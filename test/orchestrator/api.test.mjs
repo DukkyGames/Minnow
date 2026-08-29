@@ -305,6 +305,58 @@ describe('commands', () => {
     const again = await call('POST', `/api/boards/${boardId}/tasks/W1-B/start`);
     assert.equal(again.status, 409);
   });
+
+  it('runs a hand-started task on a stopped board — Manual mode', async () => {
+    // PRD §6: Manual = Stopped, with the user starting individual tasks by hand.
+    const boardId = await createBoard();
+    const started = await call('POST', `/api/boards/${boardId}/tasks/W1-A/start`);
+    assert.equal(started.status, 200);
+
+    // The attempt is still there after the board has been read back, which is
+    // what proves the reconcile loop did not immediately undo it.
+    const after = await call('GET', `/api/boards/${boardId}`);
+    const state = stateFromJSON(after.body.state);
+    assert.equal(state.status, 'created');
+    assert.equal(state.tasks.get('W1-A').phase, 'building');
+    assert.equal(state.tasks.get('W1-A').attempts.at(-1).ended, false);
+    assert.equal(state.tasks.get('W1-A').attempts.at(-1).manual, true);
+  });
+
+  it('survives four concurrent commands against a cold board', async () => {
+    // A cold board is what every first page load after a server restart hits.
+    // The race this covers lives in the engine registry and is pinned down
+    // deterministically there ("never hands out an engine that has not finished
+    // loading"); over HTTP the requests rarely arrive close enough together to
+    // reproduce it, so this is the integration check, not the regression test.
+    const boardId = await createBoard();
+    await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
+    disposeEngines(); // as cold as a fresh process
+
+    const responses = await Promise.all([
+      call('POST', `/api/boards/${boardId}/stop`),
+      call('POST', `/api/boards/${boardId}/stop`),
+      call('POST', `/api/boards/${boardId}/stop`),
+      call('POST', `/api/boards/${boardId}/stop`),
+    ]);
+    for (const response of responses) {
+      assert.equal(response.status, 200, JSON.stringify(response.body));
+      assert.equal(stateFromJSON(response.body.state).status, 'stopped');
+    }
+  });
+
+  it('serves one engine to concurrent readers and streamers alike', async () => {
+    const boardId = await createBoard();
+    disposeEngines();
+
+    const [get, stop, journal] = await Promise.all([
+      call('GET', `/api/boards/${boardId}`),
+      call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 }),
+      call('GET', `/api/boards/${boardId}/journal`),
+    ]);
+    assert.equal(get.status, 200, JSON.stringify(get.body));
+    assert.equal(stop.status, 200, JSON.stringify(stop.body));
+    assert.equal(journal.status, 200);
+  });
 });
 
 describe('SSE', () => {

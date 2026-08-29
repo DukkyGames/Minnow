@@ -11,6 +11,7 @@ import { derive } from '../../server/orchestrator/core/derive.js';
 import { makeEvent } from '../../server/orchestrator/core/events.js';
 import {
   globsIntersect,
+  manualStart,
   nextAction,
   orderedTaskIds,
   pendingAbandonments,
@@ -715,5 +716,117 @@ describe('touchesOverlap — pure glob-set intersection', () => {
     const nasty = '**/*/**/*/**/*/**/*/**/*.ts';
     assert.doesNotThrow(() => globsIntersect(nasty, nasty));
     assert.equal(globsIntersect(nasty, 'a/b/c/d/e/f.ts'), true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('plan — rule 6 and Manual mode', () => {
+  it('desires nothing on a stopped board with nothing hand-started', () => {
+    const state = boardOf({ tasks: [task('A'), task('B')], running: false });
+    assert.deepEqual(plan(state), []);
+  });
+
+  it('keeps an attempt started while stopped, and nothing else', () => {
+    const state = boardOf(
+      { tasks: [task('A'), task('B')], running: false },
+      started('A', 'a1', 'builder'),
+    );
+    assert.deepEqual(plan(state), [
+      { taskId: 'A', role: 'builder', seedKind: 'initial', sameWorktree: false },
+    ]);
+  });
+
+  it('drops it once the board is stopped again — Stop means stop', () => {
+    const state = boardOf(
+      { tasks: [task('A')], running: false },
+      started('A', 'a1', 'builder'),
+      makeEvent('board.stopped', { reason: 'user' }),
+    );
+    assert.equal(state.tasks.get('A').attempts[0].manual, false);
+    assert.deepEqual(plan(state), []);
+  });
+
+  it('does not mark an attempt started on a running board as manual', () => {
+    const state = boardOf({ tasks: [task('A')] }, started('A', 'a1', 'builder'));
+    assert.equal(state.tasks.get('A').attempts[0].manual, false);
+  });
+
+  it('never advances a stopped board past the attempt it was given', () => {
+    // A passing builder becomes a tester only under the scheduler. Manual mode
+    // means the user drives each step.
+    const state = boardOf(
+      { tasks: [task('A')], running: false },
+      ...attempt('A', 'a1', 'builder', 'pass'),
+    );
+    assert.deepEqual(plan(state), []);
+  });
+});
+
+describe('manualStart — outside the cap, and nothing else', () => {
+  it('starts a ready task on a stopped board', () => {
+    const state = boardOf({ tasks: [task('A')], running: false });
+    assert.deepEqual(manualStart(state, 'A', []), {
+      kind: 'start',
+      role: 'builder',
+      seedKind: 'initial',
+      sameWorktree: false,
+    });
+  });
+
+  it('refuses a task whose dependencies have not merged — rule 1', () => {
+    // Building against an integration base that is missing its prerequisites is
+    // wrong however loudly it was asked for. The conformance suite's
+    // perturbation dimension found this one.
+    const state = boardOf({
+      tasks: [task('A'), task('B', { dependsOn: ['A'] })],
+      running: false,
+    });
+    assert.deepEqual(manualStart(state, 'B', []), { kind: 'none' });
+  });
+
+  it('starts it once the dependency has merged', () => {
+    const state = boardOf(
+      { tasks: [task('A'), task('B', { dependsOn: ['A'] })], running: false },
+      ...merged('A', 'sha-a'),
+    );
+    assert.equal(manualStart(state, 'B', []).kind, 'start');
+  });
+
+  it('refuses a second attempt on a task already running — rule 2', () => {
+    const state = boardOf({ tasks: [task('A')], running: false }, started('A', 'a1', 'builder'));
+    assert.deepEqual(
+      manualStart(state, 'A', [{ taskId: 'A', role: 'builder' }]),
+      { kind: 'none' },
+    );
+  });
+
+  it('refuses a task whose footprint overlaps running work — rule 3', () => {
+    const state = boardOf({
+      tasks: [task('A', { touches: ['src/shared/**'] }), task('B', { touches: ['src/shared/x.ts'] })],
+      running: false,
+    });
+    assert.deepEqual(
+      manualStart(state, 'B', [{ taskId: 'A', role: 'builder' }]),
+      { kind: 'none' },
+    );
+    // A disjoint footprint is fine.
+    const disjoint = boardOf({ tasks: [task('A'), task('B')], running: false });
+    assert.equal(manualStart(disjoint, 'B', [{ taskId: 'A', role: 'builder' }]).kind, 'start');
+  });
+
+  it('ignores the cap — rule 4 is the one it is allowed to override', () => {
+    const state = boardOf(
+      { tasks: [task('A'), task('B')], concurrency: 1 },
+      started('A', 'a1', 'builder'),
+    );
+    assert.equal(nonMerge(plan(state)).length, 1, 'the scheduler is already at its cap');
+    assert.equal(manualStart(state, 'B', [{ taskId: 'A', role: 'builder' }]).kind, 'start');
+  });
+
+  it('refuses a task that is finished, unknown, or has nothing to do', () => {
+    const state = boardOf({ tasks: [task('A')], running: false }, ...merged('A', 'sha-a'));
+    assert.deepEqual(manualStart(state, 'A', []), { kind: 'none' });
+    assert.deepEqual(manualStart(state, 'nope', []), { kind: 'none' });
   });
 });

@@ -267,6 +267,20 @@ export interface Attempt {
   outcome: PolicyOutcome | null;
   summary: string | null;
   evidence: Evidence | null;
+  /**
+   * Started while the board was not running — PRD §6's Manual mode.
+   *
+   * Derived, not journaled: it is simply whether `status` was `running` when the
+   * `task.attempt.started` line was folded, so replay reproduces it exactly. The
+   * journal still records that the attempt happened, never that a person asked
+   * for it.
+   *
+   * `plan()` keeps these desired while the board is stopped, which is what makes
+   * a hand-started task survive the next reconcile instead of being stopped by
+   * the tick that follows it. A `board.stopped` clears the flag on everything
+   * still open, because stopping stops work of every kind.
+   */
+  manual: boolean;
 }
 
 /** A Builder diff that reached outside what the task declared. Journaled, not failed. */

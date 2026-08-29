@@ -185,19 +185,40 @@ async function settle() {
 
 // ---------------------------------------------------------------------------
 // The eight invariants
+//
+// 1 is stated as "no tick starts work that would push attempts above N", not as
+// "at no tick do more than N attempts exist". The second is false in the
+// product: the cap gates starting, not continuing (plan.js rule 4). It looked
+// true only because nothing in this suite ever moved N mid-run — which is why
+// the perturbation dimension below now does.
 // ---------------------------------------------------------------------------
 
 /**
  * @param {import('../../server/orchestrator/core/types').BoardState} state
- * @param {Array<{ taskId: string | null, role: string }>} live
+ * @param {Array<{ taskId: string | null, role: string, attemptId?: string }>} live
  * @param {number} cap
+ * @param {Set<string>} [wereLive]  attempt ids live at the previous check
  * @returns {string | null} the violated invariant, or null
  */
-function checkInvariants(state, live, cap) {
+function checkInvariants(state, live, cap, wereLive = new Set()) {
   const nonMerge = live.filter((r) => r.role !== 'merge' && r.role !== 'final');
 
-  // 1. Cap.
-  if (nonMerge.length > cap) return `cap: ${nonMerge.length} attempts at N=${cap}`;
+  // 1. Cap. **No tick starts work that would push attempts above N.**
+  //
+  // Not "at no tick do more than N attempts exist", which is what this checked
+  // before and is false in the product: the cap gates *starting*, not
+  // *continuing*, so lowering N mid-run leaves what is already in flight alone
+  // (see plan.js rule 4). The old wording only held because nothing here ever
+  // moved N — which is precisely why the perturbation dimension exists.
+  //
+  // A stopped board is exempt: `plan()` desires only what the user started by
+  // hand there, and PRD §6 puts a manual start outside the cap by design.
+  if (state.status === 'running' && nonMerge.length > cap) {
+    const fresh = nonMerge.filter((r) => r.attemptId !== undefined && !wereLive.has(r.attemptId));
+    if (fresh.length > 0) {
+      return `cap: a tick started ${fresh.length} attempt(s) with ${nonMerge.length} live at N=${cap}`;
+    }
+  }
 
   // 2. Exclusivity.
   const byTask = new Map();
@@ -273,13 +294,20 @@ function checkProgress(state) {
 /**
  * Run one generated case to completion, checking the invariants after every tick.
  *
+ * With `perturb`, the run is also shoved around while it happens: concurrency
+ * moves, the board is stopped and started, and tasks are started by hand while
+ * it is stopped. Everything the product exposes as a live control, in other
+ * words — a suite in which N is set once and never touched again cannot see any
+ * of the bugs that only exist because it can be touched.
+ *
  * @param {number} seed
  * @param {number} cap
+ * @param {{ perturb?: boolean, wrapEffector?: (inner: any) => any }} [options]
  * @returns {Promise<{ journal: any[], ticks: number }>}
  */
-async function runCase(seed, cap) {
+async function runCase(seed, cap, options = {}) {
   const { tasks, script } = generateCase(seed);
-  const boardId = `c${seed}-${cap}`;
+  const boardId = `c${seed}-${cap}${options.perturb ? '-p' : ''}`;
   const clock = fakeClock();
   const journal = createMemoryJournal();
 
@@ -290,19 +318,68 @@ async function runCase(seed, cap) {
     { now: clock.now },
   );
 
-  const effector = createScriptedEffector({ script, clock });
+  const truth = createScriptedEffector({ script, clock });
+  const effector = options.wrapEffector ? options.wrapEffector(truth) : truth;
   const engine = createEngine({ boardId, effector, clock, tickMs: 1000, journal });
   await engine.load();
+
+  /** Attempt ids live at the previous check — see invariant 1. */
+  let wereLive = new Set();
+
+  /**
+   * The cap the *driver* last commanded, tracked here rather than read back from
+   * `state.concurrency`. Reading it from the state would make the check
+   * self-consistent by construction: a fold that lost a `board.started`, or a
+   * scheduler that ignored the number, would agree with itself and pass.
+   */
+  let commandedCap = cap;
 
   /** @param {string} stage */
   const check = (stage) => {
     const state = engine.getState();
+    const live = truth.inspect();
     const violated =
-      checkInvariants(state, effector.inspect(), cap) ?? checkProgress(state);
+      checkInvariants(state, live, commandedCap, wereLive) ?? checkProgress(state);
+    wereLive = new Set(live.map((r) => r.attemptId));
     if (violated) {
       return `seed ${seed} cap ${cap} at ${stage}: ${violated}`;
     }
     return null;
+  };
+
+  const r = rng(seed ^ 0x5eed);
+  /**
+   * Move a control the product exposes, mid-run.
+   *
+   * @param {number} i  the tick number
+   * @returns {Promise<void>}
+   */
+  const perturb = async (i) => {
+    if (!options.perturb) return;
+    const roll = r();
+    const state = engine.getState();
+    if (roll < 0.12) {
+      // Lower or raise N under running work. Rule 4 says what is in flight keeps
+      // its slot, so this is exactly the case invariant 1 was mis-stated for.
+      commandedCap = 1 + Math.floor(r() * 4);
+      await engine.setConcurrency(commandedCap);
+    } else if (roll < 0.18 && state.status === 'running') {
+      await engine.stopBoard('user');
+    } else if (roll < 0.26 && state.status !== 'running' && !state.finished) {
+      // Manual mode: hand-start something, let it run on a stopped board, then
+      // hand the board back to the scheduler.
+      const ids = [...state.tasks.keys()];
+      if (ids.length > 0) await engine.startTask(ids[Math.floor(r() * ids.length)]);
+      await settle();
+      commandedCap = 1 + Math.floor(r() * 4);
+      await engine.startBoard(commandedCap);
+    } else if (state.status !== 'running' && !state.finished && i > 3) {
+      // Never leave the board stopped for good, or every case would time out on
+      // liveness rather than on anything the suite is trying to measure.
+      commandedCap = cap;
+      await engine.startBoard(commandedCap);
+    }
+    await settle();
   };
 
   try {
@@ -334,6 +411,10 @@ async function runCase(seed, cap) {
       await engine.tick();
       await settle();
       failure = check(`tick ${i}`);
+      if (failure) return { failure, engine, boardId, events: journal.readEventsSync(boardId) };
+
+      await perturb(i);
+      failure = check(`perturb ${i}`);
       if (failure) return { failure, engine, boardId, events: journal.readEventsSync(boardId) };
 
       if (clock.pending > 0) {
@@ -395,16 +476,27 @@ describe('scheduler conformance', () => {
     });
   }
 
-  it('reproduces a seed to an identical journal', async () => {
-    // A conformance failure must be reproducible from a one-line seed, so the
-    // same seed must produce the same run every time.
-    const first = await runCase(90_001, 2);
-    const second = await runCase(90_002, 2);
-    assert.equal(first.failure, undefined);
-    assert.equal(second.failure, undefined);
+  it('holds them all while N, stop/start, and manual starts are moved mid-run', async () => {
+    // Every one of these is a control the product exposes, and a suite that sets
+    // N once and never touches it again cannot see the bugs that exist only
+    // because it can be touched — `startTask` on a stopped board being the one
+    // that got through.
+    const perturbed = ONLY_SEED === null
+      ? Array.from({ length: Math.min(seeds.length, 150) }, (_, i) => i + 1)
+      : [ONLY_SEED];
+    for (const seed of perturbed) {
+      const result = await runCase(seed, 2, { perturb: true });
+      if (result.failure) {
+        assert.fail(explain(result.failure, result.boardId, result.events ?? []));
+      }
+    }
+  });
 
-    // Same generator input, different board — the journals must match apart
-    // from ids and timestamps.
+  it('reproduces a seed to an identical journal, 50 times over', async () => {
+    // A conformance failure must be reproducible from a one-line seed, so the
+    // same seed must produce the same run every time. Checking one seed twice
+    // proves almost nothing: the interesting nondeterminism is the kind that
+    // shows up on the cases with retries, vanishes, and merge conflicts in them.
     const strip = (events) =>
       events.map((e) => ({
         type: e.type,
@@ -413,63 +505,46 @@ describe('scheduler conformance', () => {
         outcome: e.outcome,
         reason: e.reason,
       }));
-    const rerun = await runCase(90_001, 2);
-    assert.deepEqual(strip(rerun.journal), strip(first.journal));
-  });
 
-  it('catches a real violation during a real run, not just in the checker', async () => {
-    // The suite is only worth having if a scheduler that over-starts fails it.
-    // A rogue effector reports one more running attempt than the engine asked
-    // for, which is exactly what an uncapped `plan()` would produce, and the
-    // driver must catch it mid-run rather than at the end.
-    const tasks = [
-      { id: 'A', title: 'A', wave: 1, dependsOn: [], touches: ['src/a/**'], build: 'b', test: 't', accept: 'a' },
-      { id: 'B', title: 'B', wave: 1, dependsOn: [], touches: ['src/b/**'], build: 'b', test: 't', accept: 'a' },
-    ];
-    const clock = fakeClock();
-    const journal = createMemoryJournal();
-    const boardId = 'rogue';
-
-    await journal.createBoard(boardId);
-    await journal.appendEvent(
-      boardId,
-      makeEvent('board.created', { boardId, planPath: 'gen.md', tasks, waves: [] }),
-      { now: clock.now },
-    );
-
-    // A never longer finishes, so it is reliably still running when checked.
-    const inner = createScriptedEffector({
-      script: [{ emit: { outcome: 'pass', delayMs: 10_000_000 } }],
-      clock,
-    });
-    const rogue = {
-      start: (d) => inner.start(d),
-      stop: (id) => inner.stop(id),
-      onEnd: (h) => inner.onEnd(h),
-      inspect() {
-        // One phantom builder on B, which the engine never asked for. This is
-        // what an uncapped `plan()` would look like from the outside.
-        return [...inner.inspect(), { taskId: 'B', role: 'builder', attemptId: 'phantom' }];
-      },
-    };
-
-    const engine = createEngine({ boardId, effector: rogue, clock, tickMs: 1000, journal });
-    await engine.load();
-    try {
-      await engine.startBoard(1);
-      await settle();
-      const violated = checkInvariants(engine.getState(), rogue.inspect(), 1);
-      assert.ok(violated, 'the driver did not notice an over-started board');
-      assert.match(violated, /^cap: 2 attempts at N=1/);
-    } finally {
-      engine.dispose();
+    for (let seed = 90_001; seed <= 90_050; seed += 1) {
+      const first = await runCase(seed, 2);
+      assert.equal(first.failure, undefined, String(first.failure));
+      const rerun = await runCase(seed, 2);
+      assert.equal(rerun.failure, undefined, String(rerun.failure));
+      // Same generator input, different board — the journals must match apart
+      // from ids and timestamps.
+      assert.deepEqual(strip(rerun.journal), strip(first.journal), `seed ${seed}`);
     }
   });
 
-  it('fails loudly when the cap check is removed', async () => {
-    // The suite is only worth having if a broken scheduler fails it. Rather than
-    // patch `plan()`, feed the invariant checker the state a capless scheduler
-    // would produce and assert it is caught.
+  it('fails a real run that over-starts, through the driver itself', async () => {
+    // The suite is only worth having if a scheduler that over-starts fails it —
+    // and the thing that has to fail is `runCase`, not `checkInvariants` called
+    // by hand. An effector that hides one running attempt from the engine makes
+    // the engine believe it has a free slot and start a second builder, which is
+    // exactly what an uncapped `plan()` would do.
+    const result = await runCase(4_242, 1, {
+      wrapEffector: (inner) => ({
+        start: (d) => inner.start(d),
+        stop: (id) => inner.stop(id),
+        onEnd: (h) => inner.onEnd(h),
+        // What the engine is allowed to see: everything except the first agent
+        // attempt, so its slot always looks free.
+        inspect() {
+          const all = inner.inspect();
+          const hidden = all.find((entry) => entry.role === 'builder' || entry.role === 'tester');
+          return hidden ? all.filter((entry) => entry !== hidden) : all;
+        },
+      }),
+    });
+
+    assert.ok(result.failure, 'the driver passed a board that over-started');
+    assert.match(result.failure, /cap: a tick started/);
+  });
+
+  it('rejects an over-started board on the invariant check itself', async () => {
+    // The unit-level companion to the run above: feed the checker the shape a
+    // capless scheduler produces and assert it names the right invariant.
     const state = derive([
       {
         v: 1,
@@ -484,13 +559,29 @@ describe('scheduler conformance', () => {
           { id: 'B', title: 'B', wave: 1, dependsOn: [], touches: ['src/b/**'] },
         ],
       },
+      { v: 1, seq: 2, ts: 2, type: 'board.started', concurrency: 1 },
     ]);
     const live = [
-      { taskId: 'A', role: 'builder' },
-      { taskId: 'B', role: 'builder' },
+      { taskId: 'A', role: 'builder', attemptId: 'a1' },
+      { taskId: 'B', role: 'builder', attemptId: 'b1' },
     ];
-    assert.match(checkInvariants(state, live, 1) ?? '', /^cap: 2 attempts at N=1/);
+    assert.match(checkInvariants(state, live, 1) ?? '', /^cap: a tick started 2/);
     assert.equal(checkInvariants(state, live, 2), null);
+
+    // Two already in flight when N drops to 1 is *not* a violation: the cap
+    // gates starting, not continuing (plan.js rule 4). Nothing new started, so
+    // nothing is wrong.
+    assert.equal(checkInvariants(state, live, 1, new Set(['a1', 'b1'])), null);
+    // But starting a third one at that point is.
+    assert.match(
+      checkInvariants(
+        state,
+        [...live, { taskId: 'C', role: 'builder', attemptId: 'c1' }],
+        1,
+        new Set(['a1', 'b1']),
+      ) ?? '',
+      /^cap: a tick started 1/,
+    );
   });
 
   it('catches each of the other structural violations', async () => {

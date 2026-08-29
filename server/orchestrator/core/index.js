@@ -37,6 +37,7 @@ export { decide, formatPolicyTable, POLICY_TABLE, wantsSameWorktree } from './po
 export {
   globsIntersect,
   isReadyForFinalTest,
+  manualStart,
   nextAction,
   orderedTaskIds,
   pendingAbandonments,

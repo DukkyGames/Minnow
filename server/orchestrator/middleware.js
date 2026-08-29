@@ -145,6 +145,20 @@ export async function handleBoardsRequest(req, res, pathname) {
     await dispatch(route, req, res);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (res.headersSent) {
+      // The SSE route writes its 200 before it can fail. Answering with a 500
+      // here throws ERR_HTTP_HEADERS_SENT on top of the original error, and the
+      // client then sees a crash rather than the failure that caused it. Say
+      // what happened on the stream that is already open, and close it.
+      console.warn(`[orchestrator] ${pathname} failed after the response began:`, message);
+      try {
+        res.write(`event: error\ndata: ${JSON.stringify({ error: message })}\n\n`);
+      } catch {
+        // The socket is gone; ending it is all that is left.
+      }
+      res.end();
+      return true;
+    }
     json(res, 500, { ok: false, error: message });
   }
   return true;

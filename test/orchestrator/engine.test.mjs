@@ -15,7 +15,12 @@ import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
 
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { makeEvent } from '../../server/orchestrator/core/events.js';
-import { createEngine } from '../../server/orchestrator/engine.js';
+import {
+  createEngine,
+  disposeEngines,
+  getEngine,
+  peekEngine,
+} from '../../server/orchestrator/engine.js';
 import { createScriptedEffector } from '../../server/orchestrator/effector-scripted.js';
 import {
   appendEvent,
@@ -56,6 +61,7 @@ beforeEach(async () => {
 afterEach(async () => {
   for (const engine of liveEngines) engine.dispose();
   liveEngines = [];
+  disposeEngines();
   // Let any append already in flight finish against the home it was started in.
   await settle();
 });
@@ -393,6 +399,67 @@ describe('engine — self-healing is a consequence, not a feature', () => {
     }
   });
 
+  it('warns, and leaks nothing, when an effector breaks the inspect() contract', async () => {
+    // An attempt must stay visible to `inspect()` until its `onEnd` handler has
+    // resolved. An effector that drops it first lets `reapVanished` journal
+    // `crashed` for work that actually passed. The engine cannot undo that — the
+    // fold ignores a second end for a closed attempt — but it must say so, and
+    // it must not park the orphaned end in `bufferedEnds` forever.
+    /** @type {Array<(end: object) => Promise<void>>} */
+    const handlers = [];
+    /** @type {Array<{ taskId: string, role: string, attemptId: string }>} */
+    let running = [];
+    let nextId = 0;
+
+    const effector = {
+      inspect: () => running,
+      async start(desired) {
+        const attemptId = `bad${(nextId += 1)}`;
+        running = [...running, { taskId: desired.taskId, role: desired.role, attemptId }];
+        return { attemptId };
+      },
+      async stop(attemptId) {
+        running = running.filter((r) => r.attemptId !== attemptId);
+      },
+      onEnd: (handler) => handlers.push(handler),
+    };
+
+    const { engine, clock } = await harness({ effector });
+    await engine.startBoard(1);
+    await settle();
+
+    const attempt = running[0];
+    assert.ok(attempt, 'nothing started');
+
+    // The contract violation: gone from inspect() with the end still to come.
+    running = [];
+    await clock.advance(10_000);
+    await settle();
+
+    const warnings = [];
+    const realWarn = console.warn;
+    console.warn = (...args) => warnings.push(args.join(' '));
+    try {
+      for (const handler of handlers) {
+        await handler({ attemptId: attempt.attemptId, taskId: 'A', role: 'builder', outcome: 'pass' });
+      }
+      await settle();
+    } finally {
+      console.warn = realWarn;
+    }
+
+    const recorded = engine
+      .getState()
+      .tasks.get('A')
+      .attempts.find((a) => a.attemptId === attempt.attemptId);
+    assert.equal(recorded.ended, true);
+    assert.equal(recorded.outcome, 'crashed', 'the reap did not run');
+    assert.ok(
+      warnings.some((line) => line.includes('inspect()')),
+      `no contract warning: ${JSON.stringify(warnings)}`,
+    );
+  });
+
   it('survives every process disappearing at once — the display-sleep analogue', async () => {
     const tasks = Array.from({ length: 4 }, (_, i) => task(`T${i}`));
     const { engine, effector, clock } = await harness({
@@ -601,6 +668,103 @@ describe('engine — commands', () => {
     assert.equal(seen.at(-1), 'board.stopped');
   });
 
+  it('keeps a hand-started attempt running on a stopped board', async () => {
+    // PRD §6: Manual = Stopped, with the user starting individual tasks by hand.
+    // `startTask` used to spawn the process, journal its start, and have the very
+    // next tick stop it again — leaving the task `building` forever behind an
+    // attempt that no longer existed, and returning 200 while doing it.
+    const { engine, effector } = await harness({
+      script: [{ emit: { outcome: 'pass', delayMs: 9999 } }],
+    });
+    assert.equal(engine.getState().status, 'created');
+
+    assert.equal(await engine.startTask('A'), true);
+    await settle();
+    await engine.tick();
+    await settle();
+
+    assert.equal(effector.inspect().length, 1, 'the tick stopped what startTask began');
+    const attempt = engine.getState().tasks.get('A').attempts.at(-1);
+    assert.equal(attempt.manual, true);
+    assert.equal(attempt.ended, false);
+    assert.equal(engine.getState().tasks.get('A').phase, 'building');
+  });
+
+  it('picks up nothing else while stopped, however many ticks run', async () => {
+    const { engine, effector } = await harness({
+      tasks: [task('A'), task('B')],
+      script: [{ emit: { outcome: 'pass', delayMs: 9999 } }],
+    });
+    await engine.startTask('A');
+    await settle();
+
+    for (let i = 0; i < 5; i += 1) {
+      await engine.tick();
+      await settle();
+    }
+    assert.deepEqual(effector.started.map((s) => s.taskId), ['A']);
+  });
+
+  it('stops a hand-started attempt when the board is stopped', async () => {
+    // Manual work is still work: Stop means stop, not "stop except the ones I
+    // started myself".
+    const { engine, effector } = await harness({
+      script: [{ emit: { outcome: 'pass', delayMs: 9999 } }],
+    });
+    await engine.startTask('A');
+    await settle();
+    assert.equal(effector.inspect().length, 1);
+
+    await engine.stopBoard('user');
+    await settle();
+    assert.equal(effector.inspect().length, 0);
+    assert.equal(engine.getState().tasks.get('A').attempts.at(-1).manual, false);
+
+    await engine.tick();
+    await settle();
+    assert.equal(effector.inspect().length, 0, 'a stopped attempt came back');
+  });
+
+  it('lets a hand-started attempt finish, then advances nothing', async () => {
+    const { engine, effector } = await harness();
+    await engine.startTask('A');
+    await settle();
+    await engine.tick();
+    await settle();
+
+    const state = engine.getState();
+    assert.equal(state.tasks.get('A').attempts.at(-1).outcome, 'pass');
+    assert.equal(state.tasks.get('A').phase, 'idle');
+    // A passing builder advances to the tester only on a *running* board. Here
+    // the user drives each step.
+    assert.deepEqual(effector.started.map((s) => s.role), ['builder']);
+    assert.equal(state.status, 'created');
+
+    // And the next hand start picks up where the policy says it should.
+    assert.equal(await engine.startTask('A'), true);
+    await settle();
+    assert.deepEqual(effector.started.map((s) => s.role), ['builder', 'tester']);
+  });
+
+  it('reaps a hand-started attempt that vanishes, with no board running', async () => {
+    // The safety-net timer is the only thing that would ever notice. On a
+    // stopped board nothing else ticks at all.
+    const { engine, effector, clock } = await harness({
+      script: [{ emit: { outcome: 'pass', delayMs: 9999 } }],
+    });
+    await engine.startTask('A');
+    await settle();
+
+    effector.vanishAll();
+    assert.ok(clock.pending > 0, 'no timer was armed for the manual attempt');
+    await clock.advance(10_000);
+    await settle();
+
+    const attempt = engine.getState().tasks.get('A').attempts.at(-1);
+    assert.equal(attempt.ended, true);
+    assert.equal(attempt.outcome, 'crashed');
+  });
+
   it('stops ticking once disposed', async () => {
     const { engine, effector, clock } = await harness({
       script: [{ emit: { outcome: 'pass', delayMs: 9999 } }],
@@ -613,6 +777,109 @@ describe('engine — commands', () => {
     await engine.tick();
     await clock.advance(60_000);
     assert.equal(effector.started.length, before);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('engine — the registry', () => {
+  /** A board on disk with no engine attached to it. */
+  async function coldBoard(boardId = 'reg') {
+    await createBoard(boardId);
+    await appendEvent(
+      boardId,
+      makeEvent('board.created', {
+        boardId,
+        planPath: 'plan.md',
+        tasks: [task('A')],
+        waves: [],
+      }),
+    );
+    await appendEvent(boardId, makeEvent('board.started', { concurrency: 1 }));
+    return boardId;
+  }
+
+  const effectorFactory = () =>
+    createScriptedEffector({ script: [{ emit: { outcome: 'pass', delayMs: 9999 } }] });
+
+  it('never hands out an engine that has not finished loading', async () => {
+    // The registry used to store the engine and *then* await `load()`, so a
+    // second caller arriving during the load received one with `state === null`.
+    // `getState()` threw, and `startBoard`/`stopBoard`/`setConcurrency` ran
+    // `foldInto(null, …)`. Every first page load after a server restart hits a
+    // cold board, so this was reached constantly.
+    const boardId = await coldBoard();
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 4 }, async () => {
+        const engine = await getEngine(boardId, effectorFactory, { tickMs: 60_000 });
+        await engine.stopBoard('user');
+        return engine.getState().status;
+      }),
+    );
+
+    for (const result of results) {
+      assert.equal(
+        result.status,
+        'fulfilled',
+        `a concurrent caller failed: ${result.reason?.message}`,
+      );
+      assert.equal(result.value, 'stopped');
+    }
+  });
+
+  it('gives every concurrent caller the same engine', async () => {
+    const boardId = await coldBoard();
+    const engines = await Promise.all(
+      Array.from({ length: 4 }, () => getEngine(boardId, effectorFactory, { tickMs: 60_000 })),
+    );
+    for (const engine of engines) assert.equal(engine, engines[0]);
+  });
+
+  it('peeks nothing while a load is in flight', async () => {
+    // `peekEngine` is read synchronously by `GET /api/boards/:id`, which calls
+    // `getState()` on whatever it gets back.
+    const boardId = await coldBoard();
+    const loading = getEngine(boardId, effectorFactory, { tickMs: 60_000 });
+    assert.equal(peekEngine(boardId), undefined);
+    const engine = await loading;
+    assert.equal(peekEngine(boardId), engine);
+    assert.doesNotThrow(() => engine.getState());
+  });
+
+  it('retries a board whose load failed rather than caching the failure', async () => {
+    // A rejected promise left in the registry would answer every later request
+    // with the same failure, and the board would stay broken until a restart.
+    await createBoard('broken');
+    await appendEvent(
+      'broken',
+      makeEvent('board.created', {
+        boardId: 'broken',
+        planPath: 'plan.md',
+        tasks: [task('A')],
+        waves: [],
+      }),
+    );
+
+    let attempts = 0;
+    const failOnce = () => {
+      attempts += 1;
+      if (attempts > 1) return effectorFactory();
+      // `load()` wires up `onEnd`, so this fails the load itself rather than the
+      // construction before it.
+      return {
+        inspect: () => [],
+        start: async () => ({ attemptId: 'x' }),
+        stop: async () => {},
+        onEnd: () => {
+          throw new Error('effector unavailable');
+        },
+      };
+    };
+
+    await assert.rejects(() => getEngine('broken', failOnce, { tickMs: 60_000 }));
+    const engine = await getEngine('broken', failOnce, { tickMs: 60_000 });
+    assert.equal(engine.getState().boardId, 'broken');
   });
 });
 

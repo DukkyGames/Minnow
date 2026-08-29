@@ -128,6 +128,15 @@ function apply(state, event) {
     case 'board.stopped': {
       state.status = 'stopped';
       state.stopReason = event.reason;
+      // Stopping stops work of every kind, hand-started included, so nothing
+      // stays marked as manually desired across it. `plan()` reads this flag to
+      // decide what a stopped board still wants; clearing it here is what makes
+      // Stop mean stop rather than "stop, except the ones I started myself".
+      for (const task of state.tasks.values()) {
+        for (const attempt of task.attempts) {
+          if (!attempt.ended) attempt.manual = false;
+        }
+      }
       return;
     }
 
@@ -144,6 +153,10 @@ function apply(state, event) {
         outcome: null,
         summary: null,
         evidence: null,
+        // An attempt that began while the board was not running was started by
+        // hand — there is no other way for one to exist. Read from the status
+        // the fold has already reached, so replay reproduces it.
+        manual: state.status !== 'running',
       });
       return;
     }
@@ -165,6 +178,7 @@ function apply(state, event) {
           outcome: null,
           summary: null,
           evidence: null,
+          manual: false,
         };
         task.attempts.push(attempt);
       }
@@ -277,6 +291,8 @@ function mergeAttempt(task) {
     outcome: null,
     summary: null,
     evidence: null,
+    // Merges are engine-driven and only ever run on a running board.
+    manual: false,
   };
 }
 

@@ -6,6 +6,18 @@ import type { BoardState, Desired, Evidence, NextAction } from './types';
  */
 export function nextAction(state: BoardState, taskId: string): NextAction;
 
+/**
+ * What a hand-started task should begin, if anything.
+ *
+ * Outside the concurrency cap (rule 4) and nothing else: dependencies, one
+ * attempt per task, and `touches` exclusion still apply.
+ */
+export function manualStart(
+  state: BoardState,
+  taskId: string,
+  running?: ReadonlyArray<{ taskId: string | null; role: string }>,
+): NextAction;
+
 /** Tasks whose tester passed but which are not yet on the merge queue. */
 export function pendingEnqueues(state: BoardState): string[];
 

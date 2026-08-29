@@ -34,7 +34,7 @@
 import {
   isReadyForFinalTest,
   isRunComplete,
-  nextAction,
+  manualStart,
   pendingAbandonments,
   pendingEnqueues,
   pendingSkips,
@@ -101,10 +101,23 @@ function isAgentRole(role) {
  *   What is running right now. The engine's only view of reality.
  *
  *   **An attempt must keep appearing here until the `onEnd` handler for it has
- *   resolved.** Dropping it earlier opens a window in which the engine sees the
- *   work as neither running nor finished, and starts a second copy of it. An
- *   attempt that is genuinely gone — killed, vanished — simply stops appearing,
- *   with no end delivered, and the next tick restarts it.
+ *   resolved.** This is the contract, and it is the one an implementation is
+ *   most likely to break, because the obvious way to write a process runner —
+ *   drop the child on `exit`, then deliver its outcome — breaks it by
+ *   construction. Read the exit code, deliver the end, *await the handler*, and
+ *   only then stop reporting the attempt.
+ *
+ *   Two things go wrong otherwise. A tick landing in the gap sees the work as
+ *   neither running nor finished and starts a second copy of it. Worse, if
+ *   `reapVanished` gets there first it journals `crashed` for an attempt that
+ *   passed — silently burning that task's attempts towards abandonment — and the
+ *   real outcome is unrecoverable, because the fold ignores a second end for an
+ *   attempt it has already closed. The engine warns when it detects this
+ *   (see `handleAttemptEnd`) but cannot repair it.
+ *
+ *   An attempt that is genuinely gone — killed, vanished — simply stops
+ *   appearing, with no end delivered, and the next tick restarts it. That is a
+ *   different case, and it is the supported one.
  * @property {(desired: import('./core/types').Desired) => Promise<{ attemptId: string, worktree?: string }>} start
  *   Resolves once the process **exists**. That resolution is what licenses the
  *   `task.attempt.started` append.
@@ -177,7 +190,10 @@ export function createEngine(options) {
    * first would put a `task.attempt.ended` on the journal ahead of its
    * `task.attempt.started`, which the fold reads as an attempt nobody started.
    *
-   * Bounded by the number of attempts in flight.
+   * Bounded by the number of attempts in flight, because the only thing that
+   * puts an entry here is a `startAttempt` that has not finished its append yet,
+   * and that same call drains it. An end for an attempt the fold has already
+   * closed is *not* buffered — see {@link handleAttemptEnd}.
    *
    * @type {Map<string, AttemptEnd>}
    */
@@ -346,6 +362,22 @@ export function createEngine(options) {
   }
 
   /**
+   * Has the fold already closed this attempt?
+   *
+   * @param {string} attemptId
+   * @returns {boolean}
+   */
+  function isAlreadyEnded(attemptId) {
+    if (!state) return false;
+    for (const task of state.tasks.values()) {
+      for (const attempt of task.attempts) {
+        if (attempt.attemptId === attemptId) return attempt.ended;
+      }
+    }
+    return false;
+  }
+
+  /**
    * @param {import('./core/types').Desired} want
    * @returns {Promise<void>}
    */
@@ -397,8 +429,23 @@ export function createEngine(options) {
   async function handleAttemptEnd(end) {
     if (disposed || !state) return;
 
-    // Hold it until its start is on the journal — see `bufferedEnds`.
     if (isAgentRole(end.role) && !journaledStarts.has(end.attemptId)) {
+      // Already closed by `reapVanished`, which only happens when `inspect()`
+      // stopped reporting the attempt *before* this end arrived — the one thing
+      // the Effector contract forbids. The journal now says `crashed` for work
+      // that actually reported `${end.outcome}`, and that cannot be taken back:
+      // the fold ignores a second end for an attempt it has already closed. So
+      // say so loudly, because the quiet version of this burns a passing task's
+      // attempts towards abandonment.
+      if (isAlreadyEnded(end.attemptId)) {
+        console.warn(
+          `[orchestrator] ${boardId}: ${end.role} ${end.attemptId} reported "${end.outcome}" ` +
+            'after the engine had already recorded it as crashed. The effector dropped it from ' +
+            'inspect() before delivering onEnd, which the Effector contract does not allow.',
+        );
+        return;
+      }
+      // Otherwise its start is still being written. Hold it — see `bufferedEnds`.
       bufferedEnds.set(end.attemptId, end);
       return;
     }
@@ -463,13 +510,27 @@ export function createEngine(options) {
     }
   }
 
+  /**
+   * Is there anything for the safety net to catch?
+   *
+   * A running board, always. A stopped one only while a hand-started attempt is
+   * still open: without a timer, an attempt that vanishes rather than ending
+   * would leave the task in flight forever, since nothing else would ever tick.
+   *
+   * @returns {boolean}
+   */
+  function wantsTicking() {
+    if (!state) return false;
+    return state.status === 'running' || plan(state).length > 0;
+  }
+
   function startTimer() {
     if (timer !== null || disposed) return;
     const arm = () => {
       timer = clock.setTimer(() => {
         timer = null;
         void tick().then(() => {
-          if (state?.status === 'running') arm();
+          if (wantsTicking()) arm();
         });
       }, tickMs);
     };
@@ -584,20 +645,33 @@ export function createEngine(options) {
      * is unaffected — the journal records that the attempt happened, not that a
      * person asked for it.
      *
+     * Works on a stopped board, which is the whole of PRD §6's Manual mode: the
+     * fold marks an attempt begun while stopped as `manual`, and `plan()` keeps
+     * it desired. Before that, this started a process, journaled it, and had the
+     * next tick stop it — leaving the task `building` behind an attempt that no
+     * longer existed, with a 200 on the way back.
+     *
+     * The timer is armed either way. On a stopped board it is the only thing
+     * that would notice a hand-started attempt vanishing.
+     *
      * @param {string} taskId
      * @returns {Promise<boolean>} whether anything was started
      */
     async startTask(taskId) {
       if (!state) throw new Error('engine not loaded');
-      const next = nextAction(state, taskId);
+      if (state.finished) return false;
+      // `manualStart` decides, not the engine: a manual start is outside the
+      // concurrency cap and nothing else, and which rules that means is a
+      // scheduling question that belongs in the pure core with the rest of them.
+      const next = manualStart(state, taskId, effector.inspect());
       if (next.kind !== 'start') return false;
-      if (effector.inspect().some((r) => r.taskId === taskId)) return false;
       await startAttempt({
         taskId,
         role: next.role,
         seedKind: next.seedKind,
         sameWorktree: next.sameWorktree,
       });
+      startTimer();
       await tick();
       return true;
     },
@@ -651,8 +725,28 @@ function runSummary(state) {
 // Registry
 // ---------------------------------------------------------------------------
 
-/** @type {Map<string, ReturnType<typeof createEngine>>} */
+/**
+ * Engines being loaded or already loaded, keyed by board.
+ *
+ * The **promise** is what is registered, never the engine. Registering the
+ * engine and then awaiting `load()` publishes it in the one state it must never
+ * be observed in: `state === null`. A second caller arriving during the load got
+ * that engine, and `getState()` threw while `startBoard`/`stopBoard`/
+ * `setConcurrency` ran `foldInto(null, …)`. Four concurrent `POST /:id/stop`
+ * against a cold board failed about half the time, and a cold board is what
+ * every first page load after a server restart hits.
+ *
+ * @type {Map<string, Promise<ReturnType<typeof createEngine>>>}
+ */
 const engines = new Map();
+
+/**
+ * Engines whose `load()` has resolved. Only these are safe to touch
+ * synchronously, which is what {@link peekEngine} promises its callers.
+ *
+ * @type {Map<string, ReturnType<typeof createEngine>>}
+ */
+const ready = new Map();
 
 /**
  * The live engine for a board, created on first use.
@@ -662,21 +756,36 @@ const engines = new Map();
  * @param {{ clock?: typeof systemClock, tickMs?: number }} [options]
  * @returns {Promise<ReturnType<typeof createEngine>>}
  */
-export async function getEngine(boardId, makeEffector, options = {}) {
+export function getEngine(boardId, makeEffector, options = {}) {
   const existing = engines.get(boardId);
   if (existing) return existing;
+
   const engine = createEngine({ boardId, effector: makeEffector(), ...options });
-  engines.set(boardId, engine);
-  await engine.load();
-  return engine;
+  const loading = engine.load().then(() => {
+    // Only registered as loaded if this entry is still the current one — a
+    // `disposeEngines` during the load must not resurrect it.
+    if (engines.get(boardId) === loading) ready.set(boardId, engine);
+    return engine;
+  });
+  engines.set(boardId, loading);
+
+  // A failed load must not wedge the board: drop the entry so the next request
+  // gets a fresh attempt rather than the same rejection forever.
+  loading.catch(() => {
+    if (engines.get(boardId) === loading) engines.delete(boardId);
+  });
+
+  return loading;
 }
 
 /**
+ * The engine for a board **if it is already loaded**. Never one mid-load.
+ *
  * @param {string} boardId
  * @returns {ReturnType<typeof createEngine> | undefined}
  */
 export function peekEngine(boardId) {
-  return engines.get(boardId);
+  return ready.get(boardId);
 }
 
 /**
@@ -685,12 +794,23 @@ export function peekEngine(boardId) {
  */
 export function disposeEngines(boardId) {
   if (boardId === undefined) {
-    for (const engine of engines.values()) engine.dispose();
+    for (const id of [...engines.keys()]) disposeEngines(id);
     engines.clear();
+    ready.clear();
     return;
   }
-  engines.get(boardId)?.dispose();
+  ready.get(boardId)?.dispose();
+  // An engine still loading has no entry in `ready` yet, so it is disposed when
+  // its load settles. `dispose()` is idempotent, so doing both is safe.
+  const loading = engines.get(boardId);
+  if (loading) {
+    void loading.then(
+      (engine) => engine.dispose(),
+      () => {},
+    );
+  }
   engines.delete(boardId);
+  ready.delete(boardId);
 }
 
 export { isReadyForFinalTest };

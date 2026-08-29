@@ -26,8 +26,15 @@
 
 import { derive, emptyState, foldInto } from './derive.js';
 
-/** Bump when the snapshot shape changes. A mismatch is ignored, never migrated. */
-export const SNAPSHOT_VERSION = 1;
+/**
+ * Bump when the snapshot shape changes. A mismatch is ignored, never migrated.
+ *
+ * 2 — `Attempt.manual`, which `plan()` reads to decide what a stopped board
+ * still wants. A v1 snapshot restores attempts without it, so an open
+ * hand-started attempt would come back looking automatic and be stopped on the
+ * next tick. Cheaper to re-fold once than to carry that.
+ */
+export const SNAPSHOT_VERSION = 2;
 
 /** Write a snapshot every this many events. Read by P1-A's journal store. */
 export const SNAPSHOT_INTERVAL = 200;

@@ -29,7 +29,11 @@
  *    flight keep their slot, so lowering `N` mid-run stops nothing that is
  *    already running; it stops new work being picked up.
  * 5. The merge queue is serialised — at most one merge in flight, regardless of `N`.
- * 6. A board that is not running desires nothing.
+ * 6. A board that is not running desires nothing **except attempts the user
+ *    started by hand since it stopped** — PRD §6's Manual mode. It picks up
+ *    nothing new, advances nothing, and merges nothing; it only lets the work
+ *    someone explicitly asked for finish. `board.stopped` clears the flag those
+ *    attempts carry, so a Stop stops them too.
  *
  * ## The single policy call site
  *
@@ -95,6 +99,47 @@ export function nextAction(state, taskId) {
 }
 
 /**
+ * What a hand-started task should begin, if anything.
+ *
+ * A manual start is outside **rule 4 only**. The cap is a throughput preference
+ * and the user is entitled to override it; the rest of the rules are correctness
+ * constraints and are not overridable by asking louder:
+ *
+ * - Rule 1, dependencies. Building a task whose prerequisites have not merged
+ *   seeds the work off an integration base that is missing them.
+ * - Rule 2, one attempt per task.
+ * - Rule 3, footprints. Two agents writing the same files is the failure the
+ *   `touches` rule exists to prevent, whoever asked for it.
+ *
+ * `running` is what the effector reports, so the check is against reality rather
+ * than against the journal's opinion of it.
+ *
+ * @param {import('./types').BoardState} state
+ * @param {string} taskId
+ * @param {ReadonlyArray<{ taskId: string | null, role: string }>} running
+ * @returns {import('./types').NextAction}
+ */
+export function manualStart(state, taskId, running = []) {
+  if (!state) return { kind: 'none' };
+  const task = state.tasks.get(taskId);
+  if (!task) return { kind: 'none' };
+
+  // Rule 1.
+  if (!readyTasks(state).includes(taskId)) return { kind: 'none' };
+  // Rule 2, against what is actually running as well as against the journal.
+  if (running.some((r) => r.taskId === taskId)) return { kind: 'none' };
+  // Rule 3.
+  for (const other of running) {
+    if (other.taskId === null || other.taskId === taskId) continue;
+    const against = state.tasks.get(other.taskId);
+    if (against && touchesOverlap(task.touches, against.touches)) return { kind: 'none' };
+  }
+
+  const next = nextAction(state, taskId);
+  return next.kind === 'start' ? next : { kind: 'none' };
+}
+
+/**
  * Tasks whose tester has passed but which are not yet on the merge queue.
  * The engine journals `merge.enqueued` for each.
  *
@@ -133,8 +178,11 @@ export function pendingAbandonments(state) {
  * @returns {import('./types').Desired[]}
  */
 export function plan(state) {
-  // Rule 6.
-  if (!state || state.status !== 'running') return [];
+  // Rule 6. A stopped board still wants whatever the user started by hand since
+  // it stopped — that *is* Manual mode (PRD §6). It never picks up anything new,
+  // and `board.stopped` clears the flag, so a Stop still stops everything.
+  if (!state) return [];
+  if (state.status !== 'running') return manualDesires(state);
 
   /** @type {import('./types').Desired[]} */
   const desired = [];
@@ -214,6 +262,37 @@ export function plan(state) {
     desired.push({ taskId: null, role: 'final', seedKind: 'initial', sameWorktree: false });
   }
 
+  return desired;
+}
+
+/**
+ * What a stopped board still wants: the attempts a human started by hand.
+ *
+ * Only ones already open — a stopped board never picks up new work, never
+ * advances a task to its tester, and never merges. When the attempt ends the
+ * task sits at whatever it reached and waits for the next manual start, which is
+ * what "the user starts individual tasks by hand" means.
+ *
+ * Without this, `startTask` on a stopped board spawned a process, journaled its
+ * start, and had the very next tick stop it again — leaving the task `building`
+ * forever behind an attempt that no longer existed.
+ *
+ * @param {import('./types').BoardState} state
+ * @returns {import('./types').Desired[]}
+ */
+function manualDesires(state) {
+  /** @type {import('./types').Desired[]} */
+  const desired = [];
+  for (const id of orderedTaskIds(state)) {
+    const open = state.tasks.get(id)?.attempts.find((a) => !a.ended && a.role !== 'merge');
+    if (!open || !open.manual) continue;
+    desired.push({
+      taskId: id,
+      role: open.role,
+      seedKind: open.seedKind ?? 'initial',
+      sameWorktree: wantsSameWorktree(open.seedKind),
+    });
+  }
   return desired;
 }
 

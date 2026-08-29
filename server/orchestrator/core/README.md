@@ -55,3 +55,12 @@ the `.d.ts`, exactly the way `src/ui/terminal-panel.ts` imports
 - **There are no retry counters.** Attempt counts are `events.filter(...)`.
   A counter is a second source of truth and will desynchronise.
 - **A snapshot is a cache.** Deleting every snapshot must change nothing but speed.
+- **The concurrency cap gates starting, not continuing.** Lowering `N` mid-run
+  stops nothing already in flight. So "at no tick do more than `N` attempts
+  exist" is false in the product; the invariant is "no tick starts work that
+  would push attempts above `N`".
+- **A manual start overrides the cap and nothing else.** `manualStart()` still
+  enforces dependencies, one-attempt-per-task, and `touches` exclusion, because
+  those are correctness constraints rather than throughput preferences. PRD §6's
+  Manual mode is a *stopped* board with hand-started attempts — see
+  `Attempt.manual`, which `plan()` reads and which a `board.stopped` clears.
