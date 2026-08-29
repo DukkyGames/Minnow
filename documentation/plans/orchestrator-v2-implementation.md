@@ -1,6 +1,6 @@
 ---
 name: orchestrator-v2-implementation
-overview: Implementation plan for Orchestrator V2 — a clean-room, server-side, journal-and-reconcile board engine that replaces the V1 renderer orchestrator. Seven phases from a pure decision core through V1 deletion to normal chat adopting the same runner.
+overview: Implementation plan for Orchestrator V2 — a clean-room, server-side, journal-and-reconcile board engine that replaces the V1 renderer orchestrator. Eight phases from a pure decision core through V1 deletion, normal chat adopting the same runner, and coalesced stream paint so the UI stays live mid-generation.
 isProject: true
 ---
 
@@ -9,7 +9,7 @@ isProject: true
 **Date:** 2026-08-28
 **Goal:** Replace the V1 board engine with a server-side journal + reconcile engine whose state is a pure fold, so multi-agent runs are as reliable as today's sequential single-agent path.
 **PRD:** [`orchestrator-v2.md`](./orchestrator-v2.md) — read it first. This document plans the build; it does not restate the design.
-**Linear:** [Orchestrator V2](https://linear.app/minnowai/project/orchestrator-v2-97ced8c22ad8) (team Minnow AI) — 7 phase parents, `MIN-677`–`MIN-683`, with 43 sub-issues, `MIN-684`–`MIN-726`. Each sub-issue carries its own full plan.
+**Linear:** [Orchestrator V2](https://linear.app/minnowai/project/orchestrator-v2-97ced8c22ad8) (team Minnow AI) — 8 phase parents, `MIN-677`–`MIN-683` plus `MIN-727`, with sub-issues `MIN-684`–`MIN-726` and `MIN-728`–`MIN-731`. Each sub-issue carries its own full plan.
 
 ## Context
 
@@ -27,7 +27,7 @@ The PRD left four questions open (§13) and this pass raised four more. All eigh
 | 4 | Linear structure | **Phase parents + sub-issues.** |
 | 5 | V1/V2 coexistence | **Swap the board UI at Phase 1.** V1 becomes unreachable from Phase 1; Phase 4 is pure code removal. Accepted cost: no usable orchestrator between Phase 1 and Phase 2. |
 | 6 | §13.2 Final Tester | **Static ladder at Phase 3, browser at Phase 5.** Multi-agent runs are verified end-to-end *before* V1 is deleted. |
-| 7 | Project scope | **Phases 0–6.** Phase 6 issues are written now and stay unscheduled until Phase 5 lands. |
+| 7 | Project scope | **Phases 0–7.** Phase 6 issues stay unscheduled until Phase 5 lands. Phase 7 (stream UI lag) can start now — it does not wait on the runner. |
 | 8 | §13.1 journal retention | **Keep forever + periodic snapshot.** The fold is memoised against a snapshot written every N events. Raw history is never compacted — §11 needs it to measure bad abandonments. |
 
 ## Findings that change the PRD's risk model
@@ -103,6 +103,13 @@ Each task below is one Linear sub-issue carrying its own full plan. Phases are s
 
 **MIN-683** · MIN-723 P6-A Non-board `runTurn()` spike · MIN-724 P6-B `ask_question` as an injected capability · MIN-725 P6-C Strangle the client loop · MIN-726 P6-D Delete the client loop
 
+### Phase 7 — Chat-stream UI stays responsive mid-generation
+*Proves: typing, scrolling, and clicking stay live while a chat streams, without giving back local tok/s. Can start now.*
+
+**MIN-727** · MIN-728 P7-A Measure stream long tasks · MIN-729 P7-B Coalesce `handleChunk` onto one paint · MIN-730 P7-C Cheap thinking stats + ticked-motion rescan · MIN-731 P7-D `STEP_HZ` hygiene and accept
+
+Full research plan: [`chat-stream-ui-lag.md`](./chat-stream-ui-lag.md). Phases 1 and 6 do not fix this: upstream SSE is already server-side; the freeze is token→DOM on the renderer. P6-A may later batch `onEvent`; until then P7-B is required on whatever loop owns the transcript.
+
 ## Verification Checklist
 
 - [ ] `npm test` passes
@@ -113,6 +120,7 @@ Each task below is one Linear sub-issue carrying its own full plan. Phases are s
 - [ ] No file under `src/state/orchestrate-*` or `src/chat/orchestrate/` remains (Phase 4 gate)
 - [ ] `grep -r "board_init\|board_set_autonomy\|delegate_tasks" src server` returns nothing (Phase 4 gate)
 - [ ] An overnight AFK run finishes, reports once, and stalls on nothing (Phase 5 gate)
+- [ ] Cloud and local streams leave composer/scroll/clicks responsive; local tok/s not regressed (Phase 7 gate)
 
 ## Notes for Build Agents
 

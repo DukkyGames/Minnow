@@ -245,6 +245,7 @@ On `Abandon`: emit `task.abandoned`, emit `task.skipped` for genuine dependents 
 | **4** | Delete V1 (26,657 lines) | |
 | **5** | Server-side browser driver (Playwright/CDP) + final integration test | Fully unattended verification |
 | **6** | Normal chat adopts the headless runner | One engine |
+| **7** | Chat-stream UI stays responsive mid-generation ([`chat-stream-ui-lag.md`](./chat-stream-ui-lag.md), [MIN-727](https://linear.app/minnowai/issue/MIN-727)) | Token→DOM paint is coalesced; local tok/s win kept. Independent of 1–6; can start now. |
 
 Phase 1 leans on existing prior art: `src/dev/orchestrate-scenarios/` (schema, adapters, catalog) and `server/orchestrate/board-testing/` (scenario-runner, fake-model-host). V2 promotes scripted board testing to a first-class capability — **the scheduler must be fully testable with zero model calls.**
 
