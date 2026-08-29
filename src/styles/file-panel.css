@@ -1283,6 +1283,7 @@
 .file-sidebar.collapsed .file-sidebar-header-actions {
   flex-direction: column;
   align-items: stretch;
+  /* Override trailing-edge pin used when refresh is visible in the wide header. */
   margin-left: 0;
 }
 
@@ -1300,12 +1301,25 @@
   flex-shrink: 0;
 }
 
-/* Collapse + preview + refresh + git: one bordered cluster (matches chat sidebar) */
+/* Refresh sits beside the pane cluster so Files / Browser / Source Control stay fixed (MIN-655).
+   Title flex:1 pins both controls to the trailing edge whether refresh is visible or not. */
+.file-sidebar-header > .file-tree-refresh {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  color: var(--mn-fg-muted);
+}
+
+.file-sidebar-header > .file-tree-refresh .icon-svg {
+  --mn-icon-size: 16px;
+}
+
+/* Files + browser + source control: one bordered cluster (matches chat sidebar) */
 .file-sidebar-header-actions {
   display: inline-flex;
   align-items: stretch;
   flex-shrink: 0;
-  margin-left: auto;
+  margin-left: 0;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
   overflow: hidden;
@@ -1330,12 +1344,18 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
+  .file-sidebar-header > .file-tree-refresh:hover {
+    background: var(--mn-surface-elevated);
+    color: var(--mn-fg);
+  }
+
   .file-sidebar-header-actions .icon-btn:hover {
     background: var(--mn-surface-elevated);
     color: var(--mn-fg);
     border-color: transparent;
   }
 
+  .file-sidebar-header-actions .file-sidebar-toggle.is-active:hover,
   .file-sidebar-header-actions .file-sidebar-preview-toggle.is-active:hover,
   .file-sidebar-header-actions .git-panel-toggle.is-active:hover {
     background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
@@ -1410,11 +1430,8 @@
   display: none !important;
 }
 
-.file-sidebar-preview-toggle.is-active {
-  color: var(--mn-accent);
-  background: color-mix(in srgb, var(--mn-accent) 14%, transparent);
-}
-
+.file-sidebar-toggle.is-active,
+.file-sidebar-preview-toggle.is-active,
 .git-panel-toggle.is-active {
   color: var(--mn-accent);
   background: color-mix(in srgb, var(--mn-accent) 14%, transparent);

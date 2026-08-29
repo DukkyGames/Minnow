@@ -13,8 +13,8 @@ export const ICON_CHEVRON_RIGHT = iconHtml('chevronRight');
 /** Uicons magnifier for chat search buttons (sidebar + desktop rail). */
 export const ICON_SEARCH = iconHtml('search');
 
-/** Document icon for the file sidebar toggle. */
-export const ICON_FILE_TREE = iconHtml('fileText');
+/** Folder-tree icon for the file sidebar Files pane button (MIN-655). */
+export const ICON_FILE_TREE = iconHtml('fileTree');
 
 /** Named layout icons (sidebar chevrons). Stats-strip SVGs stay in HTML markup. */
 export const icons = {
