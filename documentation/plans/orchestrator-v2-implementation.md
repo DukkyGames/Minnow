@@ -78,6 +78,46 @@ Each task below is one Linear sub-issue carrying its own full plan. Phases are s
 
 **MIN-678** · MIN-691 P1-A Journal store · MIN-692 P1-B Reconcile loop + effector interface · MIN-693 P1-C `/api/boards/*` REST + SSE · MIN-694 P1-D Scripted fake effector · MIN-695 P1-E Renderer as view (UI swap) · MIN-696 P1-F Scheduler conformance suite · MIN-697 P1-G Crash / restart / reload recovery proof
 
+#### Phase 1 status
+
+All seven sub-issues are built. Two review passes over Phase 1 found six defects
+between them; all six are fixed with regression tests that were each verified to
+fail against the old code. The ones worth remembering, because they are the
+shapes to watch for again:
+
+- **A torn journal tail bricked the board.** `readEvents` dropped a half-written
+  final line but nothing repaired the file, so the next append concatenated onto
+  the fragment and every read of that board threw from then on. A crash made the
+  board permanently unopenable — the one failure an append-only journal exists
+  to rule out. The test that missed it asserted on the `seq` the append returned
+  rather than on a re-read.
+- **`getEngine` published the engine before `load()` resolved**, so a second
+  caller during the load got one with `state === null`. Every first page load
+  after a server restart hit it.
+- **`startTask` on a stopped board** spawned work, journaled it, and had the
+  next tick stop it. Fixing it is what made PRD §6's Manual mode real: the fold
+  marks an attempt begun while stopped as `manual`, `plan()` keeps those desired,
+  and `board.stopped` clears the flag so Stop still means stop. A manual start
+  overrides the concurrency cap and **nothing else** — dependencies, one attempt
+  per task and `touches` exclusion are correctness constraints, not preferences.
+
+MIN-696's invariant 1 was also mis-stated. "At no tick do more than N attempts
+exist" is false in the product, because the cap gates *starting* and not
+*continuing*; it now reads "no tick starts work that would push attempts above
+N" and is checked against the cap the driver commanded rather than against
+`state.concurrency`. A new generator dimension moves concurrency, stop/start and
+manual starts mid-run, and found the `startTask` dependency hole within seconds.
+
+**Open against decision 5.** V2's surface is a new one at `#/app/code/boards`
+(`src/orchestrator/`), built beside V1 rather than by retrofitting
+`orchestrate-board.ts` — V1's `BoardTask` has ~50 fields against `TaskState`'s
+17, and each of the 45 sites reading a deleted field needs a decision rather
+than a substitution. V1's Orchestrate entry point is therefore **still
+reachable**, where decision 5 says V1 becomes unreachable at Phase 1. Hiding it
+is a one-line change; doing it properly is not, because V1's hub is wired into
+onboarding, chat groups, kickoff and the plan screen. Left as a call to make
+rather than made silently.
+
 ### Phase 2 — Headless runner, concurrency 1
 *Proves: real builds run server-side.*
 
@@ -114,8 +154,8 @@ Full research plan: [`chat-stream-ui-lag.md`](./chat-stream-ui-lag.md). Phases 1
 
 - [ ] `npm test` passes
 - [ ] `npm run build` passes
-- [ ] The scheduler suite runs to completion with **zero model calls** (Phase 1 gate)
-- [ ] Killing the server mid-run and restarting reproduces identical derived state (Phase 1 gate)
+- [x] The scheduler suite runs to completion with **zero model calls** (Phase 1 gate)
+- [x] Killing the server mid-run and restarting reproduces identical derived state (Phase 1 gate)
 - [ ] A real multi-task board completes at concurrency 2 with worktrees and a merge queue (Phase 3 gate)
 - [ ] No file under `src/state/orchestrate-*` or `src/chat/orchestrate/` remains (Phase 4 gate)
 - [ ] `grep -r "board_init\|board_set_autonomy\|delegate_tasks" src server` returns nothing (Phase 4 gate)
