@@ -1,8 +1,44 @@
-/* Per-message ⋮ menu (Epic C2) */
-.msg.msg--has-actions {
+/*
+ * Per-message ⋮ menu (Epic C2).
+ *
+ * Two things have to hold here, and they came apart independently:
+ *
+ * 1. The row must be a containing block. The trigger is position:absolute, so a
+ *    row left `static` lets it escape and resolve against whichever positioned
+ *    ancestor happens to be up the tree — which is how the button turned up
+ *    floating over an unrelated thinking label. `.tool-call-msg` is not a `.msg`,
+ *    so it needs the rule named for it too rather than inheriting one.
+ *
+ * 2. The trigger gets a lane, never an overlap. Rows are shrink-wrapped, so
+ *    padding on the outboard side — left of a right-aligned user bubble, right
+ *    of left-aligned assistant content — grows the box into the empty half of
+ *    the column and the bubble itself never moves.
+ */
+.msg.msg--has-actions,
+.tool-call-msg.msg--has-actions {
   position: relative;
-  /* .msg is full column width; shrink so absolute top/right hugs the bubble cluster. */
+}
+
+.msg.msg--has-actions {
+  /* .msg is full column width; shrink so the lane hugs the bubble cluster. */
   width: max-content;
+}
+
+.msg--has-actions,
+.tool-call-msg.msg--has-actions {
+  --msg-actions-lane: 36px;
+  padding-right: var(--msg-actions-lane);
+}
+
+/* Read aloud parks left of ⋮ (voice.css right:36px), so the lane holds both. */
+.msg--has-actions:has(.voice-play-btn) {
+  --msg-actions-lane: 68px;
+}
+
+/* User turns hug the right edge, so their lane goes on the left instead. */
+.msg.user.msg--has-actions {
+  padding-right: 0;
+  padding-left: var(--msg-actions-lane);
 }
 
 .message-actions__trigger {
@@ -27,6 +63,12 @@
 .msg--has-actions:hover .message-actions__trigger,
 .msg--has-actions:focus-within .message-actions__trigger {
   opacity: 1;
+}
+
+/* Mirror of the lane above: on user turns ⋮ lives left of the bubble. */
+.msg.user .message-actions__trigger {
+  right: auto;
+  left: 4px;
 }
 
 .message-actions__trigger:hover,
