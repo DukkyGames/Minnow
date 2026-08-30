@@ -2829,16 +2829,17 @@
     ></div>
     <div class="file-sidebar-header">
       <span class="file-sidebar-title" id="fileSidebarTitle">Files</span>
-      <div class="file-sidebar-header-actions">
-        <button type="button" class="icon-btn file-sidebar-toggle" id="btnFileSidebarCollapse" aria-label="Project files" title="Project files">
-          <i class="fi fi-rr-document icon-svg" aria-hidden="true"></i>
+      <!-- Refresh stays outside the pane cluster so Files / Browser / Source Control never reshuffle (MIN-655). -->
+      <button type="button" class="icon-btn file-tree-refresh" id="btnFileTreeRefresh" aria-label="Refresh file tree" title="Refresh file tree">
+        <i class="fi fi-rr-refresh icon-svg" aria-hidden="true"></i>
+      </button>
+      <div class="file-sidebar-header-actions" role="toolbar" aria-label="Code left pane">
+        <button type="button" class="icon-btn file-sidebar-toggle is-active" id="btnFileSidebarCollapse" aria-label="Collapse file tree" title="Collapse file tree" aria-pressed="true">
+          <i class="fi fi-rr-folder icon-svg" aria-hidden="true"></i>
         </button>
         <button type="button" class="icon-btn file-sidebar-preview-toggle" id="btnPreviewToggle"
-          aria-label="Preview browser" title="Preview browser">
+          aria-label="Preview browser" title="Preview browser" aria-pressed="false">
           <i class="fi fi-rr-globe icon-svg" aria-hidden="true"></i>
-        </button>
-        <button type="button" class="icon-btn file-tree-refresh" id="btnFileTreeRefresh" aria-label="Refresh file tree">
-          <i class="fi fi-rr-refresh icon-svg" aria-hidden="true"></i>
         </button>
         <button type="button" class="icon-btn git-panel-toggle" id="btnGitPanelToggle" aria-label="Source control" title="Source control" aria-pressed="false">
           <i class="fi fi-sr-code-branch icon-svg" aria-hidden="true"></i>

@@ -62,7 +62,12 @@ import {
   type GitGraphContextMenuCtx,
 } from './git-graph-context-menu';
 
-import { applyFileSidebarVisuals, isMobileLayout, openMobileFileSidebar } from './file-layout';
+import {
+  applyFileSidebarVisuals,
+  isMobileLayout,
+  openMobileFileSidebar,
+  syncFileSidebarFilesPaneButton,
+} from './file-layout';
 
 import { subscribeAllBoardChanges } from '../state/orchestrate-board-events';
 
@@ -2117,13 +2122,15 @@ function syncToggleButtonState(): void {
 
   const toggleBtn = document.getElementById('btnGitPanelToggle');
 
-  if (!toggleBtn) return;
-
   const open = isGitSidePanelOpen();
 
-  toggleBtn.classList.toggle('is-active', open);
+  if (toggleBtn) {
+    toggleBtn.classList.toggle('is-active', open);
+    toggleBtn.setAttribute('aria-pressed', open ? 'true' : 'false');
+  }
 
-  toggleBtn.setAttribute('aria-pressed', open ? 'true' : 'false');
+  // Keep Files highlight in lockstep with Source Control (MIN-655).
+  syncFileSidebarFilesPaneButton({ gitOpen: open });
 
 }
 
