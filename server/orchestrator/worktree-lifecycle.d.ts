@@ -2,6 +2,7 @@ import type { BoardState, Desired } from './core/types';
 
 export const INTEGRATION_SLOT: 'integration';
 export const WORKTREE_DISCARDED_TYPE: 'worktree.discarded';
+export const BOARD_GIT_INITIALIZED_TYPE: 'board.git.initialized';
 
 export function integrationBranch(boardId: string): string;
 export function attemptBranch(boardId: string, slotId: string): string;
@@ -21,12 +22,26 @@ export function shouldKeepWorktree(
 ): boolean;
 export function wantsReuse(desired: Desired): boolean;
 
+export function ensureBoardWorkspaceGit(): Promise<
+  | {
+      ok: true;
+      event: {
+        createdRepo: boolean;
+        gitignoreCreated: boolean;
+        committed: boolean;
+        commitSha?: string;
+      } | null;
+    }
+  | { ok: false; error: string }
+>;
+
 export function ensureBoardIntegration(boardId: string): Promise<{
   ok: boolean;
   path?: string;
   branch?: string;
   error?: string;
   output?: string;
+  gitInitialized?: Record<string, unknown>;
 }>;
 
 export function allocateAttemptWorktree(input: {
@@ -41,6 +56,7 @@ export function allocateAttemptWorktree(input: {
   slotId?: string;
   created?: boolean;
   discarded: Record<string, unknown>[];
+  gitInitialized?: Record<string, unknown>;
   error?: string;
 }>;
 

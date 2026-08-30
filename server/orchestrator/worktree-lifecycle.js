@@ -25,6 +25,7 @@ import {
   refreshIntegrationDeps,
   removeWorktree,
 } from '../worktree/worktree-ops.js';
+import { initializeWorkspaceGit } from '../workspace/initialize-git.js';
 
 /** Integration slot name used by `getWorktreeSlotPath`. Never reclaimed as an orphan. */
 export const INTEGRATION_SLOT = 'integration';
@@ -37,6 +38,14 @@ export const INTEGRATION_SLOT = 'integration';
  * bump the thirteen-type contract for a side-effect the fold never reads.
  */
 export const WORKTREE_DISCARDED_TYPE = 'worktree.discarded';
+
+/**
+ * Opaque journal type when Start created a workspace repo or its first commit.
+ *
+ * Same pattern as {@link WORKTREE_DISCARDED_TYPE}: not a 14th known fold type.
+ * The timeline already prints unknown `event.type`.
+ */
+export const BOARD_GIT_INITIALIZED_TYPE = 'board.git.initialized';
 
 /**
  * Boards that have had `ensureIntegration` succeed this process.
@@ -211,15 +220,68 @@ export function wantsReuse(desired) {
 }
 
 /**
+ * MIN-615 git init for isolated-worktree boards. Idempotent: a repo that already
+ * has HEAD is a no-op. `parsePlan` stays pure — this is I/O on the effector path.
+ *
+ * @returns {Promise<{
+ *   ok: true,
+ *   event: {
+ *     createdRepo: boolean,
+ *     gitignoreCreated: boolean,
+ *     committed: boolean,
+ *     commitSha?: string,
+ *   } | null,
+ * } | { ok: false, error: string }>}
+ */
+export async function ensureBoardWorkspaceGit() {
+  const result = await initializeWorkspaceGit();
+  if (!result.ok) {
+    return { ok: false, error: result.error || 'git init failed' };
+  }
+  // Journal only when something actually appeared — not when we touched an
+  // existing checkout (gitignore repair with HEAD already present).
+  if (!result.createdRepo && !result.committed) {
+    return { ok: true, event: null };
+  }
+  return {
+    ok: true,
+    event: {
+      createdRepo: Boolean(result.createdRepo),
+      gitignoreCreated: Boolean(result.gitignoreCreated),
+      committed: Boolean(result.committed),
+      ...(result.commitSha ? { commitSha: result.commitSha } : {}),
+    },
+  };
+}
+
+/**
  * @param {string} boardId
- * @returns {Promise<{ ok: boolean, path?: string, branch?: string, error?: string, output?: string }>}
+ * @returns {Promise<{
+ *   ok: boolean,
+ *   path?: string,
+ *   branch?: string,
+ *   error?: string,
+ *   output?: string,
+ *   gitInitialized?: Record<string, unknown>,
+ * }>}
  */
 export async function ensureBoardIntegration(boardId) {
+  // Manual card Start never calls `preflight()`, so the first worktree allocate
+  // is what must refuse a non-git workspace.
+  const git = await ensureBoardWorkspaceGit();
+  if (!git.ok) {
+    return { ok: false, error: git.error };
+  }
   if (ensuredBoards.has(boardId)) {
     const intPath = getWorktreeSlotPath(boardId, INTEGRATION_SLOT);
     try {
       await fs.access(intPath);
-      return { ok: true, path: intPath, branch: integrationBranch(boardId) };
+      return {
+        ok: true,
+        path: intPath,
+        branch: integrationBranch(boardId),
+        ...(git.event ? { gitInitialized: git.event } : {}),
+      };
     } catch {
       ensuredBoards.delete(boardId);
     }
@@ -229,7 +291,7 @@ export async function ensureBoardIntegration(boardId) {
     branch: integrationBranch(boardId),
   });
   if (result.ok) ensuredBoards.add(boardId);
-  return result;
+  return git.event ? { ...result, gitInitialized: git.event } : result;
 }
 
 /**
@@ -249,6 +311,7 @@ export async function ensureBoardIntegration(boardId) {
  *   slotId?: string,
  *   created?: boolean,
  *   discarded: Record<string, unknown>[],
+ *   gitInitialized?: Record<string, unknown>,
  *   error?: string,
  * }>}
  */
@@ -265,6 +328,7 @@ export async function allocateAttemptWorktree(input) {
       error: integration.output || integration.error || 'ensureIntegration failed',
     };
   }
+  const gitInitialized = integration.gitInitialized;
 
   const reuse = wantsReuse(desired);
   const previous = previousWorktreeForTask(state, taskId);
@@ -275,7 +339,14 @@ export async function allocateAttemptWorktree(input) {
       await fs.access(previous);
       // Do not call `createWorktree` on a live repair tree — that merges the
       // integration tip in and can clobber the dirty work being repaired.
-      return { ok: true, path: previous, slotId, created: false, discarded };
+      return {
+        ok: true,
+        path: previous,
+        slotId,
+        created: false,
+        discarded,
+        ...(gitInitialized ? { gitInitialized } : {}),
+      };
     } catch {
       // Crash between end and retry: recreate at the same slot so the path
       // the journal records still matches the previous attempt.
@@ -292,7 +363,14 @@ export async function allocateAttemptWorktree(input) {
           error: created.output || created.error || 'createWorktree failed',
         };
       }
-      return { ok: true, path: created.path, slotId, created: true, discarded };
+      return {
+        ok: true,
+        path: created.path,
+        slotId,
+        created: true,
+        discarded,
+        ...(gitInitialized ? { gitInitialized } : {}),
+      };
     }
   }
 
@@ -325,7 +403,14 @@ export async function allocateAttemptWorktree(input) {
       error: created.output || created.error || 'createWorktree failed',
     };
   }
-  return { ok: true, path: created.path, slotId, created: true, discarded };
+  return {
+    ok: true,
+    path: created.path,
+    slotId,
+    created: true,
+    discarded,
+    ...(gitInitialized ? { gitInitialized } : {}),
+  };
 }
 
 /**

@@ -12,10 +12,15 @@ export interface RunnerEffector {
     role: string;
     seedKind?: string;
     sameWorktree?: boolean;
-  }): Promise<{ attemptId: string; worktree?: string; discarded?: Record<string, unknown>[] }>;
+  }): Promise<{
+    attemptId: string;
+    worktree?: string;
+    discarded?: Record<string, unknown>[];
+    gitInitialized?: Record<string, unknown>;
+  }>;
   stop(attemptId: string): Promise<void>;
-  /** Check the model binding and role prompts. Throws when something is missing. */
-  preflight(): Promise<void>;
+  /** Check the model binding, role prompts, and isolated-worktree git init. Throws when something is missing. */
+  preflight(): Promise<{ gitInitialized?: Record<string, unknown> } | void>;
   onEnd(
     handler: (end: {
       attemptId: string;

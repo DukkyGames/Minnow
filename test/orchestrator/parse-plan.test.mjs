@@ -403,7 +403,19 @@ describe('parsePlan — the retired workaround', () => {
   });
 
   it('treats placeholder values for no dependencies as none', () => {
-    for (const placeholder of ['none', 'None', 'n/a', '—', '-']) {
+    for (const placeholder of [
+      'none',
+      'None',
+      'none.',
+      'None.',
+      'nothing',
+      '(none)',
+      '`none`',
+      '**none**',
+      'n/a',
+      '—',
+      '-',
+    ]) {
       const source = mutate('- **Depends on:**\n', `- **Depends on:** ${placeholder}\n`);
       const graph = parsePlan(source);
       assert.equal(isParseErrors(graph), false, placeholder);

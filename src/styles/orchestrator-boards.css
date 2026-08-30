@@ -32,12 +32,19 @@
 }
 
 .ov2 {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(200px, 260px) 1fr;
   height: 100%;
   min-height: 0;
   background: var(--mn-bg);
   color: var(--mn-fg);
+}
+
+/* Task detail covers the whole Boards shell (rail + pane), not only the
+ * scrollport — the pane alone is often short when other chrome shares the column. */
+.ov2.is-detail-open {
+  overflow: hidden;
 }
 
 /* ── The list ──────────────────────────────────────────────────────────── */
@@ -123,6 +130,7 @@
 /* ── The board ─────────────────────────────────────────────────────────── */
 
 .ov2__board {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -130,6 +138,7 @@
   padding: 18px 20px 40px;
   overflow-y: auto;
 }
+
 
 /*
  * Live-board runhead: restatement of V1 `.board-header` under `.ov2`.
@@ -893,12 +902,33 @@
   border-radius: 5px;
 }
 
-/* ── Task detail (P9-B moved it out of the card) ───────────────────────── */
+/* ── Task detail overlay (centered over the board, not a bottom dock) ──── */
+
+.ov2-detail-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 20px 24px;
+  background: var(--mn-overlay);
+}
 
 .ov2-detail {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
+  width: min(1100px, 100%);
+  height: 100%;
+  min-height: 0;
+  max-width: 100%;
+  padding: 16px 18px 14px;
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md, 10px);
+  box-shadow: var(--shadow-popover-tall);
+  outline: none;
 }
 
 .ov2-detail__head {
@@ -906,6 +936,12 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
+  padding-bottom: 10px;
+}
+
+.ov2-detail__head .ov2-btn {
+  margin-left: auto;
 }
 
 .ov2-detail__title {
@@ -914,14 +950,37 @@
   align-items: baseline;
   gap: 8px;
   margin: 0;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
+  letter-spacing: -0.01em;
+  min-width: 0;
 }
 
 .ov2-detail__id {
   font-family: var(--mn-font-mono, ui-monospace, monospace);
   font-size: 11px;
   color: var(--mn-fg-muted);
+}
+
+.ov2-detail__meta {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 8px 0 12px;
+  margin: 0 0 4px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.ov2-detail__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 2px 4px 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .ov2-task__meta {
@@ -932,23 +991,33 @@
 
 .ov2-task__spec {
   display: flex;
-  gap: 8px;
+  gap: 10px;
+  align-items: flex-start;
 }
 
 .ov2-task__spec-label {
-  flex: 0 0 52px;
+  flex: 0 0 56px;
   color: var(--mn-fg-subtle);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-size: 10px;
+  font-weight: 600;
   padding-top: 2px;
 }
 
 .ov2-task__spec-text {
   margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 75ch;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
+
+/* No enter animation: the live board remounts this overlay on every paint, and
+ * a repeating fade would flash under the reader. */
 
 .ov2-task__note {
   display: flex;

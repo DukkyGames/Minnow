@@ -44,6 +44,7 @@ import { finalAttemptEnd, formatRunInstructions, runFinalLadder } from './final-
 import {
   allocateAttemptWorktree,
   commitAttemptWorktree,
+  ensureBoardWorkspaceGit,
   INTEGRATION_SLOT,
   previousWorktreeForTask,
   releaseWorktree,
@@ -555,13 +556,23 @@ export function createRunnerEffector(options = {}) {
      * cannot pass while `start()` fails on the thing it claims to have checked.
      * Per-task work (the seed) is not checked here — it needs a task.
      *
-     * @returns {Promise<void>}
+     * Isolated-worktree boards also run MIN-615 git init here so a non-git
+     * workspace fails on the Start button (400) instead of after parse.
+     * Explicit `cwd` sandboxes stay git-free.
+     *
+     * @returns {Promise<{ gitInitialized?: Record<string, unknown> } | void>}
      */
     async preflight() {
       const state = boardId || options.getState ? await currentState() : null;
       await resolveAttemptModel(options.model ?? state?.model ?? null);
       await loadRolePrompt('builder', promptVariant);
       await loadRolePrompt('tester', promptVariant);
+      if (!isolateWorktrees) return;
+      const git = await ensureBoardWorkspaceGit();
+      if (!git.ok) {
+        throw new Error(git.error || 'Workspace is not a git repository');
+      }
+      if (git.event) return { gitInitialized: git.event };
     },
 
     /**
@@ -623,6 +634,8 @@ export function createRunnerEffector(options = {}) {
       let slotId;
       /** @type {Record<string, unknown>[]} */
       const discarded = [];
+      /** @type {Record<string, unknown> | undefined} */
+      let gitInitialized;
 
       if (isolateWorktrees) {
         if (!boardId) {
@@ -641,6 +654,7 @@ export function createRunnerEffector(options = {}) {
         attemptCwd = allocated.path;
         slotId = allocated.slotId;
         discarded.push(...allocated.discarded);
+        if (allocated.gitInitialized) gitInitialized = allocated.gitInitialized;
       }
 
       const prompt = interpolatePrompt(
@@ -743,6 +757,7 @@ export function createRunnerEffector(options = {}) {
         attemptId,
         ...(entry.worktree ? { worktree: entry.worktree } : {}),
         ...(discarded.length > 0 ? { discarded } : {}),
+        ...(gitInitialized ? { gitInitialized } : {}),
       };
     },
 

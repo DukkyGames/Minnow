@@ -352,6 +352,11 @@ describe('P2-G HTTP board (UI closed)', { concurrency: false }, () => {
     assert.ok(types.includes('task.attempt.ended'));
     assert.ok(types.includes('merge.succeeded'));
     assert.ok(types.includes('run.finished'));
+    assert.equal(
+      types.includes('board.git.initialized'),
+      false,
+      'P2-G explicit cwd must stay git-free',
+    );
   });
 
   test('GET mid-run folds the same state the engine holds', { timeout: 60_000 }, async () => {

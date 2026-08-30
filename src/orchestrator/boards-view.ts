@@ -174,6 +174,7 @@ export async function openBoardsView(): Promise<void> {
   area.classList.add(CHAT_AREA_CLASS);
   document.getElementById('mainColumn')?.classList.add(MAIN_COLUMN_CLASS);
   surface = { root, listPane, boardPane };
+  document.addEventListener('keydown', onBoardsDocumentKeydown, true);
 
   list = createBoardListClient();
   unsubscribeList = list.subscribe(() => {
@@ -194,6 +195,7 @@ export async function openBoardsView(): Promise<void> {
 
 export function teardownBoardsView(): void {
   if (typeof document === 'undefined') return;
+  document.removeEventListener('keydown', onBoardsDocumentKeydown, true);
   unsubscribeBoard?.();
   unsubscribeBoard = null;
   client?.close();
@@ -216,6 +218,35 @@ export function teardownBoardsView(): void {
   transcript = null;
   notice = null;
   syncRailButton();
+}
+
+/** Escape closes the task overlay even when focus is not on the dialog itself. */
+function onBoardsDocumentKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Escape') return;
+  if (!surface || !selectedTaskId) return;
+  if (!surface.root.querySelector('.ov2-detail-overlay')) return;
+  event.preventDefault();
+  selectTaskDetail(null);
+}
+
+/**
+ * Open or close the task detail overlay and put keyboard focus where the
+ * overlay lifecycle expects it (Close on open, task card on close).
+ */
+function selectTaskDetail(taskId: string | null): void {
+  const previous = selectedTaskId;
+  selectedTaskId = taskId;
+  transcript = null;
+  paintBoard();
+  if (taskId === null && previous) {
+    surface?.root
+      .querySelector<HTMLElement>(`[data-focus-key="task:${CSS.escape(previous)}"]`)
+      ?.focus();
+    return;
+  }
+  if (taskId) {
+    surface?.root.querySelector<HTMLElement>('[data-focus-key="detail-close"]')?.focus();
+  }
 }
 
 export async function closeBoardsView(): Promise<void> {
@@ -644,6 +675,8 @@ function paintBoard(): void {
 
   if (!selectedBoardId) {
     detachV2BoardHeaderInstruments();
+    surface.root.classList.remove('is-detail-open');
+    surface.root.querySelector('.ov2-detail-overlay')?.remove();
     pane.replaceChildren(renderNoSelection());
     return;
   }
@@ -651,6 +684,8 @@ function paintBoard(): void {
   const state = client?.getState() ?? null;
   if (!state) {
     detachV2BoardHeaderInstruments();
+    surface.root.classList.remove('is-detail-open');
+    surface.root.querySelector('.ov2-detail-overlay')?.remove();
     // A skeleton in the board's own shape, not the word "Loading" — P9-I.
     pane.replaceChildren(renderBoardSkeleton());
     return;
@@ -685,11 +720,7 @@ function paintBoard(): void {
   const actions = {
     startTask: (taskId: string) => void commandStartTask(taskId),
     abandonTask: (taskId: string) => void commandAbandonTask(taskId),
-    select: (taskId: string | null) => {
-      selectedTaskId = taskId;
-      transcript = null;
-      paintBoard();
-    },
+    select: (taskId: string | null) => selectTaskDetail(taskId),
     openTranscript: (attemptId: string) => void toggleTranscript(attemptId),
   };
   const options = {
@@ -701,9 +732,6 @@ function paintBoard(): void {
   };
 
   pane.appendChild(renderTaskList(state, actions, options));
-
-  const selected = selectedTaskId ? state.tasks.get(selectedTaskId) : undefined;
-  if (selected) pane.appendChild(renderTaskDetail(state, selected, actions, options));
 
   // P9-G. The narrative artifact first, then the derived ledger beneath it: the
   // report writer can be late, absent, or wrong, and the ledger is a fold over
@@ -721,6 +749,14 @@ function paintBoard(): void {
   // state; restoring the scroll offset and the focus is what stops that being
   // felt as a keyboard user losing their place every five seconds.
   pane.scrollTop = scrollTop;
+
+  const selected = selectedTaskId ? state.tasks.get(selectedTaskId) : undefined;
+  // Cover the whole Boards shell so the dialog can use nearly the full area,
+  // not only the short board scrollport beside the rail.
+  surface.root.classList.toggle('is-detail-open', Boolean(selected));
+  surface.root.querySelector('.ov2-detail-overlay')?.remove();
+  if (selected) surface.root.appendChild(renderTaskDetail(state, selected, actions, options));
+
   restoreFocus(focused);
 }
 

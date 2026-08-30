@@ -670,8 +670,55 @@ function titleCaseLabel(label) {
 }
 
 /**
+ * Peel wrapping markup and trailing sentence punctuation so LLM/placeholder
+ * spellings (`none.`, `(none)`, `` `none` ``, `**nothing**`) compare as the
+ * same token. Real task ids are left intact aside from those wrappers.
+ *
+ * @param {string} part
+ * @returns {string}
+ */
+function normalizeListToken(part) {
+  let token = String(part ?? '')
+    .trim()
+    .replace(/^[-*]\s+/, '')
+    .trim();
+  let previous = '';
+  while (token && token !== previous) {
+    previous = token;
+    // Bold wrappers only (`**none**`). Trailing `*` is glob syntax (`src/**`).
+    if (token.startsWith('**') && token.endsWith('**') && token.length >= 4) {
+      token = token.slice(2, -2).trim();
+      continue;
+    }
+    if (token.startsWith('`') && token.endsWith('`') && token.length >= 2) {
+      token = token.slice(1, -1).trim();
+      continue;
+    }
+    if (
+      (token.startsWith("'") && token.endsWith("'") && token.length >= 2) ||
+      (token.startsWith('"') && token.endsWith('"') && token.length >= 2)
+    ) {
+      token = token.slice(1, -1).trim();
+      continue;
+    }
+    if (
+      (token.startsWith('(') && token.endsWith(')') && token.length >= 2) ||
+      (token.startsWith('[') && token.endsWith(']') && token.length >= 2)
+    ) {
+      token = token.slice(1, -1).trim();
+      continue;
+    }
+    token = token.replace(/[.,;:!?]+$/g, '').trim();
+  }
+  return token;
+}
+
+/**
  * Split a comma-separated bullet value. Placeholders the Planner prompt allows
  * for "no dependencies" collapse to an empty list rather than to a fake id.
+ *
+ * Touches uses the same splitter; a glob literally named `none` is vanishingly
+ * rare. Unknown real ids stay errors in `resolveDependencies`.
  *
  * @param {string} value
  * @returns {string[]}
@@ -679,8 +726,8 @@ function titleCaseLabel(label) {
 function splitList(value) {
   return String(value ?? '')
     .split(/[,\n]/)
-    .map((part) => part.trim().replace(/^[-*]\s*/, '').replace(/^`|`$/g, '').trim())
-    .filter((part) => part.length > 0 && !/^(none|n\/a|na|-|—|–)$/i.test(part));
+    .map((part) => normalizeListToken(part))
+    .filter((part) => part.length > 0 && !/^(none|nothing|n\/a|na|-|—|–)$/i.test(part));
 }
 
 /**

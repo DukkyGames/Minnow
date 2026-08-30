@@ -49,6 +49,7 @@ import {
   liveWorktreePaths,
   reconcileOrphanWorktrees,
   WORKTREE_DISCARDED_TYPE,
+  BOARD_GIT_INITIALIZED_TYPE,
 } from './worktree-lifecycle.js';
 import { detectAttemptOverflow, captureWorktreeDiff } from './touches.js';
 import {
@@ -133,16 +134,17 @@ function isAgentRole(role) {
  *   An attempt that is genuinely gone — killed, vanished — simply stops
  *   appearing, with no end delivered, and the next tick restarts it. That is a
  *   different case, and it is the supported one.
- * @property {(desired: import('./core/types').Desired) => Promise<{ attemptId: string, worktree?: string, discarded?: Record<string, unknown>[] }>} start
+ * @property {(desired: import('./core/types').Desired) => Promise<{ attemptId: string, worktree?: string, discarded?: Record<string, unknown>[], gitInitialized?: Record<string, unknown> }>} start
  *   Resolves once the process **exists**. That resolution is what licenses the
  *   `task.attempt.started` append.
  * @property {(attemptId: string) => Promise<void>} stop
  * @property {(handler: (end: AttemptEnd) => Promise<void> | void) => void} [onEnd]
  *   Called when an attempt finishes, with its outcome. Without this the engine
  *   would have to poll for completion, and a poller is a watchdog by another name.
- * @property {() => Promise<void>} [preflight]
+ * @property {() => Promise<{ gitInitialized?: Record<string, unknown> } | void>} [preflight]
  *   Check everything `start()` needs that is not per-task — the model binding,
- *   the role prompts — and **throw** with a readable message when it is missing.
+ *   the role prompts, isolated-worktree git init — and **throw** with a readable
+ *   message when it is missing.
  *
  *   P9-A. This exists so `POST /start` can refuse before it answers, rather than
  *   returning 200 to a board that will then fail to start every attempt forever.
@@ -473,7 +475,7 @@ export function createEngine(options) {
   async function startAttempt(want) {
     const key = `${want.role}:${want.taskId ?? ''}`;
 
-    /** @type {{ attemptId: string, worktree?: string, discarded?: Record<string, unknown>[] }} */
+    /** @type {{ attemptId: string, worktree?: string, discarded?: Record<string, unknown>[], gitInitialized?: Record<string, unknown> }} */
     let handle;
     try {
       handle = await effector.start(want);
@@ -508,6 +510,9 @@ export function createEngine(options) {
       for (const payload of handle.discarded) {
         events.push(makeEvent(WORKTREE_DISCARDED_TYPE, payload));
       }
+    }
+    if (handle.gitInitialized) {
+      events.push(makeEvent(BOARD_GIT_INITIALIZED_TYPE, handle.gitInitialized));
     }
     events.push(
       makeEvent('task.attempt.started', {
@@ -803,7 +808,10 @@ export function createEngine(options) {
      * @returns {Promise<void>}
      */
     async preflight() {
-      await effector.preflight?.();
+      const result = await effector.preflight?.();
+      if (result?.gitInitialized) {
+        await append([makeEvent(BOARD_GIT_INITIALIZED_TYPE, result.gitInitialized)]);
+      }
     },
 
     /**

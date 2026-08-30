@@ -232,6 +232,23 @@ describe('renderTaskList', () => {
     );
     assert.deepEqual(keys, ['task:W1-C', 'task:W1-D', 'task:W1-B', 'task:W1-A']);
   });
+
+  test('selecting an already-open card does not toggle the overlay closed', () => {
+    setupDom();
+    const calls: Array<string | null> = [];
+    const actions: BoardActions = {
+      ...NO_ACTIONS,
+      select: (id) => calls.push(id),
+    };
+    const node = renderTaskList(board(), actions, {
+      selectedTaskId: 'W1-A',
+      pendingTaskIds: new Set(),
+    });
+    node.querySelector<HTMLButtonElement>('[data-focus-key="task:W1-A"]')!.click();
+    assert.deepEqual(calls, []);
+    node.querySelector<HTMLButtonElement>('[data-focus-key="task:W1-B"]')!.click();
+    assert.deepEqual(calls, ['W1-B']);
+  });
 });
 
 describe('renderEngineErrors (P9-A)', () => {
@@ -308,6 +325,61 @@ describe('renderRunLedger (P9-G)', () => {
 });
 
 describe('renderTaskDetail (P9-D)', () => {
+  test('opens as a modal overlay with compact meta above the scroll body', () => {
+    setupDom();
+    const state = derive([
+      {
+        v: 1,
+        seq: 1,
+        type: 'board.created',
+        boardId: 'b1',
+        planPath: 'documentation/plans/x.md',
+        name: 'Example',
+        waves: [{ n: 1, name: 'Foundations' }],
+        tasks: [
+          {
+            id: 'W1-A',
+            title: 'A',
+            wave: 1,
+            dependsOn: [],
+            touches: ['a.ts'],
+            build: 'Create package.json',
+            test: 'npm test',
+          },
+        ],
+      },
+    ]);
+    const task = state.tasks.get('W1-A')!;
+    const node = renderTaskDetail(state, task, NO_ACTIONS, OPTIONS);
+    assert.equal(node.className, 'ov2-detail-overlay');
+    const dialog = node.querySelector('.ov2-detail')!;
+    assert.equal(dialog.getAttribute('role'), 'dialog');
+    assert.equal(dialog.getAttribute('aria-modal'), 'true');
+    assert.ok(node.querySelector('.ov2-detail__meta'));
+    assert.ok(node.querySelector('.ov2-detail__body'));
+    const bodyText = node.querySelector('.ov2-detail__body')!.textContent!;
+    const buildAt = bodyText.indexOf('Build');
+    const attemptsAt = bodyText.indexOf('Attempts');
+    assert.ok(buildAt >= 0 && attemptsAt > buildAt, 'Build specs precede Attempts');
+    assert.match(bodyText, /Create package\.json/);
+  });
+
+  test('Close and scrim both dismiss via select(null)', () => {
+    setupDom();
+    const state = board();
+    const calls: Array<string | null> = [];
+    const actions: BoardActions = {
+      ...NO_ACTIONS,
+      select: (id) => calls.push(id),
+    };
+    const node = renderTaskDetail(state, state.tasks.get('W1-A')!, actions, OPTIONS);
+    node.querySelector<HTMLButtonElement>('[data-focus-key="detail-close"]')!.click();
+    assert.deepEqual(calls, [null]);
+    calls.length = 0;
+    node.click();
+    assert.deepEqual(calls, [null]);
+  });
+
   test('offers a log for agent attempts and not for synthesised merges', () => {
     setupDom();
     const state = board();

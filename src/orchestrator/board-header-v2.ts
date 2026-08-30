@@ -89,6 +89,16 @@ export function attachV2BoardHeaderInstruments(
     resolveBinding: () => resolveV2BoardModelBinding(liveState),
     persist: (providerId, modelId) => {
       const reasoning = liveState?.model?.reasoning ?? '';
+      if (liveState) {
+        liveState = {
+          ...liveState,
+          model: {
+            providerId,
+            id: modelId,
+            reasoning: reasoning || null,
+          },
+        };
+      }
       void liveCommands?.setModel(providerId, modelId, reasoning);
     },
     onChanged: () => {
@@ -115,6 +125,16 @@ export function attachV2BoardHeaderInstruments(
         binding.modelId,
         isBoardJournalReasoning(journal) ? journal : '',
       );
+      if (liveState) {
+        liveState = {
+          ...liveState,
+          model: {
+            providerId: binding.providerId,
+            id: binding.modelId,
+            reasoning: journal || null,
+          },
+        };
+      }
     },
     onChanged: () => {
       // Stream-driven, same as the model chip.

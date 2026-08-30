@@ -5,13 +5,12 @@
  * medium / high are journaled so the header round-trips the same control V1 uses.
  */
 
-import type { ReasoningEffortOption } from '../types.ts';
+import type { OrchestrateBoardState, ReasoningEffortOption } from '../types.ts';
 import type { ThinkingTriState } from '../agents/thinking-types.ts';
 import {
   applyBoardReasoningPatch,
   type BoardReasoningPatch,
 } from '../chat/orchestrate/board-reasoning-binding.ts';
-import type { OrchestrateBoardState } from '../types.ts';
 
 /** Values POST `/api/boards/:id/model` accepts on `reasoning`. */
 export const BOARD_JOURNAL_REASONING = ['on', 'off', 'low', 'medium', 'high'] as const;

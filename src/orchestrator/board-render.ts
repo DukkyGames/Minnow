@@ -435,7 +435,11 @@ function renderTaskCard(
   // Survives a repaint: the surface rebuilds from scratch on every frame, so
   // focus is restored by key rather than by node identity (P9-I).
   head.dataset.focusKey = `task:${task.id}`;
-  head.addEventListener('click', () => actions.select(selected ? null : task.id));
+  // Open (or replace) the detail overlay. Same-card click does not toggle closed —
+  // dismiss is Close, scrim, or Escape (see renderTaskDetail).
+  head.addEventListener('click', () => {
+    if (!selected) actions.select(task.id);
+  });
 
   head.appendChild(el('span', 'ov2-task__id', task.id));
   head.appendChild(el('span', 'ov2-task__title', task.title));
@@ -617,11 +621,11 @@ function attachKeyboardGrid(list: HTMLElement): void {
 // ---------------------------------------------------------------------------
 
 /**
- * The selected task, in full.
+ * The selected task, in full — as a centered overlay over the board.
  *
- * A panel below the grid rather than an expanding card: a card that grows
- * reflows its whole column, and the detail is long enough — specs, notes,
- * attempts, and now a transcript — that it would swallow the board.
+ * Specs and notes are the reason you open a card; meta stays a compact strip
+ * under the title. A growing in-grid card would reflow its column, and a
+ * bottom dock pushes Finish / ledger off-screen for the same long content.
  */
 export function renderTaskDetail(
   state: BoardState,
@@ -629,11 +633,33 @@ export function renderTaskDetail(
   actions: BoardActions,
   options: BoardViewOptions,
 ): HTMLElement {
+  const titleId = `ov2-detail-title-${task.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+
+  // Scrim owns dismiss-on-outside; the dialog stops propagation so clicks inside stay open.
+  const overlay = el('div', 'ov2-detail-overlay');
+  overlay.dataset.focusKey = 'detail-overlay';
+  overlay.addEventListener('click', () => actions.select(null));
+
   const detail = el('section', 'ov2-detail ob-sec');
-  detail.setAttribute('aria-label', `${task.id} detail`);
+  detail.setAttribute('role', 'dialog');
+  detail.setAttribute('aria-modal', 'true');
+  detail.setAttribute('aria-labelledby', titleId);
+  detail.addEventListener('click', (event) => event.stopPropagation());
+
+  // Escape also bubbles from focus inside the dialog; boards-view adds a
+  // document capture listener so dismiss still works if focus drifts.
+  const dismissOnEscape = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    actions.select(null);
+  };
+  overlay.addEventListener('keydown', dismissOnEscape);
+  detail.addEventListener('keydown', dismissOnEscape);
 
   const head = el('div', 'ov2-detail__head');
   const title = el('h3', 'ov2-detail__title');
+  title.id = titleId;
   title.appendChild(el('span', 'ov2-detail__id', task.id));
   title.appendChild(el('span', undefined, task.title));
   head.appendChild(title);
@@ -645,7 +671,8 @@ export function renderTaskDetail(
   head.appendChild(close);
   detail.appendChild(head);
 
-  const meta = el('div', 'ov2-task__meta');
+  // Compact instrument strip — status facts, not the reading surface.
+  const meta = el('div', 'ov2-detail__meta ov2-task__meta');
   meta.appendChild(field('Column', columnLabel(columnOf(state, task))));
   meta.appendChild(field('Wave', String(task.wave)));
   meta.appendChild(field('Touches', task.touches.join(', ') || '—'));
@@ -655,6 +682,8 @@ export function renderTaskDetail(
   if (task.mergedSha) meta.appendChild(field('Merged', task.mergedSha.slice(0, 12)));
   detail.appendChild(meta);
 
+  const body = el('div', 'ov2-detail__body');
+
   for (const [label, value] of [
     ['Build', task.buildSpec],
     ['Test', task.testSpec],
@@ -663,8 +692,9 @@ export function renderTaskDetail(
     if (!value) continue;
     const spec = el('div', 'ov2-task__spec');
     spec.appendChild(el('span', 'ov2-task__spec-label', label));
+    // Preserve newlines from plan specs; white-space is handled in CSS.
     spec.appendChild(el('p', 'ov2-task__spec-text', value));
-    detail.appendChild(spec);
+    body.appendChild(spec);
   }
 
   if (task.abandonedReason) {
@@ -677,7 +707,7 @@ export function renderTaskDetail(
         task.abandonedReason === 'user' ? 'by hand' : task.abandonedReason,
       ),
     );
-    detail.appendChild(reason);
+    body.appendChild(reason);
   }
   if (task.skippedBy) {
     // Skipped is not a failure of this task — it is waiting on something that failed.
@@ -690,30 +720,33 @@ export function renderTaskDetail(
         `waiting on ${task.skippedBy}, which failed — this task did not fail`,
       ),
     );
-    detail.appendChild(reason);
+    body.appendChild(reason);
   }
   if (task.mergeConflicts && task.mergeConflicts.length > 0) {
     const conflict = el('div', 'ov2-task__note ov2-task__note--warn');
     conflict.appendChild(el('strong', undefined, 'Merge conflict'));
     conflict.appendChild(el('span', undefined, task.mergeConflicts.join(', ')));
-    detail.appendChild(conflict);
+    body.appendChild(conflict);
   }
   for (const overflow of task.touchesOverflow) {
     const note = el('div', 'ov2-task__note ov2-task__note--info');
     note.appendChild(el('strong', undefined, 'Wrote outside its footprint'));
     note.appendChild(el('span', undefined, overflow.actual.join(', ')));
-    detail.appendChild(note);
+    body.appendChild(note);
   }
   if (task.emptyTouchesGlobs && task.emptyTouchesGlobs.length > 0) {
     const note = el('div', 'ov2-task__note ov2-task__note--warn');
     note.appendChild(el('strong', undefined, 'Glob matched no files'));
     note.appendChild(el('span', undefined, task.emptyTouchesGlobs.join(', ')));
-    detail.appendChild(note);
+    body.appendChild(note);
   }
 
-  detail.appendChild(renderAttempts(task.attempts, actions, options));
-  if (options.transcript) detail.appendChild(renderTranscript(options.transcript));
-  return detail;
+  body.appendChild(renderAttempts(task.attempts, actions, options));
+  if (options.transcript) body.appendChild(renderTranscript(options.transcript));
+
+  detail.appendChild(body);
+  overlay.appendChild(detail);
+  return overlay;
 }
 
 function columnLabel(id: ColumnId): string {
