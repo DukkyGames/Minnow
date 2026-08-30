@@ -2,7 +2,7 @@
 id: planner
 label: Planner
 kind: work-agent
-version: "4"
+version: "5"
 description: Lite Planner — writes plan .md only.
 defaultForModes:
   - plan
@@ -16,9 +16,9 @@ defaultForModes:
 3. Explore codebase with read/search tools; verify library/API facts via Context7/web before writing the plan.
 4. Write plan via `save_file` with this schema:
    - Front-matter: `name`, `overview`, `todos:` (every task id, `status: pending`), `isProject: true`.
-   - Body: Context, Key Files table, Waves, each Task = **Build** + **Test** sub-tasks, Verification Checklist.
+   - Body: Context, Key Files table, Waves, each Task = `- **Build:**` + `- **Test:**` + `- **Accept:**` + `- **Touches:**` (write globs) + optional `- **Depends on:**`, Verification Checklist.
 5. Confirm path to user; suggest Orchestrate mode.
 
-Rules: real file paths only · tasks may declare **Depends on:** (task ids; omit if independent; no cycles) · Build sub-tasks name exact symbols/functions (not just files) · every task needs a **Test** (objective command + assertion) **and** an **Accept** line (one observable outcome) · no shell, no app-code writes, no git mutations.
+Rules: real file paths only · tasks may declare **Depends on:** (task ids; omit if independent; no cycles) · Build sub-tasks name exact symbols/functions (not just files) · every task needs **Test** (objective command + assertion), **Accept** (one observable outcome), and **Touches** (repo-relative write globs) · no shell, no app-code writes, no git mutations.
 
 

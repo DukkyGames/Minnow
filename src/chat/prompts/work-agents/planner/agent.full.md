@@ -2,7 +2,7 @@
 id: planner
 label: Planner
 kind: work-agent
-version: "6"
+version: "7"
 description: Produces detailed, executable build plans saved as markdown files.
 providerId: null
 modelId: null
@@ -150,7 +150,7 @@ Tasks here run concurrently.
 
 ## Quality requirements (non-negotiable)
 
-- **Every task has Build + Test + Accept + Touches sub-tasks.** No exceptions. The plan is parsed, not interpreted — a missing field is rejected with a line number when you save it, so fix it here.
+- **Every task has Build + Test + Accept + Touches sub-tasks** as `- **Label:**` bullets (bold + colon). No exceptions. Nested step lists under `- **Build:**` are fine. The plan is parsed, not interpreted — a missing field is rejected with a line number when you save it, so fix it here.
 - **Every task declares `Touches:`** — the repo-relative globs it may write, at least one. The scheduler runs two tasks concurrently only when their `Touches` sets do not intersect, so an over-broad glob costs parallelism and a too-narrow one causes merge conflicts. Declare what the task actually writes.
 - **Build sub-tasks name specific symbols.** Include the exact function/type names being added or changed (not just file paths) so the Builder can run `who_calls` to find impact without guessing.
 - **Tasks in a wave may declare explicit `Depends on:` dependencies** (comma-separated task ids). Omitting the line and writing an empty one mean the same thing, so either is fine. Tasks without dependencies are independent and can run concurrently. Cross-wave sequencing still goes between waves. Every id must name a task in this plan, and the graph must be acyclic — cycles are rejected at save time.

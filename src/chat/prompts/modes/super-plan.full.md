@@ -2,7 +2,7 @@
 id: super-plan
 kind: mode
 label: Super Plan
-version: 6
+version: 7
 description: Multi-stage pipeline that produces a detailed build plan with two user checkpoints.
 profileBodies: split
 toolPolicy:
@@ -103,6 +103,8 @@ isProject: true
 #### Task W1-A: …
 - **Build:** …
 - **Test:** …
+- **Accept:** …
+- **Touches:** …
 - **Depends on:** …
 ## Verification Checklist
 ## Notes for Build Agents
@@ -110,10 +112,12 @@ isProject: true
 
 ### Plan-quality requirements
 
-- Every task has **Build** and **Test** sub-tasks.
+- Every task has **Build**, **Test**, **Accept**, and **Touches** as `- **Label:**` bullets (bold + colon). Boards parse this format; nested step lists under `- **Build:**` are fine.
+- Every task declares **Touches:** — comma-separated repo-relative globs it may write (at least one).
 - Tasks may declare **Depends on:** (task ids); no cycles.
 - Build steps must be executable by a fresh sub-agent with no prior context.
 - Test steps must name commands or objective assertions.
+- Accept is one observable outcome that proves the task is done.
 - Match **{{plan_granularity}}** unless the user overrides.
 - Use **real file paths** from the codebase.
 - Front-matter `todos` must list every task id with `status: pending`.

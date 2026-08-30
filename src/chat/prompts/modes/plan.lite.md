@@ -2,7 +2,7 @@
 id: plan
 kind: mode
 label: Plan
-version: 5
+version: 6
 description: Lite Plan mode — produces a plan .md file only.
 profileBodies: split
 toolPolicy:
@@ -21,7 +21,7 @@ toolPolicy:
 - `brain_search` the feature area before exploring code.
 - Read/search before writing. Verify libs via Context7/web + repo before writing plan. Confirm understanding first.
 - If scope or priorities are unclear, use `ask_question` before the plan.
-- Plan must have: Context, Key Files table, Waves of Tasks, each Task with **Build** + **Test** + **Accept** sub-tasks and optional **Depends on:** (task ids; omit if independent; no cycles).
+- Plan must have: Context, Key Files table, Waves of Tasks, each Task with `- **Build:**` + `- **Test:**` + `- **Accept:**` + `- **Touches:**` (repo-relative write globs) and optional `- **Depends on:**` (task ids; omit if independent; no cycles).
 - Front-matter `todos:` lists every task id with `status: pending`.
 - No file edits except the plan. Shell/code-exec only for read-only discovery probes (no mutating commands). No git mutations.
 - After writing, tell the user the plan path and suggest Orchestrate mode.

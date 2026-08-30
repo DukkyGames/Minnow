@@ -23,9 +23,10 @@
  * This module validates glob *syntax* only. Matching declared globs against the
  * real repo needs I/O and belongs in P3-D.
  *
- * The format here is the one `src/chat/prompts/work-agents/planner/agent.full.md`
- * already specifies, plus the newly required `- **Touches:**` field. Prompt and
- * parser are changed together, by rule, so they cannot drift.
+ * The preferred emit form is the one Plan / Super Plan / Planner prompts specify
+ * (`- **Build:**` / `- **Test:**` / `- **Accept:**` / `- **Touches:**`). The
+ * matcher also accepts plain labels and bare headings so older plans and nested
+ * Build step-lists still board-intake. Prompt and parser change together by rule.
  */
 
 /** Bullet fields a task must carry. */
@@ -365,29 +366,41 @@ function readBody(lines, from, errors) {
 
     if (!task) continue;
 
-    const bullet = /^\s*[-*]\s+\*\*([A-Za-z ]+?):?\*\*:?\s*(.*)$/.exec(raw);
-    if (bullet) {
+    // Task fields accept several layouts so Plan / Super Plan output and older
+    // hand-authored plans all board-intake without a rewrite:
+    //   - **Build:** value   (preferred)
+    //   - **Build** value
+    //   - Build: value
+    //   **Build:** / Build:  (bare headings; body on following lines)
+    // Nested markdown list items under an empty `- **Build:**` are continuation
+    // content — rejecting any `[-*] ` line here was dropping every Build body
+    // that used step bullets (the common Planner shape).
+    const matched = matchTaskField(raw);
+    if (matched) {
       finishField();
-      const label = bullet[1].trim();
-      const value = bullet[2];
+      const label = matched.label;
       if (label === 'Build') field = 'build';
       else if (label === 'Test') field = 'test';
       else if (label === 'Accept') field = 'accept';
       else if (label === 'Touches') field = 'touchesRaw';
-      else if (/^Depends on$/i.test(label)) {
+      else if (label === 'Depends on') {
         field = 'dependsRaw';
         task.dependsDeclared = true;
-      } else continue;
-      task[field] = value;
+      } else {
+        field = null;
+        continue;
+      }
+      task[field] = matched.value;
       continue;
     }
 
-    // A continuation line belongs to the bullet above it. `field` is already the
-    // property name — lower-casing it here silently wrote `touchesraw` and
-    // `dependsraw`, so a wrapped `Touches:` or `Depends on:` list dropped every
-    // entry after the first with no parse error. That is the silently-dropped-
-    // edge failure this parser exists to make impossible.
-    if (field && trimmed.length > 0 && !/^[-*]\s/.test(trimmed)) {
+    // A continuation line belongs to the field above it. Keep nested list items
+    // (`  - step…`) and wrapped prose. `field` is already the property name —
+    // lower-casing it here silently wrote `touchesraw` and `dependsraw`, so a
+    // wrapped `Touches:` or `Depends on:` list dropped every entry after the
+    // first with no parse error. That is the silently-dropped-edge failure this
+    // parser exists to make impossible.
+    if (field && trimmed.length > 0) {
       task[field] = `${task[field]}\n${trimmed}`;
       continue;
     }
@@ -615,6 +628,46 @@ function detectCycles(body, errors) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Recognised task-field labels (case-insensitive). Preferred emit form is
+ * `- **Label:** value`; the matcher also accepts plain labels and bare headings.
+ *
+ * @param {string} raw
+ * @returns {{ label: string, value: string } | null}
+ */
+function matchTaskField(raw) {
+  // Preferred emit is `- **Build:** value` — the colon sits *inside* the bold
+  // markers (`**Build:**`), which is why `:?)` comes before the closing `\*\*`.
+  // Also accept `- **Build** value`, plain `- Build:`, and bare headings.
+  const patterns = [
+    // Bullet + bold label: - **Build:** value | - **Build** value | - **Build**: value
+    /^\s*[-*]\s+\*\*(Build|Test|Accept|Touches|Depends\s+on):?\*\*:?\s*(.*)$/i,
+    // Bullet + plain label, colon required: - Build: value
+    /^\s*[-*]\s+(Build|Test|Accept|Touches|Depends\s+on):\s*(.*)$/i,
+    // Bare bold heading: **Build:** value | **Build** value
+    /^\s*\*\*(Build|Test|Accept|Touches|Depends\s+on):?\*\*:?\s*(.*)$/i,
+    // Bare plain heading, colon required: Build: value
+    /^\s*(Build|Test|Accept|Touches|Depends\s+on):\s*(.*)$/i,
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(raw);
+    if (!match) continue;
+    const label = /^depends\s+on$/i.test(match[1]) ? 'Depends on' : titleCaseLabel(match[1]);
+    return { label, value: match[2] ?? '' };
+  }
+  return null;
+}
+
+/**
+ * @param {string} label
+ * @returns {string}
+ */
+function titleCaseLabel(label) {
+  const trimmed = String(label ?? '').trim();
+  if (!trimmed) return trimmed;
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+}
 
 /**
  * Split a comma-separated bullet value. Placeholders the Planner prompt allows

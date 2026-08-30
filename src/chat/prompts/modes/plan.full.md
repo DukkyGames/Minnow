@@ -2,7 +2,7 @@
 id: plan
 kind: mode
 label: Plan
-version: 6
+version: 7
 description: Produces a detailed build-plan document. Read-only except for the plan file itself.
 profileBodies: split
 toolPolicy:
@@ -90,12 +90,14 @@ Tasks in this wave can run concurrently.
 - **Build:** <exact steps, file paths, function names, expected diff scope>
 - **Test:** <exact assertions; what command to run; what output proves success>
 - **Accept:** <one observable outcome that proves this task is done>
+- **Touches:** <comma-separated repo-relative globs this task may write — e.g. `src/foo/**`, `server/bar/*.js`>
 - **Depends on:** <comma-separated task ids, or omit>
 
 #### Task W1-B: <Title>
 - **Build:** ...
 - **Test:** ...
 - **Accept:** ...
+- **Touches:** ...
 - **Depends on:** <omit if no dependency>
 
 ### Wave 2 — <Wave name>
@@ -112,7 +114,8 @@ Tasks in this wave can run concurrently.
 
 ### Plan-quality requirements
 
-- **Every task has Build + Test + Accept sub-tasks.** A task is not complete until its test passes.
+- **Every task has Build + Test + Accept + Touches sub-tasks** as `- **Label:**` bullets (bold + colon). Boards parse this format; a missing field is rejected with a line number. Nested step lists under `- **Build:**` are fine.
+- **Every task declares `Touches:`** — the repo-relative globs it may write, at least one. The scheduler runs two tasks concurrently only when their `Touches` sets do not intersect.
 - **Tasks within a wave may declare explicit dependencies** via `Depends on:` (task ids). Tasks without a `Depends on:` line are independent and may run concurrently. Cross-wave sequencing still goes between waves; within-wave `Depends on:` is for fine-grained ordering only. No cycles allowed; only reference task ids earlier in the plan.
 - **Each Build sub-task must be specific enough that a fresh sub-agent could execute it with no prior context** — include file paths, function signatures, and expected outcomes.
 - **Each Test sub-task must be objective** — name the command to run or the exact assertion to check.

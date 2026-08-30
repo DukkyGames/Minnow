@@ -337,6 +337,56 @@ describe('parsePlan — document-level failures', () => {
 
 // ---------------------------------------------------------------------------
 
+describe('parsePlan — field layout variants', () => {
+  it('keeps nested list items under an empty - **Build:** bullet', () => {
+    // The failure mode behind "task has no **Build:**" on otherwise valid plans:
+    // Planner writes `- **Build:**` then indented step bullets. Rejecting any
+    // `[-*] ` continuation line dropped the entire Build body.
+    const source = GOLDEN.replace(
+      '- **Build:** Add `GET /api/widgets` in `server/widgets/routes.js`.\n',
+      '- **Build:**\n  - Add `GET /api/widgets` in `server/widgets/routes.js`.\n  - Return an empty list.\n',
+    );
+    const graph = parsePlan(source);
+    assert.equal(isParseErrors(graph), false, isParseErrors(graph) ? formatParseErrors(graph) : '');
+    assert.match(graph.tasks[1].build, /GET \/api\/widgets/);
+    assert.match(graph.tasks[1].build, /Return an empty list/);
+  });
+
+  it('accepts plain bullet labels with a required colon', () => {
+    const source = GOLDEN.replace(
+      '- **Build:** Add `GET /api/widgets` in `server/widgets/routes.js`.\n- **Test:** curl returns 200.\n- **Accept:** The route returns `{ widgets: [] }`.\n- **Touches:** `server/widgets/**`\n',
+      '- Build: Add `GET /api/widgets` in `server/widgets/routes.js`.\n- Test: curl returns 200.\n- Accept: The route returns `{ widgets: [] }`.\n- Touches: `server/widgets/**`\n',
+    );
+    const graph = parsePlan(source);
+    assert.equal(isParseErrors(graph), false, isParseErrors(graph) ? formatParseErrors(graph) : '');
+    assert.match(graph.tasks[1].build, /GET \/api\/widgets/);
+    assert.equal(graph.tasks[1].test, 'curl returns 200.');
+  });
+
+  it('accepts bare **Build:** / Build: headings with body on following lines', () => {
+    const source = GOLDEN.replace(
+      '- **Build:** Add `GET /api/widgets` in `server/widgets/routes.js`.\n- **Test:** curl returns 200.\n- **Accept:** The route returns `{ widgets: [] }`.\n- **Touches:** `server/widgets/**`\n',
+      '**Build:**\nAdd `GET /api/widgets` in `server/widgets/routes.js`.\nTest:\ncurl returns 200.\n**Accept:** The route returns `{ widgets: [] }`.\nTouches: `server/widgets/**`\n',
+    );
+    const graph = parsePlan(source);
+    assert.equal(isParseErrors(graph), false, isParseErrors(graph) ? formatParseErrors(graph) : '');
+    assert.match(graph.tasks[1].build, /GET \/api\/widgets/);
+    assert.equal(graph.tasks[1].test, 'curl returns 200.');
+    assert.match(graph.tasks[1].accept, /widgets: \[\]/);
+    assert.deepEqual(graph.tasks[1].touches, ['server/widgets/**']);
+  });
+
+  it('accepts - **Build** without a colon', () => {
+    const source = mutate(
+      '- **Build:** Add `GET /api/widgets` in `server/widgets/routes.js`.',
+      '- **Build** Add `GET /api/widgets` in `server/widgets/routes.js`.',
+    );
+    const graph = parsePlan(source);
+    assert.equal(isParseErrors(graph), false, isParseErrors(graph) ? formatParseErrors(graph) : '');
+    assert.match(graph.tasks[1].build, /GET \/api\/widgets/);
+  });
+});
+
 describe('parsePlan — the retired workaround', () => {
   it('parses an absent and an empty Depends on identically', () => {
     // V1's orchestrator prompt had to plead "never emit `dependsOn: []` — omit
