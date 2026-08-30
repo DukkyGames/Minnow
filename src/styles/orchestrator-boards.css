@@ -31,6 +31,21 @@
   overflow: hidden;
 }
 
+/*
+ * Boards owns the stage with its own rail. The Code session list and composer
+ * belong to chat, not this page — hide them while the surface is up (same
+ * treatment as Research). V2 has no board-chat embed yet, so there is no
+ * `.main-column--board-chat` exception.
+ */
+.main-column.main-column--orchestrator-boards .input-bar,
+.main-column.main-column--orchestrator-boards .tool-approval-host,
+.main-column.main-column--orchestrator-boards .question-host,
+.main-column.main-column--orchestrator-boards .code-change-strip-wrap,
+.main-column.main-column--orchestrator-boards .chat-jump-latest,
+.main-column.main-column--orchestrator-boards .stats-strip {
+  display: none;
+}
+
 .ov2 {
   position: relative;
   display: grid;
