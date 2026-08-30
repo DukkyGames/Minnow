@@ -22,9 +22,9 @@
  *
  * ## What it cannot do yet
  *
- * Phase 1's effector is scripted, so this drives a board with no agents behind
- * it. Real work arrives with P2-F's runner effector; until then this surface is
- * how the scheduler is watched, not how software gets built.
+ * Merge and Final are still instant-pass (P3 owns a real merge queue). Live
+ * agent output arrives as SSE `event: live` from P2-F; this view renders the
+ * current tool name on the running task row.
  */
 
 import '../styles/orchestrator-boards.css';
@@ -398,7 +398,7 @@ function paintBoard(): void {
           paintBoard();
         },
       },
-      { selectedTaskId, pendingTaskIds: pendingTasks },
+      { selectedTaskId, pendingTaskIds: pendingTasks, liveHeadlines: client?.getLiveHeadlines() },
     ),
   );
   pane.appendChild(renderMergeQueue(state));

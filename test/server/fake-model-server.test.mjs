@@ -45,6 +45,26 @@ describe('fake-model-server', () => {
     assert.equal(isMissingBoardReportNudge(NUDGE_BODY), true);
   });
 
+  test('extractRequestContext detects V2 Builder/Tester prompts and # Task headings', () => {
+    const builder = extractRequestContext({
+      messages: [
+        { role: 'system', content: '**Builder.** Implement one task precisely. Working directory: /tmp.' },
+        { role: 'user', content: '# Task W2-A — Wire the barrel\n\n## Build\nCreate src/index.js\n' },
+      ],
+    });
+    assert.equal(builder.role, 'builder');
+    assert.equal(builder.taskId, 'W2-A');
+
+    const tester = extractRequestContext({
+      messages: [
+        { role: 'system', content: '**Tester.** Verify Builder output against the Test spec.' },
+        { role: 'user', content: '# Task W1-A — Add greet\n' },
+      ],
+    });
+    assert.equal(tester.role, 'tester');
+    assert.equal(tester.taskId, 'W1-A');
+  });
+
   test('builder nth=0 emits board_report; nth=1 is prose unless nudge', () => {
     const ctx = { role: 'builder', taskId: 'W1-A' };
     assert.equal(emitHasBoardReport(defaultEmitForContext(ctx, 0)), true);

@@ -20,6 +20,7 @@ import type { BoardState } from '../../server/orchestrator/core/types';
 import { derive } from '../../server/orchestrator/core/derive.js';
 import { createScriptedEffector } from '../../server/orchestrator/effector-scripted.js';
 import { disposeEngines } from '../../server/orchestrator/engine.js';
+import { emitLive } from '../../server/orchestrator/live-events.js';
 import { readEvents, resetJournalCache } from '../../server/orchestrator/journal.js';
 import {
   createBoardsMiddleware,
@@ -285,6 +286,37 @@ describe('board client — reading', () => {
       // The view and the engine run the same fold, so they cannot disagree.
       const fromJournal = derive(await readEvents(boardId));
       assert.deepEqual(client.getState(), fromJournal);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('surfaces live tool calls without folding them into the journal', async () => {
+    const boardId = await makeBoard();
+    const client = createBoardClient(boardId, { openStream: openTestStream });
+    try {
+      client.connect();
+      await until(() => client.getState() !== null, 'the snapshot frame');
+
+      emitLive({
+        boardId,
+        attemptId: 'r-live-test',
+        taskId: 'W1-A',
+        role: 'builder',
+        event: { type: 'tool_call', name: 'save_file' },
+      });
+      await until(
+        () => client.getLiveHeadlines().get('W1-A')?.text === 'save_file',
+        'the live tool headline',
+      );
+      assert.equal(client.getLiveHeadlines().get('W1-A')?.role, 'builder');
+
+      const events = await readEvents(boardId);
+      assert.equal(
+        events.some((event) => event.type === 'live' || event.type === 'delta'),
+        false,
+        'live frames must never become journal lines',
+      );
     } finally {
       client.close();
     }

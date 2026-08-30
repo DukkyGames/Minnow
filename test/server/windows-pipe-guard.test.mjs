@@ -14,6 +14,13 @@ describe('assessUnixPipeOnWindows', () => {
     assert.match(result, /`tail` isn't available under cmd\.exe/);
   });
 
+  it('flags the same command on a second call (no sticky lastIndex)', { skip: !isWin32 }, () => {
+    assert.ok(assessUnixPipeOnWindows('echo x | tail -5'));
+    const again = assessUnixPipeOnWindows('echo x | tail -5');
+    assert.ok(again);
+    assert.match(again, /`tail` isn't available under cmd\.exe/);
+  });
+
   it('allows plain npm test on win32', { skip: !isWin32 }, () => {
     assert.equal(assessUnixPipeOnWindows('npm test'), null);
   });

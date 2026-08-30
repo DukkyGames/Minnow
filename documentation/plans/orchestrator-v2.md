@@ -61,7 +61,7 @@ Design consequence: V2 gets *less* machinery and *tighter* task contracts, not m
 | 2 | Runtime | **Server-side.** Engine + journal in the Node server. Renderer is a view. |
 | 3 | Parallelism | **Reliability first.** Low default concurrency, cohesion-clustered tasks, fan out only where provably safe. |
 | 4 | Integration | **Worktrees kept; merge queue replaces the merge-fixer agent.** Rebase-before-merge; conflicts re-open the owning task. |
-| 5 | Scope | **All chat eventually — V2 is step one.** The headless runner is designed board-agnostic so normal chat can adopt it later. Board agents ship first. |
+| 5 | Scope | **All chat eventually — V2 is step one.** The headless runner is designed board-agnostic so normal chat (§8 Phase 6) and sub-agents (§8 Phase 8) can adopt it later. Board agents ship first. |
 | 6 | Autonomy | **Running / Stopped + a concurrency number.** Sequential is concurrency 1. AFK is Running with no interactive gates. Four boolean flags deleted. |
 | 7 | Dead ends | **Skip and continue.** Abandon the task, skip only genuine dependents, run everything else, report once at the end. |
 | 8 | Final test | **Real server-side browser driver.** Built as its own workstream; does not block a working orchestrator. |
@@ -246,6 +246,7 @@ On `Abandon`: emit `task.abandoned`, emit `task.skipped` for genuine dependents 
 | **5** | Server-side browser driver (Playwright/CDP) + final integration test | Fully unattended verification |
 | **6** | Normal chat adopts the headless runner | One engine |
 | **7** | Chat-stream UI stays responsive mid-generation ([`chat-stream-ui-lag.md`](./chat-stream-ui-lag.md), [MIN-727](https://linear.app/minnowai/issue/MIN-727)) | Token→DOM paint is coalesced; local tok/s win kept. Independent of 1–6; can start now. |
+| **8** | Sub-agents adopt the headless runner; `src/agents/controller/` deleted | Every background agent gets the journal + reconcile properties, not just board attempts. Depends only on Phase 2. |
 
 Phase 1 leans on existing prior art: `src/dev/orchestrate-scenarios/` (schema, adapters, catalog) and `server/orchestrate/board-testing/` (scenario-runner, fake-model-host). V2 promotes scripted board testing to a first-class capability — **the scheduler must be fully testable with zero model calls.**
 
@@ -261,9 +262,15 @@ Board specifics (worktree cwd, allowed-tool subset, the report contract) are pas
 
 The two runners coexist during Phases 2–5: the client loop keeps serving normal chat while the server runner serves board agents. That is the strangle boundary, not debt.
 
+**Sub-agents are the interface’s second consumer (Phase 8).** They are neither board attempts nor normal chat, and today they run their own renderer-side loop and supervisor — the same faults V1 had, listed as finding E in the implementation plan. Adopting `runTurn()` is what turns "board-agnostic" from a discipline into a property the tests hold: a second caller cannot be satisfied by a runner that quietly assumes a board.
+
+**Deletion order, so nothing is removed early.** P6-D deletes the *client chat loop* (`src/tools/loop.ts`). The *client sub-agent runner* (`src/agents/sub-agent-runner.ts`) is a different file, still serving sub-agents at that point; it and `src/agents/controller/` are deleted by P8-G, not before.
+
 ## 10. What gets deleted
 
 `orchestrate-board-actions.ts` (6,276), `orchestrate-self-heal.ts` (343), `orchestrate-failure-classify.ts` (303), `orchestrate-pipeline-holds.ts` (273), the launch-slot machinery, the queue drain, both fixers, `board-display-wake.ts`, `board-boot-resume.ts`, `oom-recovery.ts`, and the six retry counters — plus the orphaned 6.5 MB `server/session/engine-bundle/` left over from the reverted MIN-354 v1.
+
+Deleted at Phase 8: `src/agents/controller/` (3,089 — the sub-agent watchdog, heartbeats, dispatch timers, last-write-wins registry mirror, and boot reconcile) and the client `src/agents/sub-agent-runner.ts` (1,375), superseded by `server/runner/`. `src/agents/sub-agent-config.ts` stays — it is configuration, and the effector reads it.
 
 Also deleted: the **orchestrator work-agent** and its persistent planner chat, the `board_init` / `board_update_task` / `board_set_autonomy` tools, and the now-vestigial `delegate_tasks` (already excluded from the orchestrator's `allowedTools` and separately gated by auto-pilot, yet still carrying a "Do not call" section in the prompt).
 

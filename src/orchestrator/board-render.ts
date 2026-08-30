@@ -28,6 +28,11 @@ export interface BoardViewOptions {
   selectedTaskId: string | null;
   /** Tasks whose manual start is in flight, so the button can say so. */
   pendingTaskIds: ReadonlySet<string>;
+  /**
+   * Live agent output from SSE `event: live` (P2-F bus, P2-G render).
+   * Presentation-only — never folded into `BoardState`.
+   */
+  liveHeadlines?: ReadonlyMap<string, { role: string; text: string }>;
 }
 
 const PHASE_TONE: Record<TaskState['phase'], 'neutral' | 'live' | 'good' | 'warn' | 'bad'> = {
@@ -188,6 +193,15 @@ function renderTaskRow(
     head.appendChild(el('span', 'ov2-task__tries', `${tries} ${tries === 1 ? 'try' : 'tries'}`));
   }
   row.appendChild(head);
+
+  const live = options.liveHeadlines?.get(task.id);
+  if (live && (task.phase === 'building' || task.phase === 'testing')) {
+    // Status still comes from derive(); this line is the live hook so a
+    // running attempt shows the current tool without journaling tokens.
+    const liveLine = el('p', 'ov2-task__live', `${live.role}: ${live.text}`);
+    liveLine.setAttribute('aria-live', 'polite');
+    row.appendChild(liveLine);
+  }
 
   const controls = el('div', 'ov2-task__controls');
   const startable = isStartable(state, task);

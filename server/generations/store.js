@@ -23,6 +23,17 @@ import {
  */
 
 /**
+ * In-process subscriber — a callback pair, not a fake HTTP socket.
+ * Chunks are the same upstream SSE bytes HTTP subscribers receive.
+ * Terminal status is a structured payload; the HTTP `event: end` sentinel is
+ * SSE-framing for `ServerResponse` only (fetch-chat strips it before parsing).
+ *
+ * @typedef {object} LocalSubscriber
+ * @property {(buf: Buffer) => void} onChunk
+ * @property {(payload: ReturnType<typeof terminalEventPayload>) => void} onEnd
+ */
+
+/**
  * @typedef {object} GenerationState
  * @property {string} id
  * @property {string} providerId
@@ -32,6 +43,7 @@ import {
  * @property {GenerationStatus} status
  * @property {AbortController | null} upstreamController
  * @property {Set<ServerResponse>} subscribers
+ * @property {Set<LocalSubscriber>} localSubscribers
  * @property {ReturnType<typeof setTimeout> | null} evictTimer
  * @property {boolean} persist
  * @property {string} startedAt
@@ -245,6 +257,7 @@ function broadcastTerminalEvent(state) {
     }
   }
   state.subscribers.clear();
+  broadcastLocalTerminal(state);
 }
 
 /**
@@ -298,6 +311,7 @@ export function createGenerationState({
     status: 'pending',
     upstreamController: null,
     subscribers: new Set(),
+    localSubscribers: new Set(),
     evictTimer: null,
     persist: persist === true,
     startedAt: new Date().toISOString(),
@@ -326,6 +340,15 @@ export function getGenerationState(id) {
 }
 
 /**
+ * Snapshot of in-memory generations. Used by the in-process runner binding
+ * tests to assert persist/role without an HTTP status round-trip.
+ * @returns {import('./store.js').GenerationState[]}
+ */
+export function listGenerationStates() {
+  return [...generations.values()];
+}
+
+/**
  * Rebuild a terminal generation from its disk checkpoint after a server restart.
  *
  * The replayed state is inert — no upstream, no writer — but `addSubscriber` treats
@@ -350,6 +373,7 @@ function rehydrateFromCheckpoint(id) {
     status: saved.status,
     upstreamController: null,
     subscribers: new Set(),
+    localSubscribers: new Set(),
     evictTimer: null,
     // Already on disk; re-checkpointing a replay would append its own bytes back.
     persist: false,
@@ -410,6 +434,7 @@ export function appendChunk(state, buf) {
   for (const res of [...state.subscribers]) {
     writeToSubscriber(state, res, buf);
   }
+  notifyLocalChunk(state, buf);
 
   if (state.totalBytes > MAX_BYTES) {
     state.upstreamController?.abort();
@@ -452,6 +477,79 @@ export function addSubscriber(state, res) {
  */
 export function removeSubscriber(state, res) {
   detachSubscriber(state, res);
+}
+
+/**
+ * Fan a buffered chunk to in-process subscribers. Errors unsubscribe the
+ * offender so a bad callback cannot break HTTP clients or other locals.
+ * @param {GenerationState} state
+ * @param {Buffer} buf
+ */
+function notifyLocalChunk(state, buf) {
+  for (const sub of [...state.localSubscribers]) {
+    try {
+      sub.onChunk(buf);
+    } catch {
+      state.localSubscribers.delete(sub);
+    }
+  }
+}
+
+/**
+ * Structured terminal delivery for in-process subscribers (not the SSE sentinel).
+ * @param {GenerationState} state
+ */
+function broadcastLocalTerminal(state) {
+  const payload = terminalEventPayload(state);
+  for (const sub of [...state.localSubscribers]) {
+    state.localSubscribers.delete(sub);
+    try {
+      sub.onEnd(payload);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/**
+ * Replay buffered bytes, then live chunks, then a structured terminal payload.
+ * Does not touch the HTTP subscriber set.
+ *
+ * @param {GenerationState} state
+ * @param {LocalSubscriber} subscriber
+ * @returns {() => void} unsubscribe; does not cancel upstream
+ */
+export function addLocalSubscriber(state, subscriber) {
+  for (const chunk of state.chunks) {
+    try {
+      subscriber.onChunk(chunk);
+    } catch {
+      return () => {};
+    }
+  }
+
+  if (isTerminal(state.status)) {
+    try {
+      subscriber.onEnd(terminalEventPayload(state));
+    } catch {
+      /* already terminal; nothing to attach */
+    }
+    return () => {};
+  }
+
+  state.localSubscribers.add(subscriber);
+  return () => {
+    state.localSubscribers.delete(subscriber);
+  };
+}
+
+/**
+ * Drop an in-process subscriber without stopping upstream generation.
+ * @param {GenerationState} state
+ * @param {LocalSubscriber} subscriber
+ */
+export function removeLocalSubscriber(state, subscriber) {
+  state.localSubscribers.delete(subscriber);
 }
 
 /**

@@ -1,0 +1,10 @@
+# Task T1-A — Add health endpoint
+
+## Build
+Add GET /health that returns { ok: true }.
+
+## Test
+GET /health returns 200 and { ok: true }.
+
+## Accept
+curl the health endpoint returns ok.

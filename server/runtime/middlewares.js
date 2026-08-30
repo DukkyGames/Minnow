@@ -45,7 +45,14 @@ import { createGitMiddleware } from '../git/middleware.js';
 import { createWorktreeMiddleware } from '../worktree/middleware.js';
 import { createWorkAgentsMiddleware } from '../work-agents/routes.js';
 import { createOrchestrateMiddleware } from '../orchestrate/middleware.js';
-import { createBoardsMiddleware } from '../orchestrator/middleware.js';
+import {
+  createBoardsMiddleware,
+  setEffectorFactory,
+} from '../orchestrator/middleware.js';
+import {
+  cancelOrphanedRunnerGenerations,
+  createRunnerEffector,
+} from '../orchestrator/effector-runner.js';
 import { createBoardTestingMiddleware } from '../orchestrate/board-testing/middleware.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
 import { createToolsMiddleware } from './tools-middleware.js';
@@ -61,6 +68,11 @@ import { installDiagnosticsProcessHandlers } from '../diagnostics/process-handle
  */
 export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPathAccess }) {
   installDiagnosticsProcessHandlers();
+  // P2-F: production boards run real agents. Tests that need zero-model still
+  // call setEffectorFactory with createScriptedEffector. A previous process
+  // has an empty generations store; this is a no-op on a real boot.
+  cancelOrphanedRunnerGenerations();
+  setEffectorFactory((boardId) => createRunnerEffector({ boardId }));
   connectApp.use(createAuthMiddleware());
   connectApp.use(createAuthRoutesMiddleware());
   connectApp.use(createDiagnosticsMiddleware());

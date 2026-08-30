@@ -1,0 +1,16 @@
+# Task T1-A — Add health endpoint
+
+## Build
+Add GET /health that returns { ok: true }.
+
+## Test
+GET /health returns 200 and { ok: true }.
+
+## Accept
+curl the health endpoint returns ok.
+
+## Resume
+The previous attempt crashed. Continue from what is already done; do not redo completed work.
+
+Already done:
+- Added src/api/health.ts with the GET handler

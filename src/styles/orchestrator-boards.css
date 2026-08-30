@@ -417,6 +417,15 @@
   font-size: 11px;
 }
 
+.ov2-task__live {
+  margin: 0;
+  padding: 0 2px;
+  color: var(--mn-fg-muted);
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .ov2-task__controls {
   display: flex;
   align-items: center;

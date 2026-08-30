@@ -1,0 +1,44 @@
+# Headless tool set (MIN-701 / P2-D)
+
+The runner does not hardcode Builder/Tester roles. Callers pass `tools` (P2-B)
+and, when they want a default, `DEFAULT_HEADLESS_TOOL_IDS` from
+`server/runner/tool-set.js`. This note records the port-vs-exclude decision for
+every renderer-only tool a board agent might want.
+
+**Rule:** a tool is in the default set only if `POST /api/tools` (and therefore
+`executeServerTool`) implements it. Renderer-only tools stay excluded until a
+later phase ports them with every guard they have today (browser origin
+allowlist, ask_question UI, and so on). Skipping a guard because “the caller is
+trusted” is how a board agent kills the host.
+
+Tests assert `rendererOnlyToolsIn(DEFAULT_HEADLESS_TOOL_IDS)` is empty and that
+each default id is not answered with `Not implemented: <name>`.
+
+## Exclude (do not port in P2-D)
+
+| Tool | Why it needs a renderer | Decision |
+|------|-------------------------|----------|
+| `get_datetime`, `calculate` | `src/tools/browser-executor.ts` | Exclude. Agents can use `execute_command` (`date`, `node -e`) if they need a clock or math. |
+| `get_system_info` | Browser executor (UA / `navigator`) | Exclude. Node `execute_command` covers OS facts. |
+| `read_clipboard`, `write_clipboard` | DOM clipboard | Exclude. Unattended runs have no clipboard. |
+| `ask_question` | Composer card; P6-B is the injected-capability work | Exclude. AFK / unattended must not block on a UI. |
+| `wikipedia_search` | Browser executor (CORS fetch) | Exclude. Use `fetch_web_content` / `web_search_ddg`. |
+| `web_search` | **Client router** to Brave (browser) or `web_search_ddg` / Tavily / SearXNG | Exclude the router name. Include the **server backends** (`web_search_ddg`, `web_search_tavily`, `web_search_searxng`). |
+| `spawn_sub_agent`, `cancel_sub_agent`, `list_sub_agents`, `get_sub_agent_status` | Nested loops in the renderer adapter | Exclude. V2 attempts are processes started by the effector (P2-F), not sub-agent tools. |
+| `board_init`, `board_add_tasks`, `board_update_task`, `board_set_autonomy`, `board_get_state`, `board_report`, `delegate_tasks` | V1 board UI + session state | Exclude. V2 reports through the injected report tool (`report_outcome`); the engine owns the graph. |
+| `set_chat_mode`, `create_chat_with_mode`, `launch_minnow_app`, `propose_mode_switch` | Mode handoff + OS window | Exclude. Headless turns do not switch composer modes. |
+| `browser_*`, `request_browser_origin_access` | Electron preview + **origin allowlist** (`checkBrowserNavigationAllowed`) | **Exclude.** Phase 5 ports a server-side driver and must take the allowlist with it. Shipping `browser_navigate` in-process without that allowlist would bypass the guard Linear called out. |
+| `todo_write` | Chat checklist DOM (`src/ui/todo-panel`) | Exclude. No transcript-scoped todo panel on the server. |
+| `get_appearance`, `update_appearance`, `upload_appearance_asset` | Theme / CSS in the renderer | Exclude. Not a Builder/Tester need. |
+| `recall_chat_context`, `recall_turn_full` | Session archive in the renderer | Exclude. The attempt transcript is injected (`TranscriptStore`). |
+| Issue tools (`issue_*`) | Client issue store / v2 HTTP mix | Exclude from the **default** set (not a board-agent need). Callers may pass them later if a server handler exists. |
+
+## Port (already server-side — include in the default)
+
+File read/write, git, `execute_command` (+ log/stop/dev-server/JS/Python), code-intel, LSP, Brain wiki read + `save_memory`, web backends + `fetch_web_content` / `rag_web_content`, `minnow_docs_*`, Impeccable load/run.
+
+These already run through `executeServerTool` with cwd-guard, host-kill, host-port-bind, windows-pipe, plan-write, output-cap, and `workspaceRoot` allowlist. The in-process dispatcher is a call-route skip, not a new implementation.
+
+## Intentionally omitted from the default (server-side but not agent work)
+
+`update_settings` / `get_settings` / `search_settings` (host config), `manage_brain` (destructive), calendar/email, `board_provision_infra`, notifications. A caller can still pass them in `allowedToolNames` / `tools`.

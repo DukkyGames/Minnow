@@ -1,0 +1,92 @@
+{
+  "runs": 10,
+  "completed": 10,
+  "failed": 0,
+  "retries": 0,
+  "abandonments": 0,
+  "perRun": [
+    {
+      "n": 1,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 747
+    },
+    {
+      "n": 2,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 717
+    },
+    {
+      "n": 3,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 675
+    },
+    {
+      "n": 4,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 718
+    },
+    {
+      "n": 5,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 707
+    },
+    {
+      "n": 6,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 718
+    },
+    {
+      "n": 7,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 706
+    },
+    {
+      "n": 8,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 690
+    },
+    {
+      "n": 9,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 693
+    },
+    {
+      "n": 10,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 706
+    }
+  ],
+  "recordedAt": "2026-08-29",
+  "host": "scripts/fake-model-server.mjs",
+  "note": "Deterministic fake host emitting save_file then report_outcome. Phase 3 is measured against this baseline."
+}

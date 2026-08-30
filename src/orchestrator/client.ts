@@ -68,6 +68,14 @@ export interface BoardClientOptions {
   openStream?: (url: string) => EventStream;
 }
 
+/** Latest live attempt activity for one task, from SSE `event: live`. Never journaled. */
+export interface LiveHeadline {
+  attemptId: string;
+  role: string;
+  /** Tool name, or a short token preview. */
+  text: string;
+}
+
 export interface BoardClient {
   readonly boardId: string;
   /**
@@ -81,7 +89,15 @@ export interface BoardClient {
   isConnected(): boolean;
   /** The `seq` the state is folded through. 0 before the first frame. */
   getSeq(): number;
-  /** Notified on every state change, including connection changes. */
+  /**
+   * Live agent output keyed by task id.
+   *
+   * Parallel to the journal fold: tokens and tool names ride `event: live`
+   * (no `seq`) so a reconnect cannot treat a token as a journal id. The
+   * map is presentation-only and is never written back to the server.
+   */
+  getLiveHeadlines(): ReadonlyMap<string, LiveHeadline>;
+  /** Notified on every state change, including connection changes and live tools. */
   subscribe(listener: (state: BoardState | null) => void): () => void;
   connect(): void;
   close(): void;
@@ -357,6 +373,11 @@ export function createBoardClient(
   let view: BoardState | null = null;
   /** The seq `internal` is folded through. */
   let seq = 0;
+  /**
+   * Live tool/token headlines. Not folded: the journal must stay bounded by
+   * outcomes (P2-F). Keyed by task id so a row can show what the agent is doing.
+   */
+  const liveHeadlines = new Map<string, LiveHeadline>();
 
   let source: EventStream | null = null;
   let connected = false;
@@ -430,6 +451,33 @@ export function createBoardClient(
     }
   };
 
+  const onLive = (event: { data: string }) => {
+    try {
+      const payload = JSON.parse(event.data) as {
+        attemptId?: string;
+        taskId?: string | null;
+        role?: string;
+        event?: { type?: string; name?: string; text?: string };
+      };
+      const taskId = typeof payload.taskId === 'string' ? payload.taskId : null;
+      if (!taskId) return;
+      const inner = payload.event;
+      // Tool calls are the useful "what is it doing" signal. Token deltas would
+      // repaint the board on every chunk — skip them here; the running pill
+      // already says the attempt is live.
+      if (inner?.type !== 'tool_call' && inner?.type !== 'tool_result') return;
+      const name = typeof inner.name === 'string' && inner.name ? inner.name : inner.type;
+      liveHeadlines.set(taskId, {
+        attemptId: String(payload.attemptId ?? ''),
+        role: String(payload.role ?? ''),
+        text: inner.type === 'tool_result' ? `${name} done` : name,
+      });
+      emit();
+    } catch (err) {
+      console.error('[orchestrator] could not read a live attempt event', err);
+    }
+  };
+
   const onEvent = (event: { data: string }) => {
     try {
       const journalEvent = JSON.parse(event.data);
@@ -484,6 +532,7 @@ export function createBoardClient(
     getState: () => view,
     isConnected: () => connected,
     getSeq: () => seq,
+    getLiveHeadlines: () => liveHeadlines,
 
     subscribe(listener) {
       listeners.add(listener);
@@ -497,6 +546,7 @@ export function createBoardClient(
       source = openStream(`/api/boards/${encodeURIComponent(boardId)}/events`);
       source.addEventListener('snapshot', onSnapshot);
       source.addEventListener('event', onEvent);
+      source.addEventListener('live', onLive);
       source.addEventListener('open', () => {
         connected = true;
         emit();

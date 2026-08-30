@@ -1,0 +1,44 @@
+import type {
+  ChatCompletionChunk,
+  LlamaTimings,
+  Stats,
+  ToolCall,
+  ToolCallAccumulator,
+} from '../../src/types';
+
+export interface StreamMetaAccumulator {
+  stats?: Stats;
+  usage?: import('../../src/types').Usage;
+  model_info?: import('../../src/types').ModelInfo;
+  model?: string;
+  finish_reason?: string;
+  error?: string;
+  timings?: LlamaTimings;
+  prompt_progress?: import('../../src/types').LlamaPromptProgress;
+}
+
+export function extractStreamErrorMessage(chunk: ChatCompletionChunk): string | undefined;
+export function extractStreamDelta(chunk: ChatCompletionChunk): string;
+export function mergeToolCallDelta(
+  acc: ToolCallAccumulator,
+  chunk: ChatCompletionChunk,
+): ToolCallAccumulator;
+export function finalizeToolCalls(acc: ToolCallAccumulator): ToolCall[];
+export function extractMessageText(
+  message: { content?: string | unknown } | null | undefined,
+): string;
+export function extractAssistantCompletionText(
+  message:
+    | {
+        content?: string | unknown;
+        parsed?: unknown;
+        refusal?: string;
+      }
+    | null
+    | undefined,
+): string;
+export function statsFromLlamaTimings(timings: LlamaTimings | undefined): Stats | null;
+export function mergeStreamMeta(
+  acc: StreamMetaAccumulator | null | undefined,
+  chunk: ChatCompletionChunk,
+): StreamMetaAccumulator;

@@ -2,8 +2,8 @@
  * Guard against Unix-only pipe targets when agents run commands through cmd.exe on Windows.
  */
 
-/** Detect `| binary` segments in a shell command (tight list — sort/find exist on Windows). */
-const PIPE_TO_UNIX_BINARY = /\|\s*(tail|head|wc|less|sed|awk|grep)\b/gi;
+/** Detect `| binary` segments (tight list — sort/find exist on Windows). No `g` flag: `.exec()` with /g sticks lastIndex and skips the next call. */
+const PIPE_TO_UNIX_BINARY = /\|\s*(tail|head|wc|less|sed|awk|grep)\b/i;
 
 /**
  * Suggest alternatives when a pipe targets a Unix-only binary under cmd.exe.

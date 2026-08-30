@@ -99,6 +99,8 @@ export const PATH_RUNNER_RULES = [
   // Orchestrator V2. The core is plain .js + .d.ts because the server ships
   // untranspiled; running these on bare `node` is part of the assertion.
   { pattern: 'test/orchestrator/**/*.test.mjs', runner: 'node' },
+  // Shared runner package (MIN-698). Plain node — same untranspiled contract as the core.
+  { pattern: 'test/runner/**/*.test.mjs', runner: 'node' },
   { pattern: 'test/headless/preflight.test.mts', runner: 'node-tsx' },
   // persist-chat imports server config helpers + headless TS (no CSS).
   { pattern: 'test/headless/persist-chat.test.mts', runner: 'node-tsx' },
@@ -304,6 +306,9 @@ export const SCOPED_SUITES = {
   },
   orchestrator: {
     patterns: ['test/orchestrator/**/*.test.mjs', 'test/orchestrator/**/*.test.mts'],
+  },
+  runner: {
+    patterns: ['test/runner/**/*.test.mjs', 'test/runner/**/*.test.mts'],
   },
   'board-gates': {
     patterns: ['test/scripts/*.test.mjs'],

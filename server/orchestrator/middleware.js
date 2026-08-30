@@ -31,6 +31,7 @@ import { stateToJSON } from './core/snapshot.js';
 import { createScriptedEffector } from './effector-scripted.js';
 import { disposeEngines, getEngine, peekEngine } from './engine.js';
 import { appendEvent, boardExists, createBoard, listBoards, loadState, readEvents } from './journal.js';
+import { subscribeLive } from './live-events.js';
 
 /** Heartbeat cadence. Intermediaries close idle streams without it. */
 const HEARTBEAT_MS = 15_000;
@@ -38,11 +39,14 @@ const HEARTBEAT_MS = 15_000;
 /**
  * How a board's effector is built.
  *
- * Phase 1 ships the scripted one — the scheduler is proven with zero model
- * calls before real agents are attached. P2-F swaps this for the runner
- * effector, and nothing else in this file changes.
+ * The default stays scripted so the Phase 1 conformance suite needs no model.
+ * Production calls {@link setEffectorFactory} from `server/runtime/middlewares.js`
+ * with the runner effector (P2-F). Tests that need zero-model still inject
+ * `createScriptedEffector`.
  *
- * @type {() => import('./engine.js').Effector}
+ * The factory may receive the board id; scripted factories ignore it.
+ *
+ * @type {(boardId?: string) => import('./engine.js').Effector}
  */
 let makeEffector = () => createScriptedEffector({});
 
@@ -232,14 +236,14 @@ async function dispatch(route, req, res) {
       if (concurrency === null) {
         return json(res, 400, { ok: false, error: 'concurrency must be an integer >= 1' });
       }
-      const engine = await getEngine(boardId, makeEffector);
+      const engine = await getEngine(boardId, () => makeEffector(boardId));
       await engine.startBoard(concurrency);
       return json(res, 200, { ok: true, state: serialiseState(engine.getState()) });
     }
 
     case 'stop': {
       if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
-      const engine = await getEngine(boardId, makeEffector);
+      const engine = await getEngine(boardId, () => makeEffector(boardId));
       await engine.stopBoard('user');
       return json(res, 200, { ok: true, state: serialiseState(engine.getState()) });
     }
@@ -249,14 +253,14 @@ async function dispatch(route, req, res) {
       const body = await readJsonBody(req);
       const n = normaliseConcurrency(body.n);
       if (n === null) return json(res, 400, { ok: false, error: 'n must be an integer >= 1' });
-      const engine = await getEngine(boardId, makeEffector);
+      const engine = await getEngine(boardId, () => makeEffector(boardId));
       await engine.setConcurrency(n);
       return json(res, 200, { ok: true, state: serialiseState(engine.getState()) });
     }
 
     case 'startTask': {
       if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
-      const engine = await getEngine(boardId, makeEffector);
+      const engine = await getEngine(boardId, () => makeEffector(boardId));
       const started = await engine.startTask(taskId);
       return json(res, started ? 200 : 409, {
         ok: started,
@@ -409,7 +413,7 @@ async function streamEvents(req, res, boardId) {
     }
   };
 
-  const engine = await getEngine(boardId, makeEffector);
+  const engine = await getEngine(boardId, () => makeEffector(boardId));
 
   // Subscribe *before* taking the baseline, buffering whatever arrives while it
   // is being taken. Reading first and subscribing after leaves a window — today
@@ -432,6 +436,11 @@ async function streamEvents(req, res, boardId) {
     if (!send('event', event, seq)) cleanup();
   };
   const unsubscribe = engine.subscribe(deliver);
+  // Live tokens/tools are a parallel stream, not journal lines. No `id:` so a
+  // reconnect's Last-Event-ID cannot skip a real event or treat a token as one.
+  const unsubscribeLive = subscribeLive(boardId, (payload) => {
+    if (!send('live', payload)) cleanup();
+  });
 
   if (resumeFrom > 0) {
     // Resuming: just the tail the client missed.
@@ -476,6 +485,7 @@ async function streamEvents(req, res, boardId) {
     // Drop the subscription *and* the reference to the response, so a dead
     // socket cannot keep the board's event stream alive through this closure.
     unsubscribe();
+    unsubscribeLive();
     try {
       res.end();
     } catch {

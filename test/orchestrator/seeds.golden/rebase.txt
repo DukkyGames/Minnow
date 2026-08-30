@@ -1,0 +1,19 @@
+# Task T1-A — Add health endpoint
+
+## Build
+Add GET /health that returns { ok: true }.
+
+## Test
+GET /health returns 200 and { ok: true }.
+
+## Accept
+curl the health endpoint returns ok.
+
+## Integration conflict
+Rebase onto the current integration tip and resolve the listed files. You wrote this code; you have the context to merge it.
+
+Integration tip: c0ffee0123456789abcdef0123456789abcdef01
+
+Conflicted files:
+- src/api/health.ts
+- src/api/routes.ts

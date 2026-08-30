@@ -89,6 +89,62 @@ export function testerVerdictChunks(verdict = 'pass') {
 }
 
 /**
+ * OpenAI tool-call SSE chunks. V2 boards emit `save_file` then `report_outcome`
+ * this way — the default V1 scenario still uses `board_report`.
+ *
+ * @param {string} name
+ * @param {unknown} args
+ * @param {string} [toolCallId]
+ * @returns {string[]}
+ */
+export function functionCallChunks(name, args, toolCallId = 'call_fake') {
+  const argStr = typeof args === 'string' ? args : JSON.stringify(args);
+  const delta = JSON.stringify({
+    choices: [
+      {
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              id: toolCallId,
+              type: 'function',
+              function: { name, arguments: argStr },
+            },
+          ],
+        },
+      },
+    ],
+  });
+  const finish = JSON.stringify({
+    choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+  });
+  return [
+    `data: ${delta}\n\n`,
+    `data: ${finish}\n\n`,
+    'event: end\ndata: {"status":"complete"}\n\n',
+  ];
+}
+
+/**
+ * @param {Record<string, unknown>} payload
+ * @param {string} [toolCallId]
+ * @returns {string[]}
+ */
+export function reportOutcomeChunks(payload, toolCallId = 'call_report') {
+  return functionCallChunks('report_outcome', payload, toolCallId);
+}
+
+/**
+ * @param {string} filePath
+ * @param {string} content
+ * @param {string} [toolCallId]
+ * @returns {string[]}
+ */
+export function saveFileChunks(filePath, content, toolCallId = 'call_save') {
+  return functionCallChunks('save_file', { path: filePath, content }, toolCallId);
+}
+
+/**
  * Default board scenario: smart per-role / per-nth responses (no static wildcard).
  * Custom --scenario JSON can still override with explicit match steps.
  */
@@ -211,13 +267,16 @@ export function extractRequestContext(body) {
   /** @type {{ role?: string; taskId?: string }} */
   const ctx = {};
 
-  if (/Run per-task testing/i.test(text)) {
+  // V2 system prompts lead with **Tester.** / **Builder.** (P2-E). Check
+  // tester first so a transcript that quotes both still classifies as tester.
+  if (/\*\*Tester\.\*\*|Run per-task testing/i.test(text)) {
     ctx.role = 'tester';
   } else if (/merge conflict|merge-fixer|Re-commit the merge/i.test(text)) {
     ctx.role = 'fixer';
   } else if (/final full-board integration/i.test(text)) {
     ctx.role = 'final';
   } else if (
+    /\*\*Builder\.\*\*/.test(text) ||
     /Execute this orchestrate task|Fix this orchestrate task|Continue the orchestrate task/i.test(
       text,
     ) ||
@@ -226,11 +285,15 @@ export function extractRequestContext(body) {
     ctx.role = 'builder';
   }
 
-  const taskLine = text.match(/Task:\s+([A-Z0-9_-]+)\s+—/);
-  if (taskLine) {
+  // V2 seeds are `# Task W1-A — Title`. V1 used `Task: W1-A —`.
+  const v2Heading = text.match(/# Task\s+([A-Z0-9_-]+)\s+[—-]/);
+  const taskLine = text.match(/Task:\s+([A-Z0-9_-]+)\s+[—-]/);
+  if (v2Heading) {
+    ctx.taskId = v2Heading[1];
+  } else if (taskLine) {
     ctx.taskId = taskLine[1];
   } else {
-    const continueLine = text.match(/Continue the orchestrate task\s+([A-Z0-9_-]+)\s+—/);
+    const continueLine = text.match(/Continue the orchestrate task\s+([A-Z0-9_-]+)\s+[—-]/);
     if (continueLine) {
       ctx.taskId = continueLine[1];
     } else {
