@@ -101,12 +101,17 @@ export class PlanActivityCollector {
     this.unsubController = subscribeSuperPlanController((updated) => {
       if (updated.id !== this.chatId || !updated.superPlan) return;
       this.recordStage(updated.superPlan);
-      if (this.lastPaused !== updated.superPlan.paused) {
-        this.lastPaused = updated.superPlan.paused ?? null;
+      // Normalize undefined/false so stage advances do not look like a resume
+      // (MIN-736). Only log when pause actually flips after we have a baseline.
+      const paused = Boolean(updated.superPlan.paused);
+      if (this.lastPaused === null) {
+        this.lastPaused = paused;
+      } else if (this.lastPaused !== paused) {
+        this.lastPaused = paused;
         this.buffer.append(
           entryFromSuperPlanStage(
             updated.superPlan.activeStage,
-            updated.superPlan.paused ? 'paused' : 'resumed',
+            paused ? 'paused' : 'resumed',
           ),
         );
       }
