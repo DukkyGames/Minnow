@@ -1447,6 +1447,11 @@ html:not(.minnow-os-enabled) .models-page.is-open {
   cursor: pointer;
 }
 
+.models-loaded.is-selected {
+  background: var(--mn-accent-soft);
+  border-color: var(--mn-accent);
+}
+
 .models-loaded__head {
   display: flex;
   gap: 10px;
@@ -1480,6 +1485,12 @@ html:not(.minnow-os-enabled) .models-page.is-open {
 .models-loaded__state.is-busy {
   color: var(--mn-accent-ink);
   background: var(--mn-accent-soft);
+}
+
+/* Waiting on a free llama.cpp slot. Warning, not accent — this is backup, not work. */
+.models-loaded__state.is-queued {
+  color: var(--mn-warning);
+  background: var(--mn-warning-soft);
 }
 
 .models-loaded__state.is-error {
@@ -1581,11 +1592,13 @@ html:not(.minnow-os-enabled) .models-page.is-open {
 }
 
 .models-progress__fill {
-  width: 0;
+  width: 100%;
   height: 100%;
   background: var(--mn-accent);
   border-radius: 999px;
-  transition: width var(--duration-normal) var(--ease-out);
+  transform: scaleX(var(--progress, 0));
+  transform-origin: left center;
+  transition: transform var(--duration-normal) var(--ease-out);
 }
 
 .models-progress__fill.is-indeterminate {
@@ -2394,6 +2407,11 @@ html:not(.minnow-os-enabled) .models-page.is-open {
   .models-progress__fill.is-indeterminate {
     width: 100%;
     opacity: 0.4;
+    transform: none;
+  }
+
+  .models-progress__fill {
+    transition: none;
   }
 
   /* The dim still conveys "refetching" — only the fade to it is dropped. */

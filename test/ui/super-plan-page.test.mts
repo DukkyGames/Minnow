@@ -29,6 +29,12 @@ import {
   type ActivityLogEntry,
 } from '../../src/research/activity-log.ts';
 import { PlanActivityCollector } from '../../src/ui/plan-activity-collector.ts';
+import {
+  notifySuperPlanControllerForTests,
+  pauseSuperPlan,
+  resetSuperPlanControllerForTests,
+} from '../../src/chat/super-plan/controller.ts';
+import { markSuperPlanStageStatus, setSuperPlanActiveStage } from '../../src/chat/super-plan/state.ts';
 
 let activeWindow: Window | undefined;
 /** Restored after this file so a 404 stub cannot leak into later tests in the worker. */
@@ -711,5 +717,68 @@ describe('super plan activity ledger persistence (MIN-599)', () => {
 
     const persisted = chat.superPlan!.activityLog ?? [];
     assert.ok(persisted.some((e) => e.detail === 'tool: write_file'));
+  });
+
+  test('stage start and advances do not log resumed without a prior pause (MIN-736)', async () => {
+    resetSuperPlanControllerForTests();
+    // Mirror a fresh pipeline: `paused` stays unset (undefined), not false.
+    const chat = makeRunChat('sp-activity-736', 'grill');
+    chat.superPlan!.stages.grill.status = 'running';
+    chat.superPlan!.stages.grill.startedAt = 1_000;
+    setSessionStateForTests({ version: 5, activeId: chat.id, chats: [chat] });
+
+    const buffer = new ActivityLogBuffer();
+    const collector = new PlanActivityCollector(chat.id, buffer);
+    await collector.start();
+
+    // Controller notifies on mark-running / stage change the way advanceSuperPlan does.
+    notifySuperPlanControllerForTests(chat);
+    markSuperPlanStageStatus(chat, 'grill', 'done');
+    setSuperPlanActiveStage(chat, 'spec_confirm');
+    notifySuperPlanControllerForTests(chat);
+    markSuperPlanStageStatus(chat, 'spec_confirm', 'running');
+    // Explicit false (setSuperPlanPaused path) must still not look like a resume.
+    chat.superPlan!.paused = false;
+    notifySuperPlanControllerForTests(chat);
+
+    const stageDetails = buffer
+      .getEntries()
+      .filter((e) => e.kind === 'stage')
+      .map((e) => e.detail ?? '');
+    assert.ok(
+      !stageDetails.some((d) => d.endsWith('· resumed')),
+      `unexpected resumed rows: ${stageDetails.join(' | ')}`,
+    );
+    assert.ok(stageDetails.some((d) => d.includes('Interview') && d.endsWith('· running')));
+    assert.ok(stageDetails.some((d) => d.includes('Build spec')));
+
+    collector.stop();
+    resetSuperPlanControllerForTests();
+  });
+
+  test('real pause then resume still logs paused and resumed (MIN-736)', async () => {
+    resetSuperPlanControllerForTests();
+    const chat = makeRunChat('sp-activity-736b', 'grill');
+    chat.superPlan!.stages.grill.status = 'running';
+    setSessionStateForTests({ version: 5, activeId: chat.id, chats: [chat] });
+
+    const buffer = new ActivityLogBuffer();
+    const collector = new PlanActivityCollector(chat.id, buffer);
+    await collector.start();
+
+    pauseSuperPlan(chat);
+    // resumeSuperPlanPipeline would call advanceSuperPlan; notify after unpause is enough.
+    chat.superPlan!.paused = false;
+    notifySuperPlanControllerForTests(chat);
+
+    const stageDetails = buffer
+      .getEntries()
+      .filter((e) => e.kind === 'stage')
+      .map((e) => e.detail ?? '');
+    assert.ok(stageDetails.some((d) => d.endsWith('· paused')));
+    assert.ok(stageDetails.some((d) => d.endsWith('· resumed')));
+
+    collector.stop();
+    resetSuperPlanControllerForTests();
   });
 });

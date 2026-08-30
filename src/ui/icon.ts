@@ -29,7 +29,9 @@ export type ShellIconName =
   | 'arrowDown'
   | 'globe'
   | 'folder'
-  | 'fileText';
+  | 'fileText'
+  // File explorer pane control (folder glyph, not a nested tree).
+  | 'fileTree';
 
 // ── Apps ─────────────────────────────────────────────────────────────────────
 
@@ -224,6 +226,8 @@ export const ICON_CLASS: Record<IconName, string> = {
   globe: 'fi-rr-globe',
   folder: 'fi-rr-folder',
   fileText: 'fi-rr-document',
+  // Files pane control (MIN-655): folder glyph, not a nested tree.
+  fileTree: 'fi-rr-folder',
 
   // Apps
   appCode: 'fi-rr-code-simple',

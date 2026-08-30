@@ -14,6 +14,8 @@
  */
 
 import { subscribeServeActivity, type ServeActivity } from './api-client';
+import { formatQueuedChipLabel } from './serve-activity-chips';
+import { getInFlightPromptOverlay } from './in-flight-prompt';
 
 type FeedListener = (activity: ServeActivity) => void;
 
@@ -91,19 +93,42 @@ export function serveActivityForModelId(modelId: string): ServeActivity | undefi
 
 /**
  * Compact suffix for a picker row: `pp 10.2k` while a prompt is being processed,
- * `917 tok` while generating, nothing when idle.
+ * `917 tok` while generating, `2 queued` when llama.cpp is deferring work.
  *
  * Prefill is a count rather than a percentage on purpose — `/slots` reports the same
  * running number as both the processed count and the total, so no fraction exists.
  */
 export function activitySuffixForModelId(modelId: string): string {
   const activity = serveActivityForModelId(modelId);
-  if (!activity?.available || activity.stale) return '';
-  const busy = activity.slots.find((slot) => slot.state !== 'idle');
-  if (!busy) return '';
-  return busy.state === 'prompt'
-    ? `pp ${compactTokens(busy.promptProcessed)}`
-    : `${compactTokens(busy.decoded)} tok`;
+  if (activity?.available) {
+    const queued = formatQueuedChipLabel(activity.queued ?? 0) ?? '';
+    if (activity.stale) return queued;
+    const busy = activity.slots.find((slot) => slot.state !== 'idle');
+    if (!busy) return queued;
+    const work =
+      busy.state === 'prompt'
+        ? `pp ${compactTokens(busy.promptProcessed)}`
+        : `${compactTokens(busy.decoded)} tok`;
+    return queued ? `${work} · ${queued}` : work;
+  }
+
+  // mlx-lm has no /slots sample. Show Minnow-owned prefill / gen from the overlay.
+  const overlay = getInFlightPromptOverlay();
+  const needle = modelId.trim();
+  if (
+    overlay &&
+    needle &&
+    (overlay.libraryId === needle || overlay.modelLabel === needle)
+  ) {
+    if (overlay.total > 0 && overlay.processed < overlay.total) {
+      const percent = Math.min(99, Math.floor((overlay.processed / overlay.total) * 100));
+      return `pp ${percent}%`;
+    }
+    if ((overlay.predictedN ?? 0) > 0) {
+      return `${compactTokens(overlay.predictedN)} tok`;
+    }
+  }
+  return '';
 }
 
 /**
@@ -124,10 +149,15 @@ export function syncModelActivityIndicators(root: ParentNode = document): void {
 /** True when any local serve is working — drives the header dot's animation. */
 export function anyServeBusy(): boolean {
   for (const activity of byServeId.values()) {
-    if (!activity.available || activity.stale) continue;
+    if (!activity.available) continue;
+    if ((activity.queued ?? 0) > 0) return true;
+    if (activity.stale) continue;
     if (activity.slots.some((slot) => slot.state !== 'idle')) return true;
   }
-  return false;
+  const overlay = getInFlightPromptOverlay();
+  if (!overlay) return false;
+  if (overlay.total > 0 && overlay.processed < overlay.total) return true;
+  return (overlay.predictedN ?? 0) > 0;
 }
 
 function compactTokens(tokens: number): string {

@@ -1,0 +1,260 @@
+/**
+ * Shared PR review panel. Lives in Source Control and Issues, so it owns its
+ * chrome rather than borrowing either. --mn-* tokens only. @container, never
+ * @media. Severity is never colour-only — every chip carries a text label.
+ */
+
+.pr-review {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 0 4px;
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  container-type: inline-size;
+  container-name: pr-review;
+}
+
+.pr-review__kicker {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.pr-review__live {
+  appearance: none;
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  text-align: left;
+  font: inherit;
+  color: var(--mn-fg);
+  background: var(--mn-surface);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+}
+
+.pr-review__live:hover {
+  background: var(--mn-surface-elevated);
+}
+
+.pr-review__live:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.pr-review__error {
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--mn-fg);
+  background: color-mix(in oklch, var(--mn-danger) 12%, var(--mn-surface));
+  border: 1px solid color-mix(in oklch, var(--mn-danger) 40%, var(--mn-border));
+  border-radius: var(--radius-sm, 6px);
+}
+
+.pr-review__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+}
+
+.pr-review__verdict {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-family: var(--font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: 999px;
+}
+
+.pr-review__verdict--approve {
+  color: var(--mn-success);
+  border-color: color-mix(in oklch, var(--mn-success) 45%, var(--mn-border));
+  background: color-mix(in oklch, var(--mn-success) 12%, transparent);
+}
+
+.pr-review__verdict--request_changes {
+  color: var(--mn-danger);
+  border-color: color-mix(in oklch, var(--mn-danger) 45%, var(--mn-border));
+  background: color-mix(in oklch, var(--mn-danger) 12%, transparent);
+}
+
+.pr-review__verdict--needs_discussion {
+  color: var(--mn-warning);
+  border-color: color-mix(in oklch, var(--mn-warning) 45%, var(--mn-border));
+  background: color-mix(in oklch, var(--mn-warning) 12%, transparent);
+}
+
+.pr-review__tally {
+  margin: 0;
+  color: var(--mn-fg-muted);
+  font-size: 12px;
+}
+
+.pr-review__stale {
+  margin: 0;
+  color: var(--mn-fg-subtle, var(--mn-fg-muted));
+  font-size: 12px;
+  font-family: var(--font-mono, 'JetBrains Mono', ui-monospace, monospace);
+}
+
+.pr-review__summary {
+  margin: 0;
+  max-width: 72ch;
+}
+
+.pr-review__group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pr-review__group-title {
+  margin: 4px 0 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.pr-review__finding {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+  border-top: 1px solid var(--mn-border);
+}
+
+.pr-review__finding-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pr-review__sev {
+  font-family: var(--font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.pr-review__sev--blocker {
+  color: var(--mn-danger);
+}
+
+.pr-review__sev--warn {
+  color: var(--mn-warning);
+}
+
+.pr-review__sev--info {
+  color: var(--mn-fg-muted);
+}
+
+.pr-review__finding-detail {
+  margin: 0;
+  max-width: 72ch;
+  color: var(--mn-fg);
+}
+
+.pr-review__paths {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pr-review__path {
+  appearance: none;
+  max-width: 100%;
+  padding: 2px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--mn-fg);
+  background: transparent;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.pr-review__path:hover {
+  background: var(--mn-surface-elevated);
+}
+
+.pr-review__path:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.pr-review__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.pr-review__btn {
+  appearance: none;
+  min-height: 32px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--mn-fg);
+  background: transparent;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+}
+
+.pr-review__btn:hover {
+  background: var(--mn-surface-elevated);
+}
+
+.pr-review__btn:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.pr-review__btn--primary {
+  color: var(--mn-text-hover, var(--mn-bg));
+  background: var(--mn-accent);
+  border-color: var(--mn-accent);
+}
+
+.pr-review__btn--primary:hover {
+  background: var(--mn-accent);
+  filter: brightness(1.08);
+}
+
+.pr-review__btn--ghost {
+  border-color: transparent;
+}
+
+@container pr-review (max-width: 360px) {
+  .pr-review__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pr-review__btn {
+    width: 100%;
+  }
+}

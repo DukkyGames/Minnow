@@ -18,6 +18,10 @@ import { specNeedsDraftModel } from '../../src/models/spec-decode.mjs';
 const WIN_FASTFAIL = 0xc0000409;
 /** Windows `STATUS_DLL_NOT_FOUND` — missing cudart / VC runtime. */
 const WIN_DLL_NOT_FOUND = 0xc0000135;
+/** Windows `ERROR_EXE_MACHINE_TYPE_MISMATCH` — ARM64 llama-server on AMD64 (or the reverse). */
+const WIN_EXE_MACHINE_MISMATCH = 216;
+/** Windows `ERROR_BAD_EXE_FORMAT`. */
+const WIN_BAD_EXE_FORMAT = 193;
 /** Unix SIGKILL (128 + 9). Node reports 137; some platforms report a null code — we only trust 137. */
 const UNIX_SIGKILL = 137;
 
@@ -221,6 +225,25 @@ function matchFailure(log, exit, plan) {
       remediation:
         'Treat this like a RAM shortage: lower context, pick a smaller quant, or close other heavy apps and retry.',
       retryable: true,
+    };
+  }
+
+  // ARM64 llama-server on AMD64 (or the reverse) exits before any log line.
+  if (
+    exit === WIN_EXE_MACHINE_MISMATCH ||
+    exit === WIN_BAD_EXE_FORMAT ||
+    has(log, /not compatible with the version of Windows/i) ||
+    has(log, /llama-server\.exe is arm64/i) ||
+    has(log, /llama-server\.exe is x64/i)
+  ) {
+    return {
+      code: 'wrong_runtime_arch',
+      title: 'llama.cpp build is for a different CPU',
+      detail:
+        'The installed llama-server.exe cannot run on this machine, so the runtime log stays empty.',
+      remediation:
+        'Open Settings → Servers and Reinstall llama.cpp so Minnow downloads the zip for this CPU.',
+      retryable: false,
     };
   }
 

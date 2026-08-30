@@ -93,13 +93,14 @@ On Windows, installed WSL distributions appear as shell options. Pick one under 
 The source-control panel does status, stage, diff, commit, branch, pull and push.
 
 - **Commit messages** can be generated from the staged diff: conventional commits with optional gitmoji, an imperative subject, and a body explaining why. The `/git-commit` skill uses the same conventions.
+- **Commit and file diffs** open as a side-by-side review in the workspace. Long lines **wrap by default**; use the **Wrap** control in the review header to turn wrapping off when you want a single-line scroll.
 - **Merge to main** appears when you are on a feature branch: it checks out the trunk in the main workspace, merges your branch, and switches you back — warning you first if the tree is dirty and surfacing merge failures with an option to send them to chat.
 - Names you type when creating a **branch** or **worktree** (composer, Source Control, or the git panel) are turned into a git-safe slug: `Test Worktree` becomes `test-worktree`. Empty or illegal characters are stripped; the dialog shows the name that will be used.
 - Agents use the same git operations through tools, so you and the model are never looking at different states.
 
 ## Source Control Center
 
-The sidebar panel covers the everyday loop. For the full surface — **Changes**, **History**, **Branches**, **Stashes**, **Worktrees**, **Pull requests**, and **Checks** — open the **Source Control Center** from that panel (it overlays the Code column). **Ctrl+1**–**7** jump between sections; **Ctrl+K** opens the **Commands** palette (rebase, cherry-pick, stash, worktree, open PR, and similar). Pull requests and CI use your local `gh` CLI (Minnow stores no GitHub token). Screenshots and a longer walkthrough: [Source Control Center in the project README](https://github.com/HenriGrimm/Minnow#source-control-center--the-full-git-surface).
+The sidebar panel covers the everyday loop. For the full surface — **Changes**, **History**, **Branches**, **Stashes**, **Worktrees**, **Pull requests**, and **Checks** — open the **Source Control Center** from that panel (it overlays the Code column). **Ctrl+1**–**7** jump between sections; **Ctrl+K** opens the **Commands** palette (rebase, cherry-pick, stash, worktree, open PR, review the current branch PR, and similar). Pull requests and CI use your local `gh` CLI (Minnow stores no GitHub token). Open pull requests can be reviewed in-app with **Review PR**; the review stays in Minnow and is not posted to GitHub. Screenshots and a longer walkthrough: [Source Control Center in the project README](https://github.com/HenriGrimm/Minnow#source-control-center--the-full-git-surface).
 
 ## Dev servers
 

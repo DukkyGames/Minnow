@@ -124,6 +124,10 @@ function parseOpenAiChunkPayload(
 /**
  * Parse one SSE event block (lines between blank-line separators).
  * Joins multiple `data:` lines per the SSE spec before JSON.parse.
+ *
+ * mlx-lm 0.31.3 emits `: keepalive processed/total` comments during prefill.
+ * Those become a synthetic `prompt_progress` chunk so chat and Local Server
+ * can show a percent. Other comment lines stay ignored.
  */
 export function parseSseEventBlock(
   block: string,
@@ -133,7 +137,21 @@ export function parseSseEventBlock(
 
   for (const line of normalizeSseText(block).split('\n')) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith(':')) continue;
+    if (!trimmed) continue;
+    if (trimmed.startsWith(':')) {
+      const keepalive = parseKeepaliveComment(trimmed);
+      if (keepalive) {
+        onChunk({
+          prompt_progress: {
+            processed: keepalive.processed,
+            total: keepalive.total,
+            cache: 0,
+            time_ms: 0,
+          },
+        });
+      }
+      continue;
+    }
     if (trimmed.startsWith('data:')) {
       dataLines.push(trimmed.slice(5).trim());
     }
@@ -143,6 +161,21 @@ export function parseSseEventBlock(
 
   const payload = dataLines.join('\n');
   parseOpenAiChunkPayload(payload, onChunk);
+}
+
+/**
+ * mlx-lm SSE comment: `: keepalive 128/4096`. Extra whitespace is tolerated.
+ * Returns null for unrelated comments (`: ping`, `: connected`, …).
+ */
+export function parseKeepaliveComment(
+  line: string,
+): { processed: number; total: number } | null {
+  const match = /^:\s*keepalive\s+(\d+)\s*\/\s*(\d+)\s*$/i.exec(String(line).trim());
+  if (!match) return null;
+  const processed = Number(match[1]);
+  const total = Number(match[2]);
+  if (!(processed >= 0) || !(total > 0)) return null;
+  return { processed, total };
 }
 
 /** Incremental buffer: feed UTF-8 text; emits complete SSE events. */

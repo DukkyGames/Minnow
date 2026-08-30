@@ -112,6 +112,7 @@ function applyBoardToIssue(issue: IssueCard, group: ChatGroup): void {
       dedupeKey: `issue-agent-review:${issue.id}`,
       os: true,
     });
+    void stampIssuePrFromWatcher(issue.id);
   }
 
   if (phase === 'failed' && previous !== 'failed') {
@@ -127,6 +128,26 @@ function applyBoardToIssue(issue: IssueCard, group: ChatGroup): void {
   }
 
   scheduleSaveIssues();
+}
+
+/** Resolve the PR the board opened and write the previously unused agent fields. */
+async function stampIssuePrFromWatcher(issueId: string): Promise<void> {
+  try {
+    const issue = findIssueById(issueId);
+    if (!issue) return;
+    const { resolveIssuePrNumber } = await import('./git-actions.ts');
+    const resolved = await resolveIssuePrNumber(issue);
+    if (!resolved) return;
+    const current = findIssueById(issueId);
+    if (!current?.agent) return;
+    updateIssueAgentRun(issueId, {
+      prNumber: resolved.number,
+      prUrl: resolved.url,
+    });
+    scheduleSaveIssues();
+  } catch {
+    // A missing PR must not take the board watcher down.
+  }
 }
 
 /**

@@ -2,13 +2,14 @@
 
 This is where you set up what the agents run on: what your machine can handle, what you have downloaded, what is serving, which endpoints Minnow talks to, which model does which job, and what it all costs.
 
-You come here to configure, then go back to Code and work. Open it from the app rail; it fills the main stage with nine sections.
+You come here to configure, then go back to Code and work. Open it from the app rail; it fills the main stage with ten sections.
 
 | Section | What it is |
 |---------|------------|
 | **Recommendations** | Hardware-aware suggestions from a probe of your machine |
 | **Installed** | Model artifacts Minnow has downloaded |
 | **Library** | Search Hugging Face, download, and serve locally |
+| **Local Server** | What is loaded, live load/inference chips, runtime log |
 | **Voice** | Speech-to-text and text-to-speech models |
 | **Providers** | Endpoints and encrypted API keys |
 | **Routing** | Which model handles which job |
@@ -17,6 +18,14 @@ You come here to configure, then go back to Code and work. Open it from the app 
 | **Usage & cost** | Token totals and spend |
 
 The last five also appear under **Models** in the Settings sidebar — same panels, two doors. Settings search finds them either way.
+
+## Local Server
+
+This is the runtime dashboard: what is loaded, whether the process is healthy, and a live log. A loading card shows a modelled percent that actually moves (llama.cpp and mlx-lm do not print a weight-load percentage). Once the model is up, chips report prompt processing as a percent when the request came from Minnow, generated tokens as a count, and **N queued** when llama.cpp has more inference requests than free slots. mlx-lm has no server-side queue gauge, so that chip stays off.
+
+Click a card to open the inspector on **Inference**, with **Loaded with** listing the flags that process was started with (llama.cpp launch flags, or for MLX the snapshot path, quant, mlx-lm version, port, and context). Loading a model from Code does not yank you here; Local Server only comes to the front if you were already in Models.
+
+Idle `update_slots` heartbeats are dropped from the log so they cannot drown the lines that matter.
 
 ## Recommendations
 
@@ -44,7 +53,7 @@ MLX is Apple Silicon only. On Windows and Linux the option is not shown at all, 
 
 **Downloading.** Search Hugging Face from Discover with the format set to MLX. An MLX model is a whole repository rather than a single file, so Minnow downloads the directory, skipping the original unquantized weights that many of these repos keep alongside the quantized ones.
 
-**Loading.** MLX models appear in My Models with format `MLX` and a quant like `mlx-4bit`, and load the same way as GGUF. One difference is worth knowing: MLX runs as a single server that holds whichever model you asked for, so switching between two MLX models is a request rather than a process restart. The server keeps a model resident in memory after use; stop it from **Settings → Servers** when you want the RAM back.
+**Loading.** MLX models appear in My Models with format `MLX` and a quant like `mlx-4bit`, and load the same way as GGUF — including a moving load percent while weights warm up. One difference is worth knowing: MLX runs as a single server that holds whichever model you asked for, so switching between two MLX models is a request rather than a process restart. The server keeps a model resident in memory after use; stop it from **Settings → Servers** when you want the RAM back. During a chat, prompt processing shows as a percent and generated tokens as a live count, same as GGUF.
 
 Vision models are filtered out of MLX search. They need a different runtime that Minnow does not ship yet, and downloading 20 GB to hit a load error is not a useful way to find that out.
 
@@ -102,7 +111,7 @@ See [Voice](../extend/voice.md).
 | **Menubar model chip** | Global default — what new chats start with |
 | **Composer picker, Ctrl+M / Cmd+M** | This chat only |
 
-Local runtimes expose **Load** and **Unload** in the composer picker, acting on the model that chat is bound to. The tray menu can unload local models without opening the window — useful when you want your VRAM back.
+Local runtimes expose **Load** and **Unload** in the composer picker, acting on the model that chat is bound to. The tray menu can unload local models without opening the window — useful when you want your VRAM back. Live load and inference numbers live on **Local Server**.
 
 ## When the picker is empty
 

@@ -20,17 +20,6 @@ export type OsView = 'workspaces' | 'app';
 export interface DesktopPrefs {
   /** `dock` = bottom launcher bar; `grid` = app tile grid below hero. */
   desktopLayout: 'dock' | 'grid';
-  wallpaper:
-    | 'flat'
-    | 'gradient'
-    | 'underwater'
-    | 'minnow'
-    | 'aurora'
-    | 'starfield'
-    | 'custom';
-  /** IndexedDB asset id when wallpaper is `custom`. */
-  wallpaperImageId?: string;
-  wallpaperImageFit?: 'cover' | 'contain';
 }
 
 import type { ModeId } from '../chat/modes/types';

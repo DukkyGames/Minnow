@@ -43,7 +43,7 @@ export const SETTINGS_CATEGORY_LABELS: Record<SettingsCategoryId, string> = {
 export const SETTINGS_CATEGORY_DESCRIPTIONS: Record<SettingsCategoryId, string> = {
   general: 'Terminal behavior, filesystem and LAN access, notifications, audio devices, and where settings are saved.',
   apps: 'Choose which Minnow apps appear in the dock and launchers.',
-  appearance: 'Theme, wallpaper, fonts, and custom accent colors.',
+  appearance: 'Theme, fonts, and custom accent colors.',
   models: 'LLM backends, per-role model picks, sampling, reasoning, and usage.',
   agents: 'System prompts, standing rules, composer modes, personas, workers, and tool policies.',
   integrations: 'Web search, dev tools, permissions, skills, and external hooks.',
@@ -276,9 +276,6 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   field('appearance.theme.mode', 'Theme mode', 'appearance', 'appearance', {
     keywords: ['dark mode', 'light mode', 'follow system'],
   }),
-  field('appearance.wallpaper', 'Desktop wallpaper', 'appearance', 'appearance', {
-    keywords: ['background', 'desktop'],
-  }),
   field('appearance.fonts', 'Fonts', 'appearance', 'appearance', {
     keywords: ['typography', 'mono', 'ui font'],
   }),
@@ -423,6 +420,9 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
     keywords: ['cursor rules', 'instructions', 'groups'],
   }),
   field('agents.rules.addGroup', 'Add rule group', 'agents', 'rules'),
+  field('agents.rules.deleteGroup', 'Delete rule group', 'agents', 'rules', {
+    keywords: ['remove group'],
+  }),
   field('agents.rules.contextDocuments', 'Workspace context documents', 'agents', 'rules', {
     keywords: ['agents.md', 'context.md', 'cursor rules', 'injection', 'workspace'],
   }),

@@ -9,7 +9,6 @@ import {
 } from '../diagnostics/prefs';
 import { loadNotificationPrefs, saveNotificationPref } from '../notifications/prefs';
 import { loadDesktopPrefs, saveDesktopPref } from '../os/desktop-prefs';
-import type { WallpaperMode } from '../os/wallpaper';
 import {
   getFollowSystem,
   getStoredTheme,
@@ -57,8 +56,6 @@ export async function applySettingsClientPatches(
         setFollowSystem(false);
         setThemeMode(value as ThemeMode);
       }
-    } else if (patchKey === 'theme.wallpaper' && typeof value === 'string') {
-      saveDesktopPref('wallpaper', value as WallpaperMode);
     } else if (patchKey === 'diagnostics.fileErrorsToIssues') {
       saveDiagnosticsPref('fileErrorsToIssues', Boolean(value));
     }
@@ -138,10 +135,6 @@ function readBrowserFieldValue(key: string): unknown {
     if (getFollowSystem()) return 'system';
     const theme = getStoredTheme();
     return theme?.endsWith('-light') ? 'light' : 'dark';
-  }
-
-  if (key === 'appearance.wallpaper') {
-    return loadDesktopPrefs().wallpaper;
   }
 
   if (key === 'advanced.diagnostics.fileErrorsToIssues') {

@@ -59,7 +59,17 @@ import {
   openExternalGitUrl,
   openIssueCommitInGitUi,
   resolveGitLinkOpenUrl,
+  resolveIssuePrNumber,
 } from '../chat/issues/git-actions';
+import { listPrReviewsForIssue, subscribePrReviews } from '../state/pr-review-store';
+import {
+  applyPrReviewToIssue,
+  mergeReviewedPr,
+  sendPrReviewToBuilder,
+} from '../chat/review/review-actions';
+import { startPrReview } from '../chat/review/run-pr-review';
+import { renderPrReviewPanel } from './pr-review-panel';
+import { switchChat } from './sidebar';
 import { createCodeRefLinkButton } from './code-ref-link';
 import { createIssueEditor } from './issue-editor';
 import { collectInlineRefs } from '../issues/markdown-inline';
@@ -104,6 +114,10 @@ const gitErrorByIssueId = new Map<string, string>();
 
 let selectedIssueId: string | undefined;
 let detailHost: HTMLElement | null = null;
+
+subscribePrReviews(() => {
+  if (selectedIssueId) refreshIssueDetailIfOpen();
+});
 
 function showIssuesToast(message: string, kind: 'success' | 'error' = 'success'): void {
   void import('./toast').then((m) => m.showToast(message, kind));
@@ -629,6 +643,9 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
 
   scroll.appendChild(buildGitSection(issue));
 
+  const reviewSection = buildIssueReviewSection(issue);
+  if (reviewSection) scroll.appendChild(reviewSection);
+
   const related = buildRelatedIssuesSection(issue);
   if (related) scroll.appendChild(related);
 
@@ -801,6 +818,43 @@ function buildActivityFooter(issue: IssueCard): HTMLElement {
   return activitySection.section;
 }
 
+/** Shared review panel when this issue has a persisted PR review. */
+function buildIssueReviewSection(issue: IssueCard): HTMLElement | null {
+  const records = listPrReviewsForIssue(issue.id);
+  if (!records.length) return null;
+  const record = [...records].sort((a, b) => b.startedAt - a.startedAt)[0]!;
+  const reviewSection = section('Review');
+  renderPrReviewPanel(reviewSection.body, record, {
+    showUpdateIssue: true,
+    onMerge: () => {
+      void mergeReviewedPr(record, issue.workspacePath || getWorkspacePath()).then((outcome) => {
+        if (outcome.cancelled) return;
+        if (!outcome.ok) {
+          showIssuesToast(outcome.error ?? 'Could not merge the pull request', 'error');
+          return;
+        }
+        showIssuesToast(`Merged #${record.number}`, 'success');
+      });
+    },
+    onFix: () => {
+      void sendPrReviewToBuilder(record);
+    },
+    onUpdateIssue: () => {
+      if (applyPrReviewToIssue(record, issue.id)) {
+        showIssuesToast('Issue updated with the review', 'success');
+        refreshIssueDetailIfOpen();
+      }
+    },
+    onOpenChat: () => {
+      if (record.chatId) void switchChat(record.chatId);
+    },
+    onRetry: () => {
+      void runGitAction(issue.id, 'review');
+    },
+  });
+  return reviewSection.section;
+}
+
 /** Restrained Git menu + linked chips + commit grep list for the detail panel. */
 function buildGitSection(issue: IssueCard): HTMLElement {
   const gitLinks = issue.gitLinks ?? [];
@@ -850,6 +904,18 @@ function buildGitSection(issue: IssueCard): HTMLElement {
     void runGitAction(issue.id, 'pr');
   });
 
+  const reviewing = listPrReviewsForIssue(issue.id).some((row) => row.status === 'running');
+  const reviewBtn = document.createElement('button');
+  reviewBtn.type = 'button';
+  reviewBtn.className = 'issues-btn';
+  reviewBtn.hidden = true;
+  reviewBtn.disabled = busy || reviewing;
+  reviewBtn.textContent = reviewing ? 'Reviewing…' : busy ? 'Working…' : 'Review PR';
+  reviewBtn.title = 'Review the linked pull request in a dedicated chat';
+  reviewBtn.addEventListener('click', () => {
+    void runGitAction(issue.id, 'review');
+  });
+
   const linkToggle = document.createElement('button');
   linkToggle.type = 'button';
   linkToggle.className = 'issues-btn issues-detail__git-link-toggle';
@@ -857,7 +923,7 @@ function buildGitSection(issue: IssueCard): HTMLElement {
   linkToggle.setAttribute('aria-expanded', 'false');
   linkToggle.setAttribute('aria-controls', `issues-git-link-fields-${issue.id}`);
 
-  menu.append(branchBtn, prBtn, linkToggle);
+  menu.append(branchBtn, prBtn, reviewBtn, linkToggle);
   body.append(menu, errEl);
 
   if (!empty) {
@@ -950,8 +1016,12 @@ function buildGitSection(issue: IssueCard): HTMLElement {
     if (selectedIssueId !== issue.id) return;
     if (hasGh) {
       prBtn.hidden = false;
+      const resolved = await resolveIssuePrNumber(issue);
+      if (selectedIssueId !== issue.id) return;
+      if (resolved) reviewBtn.hidden = false;
     } else {
       prBtn.hidden = true;
+      reviewBtn.hidden = true;
       prBtn.title = 'Install and authenticate GitHub CLI (gh) to create PRs';
     }
 
@@ -1070,7 +1140,7 @@ function buildGitLinkRow(link: IssueGitLink): HTMLLIElement {
   return li;
 }
 
-type GitUiAction = 'branch' | 'pr' | 'link-commit' | 'link-url';
+type GitUiAction = 'branch' | 'pr' | 'review' | 'link-commit' | 'link-url';
 
 /** Persist error or toast success from a Git action result. */
 function applyGitActionResult(
@@ -1110,6 +1180,27 @@ async function runGitAction(
     if (action === 'pr') {
       const result = await createPrFromIssue(issue);
       applyGitActionResult(issueId, result, 'PR created');
+      return;
+    }
+    if (action === 'review') {
+      const resolved = await resolveIssuePrNumber(issue);
+      if (!resolved) {
+        applyGitActionResult(issueId, { ok: false, error: 'No pull request to review' }, '');
+        return;
+      }
+      const started = await startPrReview({
+        cwd: issue.workspacePath || getWorkspacePath(),
+        repo: resolved.repo,
+        number: resolved.number,
+        issueId: issue.id,
+      });
+      applyGitActionResult(
+        issueId,
+        started.ok
+          ? { ok: true, message: `Reviewing #${resolved.number}` }
+          : { ok: false, error: started.error },
+        'Review started',
+      );
       return;
     }
     if (action === 'link-commit') {

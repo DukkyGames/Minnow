@@ -148,4 +148,29 @@ describe('llama.cpp timings', () => {
     });
     assert.equal(meta.stats.tokens_per_second, 42);
   });
+
+  test('mergeStreamMeta counts text deltas when timings.predicted_n is absent', () => {
+    let meta = mergeStreamMeta(null, {
+      choices: [{ delta: { content: 'Hel' } }],
+    });
+    meta = mergeStreamMeta(meta, {
+      choices: [{ delta: { content: 'lo' } }],
+    });
+    meta = mergeStreamMeta(meta, {
+      choices: [{ delta: { reasoning: 'think' } }],
+    });
+    // Tool-call-only deltas must not bump the live GEN count.
+    meta = mergeStreamMeta(meta, {
+      choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1' }] } }],
+    });
+    assert.equal(meta.timings.predicted_n, 3);
+  });
+
+  test('mergeStreamMeta does not invent predicted_n when llama timings are present', () => {
+    const meta = mergeStreamMeta(null, {
+      timings: { predicted_n: 12, predicted_ms: 100 },
+      choices: [{ delta: { content: 'x' } }],
+    });
+    assert.equal(meta.timings.predicted_n, 12);
+  });
 });

@@ -7,6 +7,7 @@ import {
   getPendingMessageQueueCount,
   pushQueuedMessageNow,
   removeQueuedMessage,
+  setPendingMessageQueueChangedListener,
 } from '../chat/message-queue';
 import { isChatTurnInProgress } from '../chat/chat-turn-guard';
 import { isActiveChatStreaming } from '../chat/streaming-state';
@@ -17,6 +18,7 @@ import { autoResize } from './input';
 import { autoResizeDesktopComposer } from '../os/desktop-composer-resize';
 import { setStatus } from './status';
 import { refreshComposerStreamingAffordance } from './composer-send';
+import { syncQueuedTranscript } from './queued-transcript';
 
 const COMPOSER_FOLLOW_UP_PLACEHOLDER = 'Add a follow-up';
 
@@ -160,12 +162,35 @@ function renderQueueItem(item: { id: string; text: string }): HTMLElement {
   return row;
 }
 
+/**
+ * Bind after modules finish evaluating. Registering at import time raced a
+ * circular import (this file ↔ message-queue via sessions) and hit TDZ.
+ * Re-bind on every sync so a test (or other caller) that cleared the listener
+ * cannot leave the transcript stuck after the next queue mutation.
+ */
+function bindQueueChangedListener(): void {
+  setPendingMessageQueueChangedListener(() => {
+    syncComposerMessageQueue();
+  });
+}
+
 /** Show or hide the queued follow-up strip for the active streaming chat. */
 export function syncComposerMessageQueue(): void {
+  bindQueueChangedListener();
   if (typeof document === 'undefined') return;
 
+  syncQueuedTranscript();
+
+  let chat;
+  try {
+    chat = getActiveChat();
+  } catch {
+    const orphan = document.getElementById('composerMessageQueue');
+    orphan?.classList.add('hidden');
+    return;
+  }
+
   const root = ensureQueueRoot();
-  const chat = getActiveChat();
   const count = getPendingMessageQueueCount(chat);
   const show = count > 0;
 

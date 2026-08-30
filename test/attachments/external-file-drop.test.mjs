@@ -47,6 +47,13 @@ describe('external-file-drop', () => {
     assert.equal(hasWorkspaceFileDrag(transfer), false);
   });
 
+  test('hasWorkspaceFileDrag rejects tab-strip reorder tokens', () => {
+    const fileTab = makeTransfer(['text/plain'], [], { 'text/plain': 'file:src/main.ts' });
+    const previewTab = makeTransfer(['text/plain'], [], { 'text/plain': 'preview:tab-1' });
+    assert.equal(hasWorkspaceFileDrag(fileTab), false);
+    assert.equal(hasWorkspaceFileDrag(previewTab), false);
+  });
+
   test('classifyFileDrag prefers code selection MIME', () => {
     const transfer = makeTransfer(
       ['application/x-minnow-code-selection', 'text/plain'],

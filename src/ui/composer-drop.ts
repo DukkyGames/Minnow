@@ -1,5 +1,6 @@
 /**
- * Composer drag-and-drop: workspace file-tree paths and OS files (Explorer) → composer.
+ * Composer drag-and-drop: workspace file-tree paths, OS files, editor
+ * selections, and Code/browser tabs → composer or durable chat links.
  */
 
 import { addCodeReferenceToComposer } from '../attachments/code-ref';
@@ -10,9 +11,12 @@ import {
   filesFromDataTransfer,
   hasWorkspaceFileDrag,
 } from '../attachments/external-file-drop';
+import { hasTabDrag, parseTabDragData, endTabDrag } from '../attachments/tab-drag';
 import { WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
+import { addChatLinkToActiveChat } from '../chat/links';
 import { getActiveComposerSurface } from './composer-surface';
 import { attachWorkspacePathToComposer } from './workspace-composer-link';
+import { syncChatLinkChipsFromActiveChat } from './chat-link-chips';
 
 const DROP_ACTIVE_CLASS = 'composer-drop-active';
 
@@ -64,8 +68,32 @@ function setDropActive(targets: HTMLElement[], active: boolean): void {
   }
 }
 
+/** True when this drag can land on the composer or chat transcript. */
 function hasComposerDrag(dataTransfer: DataTransfer | null): boolean {
+  if (hasTabDrag(dataTransfer)) return true;
   return classifyFileDrag(dataTransfer) !== null;
+}
+
+/** Pin a dropped editor/browser tab as a standing chat link chip. */
+function applyTabDrop(dataTransfer: DataTransfer): boolean {
+  const payload = parseTabDragData(dataTransfer);
+  endTabDrag();
+  if (!payload) return false;
+  const link =
+    payload.kind === 'file'
+      ? addChatLinkToActiveChat({
+          kind: 'file',
+          path: payload.path,
+          label: payload.label,
+        })
+      : addChatLinkToActiveChat({
+          kind: 'url',
+          url: payload.url,
+          label: payload.label,
+        });
+  if (!link) return false;
+  syncChatLinkChipsFromActiveChat();
+  return true;
 }
 
 /** One handler per composer surface — nested targets would each see the same bubbling drop. */
@@ -108,12 +136,18 @@ function bindDropTarget(
   });
 
   element.addEventListener('drop', (event) => {
-    const kind = classifyFileDrag(event.dataTransfer);
+    const tabDrag = hasTabDrag(event.dataTransfer);
+    const kind = tabDrag ? 'tabLink' : classifyFileDrag(event.dataTransfer);
     if (!kind) return;
     event.preventDefault();
     event.stopPropagation();
     dragDepth = 0;
     setDropActive(dropTargets, false);
+
+    if (kind === 'tabLink' && event.dataTransfer) {
+      applyTabDrop(event.dataTransfer);
+      return;
+    }
 
     if (kind === 'external' && event.dataTransfer) {
       const files = filesFromDataTransfer(event.dataTransfer);
@@ -152,11 +186,17 @@ export function initComposerDrop(): void {
     '.input-bar-composer',
     '#chatAppInput',
     '.chat-app-composer',
+    '#chatAppArea',
+    '.chat-app-viewport',
+    '#chatAppMessageCol',
     '#emailAssistantInput',
     '.email-assistant-composer',
     '#desktopInput',
     '.mn-os-desktop-composer',
     '.mn-os-desktop-input-row',
+    '#desktopChatCol',
+    '#chatArea',
+    '.chat-viewport',
   ];
 
   const targets: HTMLElement[] = [];

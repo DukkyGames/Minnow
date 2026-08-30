@@ -798,24 +798,6 @@
     ]
   },
   {
-    "key": "appearance.wallpaper",
-    "label": "Desktop wallpaper",
-    "keywords": [
-      "background",
-      "desktop"
-    ],
-    "category": "appearance",
-    "area": "appearance",
-    "storage": "browser",
-    "path": "wallpaper",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "appearance"
-    ]
-  },
-  {
     "key": "appearance.fonts",
     "label": "Fonts",
     "keywords": [
@@ -1674,6 +1656,22 @@
   {
     "key": "agents.rules.addGroup",
     "label": "Add rule group",
+    "category": "agents",
+    "area": "rules",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "rules"
+    ]
+  },
+  {
+    "key": "agents.rules.deleteGroup",
+    "label": "Delete rule group",
+    "keywords": [
+      "remove group"
+    ],
     "category": "agents",
     "area": "rules",
     "storage": "section",

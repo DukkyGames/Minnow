@@ -54,6 +54,7 @@ Issues have workspace-specific ids like `MIN-12` (configure the prefix under **S
 - Commits are found by searching for `[MIN-12]` (or your key)
 - Plans live at `documentation/plans/issues/<id>.md`
 - Pull requests go through the `gh` CLI when it is installed, with GitHub links appearing on the issue
+- **Review PR** (when `gh` is available and a PR can be resolved) runs an in-app reviewer and shows the verdict on the issue. Reviews are not posted to GitHub.
 
 When a board finishes work on an issue, the issue moves to **review** rather than closing itself.
 

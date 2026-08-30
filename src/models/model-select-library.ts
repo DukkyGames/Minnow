@@ -108,6 +108,8 @@ export interface LibraryModelSelectMerge {
  */
 export function servedContextLength(serve: ServeRecord | undefined): number | undefined {
   if (!serve || serve.status !== 'running') return undefined;
+  const mlxCtx = Number(serve.mlxSettings?.contextLength);
+  if (Number.isFinite(mlxCtx) && mlxCtx > 0) return mlxCtx;
   const settings = serve.llamaSettings;
   if (!settings || typeof settings !== 'object') return undefined;
   const ctx = Number(settings.ctx);

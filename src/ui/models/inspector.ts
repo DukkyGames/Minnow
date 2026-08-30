@@ -23,7 +23,9 @@ import {
   fetchLlamaRuntime,
   type GgufGeometryFacts,
   type LlamaServeSettings,
+  type ServeRecord,
 } from '../../models/api-client';
+import { mlxLoadedWithRows } from '../../models/mlx-loaded-with';
 import { buildSamplerFieldInputs } from '../settings-sampler-fields';
 import {
   estimateServeMemory,
@@ -65,10 +67,13 @@ import { setModelsInspectorOpen } from './inspector-visibility';
 import { ensureRuntimeForModel } from './runtime-install-prompt';
 import { serveFailureBlock } from './serve-failure-view';
 import {
+  getInspectedServe,
   getModelsState,
   getSelectedModel,
+  libraryModelForServe,
   loadModel,
   selectModel,
+  selectServe,
   serveForModel,
   subscribeModelsStore,
   unloadServe,
@@ -1110,72 +1115,118 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
 }
 
 
-function renderInferenceTab(model: LibraryModel, body: HTMLElement): void {
-  const serve = serveForModel(model);
+/**
+ * Flags the running (or failed) process was actually started with.
+ * Empty when the serve has no stored settings — do not bounce to My Models.
+ */
+function appendLoadedWithBlock(
+  body: HTMLElement,
+  settings: LlamaServeSettings | null | undefined,
+  emptyHint: string,
+): void {
   const block = el('section', 'models-inspector__block');
-  block.appendChild(el('h3', 'models-block__label', 'Runtime flags'));
+  block.appendChild(el('h3', 'models-block__label', 'Loaded with'));
 
-  if (serve && serve.llamaSettings) {
-    const list = el('dl', 'models-info-list');
-    const settings = serve.llamaSettings as LlamaServeSettings;
-    list.append(
-      infoRow('Context', settings.ctx != null ? String(settings.ctx) : '—'),
-      infoRow(
-        'GPU layers',
-        settings.n_gpu_layers === 0
-          ? 'CPU only'
-          : settings.n_gpu_layers != null
-            ? String(settings.n_gpu_layers)
-            : settings.fit_mode === 'manual'
-              ? '—'
-              : 'Auto',
-      ),
-      infoRow(
-        'KV cache',
-        settings.cache_type_k || settings.cache_type_v
-          ? `K ${settings.cache_type_k ?? settings.cache_type ?? 'f16'} / V ${settings.cache_type_v ?? settings.cache_type ?? 'f16'}`
-          : (settings.cache_type ?? '—'),
-      ),
-      infoRow('Fit', settings.fit_mode === 'manual' ? 'Manual' : 'Auto'),
-      infoRow('Parallel', String(settings.parallel ?? 1)),
-    );
-    // Only flags the user actually pinned — an all-defaults launch keeps this short.
-    const extras: Array<[string, string]> = [];
-    if (settings.flash_attn) extras.push(['Flash attention', settings.flash_attn]);
-    if (settings.threads != null) extras.push(['Threads', String(settings.threads)]);
-    if (settings.batch_size != null) extras.push(['Batch', String(settings.batch_size)]);
-    if (settings.ubatch_size != null) extras.push(['Micro-batch', String(settings.ubatch_size)]);
-    if (settings.kv_unified != null) extras.push(['Unified KV', settings.kv_unified ? 'On' : 'Off']);
-    if (settings.kv_offload === false) extras.push(['KV offload', 'Off']);
-    if (settings.ctx_checkpoints != null) {
-      extras.push(['Context checkpoints', String(settings.ctx_checkpoints)]);
+  if (!settings) {
+    block.appendChild(el('p', 'models-muted', emptyHint));
+    body.appendChild(block);
+    return;
+  }
+
+  const list = el('dl', 'models-info-list');
+  list.append(
+    infoRow('Context', settings.ctx != null ? String(settings.ctx) : '—'),
+    infoRow(
+      'GPU layers',
+      settings.n_gpu_layers === 0
+        ? 'CPU only'
+        : settings.n_gpu_layers != null
+          ? String(settings.n_gpu_layers)
+          : settings.fit_mode === 'manual'
+            ? '—'
+            : 'Auto',
+    ),
+    infoRow(
+      'KV cache',
+      settings.cache_type_k || settings.cache_type_v
+        ? `K ${settings.cache_type_k ?? settings.cache_type ?? 'f16'} / V ${settings.cache_type_v ?? settings.cache_type ?? 'f16'}`
+        : (settings.cache_type ?? '—'),
+    ),
+    infoRow('Fit', settings.fit_mode === 'manual' ? 'Manual' : 'Auto'),
+    infoRow('Parallel', String(settings.parallel ?? 1)),
+  );
+  // Only flags the user actually pinned — an all-defaults launch keeps this short.
+  const extras: Array<[string, string]> = [];
+  if (settings.flash_attn) extras.push(['Flash attention', settings.flash_attn]);
+  if (settings.threads != null) extras.push(['Threads', String(settings.threads)]);
+  if (settings.batch_size != null) extras.push(['Batch', String(settings.batch_size)]);
+  if (settings.ubatch_size != null) extras.push(['Micro-batch', String(settings.ubatch_size)]);
+  if (settings.kv_unified != null) extras.push(['Unified KV', settings.kv_unified ? 'On' : 'Off']);
+  if (settings.kv_offload === false) extras.push(['KV offload', 'Off']);
+  if (settings.ctx_checkpoints != null) {
+    extras.push(['Context checkpoints', String(settings.ctx_checkpoints)]);
+  }
+  if (settings.swa_full) extras.push(['SWA cache', 'Full size']);
+  if (settings.context_shift != null) {
+    extras.push(['Context shift', settings.context_shift ? 'On' : 'Off']);
+  }
+  if (settings.n_cpu_moe != null) extras.push(['MoE on CPU', String(settings.n_cpu_moe)]);
+  if (settings.seed != null) extras.push(['Seed', String(settings.seed)]);
+  if (settings.rope_freq_base != null) {
+    extras.push(['RoPE base', String(settings.rope_freq_base)]);
+  }
+  if (settings.rope_freq_scale != null) {
+    extras.push(['RoPE scale', String(settings.rope_freq_scale)]);
+  }
+  if (settings.spec_type && settings.spec_type !== 'none') {
+    extras.push(['Speculative', settings.spec_type]);
+    if (settings.spec_draft_model) {
+      extras.push(['Draft model', settings.spec_draft_model.split(/[\/]/).pop() ?? '']);
     }
-    if (settings.swa_full) extras.push(['SWA cache', 'Full size']);
-    if (settings.context_shift != null) {
-      extras.push(['Context shift', settings.context_shift ? 'On' : 'Off']);
-    }
-    if (settings.n_cpu_moe != null) extras.push(['MoE on CPU', String(settings.n_cpu_moe)]);
-    if (settings.seed != null) extras.push(['Seed', String(settings.seed)]);
-    if (settings.rope_freq_base != null) {
-      extras.push(['RoPE base', String(settings.rope_freq_base)]);
-    }
-    if (settings.rope_freq_scale != null) {
-      extras.push(['RoPE scale', String(settings.rope_freq_scale)]);
-    }
-    if (settings.spec_type && settings.spec_type !== 'none') {
-      extras.push(['Speculative', settings.spec_type]);
-      if (settings.spec_draft_model) {
-        extras.push(['Draft model', settings.spec_draft_model.split(/[\/]/).pop() ?? '']);
-      }
-    }
-    for (const [label, value] of extras) list.appendChild(infoRow(label, value));
-    block.appendChild(list);
-  } else {
+  }
+  for (const [label, value] of extras) list.appendChild(infoRow(label, value));
+  block.appendChild(list);
+  body.appendChild(block);
+}
+
+/**
+ * mlx-lm has no llamaSettings. Empty llamaSettings must not read as a broken serve.
+ */
+function appendMlxLoadedWithBlock(
+  body: HTMLElement,
+  serve: ServeRecord,
+  model: LibraryModel | null | undefined,
+): void {
+  const block = el('section', 'models-inspector__block');
+  block.appendChild(el('h3', 'models-block__label', 'Loaded with'));
+  const rows = mlxLoadedWithRows(serve.mlxSettings, {
+    quant: model?.quant ?? null,
+    contextLength: model?.contextLength ?? null,
+  });
+  if (!rows.length) {
     block.appendChild(
-      el('p', 'models-muted', 'Load the model to see the flags its process was started with.'),
+      el('p', 'models-muted', 'Load the model to see the snapshot this serve is running.'),
+    );
+    body.appendChild(block);
+    return;
+  }
+  const list = el('dl', 'models-info-list');
+  for (const row of rows) list.appendChild(infoRow(row.label, row.value));
+  block.appendChild(list);
+  body.appendChild(block);
+}
+
+function renderInferenceTab(model: LibraryModel, body: HTMLElement): void {
+  const serve = getInspectedServe() ?? serveForModel(model);
+  if (serve?.runtime === 'mlx-lm') {
+    appendMlxLoadedWithBlock(body, serve, model);
+  } else {
+    appendLoadedWithBlock(
+      body,
+      serve?.llamaSettings as LlamaServeSettings | null | undefined,
+      'Load the model to see the flags its process was started with.',
     );
   }
-  body.appendChild(block);
 
   const samplerBlock = el('section', 'models-inspector__block models-inspector__sampler');
   samplerBlock.append(
@@ -1323,7 +1374,15 @@ export function render(): void {
   }
   inspectorRenderDeferred = false;
 
+  const inspected = getInspectedServe();
   const model = getSelectedModel();
+
+  if (!model && inspected) {
+    host.classList.remove('is-empty');
+    renderServeOnlyInspector(host, inspected);
+    return;
+  }
+
   host.classList.toggle('is-empty', !model);
 
   if (!model) {
@@ -1379,6 +1438,53 @@ export function render(): void {
   host.replaceChildren(head, tabs, body, footer);
 }
 
+/** Inspector for a serve that has no matching library row (JIT / path mismatch). */
+function renderServeOnlyInspector(host: HTMLElement, serve: ServeRecord): void {
+  const head = el('header', 'models-inspector__head');
+  const glyph = icon('chip', 'models-inspector__glyph');
+  const title = el('h2', 'models-inspector__title', serve.modelLabel);
+  head.append(glyph, title);
+  const dot = el('span', `models-dot models-dot--${serve.status}`);
+  dot.title = `Runtime ${serve.status}`;
+  head.appendChild(dot);
+
+  const tabs = el('div', 'models-inspector__tabs');
+  tabs.setAttribute('role', 'tablist');
+  const tab = el('button', 'models-tab', TAB_LABELS.inference.label);
+  tab.type = 'button';
+  tab.setAttribute('role', 'tab');
+  tab.setAttribute('aria-selected', 'true');
+  tab.prepend(icon(TAB_LABELS.inference.glyph));
+  tabs.appendChild(tab);
+
+  const body = el('div', 'models-inspector__body');
+  body.setAttribute('role', 'tabpanel');
+  if (serve.runtime === 'mlx-lm') {
+    appendMlxLoadedWithBlock(body, serve, libraryModelForServe(serve) ?? null);
+  } else {
+    appendLoadedWithBlock(
+      body,
+      serve.llamaSettings as LlamaServeSettings | null | undefined,
+      'This serve has no stored launch flags.',
+    );
+  }
+
+  const footer = el('footer', 'models-inspector__footer');
+  footer.appendChild(
+    textButton(
+      'Eject',
+      () => {
+        void unloadServe(serve.id).catch((err: unknown) => {
+          setStatus('err', err instanceof Error ? err.message : 'Eject failed');
+        });
+      },
+      'danger',
+    ),
+  );
+
+  host.replaceChildren(head, tabs, body, footer);
+}
+
 /** Coalesce re-renders onto the next frame. */
 function scheduleInspectorRender(): void {
   if (inspectorRenderRaf != null) return;
@@ -1405,11 +1511,27 @@ export function initInspector(): void {
 
 /**
  * Select a library row and show the inspector (opens the panel when hidden).
- * Used by My Models rows, quant pickers, and Local Server cards.
+ * Used by My Models rows and quant pickers.
  */
 export function showModelInInspector(modelId: string, tab: InspectorTab = 'info'): void {
   selectModel(modelId);
   activeTab = tab;
+  setModelsInspectorOpen(true);
+  render();
+  queueMicrotask(() => {
+    const host = root();
+    if (!host) return;
+    host.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]')?.focus();
+  });
+}
+
+/**
+ * Open the inspector on a Local Server card. Binds by serve id so a JIT path
+ * mismatch still shows Loaded with. Repeat click does not close the panel.
+ */
+export function showServeInInspector(serveId: string): void {
+  selectServe(serveId);
+  activeTab = 'inference';
   setModelsInspectorOpen(true);
   render();
   queueMicrotask(() => {

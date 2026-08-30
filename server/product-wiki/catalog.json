@@ -54,7 +54,7 @@
         "Related"
       ],
       "section": "Get started",
-      "hash": "d5bbe1367870018c7c76f16b32a08b4b98b9dcd40b0029d8147b5426db1a04ab"
+      "hash": "5ffb28861b628764840c413f77e1103c40021e318b95c9e8966cd75810222624"
     },
     {
       "path": "documentation/manual/get-started/first-chat.md",
@@ -144,7 +144,7 @@
         "Related"
       ],
       "section": "Core concepts",
-      "hash": "92059962f2632fd62353e201559bc64553becbe49fea43e1d9d0a423f5773dfe"
+      "hash": "c66a17361af01e987b23d9e29ee9c9a0fe97d77576566afdf5f99413f4d5e950"
     },
     {
       "path": "documentation/manual/chat/chatting.md",
@@ -163,7 +163,7 @@
         "Related"
       ],
       "section": "Chat",
-      "hash": "06f8922a60a952f3e824b39c9f5ae53bf5225a6df037b7dcc6fffe8b9cfdd3f7"
+      "hash": "c8e8c3f8be6c0f83c5ddab581f919e1c3dcef52a2c396b785483afeeebc2fdb9"
     },
     {
       "path": "documentation/manual/chat/skills-and-commands.md",
@@ -217,7 +217,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "2279bd0846f9444b70074afe6a364d809c9eac8511607732d50c73ccfa7bd86e"
+      "hash": "c8ccf53ebf0577a9a936a460599b85d6e25ee04514d8be1cae946fe578ef146f"
     },
     {
       "path": "documentation/manual/apps/research.md",
@@ -256,6 +256,7 @@
       "title": "Models",
       "summary": "This is where you set up what the agents run on: what your machine can handle, what you have downloaded, what is serving, which endpoints Minnow talks to, which model does which job, and what it all costs. You come here to configure, then go back to Code and work. Open it from th",
       "headings": [
+        "Local Server",
         "Recommendations",
         "Library and Installed",
         "MLX on Apple Silicon",
@@ -270,7 +271,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "97704b3175fa0f815d7b5e07ad552f1254d67461a57d47a935c0750733e31956"
+      "hash": "23427027d6503c919b4716d125a8592088f4f53e0e93aa4eef6c2f9a64e641dd"
     },
     {
       "path": "documentation/manual/apps/issues.md",
@@ -286,7 +287,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "8dae1fa0b90f2ee5662c04887bf5e181e41b00814810160adf477bd6ea60bf91"
+      "hash": "897042de27d5638432fc61807fdc3cd232768ccf690e9e3050ae23ba483bc8b0"
     },
     {
       "path": "documentation/manual/apps/scheduler.md",
@@ -323,7 +324,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "03f42798dee1a78cead9445b7e05302ca96b37efa28fcc91d461f2e5edee5a8a"
+      "hash": "a3ce72b748935e1da12730be0ce0fa10865a2186fc002cb6f2c5453c2cf74e04"
     },
     {
       "path": "documentation/manual/orchestrate/boards.md",

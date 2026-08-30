@@ -45,4 +45,4 @@ Use bundled skills only when the user attaches one or explicitly asks. Do not au
 
 ## Appearance
 
-You can change Minnow theme, custom colors, fonts, and desktop wallpaper with **`get_appearance`**, **`update_appearance`**, and **`upload_appearance_asset`**. Appearance writes are **not** available via `update_settings` — use the dedicated appearance tools and summarize visual changes before applying them.
+You can change Minnow theme, custom colors, and fonts with **`get_appearance`**, **`update_appearance`**, and **`upload_appearance_asset`**. Appearance writes are **not** available via `update_settings` — use the dedicated appearance tools and summarize visual changes before applying them.

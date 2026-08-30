@@ -52,6 +52,38 @@
   color: var(--mn-fg-muted);
 }
 
+.git-commit-diff__meta-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.git-commit-diff__wrap-toggle {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .git-commit-diff__wrap-toggle:hover {
+    color: var(--mn-fg);
+    border-color: var(--mn-border-strong);
+  }
+}
+
+.git-commit-diff__wrap-toggle.is-active {
+  color: var(--mn-fg);
+  border-color: var(--mn-accent);
+  background: var(--mn-surface-2);
+}
+
 .git-commit-diff-close {
   flex-shrink: 0;
 }
@@ -214,6 +246,23 @@
   padding: 0 8px;
   white-space: pre;
   min-width: 0;
+}
+
+/* MIN-675: wrap long lines in each column so before/after stay comparable. */
+.sbs-diff--wrap .sbs-diff__grid {
+  min-width: 0;
+  width: 100%;
+}
+
+.sbs-diff--wrap .sbs-diff__row {
+  width: 100%;
+  align-items: start;
+}
+
+.sbs-diff--wrap .sbs-diff__cell {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .sbs-diff__cell--context {

@@ -87,6 +87,7 @@ import { syncModeSelectorFromActiveChat } from './mode-selector';
 import { syncComposerReasoningEffortFromActiveChat } from './composer-reasoning-effort';
 import { syncOrchestratePlanStripFromActiveChat } from './orchestrate-plan-selector';
 import { syncComposerPinnedSkillFromActiveChat } from './composer-pinned-skill';
+import { syncChatLinkChipsFromActiveChat } from './chat-link-chips';
 import { syncComposerRunTargetFromActiveChat } from './composer-run-target';
 import {
   invalidateComposerUndoGitCache,
@@ -362,6 +363,7 @@ export async function applyWorkspaceScopedSession(
     syncComposerReasoningEffortFromActiveChat();
     void syncOrchestratePlanStripFromActiveChat();
     syncComposerPinnedSkillFromActiveChat();
+    syncChatLinkChipsFromActiveChat();
     syncComposerRunTargetFromActiveChat();
     syncComposerUndoFromActiveChat();
     syncViewModeToggleFromActiveChat();
@@ -1394,6 +1396,7 @@ export async function switchChat(id: string): Promise<void> {
   syncComposerReasoningEffortFromActiveChat();
   void syncOrchestratePlanStripFromActiveChat();
   syncComposerPinnedSkillFromActiveChat();
+  syncChatLinkChipsFromActiveChat();
   syncComposerRunTargetFromActiveChat();
   syncComposerUndoFromActiveChat();
   syncViewModeToggleFromActiveChat();
@@ -1443,6 +1446,7 @@ function syncCreateChatChrome(chatId: string): void {
   syncComposerReasoningEffortFromActiveChat();
   void syncOrchestratePlanStripFromActiveChat();
   syncComposerPinnedSkillFromActiveChat();
+  syncChatLinkChipsFromActiveChat();
   syncComposerRunTargetFromActiveChat();
   syncComposerUndoFromActiveChat();
   syncViewModeToggleFromActiveChat();

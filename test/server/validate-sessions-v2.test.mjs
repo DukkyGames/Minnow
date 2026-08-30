@@ -361,6 +361,56 @@ describe('validateSessionState workspace schema', () => {
     });
   });
 
+  it('keeps durable chat file and URL links (MIN-630)', () => {
+    const out = validateSessionState({
+      version: 6,
+      activeId: 'chat-links',
+      sidebarCollapsed: false,
+      chats: [
+        {
+          id: 'chat-links',
+          name: 'Linked',
+          workspacePath: '',
+          modelId: '',
+          history: [],
+          updatedAt: 1,
+          links: [
+            {
+              id: '11111111-1111-1111-1111-111111111111',
+              kind: 'file',
+              path: 'src/main.ts',
+              label: 'main.ts',
+              addedAt: 1,
+            },
+            {
+              id: '22222222-2222-2222-2222-222222222222',
+              kind: 'url',
+              url: 'https://example.com/docs',
+              label: 'example.com',
+              addedAt: 2,
+            },
+          ],
+        },
+      ],
+    });
+    assert.deepEqual(out.chats[0].links, [
+      {
+        id: '11111111-1111-1111-1111-111111111111',
+        kind: 'file',
+        path: 'src/main.ts',
+        label: 'main.ts',
+        addedAt: 1,
+      },
+      {
+        id: '22222222-2222-2222-2222-222222222222',
+        kind: 'url',
+        url: 'https://example.com/docs',
+        label: 'example.com',
+        addedAt: 2,
+      },
+    ]);
+  });
+
   it('does not trim chats above the former MAX_CHATS limit', () => {
     const chats = [];
     for (let i = 0; i < 55; i += 1) {

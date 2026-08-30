@@ -76,6 +76,45 @@ describe('config API rules CRUD', () => {
     assert.deepEqual(onDisk, payload);
   });
 
+  test('PUT rules can drop an empty group without touching other groups\' rules', async () => {
+    const withEmptyGroup = {
+      version: 2,
+      enabled: true,
+      groups: [
+        { id: 'general', name: 'General' },
+        { id: 'style', name: 'Style' },
+      ],
+      rules: [
+        {
+          id: '11111111-1111-1111-1111-111111111111',
+          title: 'TypeScript',
+          text: 'RULES_MARKER_24: use strict TypeScript.',
+          enabled: true,
+          groupId: 'general',
+        },
+      ],
+    };
+    const created = await httpRequest(baseUrl, 'PUT', '/api/config/rules', withEmptyGroup);
+    assert.equal(created.status, 200);
+
+    const withoutStyle = {
+      version: 2,
+      enabled: true,
+      groups: [{ id: 'general', name: 'General' }],
+      rules: withEmptyGroup.rules,
+    };
+    const removed = await httpRequest(baseUrl, 'PUT', '/api/config/rules', withoutStyle);
+    assert.equal(removed.status, 200);
+
+    const get = await httpRequest(baseUrl, 'GET', '/api/config/rules');
+    assert.equal(get.status, 200);
+    assert.deepEqual(get.json, withoutStyle);
+
+    const file = path.join(homeDir, 'rules.json');
+    const onDisk = JSON.parse(await fs.readFile(file, 'utf8'));
+    assert.deepEqual(onDisk, withoutStyle);
+  });
+
   test('PUT legacy v1 rules migrates to v2 on write', async () => {
     const legacy = {
       version: 1,
