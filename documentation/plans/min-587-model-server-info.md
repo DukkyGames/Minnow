@@ -26,6 +26,12 @@ todos:
   - id: docs-context
     content: Update documentation/context.md and the Models manual
     status: completed
+  - id: load-progress-overtime
+    content: Leak past the current phase ceiling when the log is silent so fitting does not sit at 4% until /health
+    status: completed
+  - id: load-progress-checkpoints
+    content: Retune LOAD_PHASES from a captured b9628 Qwen3.8-27B log; dots map onto the wide weights band; first-load rate so 13 GiB at 7s is not 40%
+    status: completed
 isProject: false
 ---
 
@@ -39,7 +45,7 @@ A developer waiting on a local GGUF needs to trust the numbers: load percent tha
 
 ## Approach
 
-- **Load bar:** `computeLoadProgress` always climbs inside the current phase band using typical phase shares of elapsed time when there is no rate prior. `/health` is the only path to 100. Skipped log markers ease toward the new floor instead of snapping 4 → 70.
+- **Load bar:** Checkpoints from a captured b9628 Qwen3.8-27B load. `loading model tensors` owns 16–82 (last line during the silent CUDA copy); dots map onto that band; MTP/CLIP/slots are warmup. `/health` is the only path to 100.
 - **Chat:** same modelled percent on `loading_model`; existing `prompt_progress` percent; live `predicted_n` on generating and on `Calling {tool}`. Wire the agent loop (`streamCompletionTurn`) as well as the no-tools `api/chat.ts` path.
 - **Local Server chips:** prefill percent when Minnow owns in-flight `prompt_progress`; otherwise keep an honest token count. GEN stays a token count. Queue chip is llama `requests_deferred` only (PR #1032).
 - **Navigation:** switch to `#/app/models/server` only when Models is already the foreground app. JIT load from chat stays in Code.

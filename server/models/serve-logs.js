@@ -4,7 +4,9 @@
  *
  * llama-server writes through the shared terminal runner, so the log file is the
  * one source that survives a Minnow restart. Streaming polls file size and emits
- * the delta, which works for both in-memory and recovered runs.
+ * the delta, which works for both in-memory and recovered runs. 200 ms keeps the
+ * late b9628 burst (context / warmup / listening) ahead of `/health`, which used
+ * to settle the card while the bar was still in the weights band.
  */
 
 import fsp from 'node:fs/promises';
@@ -12,7 +14,7 @@ import path from 'node:path';
 import { getServerLogPath } from '../servers/paths.js';
 import { modelsLogDir } from './paths.js';
 
-const POLL_MS = 900;
+const POLL_MS = 200;
 const DEFAULT_TAIL_BYTES = 64 * 1024;
 const MAX_TAIL_BYTES = 512 * 1024;
 

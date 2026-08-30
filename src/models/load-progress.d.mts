@@ -20,6 +20,9 @@ export declare function matchLoadPhase(text: string | null | undefined): Matched
 
 export declare function parseSpecContextBytes(text: string | null | undefined): number | null;
 
+/** Tensor-copy percent from a run of 10+ dots, or null. */
+export declare function parseWeightLoadDots(text: string | null | undefined): number | null;
+
 export declare function resolveBytesPerMs(priors: {
   lastLoadMs?: unknown;
   lastWeightsBytes?: unknown;

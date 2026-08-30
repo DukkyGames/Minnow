@@ -52,6 +52,7 @@ describe('describeLoadPhase', () => {
     assert.equal(describeLoadPhase(''), 'Starting runtime');
     assert.equal(describeLoadPhase('load_tensors: loading model tensors'), 'Loading weights');
     assert.equal(describeLoadPhase('llama_kv_cache: size = 512.00 MiB'), 'Allocating context');
+    assert.equal(describeLoadPhase('clip_model_loader: model name:   Qwen3.8-27B'), 'Warming up');
     assert.equal(describeLoadPhase('main: server is listening'), 'Starting the server');
   });
 

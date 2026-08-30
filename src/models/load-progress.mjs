@@ -1,15 +1,27 @@
 /**
  * Load progress for a starting llama.cpp serve.
  *
- * llama-server never prints a weight-load percentage. Verified against b9628: at the
- * default verbosity the entire load is silent — an 11-second gap with no output — and
- * even at `-lv 4` the loader prints phase lines and a row of dots, never a number. So
- * the bar is *modelled*, not scraped:
+ * llama-server does not print `progress = N %` during a weight load. What it does
+ * print (b9628, `-lv 4`, Qwen3.8-27B IQ4_XS on RTX 4090) is a sequence of checkpoints
+ * and then a row of dots (one `.` per integer percent of tensor copy):
  *
- * - the log pins which phase we are in, and each phase owns a floor and a ceiling;
- * - inside that band, elapsed time climbs even without a rate prior;
- * - skipped phase markers ease toward the new floor instead of snapping;
- * - the caller holds the result monotonic and only ever reaches 100 on a healthy probe.
+ *   0.19s  llama_server: loading model
+ *   0.24s  llama_model_loader: loaded meta data
+ *   0.64s  load_tensors: loading model tensors     ← last line before the long copy
+ *   1.73s  load_tensors: offloaded 66/66 layers    ← often buffered with the dots
+ *   1.73–5.92s  `......... ` (93 dots)             ← the actual GPU upload
+ *   5.92s  llama_context: constructing
+ *   6.06s  warming up the model
+ *   6.13s  creating MTP draft context              ← Qwen3.8 speculative
+ *   6.16s  clip_model_loader                       ← mmproj
+ *   6.96s  loaded multimodal model / initializing slots
+ *   7.05s  speculative decoding context initialized
+ *   7.09s  model loaded / server is listening
+ *
+ * `/health` answers in the same breath as "listening", so those late lines often
+ * never paint. The weights band is therefore wide (16–82): it is the last checkpoint
+ * that is reliably on disk during the silent copy. Dots, when they flush, map onto
+ * that same band. 100 is only ever claimed on a healthy probe.
  *
  * Pure and I/O-free so the arithmetic is testable without spawning a server.
  */
@@ -19,9 +31,9 @@
  * entry; the last phase whose pattern has appeared wins, so an out-of-order match on an
  * earlier line cannot drag the bar backwards.
  *
- * Markers are the ones actually observed on b9628. Several print at the default
- * verbosity; the rest need `-lv 4`, which `buildLlamaServerLaunch` now passes. A run
- * that only lights up half of them still advances — it just has fewer waypoints.
+ * Floors are wall-time shares from the b9628 capture above (7.09s = 100), not guesses
+ * about which step "feels" expensive. `fitting params` is absent on that run (fit
+ * already chose ngl) but still a checkpoint when it does print.
  *
  * @type {ReadonlyArray<{ key: string, label: string, floor: number, ceiling: number, pattern: RegExp | null }>}
  */
@@ -30,13 +42,20 @@ export const LOAD_PHASES = [
     key: 'spawning',
     label: 'Starting runtime',
     floor: 0,
-    ceiling: 4,
+    ceiling: 3,
     pattern: null,
+  },
+  {
+    key: 'loading',
+    label: 'Opening the model file',
+    floor: 3,
+    ceiling: 8,
+    pattern: /llama_server:\s*loading model|load_model:\s*loading model/i,
   },
   {
     key: 'fitting',
     label: 'Fitting to device memory',
-    floor: 4,
+    floor: 8,
     ceiling: 12,
     pattern: /fitting params to device memory/i,
   },
@@ -44,27 +63,23 @@ export const LOAD_PHASES = [
     key: 'header',
     label: 'Reading model header',
     floor: 12,
-    ceiling: 18,
+    ceiling: 16,
     pattern: /llama_model_loader:\s*loaded meta data/i,
   },
   {
+    // Wide on purpose: the CUDA copy lives here, and `offloaded N/N` often lands
+    // in the same stdout flush as the dots + context, too late to own 70%.
     key: 'weights',
     label: 'Loading weights',
-    floor: 18,
-    ceiling: 70,
-    pattern: /loading model tensors|load_tensors:\s*loading/i,
-  },
-  {
-    key: 'offload',
-    label: 'Placing layers',
-    floor: 70,
-    ceiling: 78,
-    pattern: /load_tensors:\s*offloaded\s+\d+\/\d+\s+layers|model buffer size\s*=/i,
+    floor: 16,
+    ceiling: 82,
+    pattern:
+      /loading model tensors|load_tensors:\s*loading|load_tensors:\s*offloaded\s+\d+\/\d+\s+layers|model buffer size\s*=/i,
   },
   {
     key: 'context',
     label: 'Allocating context',
-    floor: 78,
+    floor: 82,
     ceiling: 88,
     pattern: /llama_context:\s*constructing|llama_kv_cache:\s*size\s*=|sched_reserve:|KV self size/i,
   },
@@ -72,13 +87,14 @@ export const LOAD_PHASES = [
     key: 'warmup',
     label: 'Warming up',
     floor: 88,
-    ceiling: 97,
-    pattern: /warming up the model|initializing slots/i,
+    ceiling: 96,
+    pattern:
+      /warming up the model|initializing slots|creating MTP draft context|clip_model_loader:|loaded multimodal model|speculative decoding context initialized/i,
   },
   {
     key: 'listening',
     label: 'Starting the server',
-    floor: 97,
+    floor: 96,
     ceiling: 100,
     pattern: /server is listening|llama_server:\s*model loaded|starting the main loop/i,
   },
@@ -116,6 +132,16 @@ export function parseSpecContextBytes(text) {
 export const MAX_PERCENT_BEFORE_HEALTHY = 99;
 
 /**
+ * First-load bytes/ms when we have a file size but no measured prior.
+ *
+ * Qwen3.8-27B IQ4_XS (13.26 GiB) on RTX 4090 + NVMe finished in 7.09s ≈ 1.9 GiB/s.
+ * 1.5 GiB/s is a shade slower so a first CUDA load of that file sits around 80%
+ * when `/health` answers, not 40% of a flat 25s clock. CPU/HDD loads overshoot
+ * to 99 and wait — better than jumping from 40 to Ready.
+ */
+const FIRST_LOAD_BYTES_PER_MS = 1.5 * 1024 * 1024;
+
+/**
  * Weight of the newest sample in the rolling per-variant load rate. Low enough that one
  * cold-cache load does not poison the prior, high enough to follow a disk swap.
  */
@@ -144,6 +170,31 @@ export function matchLoadPhase(text) {
     floor: matched.floor,
     ceiling: matched.ceiling,
   };
+}
+
+/**
+ * llama.cpp prints one `.` per integer percent of tensor copy (`LLAMA_LOG_CONT`).
+ * Timestamps use single dots (`0.01.726.375`); a run of 10+ is the progress bar.
+ * Null when the copy has not started flushing yet.
+ *
+ * @param {string | null | undefined} text
+ * @returns {number | null} 10–100
+ */
+export function parseWeightLoadDots(text) {
+  if (!text) return null;
+  let best = 0;
+  for (const match of String(text).matchAll(/\.{10,}/g)) {
+    if (match[0].length > best) best = match[0].length;
+  }
+  if (best < 10) return null;
+  return Math.min(100, best);
+}
+
+/** Map a 0–100 tensor-copy reading onto the weights phase band. */
+function percentFromWeightDots(dots) {
+  const weights = LOAD_PHASES.find((phase) => phase.key === 'weights');
+  if (!weights || !(dots > 0)) return 0;
+  return weights.floor + (weights.ceiling - weights.floor) * (Math.min(100, dots) / 100);
 }
 
 /** @param {unknown} value */
@@ -222,8 +273,8 @@ export function updateLoadRate(previousBytesPerMs, sample) {
  */
 
 /**
- * Typical wall time for a first load with no rate prior. Only used to pace the
- * climb inside the current phase band — it is not shown as an ETA.
+ * Typical wall time for a first load with no rate prior. Paces the climb and
+ * the overtime leak past a silent phase ceiling. Not shown as an ETA.
  */
 const DEFAULT_LOAD_MS = 25_000;
 
@@ -233,23 +284,46 @@ const DEFAULT_LOAD_MS = 25_000;
  */
 const PHASE_CATCHUP_MS = 600;
 
-/** Worst skip we smooth (fitting floor → offload floor). */
-const PHASE_CATCHUP_SPAN = 70;
+/** Worst skip we smooth (fitting floor → context floor). */
+const PHASE_CATCHUP_SPAN = 82;
 
 /**
- * Elapsed-time climb inside the current band when we have no rate prior.
+ * Modelled percent for the current log phase.
  *
- * Do not subtract an assumed duration for skipped phases: a small GGUF can print
- * a KV-cache line at 4s, and waiting out 78% of DEFAULT_LOAD_MS would pin the
- * bar on the context floor until 19s. Scale the band width across the whole
- * typical load so consecutive ticks still rise.
+ * Three clocks, one number:
+ * - Clock behind the log (small GGUF already at KV-cache): climb from the
+ *   floor across the band so we do not sit on 78% until 19s.
+ * - Clock inside the band: use elapsed/typical directly.
+ * - Clock ahead of the log (silent tensor load after "fitting params"): leak
+ *   past the ceiling toward 99. Hard-capping at the ceiling is why Local
+ *   Server sat on 4% for most of a load, then jumped to Ready.
+ *
+ * A stale fast prior must not race to 99 while we are still fitting, so the
+ * overtime leak is paced over at least DEFAULT_LOAD_MS, not the prior alone.
  *
  * @param {{ floor: number, ceiling: number }} phase
  * @param {number} elapsedMs
+ * @param {number} typicalTotalMs Rate-prior duration, or DEFAULT_LOAD_MS.
  */
-function climbInsidePhase(phase, elapsedMs) {
-  const t = DEFAULT_LOAD_MS > 0 ? Math.min(0.999, Math.max(0, elapsedMs) / DEFAULT_LOAD_MS) : 0;
-  return phase.floor + (phase.ceiling - phase.floor) * t;
+function modelledPercentForPhase(phase, elapsedMs, typicalTotalMs) {
+  const totalMs = typicalTotalMs > 0 ? typicalTotalMs : DEFAULT_LOAD_MS;
+  const timePercent = totalMs > 0 ? (Math.max(0, elapsedMs) / totalMs) * 100 : 0;
+
+  if (timePercent < phase.floor) {
+    const t = totalMs > 0 ? Math.min(0.999, Math.max(0, elapsedMs) / totalMs) : 0;
+    return phase.floor + (phase.ceiling - phase.floor) * t;
+  }
+
+  if (timePercent <= phase.ceiling) return timePercent;
+
+  const typicalMsForCeiling = (phase.ceiling / 100) * totalMs;
+  const overtimeMs = Math.max(0, elapsedMs - typicalMsForCeiling);
+  const leakSpan = Math.max(totalMs, DEFAULT_LOAD_MS);
+  // Listening's ceiling is 100; remaining must not go negative or a long
+  // wait on "server is listening" walks the bar backwards from 99.
+  const remaining = Math.max(0, MAX_PERCENT_BEFORE_HEALTHY - phase.ceiling);
+  const leak = leakSpan > 0 ? (overtimeMs / leakSpan) * remaining : 0;
+  return Math.min(MAX_PERCENT_BEFORE_HEALTHY, phase.ceiling + leak);
 }
 
 /**
@@ -300,17 +374,18 @@ export function computeLoadProgress(input) {
   // paint (tab was in the background) can catch up instead of sitting at 0.
   const dtMs = Number.isFinite(lastElapsedMs) ? Math.max(0, elapsedMs - lastElapsedMs) : elapsedMs;
   const weightsBytes = positive(input.weightsBytes);
-  const bytesPerMs = positive(input.bytesPerMs);
+  const bytesPerMs =
+    positive(input.bytesPerMs) || (weightsBytes > 0 ? FIRST_LOAD_BYTES_PER_MS : 0);
   const predictedTotalMs = weightsBytes > 0 && bytesPerMs > 0 ? weightsBytes / bytesPerMs : 0;
 
-  // A rate prior sweeps the whole 0–100 from elapsed/total, then the phase band
-  // fences it. Without a prior the bar still climbs inside the current band so
-  // fitting is not stuck at 4% until the next log line (often offload at 70%).
-  const modelledPercent =
-    predictedTotalMs > 0 ? (elapsedMs / predictedTotalMs) * 100 : climbInsidePhase(phase, elapsedMs);
-
-  const banded = Math.min(phase.ceiling, Math.max(phase.floor, modelledPercent));
-  const target = capped(Math.max(banded, floorFromPrevious));
+  // Rate prior when we have one, else file size at FIRST_LOAD_BYTES_PER_MS, else
+  // the 25s clock. The phase floor still holds us up; the weights band is wide
+  // enough that a 7s CUDA copy of a 13 GiB file does not finish painted at 40%.
+  const typicalTotalMs = predictedTotalMs > 0 ? predictedTotalMs : DEFAULT_LOAD_MS;
+  let modelledPercent = modelledPercentForPhase(phase, elapsedMs, typicalTotalMs);
+  const dots = parseWeightLoadDots(input.logText);
+  if (dots != null) modelledPercent = Math.max(modelledPercent, percentFromWeightDots(dots));
+  const target = capped(Math.max(modelledPercent, floorFromPrevious));
   const percent = capped(easeToward(floorFromPrevious, target, dtMs));
 
   return {
