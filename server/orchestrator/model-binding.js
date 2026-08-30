@@ -5,12 +5,15 @@
  * (board override → planner chat → top-bar picker → autopilot planner).
  * That module reads the DOM; this one must not. The server analogue is:
  *
- *   1. explicit override (tests, and later a journaled board model)
+ *   1. explicit override — the board's own `board.model.set` binding (P9-C),
+ *      or a test's `model` option
  *   2. Settings → Autopilot planner provider/model (`config.json`)
  *   3. active chat's menubar binding (sessions store — no `document`)
  *
- * A missing binding throws. `start()` then rejects, the engine journals
- * nothing (no process existed), and the next tick retries.
+ * A missing binding throws. `POST /start` calls the effector's `preflight()`
+ * first, so that throw becomes a 400 on the button (P9-A). If it happens later
+ * in a run instead, `start()` rejects, the engine journals nothing (no process
+ * existed), emits a non-journaled `error` frame, and the next tick retries.
  */
 
 import { readConfigJson } from '../config/store.js';

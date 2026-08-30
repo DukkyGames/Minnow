@@ -1,0 +1,437 @@
+/**
+ * Phase 9 — the commands and channels that finish the Boards surface.
+ *
+ * P9-A is the one that is a bug rather than a port, and it gets the most
+ * attention here: a rejected `effector.start()` must reach the screen without
+ * ever reaching the journal. Those two halves are asserted together, because
+ * either one alone is a different (and wrong) design — journaling it would make
+ * replay disagree with reality, and swallowing it is what made a missing model
+ * binding present as *Start does nothing*.
+ */
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
+
+import { resetMinnowHomeCache } from '../../server/config/home.js';
+import { createScriptedEffector } from '../../server/orchestrator/effector-scripted.js';
+import { disposeEngines, getEngine } from '../../server/orchestrator/engine.js';
+import { boardExists, resetJournalCache } from '../../server/orchestrator/journal.js';
+import { subscribeErrors } from '../../server/orchestrator/live-events.js';
+import {
+  createBoardsMiddleware,
+  setEffectorFactory,
+} from '../../server/orchestrator/middleware.js';
+import {
+  flushTranscripts,
+  readTranscript,
+  recordTranscriptEnd,
+  recordTranscriptEvent,
+  resetTranscripts,
+} from '../../server/orchestrator/transcripts.js';
+
+const PLAN = `---
+name: demo-board
+overview: A demo.
+todos:
+  - id: W1-A
+    content: "Wave 1: A"
+    status: pending
+isProject: true
+---
+
+# Demo
+
+## Wave Breakdown
+
+### Wave 1 — One
+
+#### Task W1-A: Alpha
+- **Build:** build alpha
+- **Test:** test alpha
+- **Accept:** alpha works
+- **Touches:** src/alpha/**
+`;
+
+/** @type {http.Server} */
+let server;
+/** @type {string} */
+let base;
+/** @type {string | undefined} */
+let previousHome;
+/** Swapped per test so a case can install a failing or refusing effector. */
+let effectorFactory = () =>
+  createScriptedEffector({ script: [{ emit: { outcome: 'pass', delayMs: 60_000 } }] });
+
+before(() => {
+  previousHome = process.env.MINNOW_HOME;
+});
+
+beforeEach(async () => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-p9-'));
+  process.env.MINNOW_HOME = home;
+  resetMinnowHomeCache();
+  resetJournalCache();
+  resetTranscripts();
+  disposeEngines();
+  effectorFactory = () =>
+    createScriptedEffector({ script: [{ emit: { outcome: 'pass', delayMs: 60_000 } }] });
+  setEffectorFactory((boardId) => effectorFactory(boardId));
+
+  const middleware = createBoardsMiddleware();
+  server = http.createServer((req, res) => {
+    void middleware(req, res, () => {
+      res.statusCode = 404;
+      res.end('not found');
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  base = `http://127.0.0.1:${server.address().port}`;
+});
+
+afterEach(async () => {
+  disposeEngines();
+  await new Promise((resolve) => server.close(resolve));
+});
+
+after(() => {
+  if (previousHome === undefined) delete process.env.MINNOW_HOME;
+  else process.env.MINNOW_HOME = previousHome;
+  resetMinnowHomeCache();
+  resetJournalCache();
+  resetTranscripts();
+  disposeEngines();
+});
+
+/**
+ * @param {string} method
+ * @param {string} pathname
+ * @param {unknown} [body]
+ */
+async function call(method, pathname, body) {
+  const response = await fetch(`${base}${pathname}`, {
+    method,
+    ...(body === undefined
+      ? {}
+      : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  });
+  const text = await response.text();
+  let parsed = null;
+  if (text.length > 0) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = text;
+    }
+  }
+  return { status: response.status, body: parsed };
+}
+
+async function createBoard() {
+  const created = await call('POST', '/api/boards', { planPath: 'demo.md', markdown: PLAN });
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  return created.body.boardId;
+}
+
+/** An effector whose preconditions are broken, the way a missing binding is. */
+function unbindableEffector(message = 'no model bound for this attempt') {
+  return {
+    inspect: () => [],
+    async preflight() {
+      throw new Error(message);
+    },
+    async start() {
+      throw new Error(message);
+    },
+    async stop() {},
+    onEnd() {},
+  };
+}
+
+// ---------------------------------------------------------------------------
+
+describe('P9-A — engine failures reach the screen', () => {
+  it('refuses Start at the button rather than entering a retry loop', async () => {
+    effectorFactory = () => unbindableEffector();
+    const boardId = await createBoard();
+
+    const started = await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
+    assert.equal(started.status, 400);
+    assert.match(started.body.error, /no model bound/);
+
+    // The board never went to `running`, so nothing is retrying forever.
+    const after = await call('GET', `/api/boards/${boardId}`);
+    assert.equal(after.body.state.status, 'created');
+    const journal = await call('GET', `/api/boards/${boardId}/journal`);
+    assert.equal(
+      journal.body.events.some((e) => e.type === 'board.started'),
+      false,
+      'a refused start must not journal board.started',
+    );
+  });
+
+  it('emits a non-journaled error frame when start fails mid-run', async () => {
+    // The board is already running when the precondition breaks — tick 40 of a
+    // six-hour run, which no amount of validation at the button can catch.
+    const boardId = await createBoard();
+    const okStart = await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
+    assert.equal(okStart.status, 200);
+    disposeEngines(boardId);
+
+    effectorFactory = () => unbindableEffector('the provider is unreachable');
+    /** @type {any[]} */
+    const seen = [];
+    const unsubscribe = subscribeErrors(boardId, (payload) => seen.push(payload));
+    const engine = await getEngine(boardId, () => effectorFactory(boardId));
+    await engine.tick();
+    await engine.tick();
+    unsubscribe();
+
+    assert.ok(seen.length >= 2, `expected repeated failures, got ${seen.length}`);
+    assert.equal(seen[0].taskId, 'W1-A');
+    assert.equal(seen[0].role, 'builder');
+    assert.match(seen[0].message, /provider is unreachable/);
+    // The counter is what turns forty identical failures into one line.
+    assert.equal(seen[0].consecutive, 1);
+    assert.equal(seen[1].consecutive, 2);
+
+    // And nothing about it is on the journal: no process ever existed, so there
+    // is no completed side effect to record.
+    const journal = await call('GET', `/api/boards/${boardId}/journal`);
+    for (const event of journal.body.events) {
+      assert.doesNotMatch(String(event.type), /error|failed/i, `journaled ${event.type}`);
+    }
+    // Exactly the one start that really happened, before the effector was
+    // swapped — the two failed ones added nothing.
+    assert.equal(
+      journal.body.events.filter((e) => e.type === 'task.attempt.started').length,
+      1,
+    );
+  });
+
+  it('tells a newly connected stream what is still failing', async () => {
+    const boardId = await createBoard();
+    await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
+    disposeEngines(boardId);
+
+    effectorFactory = () => unbindableEffector('still broken');
+    const engine = await getEngine(boardId, () => effectorFactory(boardId));
+    await engine.tick();
+
+    const failures = engine.getStartFailures();
+    assert.equal(failures.length, 1);
+    assert.equal(failures[0].taskId, 'W1-A');
+    assert.match(failures[0].message, /still broken/);
+  });
+
+  it('forgets a failure the moment that work starts', async () => {
+    const boardId = await createBoard();
+    await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
+    disposeEngines(boardId);
+
+    let broken = true;
+    const scripted = createScriptedEffector({
+      script: [{ emit: { outcome: 'pass', delayMs: 60_000 } }],
+    });
+    effectorFactory = () => ({
+      ...scripted,
+      inspect: () => scripted.inspect(),
+      async start(desired) {
+        if (broken) throw new Error('temporarily broken');
+        return scripted.start(desired);
+      },
+      onEnd: (handler) => scripted.onEnd(handler),
+    });
+
+    const engine = await getEngine(boardId, () => effectorFactory(boardId));
+    await engine.tick();
+    assert.equal(engine.getStartFailures().length, 1);
+
+    broken = false;
+    await engine.tick();
+    assert.equal(engine.getStartFailures().length, 0, 'a successful start clears the failure');
+  });
+});
+
+describe('P9-C — per-board model binding', () => {
+  it('journals the binding and derives it back', async () => {
+    const boardId = await createBoard();
+    const bound = await call('POST', `/api/boards/${boardId}/model`, {
+      providerId: 'anthropic',
+      id: 'claude-opus-5',
+      reasoning: 'on',
+    });
+    assert.equal(bound.status, 200);
+    assert.deepEqual(bound.body.state.model, {
+      providerId: 'anthropic',
+      id: 'claude-opus-5',
+      reasoning: 'on',
+    });
+
+    // On the journal, so replay reproduces which model an attempt ran against.
+    const journal = await call('GET', `/api/boards/${boardId}/journal`);
+    const event = journal.body.events.find((e) => e.type === 'board.model.set');
+    assert.ok(event, 'board.model.set is not on the journal');
+    assert.equal(event.id, 'claude-opus-5');
+
+    // And it survives a cold engine, which is the point of journaling it.
+    disposeEngines(boardId);
+    const reread = await call('GET', `/api/boards/${boardId}`);
+    assert.equal(reread.body.state.model.id, 'claude-opus-5');
+  });
+
+  it('refuses an incomplete or unusable binding', async () => {
+    const boardId = await createBoard();
+    assert.equal(
+      (await call('POST', `/api/boards/${boardId}/model`, { id: 'x' })).status,
+      400,
+    );
+    assert.equal(
+      (
+        await call('POST', `/api/boards/${boardId}/model`, {
+          providerId: 'p',
+          id: 'm',
+          reasoning: 'medium',
+        })
+      ).status,
+      400,
+      "reasoning must be one of the two states runTurn understands",
+    );
+  });
+});
+
+describe('P9-E — board lifecycle', () => {
+  it('renames through the journal, not through a field', async () => {
+    const boardId = await createBoard();
+    const renamed = await call('PATCH', `/api/boards/${boardId}`, { name: 'Phase 9' });
+    assert.equal(renamed.status, 200);
+    assert.equal(renamed.body.state.name, 'Phase 9');
+
+    const journal = await call('GET', `/api/boards/${boardId}/journal`);
+    assert.ok(journal.body.events.some((e) => e.type === 'board.renamed' && e.name === 'Phase 9'));
+
+    disposeEngines(boardId);
+    const reread = await call('GET', `/api/boards/${boardId}`);
+    assert.equal(reread.body.state.name, 'Phase 9', 'the rename must survive a replay');
+  });
+
+  it('refuses an empty rename', async () => {
+    const boardId = await createBoard();
+    assert.equal((await call('PATCH', `/api/boards/${boardId}`, { name: '   ' })).status, 400);
+  });
+
+  it('deletes the board and its journal', async () => {
+    const boardId = await createBoard();
+    await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
+
+    const removed = await call('DELETE', `/api/boards/${boardId}`);
+    assert.equal(removed.status, 200);
+    assert.equal(await boardExists(boardId), false);
+    assert.equal((await call('GET', `/api/boards/${boardId}`)).status, 404);
+    assert.equal((await call('DELETE', `/api/boards/${boardId}`)).status, 404);
+
+    // A running engine must not write the directory back on its next tick.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(await boardExists(boardId), false, 'the board came back from the dead');
+  });
+});
+
+describe('P9-H — command parity', () => {
+  it('abandons a task by hand as a journaled command', async () => {
+    const boardId = await createBoard();
+    await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
+
+    const abandoned = await call('POST', `/api/boards/${boardId}/tasks/W1-A/abandon`);
+    assert.equal(abandoned.status, 200);
+
+    const journal = await call('GET', `/api/boards/${boardId}/journal`);
+    const event = journal.body.events.find((e) => e.type === 'task.abandoned');
+    assert.ok(event, 'nothing was journaled');
+    assert.equal(event.reason, 'user', 'a hand abandonment is distinguishable from a policy one');
+
+    const state = await call('GET', `/api/boards/${boardId}`);
+    // The wire form is the canonical snapshot shape: a Map is `{ __map: [[k, v]] }`.
+    const task = state.body.state.tasks.__map.find(([id]) => id === 'W1-A')?.[1];
+    assert.ok(task, 'W1-A is missing from the serialised state');
+    assert.equal(task.phase, 'abandoned');
+  });
+
+  it('answers 409 rather than journaling twice', async () => {
+    const boardId = await createBoard();
+    await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
+    assert.equal((await call('POST', `/api/boards/${boardId}/tasks/W1-A/abandon`)).status, 200);
+    assert.equal((await call('POST', `/api/boards/${boardId}/tasks/W1-A/abandon`)).status, 409);
+
+    const journal = await call('GET', `/api/boards/${boardId}/journal`);
+    assert.equal(journal.body.events.filter((e) => e.type === 'task.abandoned').length, 1);
+  });
+
+  it('404s an abandon for a board that does not exist', async () => {
+    assert.equal((await call('POST', '/api/boards/nope/tasks/W1-A/abandon')).status, 404);
+  });
+});
+
+describe('P9-D — attempt transcripts', () => {
+  it('is readable through the API and is not on the journal', async () => {
+    const boardId = await createBoard();
+    recordTranscriptEvent({
+      boardId,
+      attemptId: 'r-1',
+      role: 'builder',
+      event: { type: 'tool_call', name: 'read_file', arguments: '{"path":"a.ts"}' },
+    });
+    recordTranscriptEnd({ boardId, attemptId: 'r-1', outcome: 'fail', summary: 'could not build' });
+    await flushTranscripts(boardId, 'r-1');
+
+    const read = await call('GET', `/api/boards/${boardId}/attempts/r-1`);
+    assert.equal(read.status, 200);
+    assert.equal(read.body.events.length, 2);
+    assert.equal(read.body.events[0].name, 'read_file');
+    assert.equal(read.body.events[1].type, 'attempt_end');
+    assert.equal(read.body.events[1].summary, 'could not build');
+
+    const journal = await call('GET', `/api/boards/${boardId}/journal`);
+    assert.equal(
+      journal.body.events.some((e) => e.type === 'tool_call'),
+      false,
+      'tool calls must stay off the journal — replay has to stay bounded',
+    );
+  });
+
+  it('treats a missing transcript as an empty one', async () => {
+    const boardId = await createBoard();
+    const read = await call('GET', `/api/boards/${boardId}/attempts/r-nothing`);
+    assert.equal(read.status, 200);
+    assert.deepEqual(read.body.events, []);
+  });
+
+  it('drops token deltas, which are the bulk and none of the story', async () => {
+    const boardId = await createBoard();
+    for (let i = 0; i < 50; i += 1) {
+      recordTranscriptEvent({ boardId, attemptId: 'r-2', event: { type: 'token', text: 'x' } });
+    }
+    recordTranscriptEvent({ boardId, attemptId: 'r-2', event: { type: 'tool_call', name: 'bash' } });
+    const { events } = await readTranscript(boardId, 'r-2');
+    assert.equal(events.length, 1);
+    assert.equal(events[0].name, 'bash');
+  });
+
+  it('refuses an attempt id that is not a filename', async () => {
+    const boardId = await createBoard();
+    // The id reaches this from HTTP, so it is never interpolated into a path
+    // unchecked — the same rule the journal applies to board ids.
+    const bad = await call('GET', `/api/boards/${boardId}/attempts/${encodeURIComponent('../x')}`);
+    assert.equal(bad.status, 500);
+    assert.match(String(bad.body.error), /invalid attempt id/);
+  });
+
+  it('deleting a board takes its transcripts with it', async () => {
+    const boardId = await createBoard();
+    recordTranscriptEvent({ boardId, attemptId: 'r-3', event: { type: 'tool_call', name: 'ls' } });
+    await flushTranscripts(boardId, 'r-3');
+    await call('DELETE', `/api/boards/${boardId}`);
+    assert.equal((await call('GET', `/api/boards/${boardId}/attempts/r-3`)).status, 404);
+  });
+});

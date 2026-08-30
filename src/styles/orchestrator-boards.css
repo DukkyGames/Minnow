@@ -6,6 +6,17 @@
  *
  * Apps run inside MinnowOS windows, so width is a container question, not a
  * viewport one: `@media` never matches an app's width here.
+ *
+ * ## P9-F — the twin-shape vocabulary, without the dependency
+ *
+ * The markup carries the confirmed `ob-*` names (`ob-shell` / `ob-rail` /
+ * `ob-main` / `ob-runhead` / `ob-sec` / `ob-row`), so Boards reads as the same
+ * page family as Super Plan and Research rather than a second invention. The
+ * *rules* are still written here rather than imported from `ob-page.css`,
+ * because that file is V1's orchestrate page stylesheet and Phase 4 deletes it —
+ * a surface that survives Phase 4 cannot have its layout come from a file that
+ * does not. Only the small number of `ob-*` rules this surface actually needs
+ * are restated, and they are marked as such.
  */
 
 /*
@@ -340,18 +351,27 @@
   font-size: 11.5px;
 }
 
-/* ── Tasks ─────────────────────────────────────────────────────────────── */
+/* ── Tasks: waves x kanban (P9-B) ──────────────────────────────────────── */
 
 .ov2-tasks {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
 .ov2-wave {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+}
+
+/*
+ * `ob-sec` is the twin-shape mono section rule (P9-F): a hairline above the
+ * section rather than card chrome around it, so nested cards do not stack.
+ */
+.ov2 .ob-sec {
+  padding-top: 12px;
+  border-top: 1px solid var(--mn-border);
 }
 
 .ov2-wave__title {
@@ -363,10 +383,62 @@
   letter-spacing: 0.06em;
 }
 
-.ov2-task {
+/* Four lanes, breaking to two and then to one — see the narrow block below. */
+.ov2-kanban {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 4px 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.ov2-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ov2-col__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.ov2-col__label {
+  color: var(--mn-fg-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ov2-col__count {
+  color: var(--mn-fg-subtle);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ov2-col__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ov2-col__empty {
+  margin: 0;
+  color: var(--mn-fg-subtle);
+  font-size: 12px;
+}
+
+.ov2-task {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
   padding: 8px 10px;
   border: 1px solid var(--mn-border);
   border-radius: 9px;
@@ -388,11 +460,15 @@
   border-color: var(--mn-danger-border);
 }
 
+.ov2-task--blocked {
+  border-style: dashed;
+}
+
 .ov2-task__head {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -432,14 +508,64 @@
   gap: 6px;
 }
 
-.ov2-task__detail {
-  grid-column: 1 / -1;
+.ov2-task__badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.ov2-task__blocked,
+.ov2-task__failed {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.ov2-task__blocked {
+  color: var(--mn-fg-subtle);
+}
+
+.ov2-task__failed {
+  color: var(--mn-danger-ink);
+  overflow-wrap: anywhere;
+}
+
+.ov2-task__head:focus-visible {
+  outline: 2px solid var(--mn-accent-border);
+  outline-offset: 2px;
+  border-radius: 5px;
+}
+
+/* ── Task detail (P9-B moved it out of the card) ───────────────────────── */
+
+.ov2-detail {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 6px;
-  padding-top: 10px;
-  border-top: 1px solid var(--mn-border);
+}
+
+.ov2-detail__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ov2-detail__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ov2-detail__id {
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--mn-fg-muted);
 }
 
 .ov2-task__meta {
@@ -765,6 +891,337 @@ select.ov2-create__input {
   font-size: 12px;
 }
 
+
+/* ── Engine errors (P9-A) ──────────────────────────────────────────────── */
+
+.ov2-errors {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 11px;
+  border: 1px solid var(--mn-danger-border);
+  border-radius: 9px;
+  background: var(--mn-danger-soft);
+  color: var(--mn-danger-ink);
+}
+
+.ov2-errors__title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ov2-errors__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ov2-errors__item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 12px;
+}
+
+.ov2-errors__what {
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+.ov2-errors__message {
+  overflow-wrap: anywhere;
+}
+
+.ov2-errors__count {
+  opacity: 0.75;
+  font-size: 11px;
+}
+
+/* ── Model binding + rename (P9-C, P9-E) ───────────────────────────────── */
+
+.ov2-controls__model {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ov2-controls__select {
+  max-width: 220px;
+  padding: 4px 6px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: 6px;
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ov2-controls__select--narrow {
+  max-width: 150px;
+}
+
+.ov2-controls__hint {
+  color: var(--mn-fg-subtle);
+  font-size: 11px;
+}
+
+.ov2-controls__rename {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ov2-controls__input {
+  width: 200px;
+  padding: 4px 7px;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: 6px;
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 12px;
+}
+
+/* ── Board rows: delete (P9-E) ─────────────────────────────────────────── */
+
+.ov2__board-item {
+  position: relative;
+}
+
+.ov2__board-delete {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mn-fg-subtle);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.ov2__board-item:hover .ov2__board-delete,
+.ov2__board-delete:focus-visible,
+.ov2__board-delete.is-confirming {
+  opacity: 1;
+}
+
+.ov2__board-delete.is-confirming {
+  border-color: var(--mn-danger-border);
+  background: var(--mn-danger-soft);
+  color: var(--mn-danger-ink);
+}
+
+/* ── Transcript (P9-D) ─────────────────────────────────────────────────── */
+
+.ov2-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ov2-transcript__title {
+  margin: 0;
+  color: var(--mn-fg-subtle);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ov2-transcript__list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: 8px;
+  background: var(--mn-surface-0);
+  list-style: none;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.ov2-transcript__item {
+  display: grid;
+  grid-template-columns: 96px 150px 1fr;
+  gap: 10px;
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.ov2-transcript__type {
+  color: var(--mn-accent-ink);
+}
+
+.ov2-transcript__body {
+  color: var(--mn-fg-muted);
+  overflow-wrap: anywhere;
+}
+
+.ov2-attempt__open {
+  padding: 1px 6px;
+  font-size: 10.5px;
+}
+
+/* ── Run report (P9-G) ─────────────────────────────────────────────────── */
+
+.ov2-report {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ov2-report__title {
+  margin: 0;
+  color: var(--mn-fg-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ov2-report__summary {
+  margin: 0;
+  font-size: 13px;
+}
+
+.ov2-report__stats,
+.ov2-report__final {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.ov2-report__run-label {
+  color: var(--mn-fg-subtle);
+  font-size: 11px;
+}
+
+.ov2-report__run {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--mn-surface-1);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.ov2-report__tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ov2-report__task {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr) auto auto;
+  gap: 4px 10px;
+  align-items: baseline;
+  padding: 3px 0;
+  font-size: 12px;
+}
+
+.ov2-report__task-id {
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+}
+
+.ov2-report__task-tries {
+  color: var(--mn-fg-subtle);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ov2-report__task-why {
+  grid-column: 2 / -1;
+  color: var(--mn-fg-muted);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+/* ── Empty and loading states (P9-I) ───────────────────────────────────── */
+
+.ov2-blank {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 560px;
+  padding: 24px 0;
+}
+
+.ov2-blank__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ov2-blank__body {
+  margin: 0;
+  color: var(--mn-fg-muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.ov2-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.ov2-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ov2-skeleton__line {
+  height: 11px;
+  border-radius: 5px;
+  background: var(--mn-surface-2);
+  opacity: 0.55;
+}
+
+.ov2-skeleton--head .ov2-skeleton__line:first-child {
+  height: 18px;
+}
+
+/*
+ * No pulse animation. One running CSS animation pins the compositor at refresh
+ * rate, and a board loads while local models are generating.
+ */
+
+.ov2-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ── Narrow ────────────────────────────────────────────────────────────── */
 
 @container ov2 (max-width: 720px) {
@@ -789,5 +1246,32 @@ select.ov2-create__input {
 
   .ov2-timeline__detail {
     grid-column: 2;
+  }
+
+  /* 4 -> 2 lanes, from the twin-shape brief. */
+  .ov2-kanban {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ov2-transcript__item {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .ov2-report__task {
+    grid-template-columns: 80px minmax(0, 1fr);
+  }
+}
+
+/* 2 -> 1 lane: below this a lane is narrower than the card inside it. */
+@container ov2 (max-width: 460px) {
+  .ov2-kanban {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ov2-controls__select,
+  .ov2-controls__input {
+    max-width: none;
+    width: 100%;
   }
 }

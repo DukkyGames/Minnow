@@ -627,6 +627,25 @@ export async function boardExists(boardId) {
 }
 
 /**
+ * Remove a board and everything under it — P9-E.
+ *
+ * The journal *is* the board: there is no other record of what a run did, so
+ * this is unrecoverable and the UI says so before it calls. Callers must dispose
+ * the engine first, or the next tick writes the directory back.
+ *
+ * @param {string} boardId
+ * @returns {Promise<boolean>} false when there was nothing to delete
+ */
+export async function deleteBoard(boardId) {
+  const id = safeBoardId(boardId);
+  if (!(await boardExists(id))) return false;
+  await fs.rm(boardDir(id), { recursive: true, force: true });
+  appendChains.delete(id);
+  highestSeq.delete(id);
+  return true;
+}
+
+/**
  * Every board with a journal on disk.
  *
  * @returns {Promise<string[]>} sorted, so listings are stable

@@ -30,6 +30,7 @@ import * as diskJournal from './journal.js';
 import { attemptLimits } from './attempt-limits.js';
 import { emitLive } from './live-events.js';
 import { resolveAttemptModel } from './model-binding.js';
+import { recordTranscriptEnd, recordTranscriptEvent } from './transcripts.js';
 import { interpolatePrompt, loadRolePrompt } from './prompts.js';
 import { parseReportFor, reportToolFor, REPORT_TOOL_NAME } from './report-tool.js';
 import { buildSeed } from './seeds.js';
@@ -324,6 +325,28 @@ export function createRunnerEffector(options = {}) {
     },
 
     /**
+     * P9-A — everything an attempt needs that is not per-task.
+     *
+     * The engine calls this from `POST /start` *before* it answers, so a board
+     * with no model bound is refused at the button with the binding error's own
+     * wording. Without it, `resolveAttemptModel` throwing presented as "Start
+     * does nothing": the board read `running`, every tick retried, and the only
+     * evidence was a server log.
+     *
+     * Deliberately the same calls `start()` makes, in the same order, so this
+     * cannot pass while `start()` fails on the thing it claims to have checked.
+     * Per-task work (the seed) is not checked here — it needs a task.
+     *
+     * @returns {Promise<void>}
+     */
+    async preflight() {
+      const state = boardId || options.getState ? await currentState() : null;
+      await resolveAttemptModel(options.model ?? state?.model ?? null);
+      await loadRolePrompt('builder', promptVariant);
+      await loadRolePrompt('tester', promptVariant);
+    },
+
+    /**
      * @param {import('./core/types').Desired} desired
      * @returns {Promise<{ attemptId: string }>}
      */
@@ -345,7 +368,17 @@ export function createRunnerEffector(options = {}) {
         state,
         taskId: desired.taskId,
       });
-      const model = await resolveAttemptModel(options.model);
+      // P9-C: the board's own binding wins over Settings, and an explicit
+      // option (tests) wins over both.
+      const model = await resolveAttemptModel(options.model ?? state.model);
+      // P9-C: the board's reasoning control, the other half of binding a model
+      // — a thinking model bound with thinking off is a different model in every
+      // way that matters. Carried on the `TurnModel`, which is where `runTurn`
+      // already looks before it falls back to the deps.
+      const reasoning = options.model ? null : state.model?.reasoning ?? null;
+      const turnModel = reasoning === 'on' || reasoning === 'off'
+        ? { ...model, thinking: { mode: reasoning } }
+        : model;
       const prompt = interpolatePrompt(
         await loadRolePrompt(desired.role, promptVariant),
         { cwd },
@@ -385,7 +418,7 @@ export function createRunnerEffector(options = {}) {
             chatId: attemptId,
             seed,
             tools,
-            model,
+            model: turnModel,
             cwd,
             signal: controller.signal,
             limits,
@@ -406,6 +439,19 @@ export function createRunnerEffector(options = {}) {
                 role: desired.role,
                 event,
               });
+              // P9-D. Beside the journal, never on it: the live bus is
+              // ephemeral and a finished attempt's `summary` is one line, so
+              // without this there is no way to read what an agent actually
+              // did — the first thing anyone asks when a task fails.
+              recordTranscriptEvent({
+                boardId,
+                attemptId,
+                taskId: desired.taskId,
+                role: desired.role,
+                event: /** @type {Record<string, unknown>} */ (
+                  /** @type {unknown} */ (event)
+                ),
+              });
             },
           });
         } catch (err) {
@@ -413,6 +459,16 @@ export function createRunnerEffector(options = {}) {
           result = { outcome: 'crashed', error: errorMessage(err) };
         }
         if (entry.stopped) return;
+        if (boardId) {
+          recordTranscriptEnd({
+            boardId,
+            attemptId,
+            outcome: result.outcome,
+            ...(typeof (/** @type {any} */ (result).summary) === 'string'
+              ? { summary: /** @type {any} */ (result).summary }
+              : {}),
+          });
+        }
         await finishAgent(entry, desired, result);
       })();
 

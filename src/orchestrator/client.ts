@@ -76,6 +76,22 @@ export interface LiveHeadline {
   text: string;
 }
 
+/**
+ * A failure that stopped work from starting — SSE `event: error`, P9-A.
+ *
+ * Not journaled and not folded: a start that never happened is not a completed
+ * side effect. It still has to reach the screen, because the alternative is the
+ * board reading `running` with nothing happening and the only evidence in a
+ * server log.
+ */
+export interface EngineError {
+  taskId: string | null;
+  role: string;
+  message: string;
+  /** How many ticks in a row this has failed. 40 of these is a different story from 1. */
+  consecutive: number;
+}
+
 export interface BoardClient {
   readonly boardId: string;
   /**
@@ -97,6 +113,14 @@ export interface BoardClient {
    * map is presentation-only and is never written back to the server.
    */
   getLiveHeadlines(): ReadonlyMap<string, LiveHeadline>;
+  /**
+   * Work that is currently failing to start, keyed `role:taskId` — P9-A.
+   *
+   * Parallel to the fold for the same reason live headlines are. Cleared for a
+   * piece of work as soon as the journal shows it starting, because an attempt
+   * on the journal is proof the precondition is satisfied again.
+   */
+  getEngineErrors(): ReadonlyMap<string, EngineError>;
   /** Notified on every state change, including connection changes and live tools. */
   subscribe(listener: (state: BoardState | null) => void): () => void;
   connect(): void;
@@ -107,6 +131,12 @@ export interface BoardClient {
   stop(): Promise<void>;
   setConcurrency(n: number): Promise<void>;
   startTask(taskId: string): Promise<boolean>;
+  /** P9-H — a journaled `task.abandoned { reason: 'user' }`. False when already terminal. */
+  abandonTask(taskId: string): Promise<boolean>;
+  /** P9-C — journal a per-board model binding. */
+  setModel(model: { providerId: string; id: string; reasoning?: string | null }): Promise<void>;
+  /** P9-E — journal a rename. */
+  rename(name: string): Promise<void>;
 }
 
 /** Thrown by `createBoardFromPlan` when the plan does not parse. */
@@ -173,6 +203,7 @@ function readOnlyState(state: BoardState): BoardState {
     taskOrder: Object.freeze([...state.taskOrder]) as string[],
     mergeQueue: Object.freeze([...state.mergeQueue]) as string[],
     integrationSha: state.integrationSha,
+    model: state.model === null ? null : Object.freeze({ ...state.model }),
     finalTest: state.finalTest === null ? null : Object.freeze({ ...state.finalTest }),
     finished: state.finished,
     stopReason: state.stopReason,
@@ -261,6 +292,42 @@ export async function readJournal(
   const suffix = query.toString() ? `?${query}` : '';
   const body = await request(`/${encodeURIComponent(boardId)}/journal${suffix}`);
   return { events: body.events ?? [], truncated: Boolean(body.truncated) };
+}
+
+/**
+ * One attempt's transcript — P9-D.
+ *
+ * Stored beside the journal rather than on it (a six-hour run of tool calls
+ * would make replay and storage unbounded, the same argument P2-F makes about
+ * tokens), so this is a plain read and nothing here folds.
+ *
+ * A missing transcript is an empty one, never an error: an attempt from before
+ * this existed, or one that has not called a tool yet, both have nothing to show.
+ */
+export async function readAttemptTranscript(
+  boardId: string,
+  attemptId: string,
+  options: { limit?: number } = {},
+): Promise<{ events: Record<string, unknown>[]; truncated: boolean; capped: boolean }> {
+  const query = options.limit && options.limit > 0 ? `?limit=${options.limit}` : '';
+  const body = await request(
+    `/${encodeURIComponent(boardId)}/attempts/${encodeURIComponent(attemptId)}${query}`,
+  );
+  return {
+    events: body.events ?? [],
+    truncated: Boolean(body.truncated),
+    capped: Boolean(body.capped),
+  };
+}
+
+/**
+ * Delete a board and its journal — P9-E.
+ *
+ * The journal is the only record of what the run did, so this is unrecoverable
+ * and the caller is expected to have said so before getting here.
+ */
+export async function deleteBoard(boardId: string): Promise<void> {
+  await request(`/${encodeURIComponent(boardId)}`, { method: 'DELETE' });
 }
 
 // ---------------------------------------------------------------------------
@@ -378,6 +445,11 @@ export function createBoardClient(
    * outcomes (P2-F). Keyed by task id so a row can show what the agent is doing.
    */
   const liveHeadlines = new Map<string, LiveHeadline>();
+  /**
+   * Work failing to start, keyed `role:taskId` — P9-A. Also not folded: a start
+   * that never happened has no journal line to fold.
+   */
+  const engineErrors = new Map<string, EngineError>();
 
   let source: EventStream | null = null;
   let connected = false;
@@ -414,6 +486,13 @@ export function createBoardClient(
     if (!internal) return false;
     const eventSeq = Number(event.seq);
     if (Number.isSafeInteger(eventSeq) && eventSeq <= seq) return false;
+    // An attempt on the journal is proof its preconditions are satisfied again,
+    // so the failure that was showing for that work is over. This is the only
+    // place the error map is cleared by the stream — everything else clears on a
+    // reconnect, when the server replays what is still failing.
+    if (event.type === 'task.attempt.started') {
+      engineErrors.delete(`${String(event.role ?? '')}:${String(event.taskId ?? '')}`);
+    }
     // The same fold the server runs. There is no second interpretation of an
     // event anywhere in the system.
     foldInto(internal, [event]);
@@ -478,6 +557,27 @@ export function createBoardClient(
     }
   };
 
+  const onError = (event: { data: string }) => {
+    try {
+      const payload = JSON.parse(event.data) as Partial<EngineError> & { error?: string };
+      // The SSE route also sends `event: error` with `{ error }` when a stream
+      // fails after its headers went out. That is a transport failure, not a
+      // board one, and it has no work to attach itself to.
+      if (typeof payload.message !== 'string') return;
+      const taskId = typeof payload.taskId === 'string' ? payload.taskId : null;
+      const role = String(payload.role ?? '');
+      engineErrors.set(`${role}:${taskId ?? ''}`, {
+        taskId,
+        role,
+        message: payload.message,
+        consecutive: Number(payload.consecutive) || 1,
+      });
+      emit();
+    } catch (err) {
+      console.error('[orchestrator] could not read an engine error frame', err);
+    }
+  };
+
   const onEvent = (event: { data: string }) => {
     try {
       const journalEvent = JSON.parse(event.data);
@@ -533,6 +633,7 @@ export function createBoardClient(
     isConnected: () => connected,
     getSeq: () => seq,
     getLiveHeadlines: () => liveHeadlines,
+    getEngineErrors: () => engineErrors,
 
     subscribe(listener) {
       listeners.add(listener);
@@ -547,11 +648,20 @@ export function createBoardClient(
       source.addEventListener('snapshot', onSnapshot);
       source.addEventListener('event', onEvent);
       source.addEventListener('live', onLive);
+      // A named SSE frame `event: error` is dispatched on the EventSource as an
+      // event of type `error` — the same type the transport uses when the
+      // connection drops. So both listeners are wired to that one type and each
+      // ignores the other's traffic: an engine error always carries `data` with
+      // a `message`, and a dropped connection never carries `data` at all.
+      source.addEventListener('error', onError);
       source.addEventListener('open', () => {
         connected = true;
         emit();
       });
-      source.addEventListener('error', () => {
+      source.addEventListener('error', (event: { data: string }) => {
+        // A named `error` frame lands here too — see above — and it is not a
+        // dropped connection.
+        if (typeof event?.data === 'string' && event.data.length > 0) return;
         // EventSource reconnects by itself, carrying Last-Event-ID. Nothing to
         // repair here, which is the point.
         connected = false;
@@ -584,6 +694,33 @@ export function createBoardClient(
       await request(`/${encodeURIComponent(boardId)}/concurrency`, {
         method: 'POST',
         body: JSON.stringify({ n }),
+      });
+    },
+
+    async abandonTask(taskId) {
+      const response = await fetch(
+        `/api/boards/${encodeURIComponent(boardId)}/tasks/${encodeURIComponent(taskId)}/abandon`,
+        { method: 'POST' },
+      );
+      // 409 means the task had already finished, which is an answer.
+      return response.ok;
+    },
+
+    async setModel(model) {
+      await request(`/${encodeURIComponent(boardId)}/model`, {
+        method: 'POST',
+        body: JSON.stringify({
+          providerId: model.providerId,
+          id: model.id,
+          ...(model.reasoning ? { reasoning: model.reasoning } : {}),
+        }),
+      });
+    },
+
+    async rename(name) {
+      await request(`/${encodeURIComponent(boardId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name }),
       });
     },
 

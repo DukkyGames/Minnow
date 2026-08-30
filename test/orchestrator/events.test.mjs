@@ -49,14 +49,16 @@ const SAMPLES = {
   },
   'final.test.ended': { outcome: 'pass' },
   'run.finished': { summary: '3 merged, 1 abandoned' },
+  'board.model.set': { providerId: 'anthropic', id: 'claude-opus-5' },
+  'board.renamed': { name: 'Phase 9' },
 };
 
 /** @param {string} type */
 const sample = (type) => makeEvent(type, { ...SAMPLES[type] });
 
 describe('event vocabulary', () => {
-  it('declares exactly the thirteen types', () => {
-    assert.equal(EVENT_TYPES.length, 13);
+  it('declares exactly the fifteen types', () => {
+    assert.equal(EVENT_TYPES.length, 15);
     assert.deepEqual(EVENT_TYPES, Object.keys(SAMPLES));
   });
 

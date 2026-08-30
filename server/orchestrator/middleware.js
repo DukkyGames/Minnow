@@ -16,10 +16,18 @@
  * | POST   | `/api/boards/:id/stop`              | —                                         |
  * | POST   | `/api/boards/:id/concurrency`       | `{ n }`                                   |
  * | POST   | `/api/boards/:id/tasks/:taskId/start` | Manual single-task start                |
+ * | POST   | `/api/boards/:id/tasks/:taskId/abandon` | Manual abandon (P9-H)                 |
+ * | POST   | `/api/boards/:id/model`             | `{ providerId, id, reasoning? }` (P9-C)   |
+ * | GET    | `/api/boards/:id/attempts/:attemptId` | One attempt's transcript (P9-D)         |
+ * | PATCH  | `/api/boards/:id`                   | `{ name }` — rename (P9-E)                |
+ * | DELETE | `/api/boards/:id`                   | Delete the board and its journal (P9-E)   |
  * | GET    | `/api/boards/:id/journal`           | Raw events; `?since=<seq>&limit=<n>`      |
  *
- * **No PUT, no PATCH, and no endpoint that accepts board state.** The only
- * writes are the commands above.
+ * **No endpoint accepts board state.** Every write above is a command the engine
+ * chose to expose, and each one turns into a journal append the engine performs
+ * — including the PATCH, which journals `board.renamed` rather than assigning a
+ * field. DELETE is the one exception to "everything is a journal append", and it
+ * is the opposite of a state write: it removes the journal outright.
  */
 
 import fs from 'node:fs/promises';
@@ -30,8 +38,17 @@ import { makeEvent } from './core/events.js';
 import { stateToJSON } from './core/snapshot.js';
 import { createScriptedEffector } from './effector-scripted.js';
 import { disposeEngines, getEngine, peekEngine } from './engine.js';
-import { appendEvent, boardExists, createBoard, listBoards, loadState, readEvents } from './journal.js';
-import { subscribeLive } from './live-events.js';
+import {
+  appendEvent,
+  boardExists,
+  createBoard,
+  deleteBoard,
+  listBoards,
+  loadState,
+  readEvents,
+} from './journal.js';
+import { subscribeErrors, subscribeLive } from './live-events.js';
+import { readTranscript } from './transcripts.js';
 import { resolveSafePath } from '../runtime/path-access.js';
 
 /** Heartbeat cadence. Intermediaries close idle streams without it. */
@@ -120,6 +137,19 @@ export const ROUTES = [
     pattern: /^\/api\/boards\/([^/]+)\/tasks\/([^/]+)\/start$/,
     name: 'startTask',
   },
+  {
+    method: 'POST',
+    pattern: /^\/api\/boards\/([^/]+)\/tasks\/([^/]+)\/abandon$/,
+    name: 'abandonTask',
+  },
+  { method: 'POST', pattern: /^\/api\/boards\/([^/]+)\/model$/, name: 'model' },
+  {
+    method: 'GET',
+    pattern: /^\/api\/boards\/([^/]+)\/attempts\/([^/]+)$/,
+    name: 'attempt',
+  },
+  { method: 'PATCH', pattern: /^\/api\/boards\/([^/]+)$/, name: 'rename' },
+  { method: 'DELETE', pattern: /^\/api\/boards\/([^/]+)$/, name: 'delete' },
 ];
 
 /**
@@ -238,8 +268,77 @@ async function dispatch(route, req, res) {
         return json(res, 400, { ok: false, error: 'concurrency must be an integer >= 1' });
       }
       const engine = await getEngine(boardId, () => makeEffector(boardId));
+      // P9-A. Refuse *before* answering. A missing model binding used to present
+      // as "Start does nothing": the board went to `running`, every tick's
+      // `effector.start()` rejected into a console.warn, and the only evidence
+      // was a server log. A precondition that can be checked up front is checked
+      // up front, so the failure lands on the button that caused it.
+      try {
+        await engine.preflight();
+      } catch (err) {
+        return json(res, 400, {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+          state: serialiseState(engine.getState()),
+        });
+      }
       await engine.startBoard(concurrency);
       return json(res, 200, { ok: true, state: serialiseState(engine.getState()) });
+    }
+
+    case 'model': {
+      if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
+      const body = await readJsonBody(req);
+      const providerId = typeof body.providerId === 'string' ? body.providerId.trim() : '';
+      const id = typeof body.id === 'string' ? body.id.trim() : '';
+      if (!providerId || !id) {
+        return json(res, 400, { ok: false, error: 'providerId and id are required' });
+      }
+      // Only the two states `runTurn` actually understands. A free-form string
+      // would journal a binding no attempt can honour, and the journal is not the
+      // place to record something that will never happen.
+      const reasoning = body.reasoning === 'on' || body.reasoning === 'off' ? body.reasoning : '';
+      if (body.reasoning !== undefined && body.reasoning !== null && !reasoning) {
+        return json(res, 400, { ok: false, error: "reasoning must be 'on' or 'off'" });
+      }
+      const engine = await getEngine(boardId, () => makeEffector(boardId));
+      await engine.setModel({ providerId, id, reasoning: reasoning || null });
+      return json(res, 200, { ok: true, state: serialiseState(engine.getState()) });
+    }
+
+    case 'rename': {
+      if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
+      const body = await readJsonBody(req);
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      if (!name) return json(res, 400, { ok: false, error: 'name is required' });
+      if (name.length > 200) return json(res, 400, { ok: false, error: 'name is too long' });
+      const engine = await getEngine(boardId, () => makeEffector(boardId));
+      await engine.rename(name);
+      return json(res, 200, { ok: true, state: serialiseState(engine.getState()) });
+    }
+
+    case 'delete': {
+      if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
+      // Dispose first. An engine left ticking would write the directory back the
+      // moment its safety-net timer fired, and the board would come back from
+      // the dead with a one-line journal.
+      disposeEngines(boardId);
+      const removed = await deleteBoard(boardId);
+      return json(res, removed ? 200 : 404, {
+        ok: removed,
+        ...(removed ? { boardId } : { error: 'no such board' }),
+      });
+    }
+
+    case 'attempt': {
+      if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
+      const query = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+      const limit = Number(query.get('limit'));
+      // `taskId` is the second capture on this route; the attempt id rides in it.
+      const transcript = await readTranscript(boardId, taskId, {
+        ...(Number.isSafeInteger(limit) && limit > 0 ? { limit } : {}),
+      });
+      return json(res, 200, { ok: true, attemptId: taskId, ...transcript });
     }
 
     case 'stop': {
@@ -257,6 +356,17 @@ async function dispatch(route, req, res) {
       const engine = await getEngine(boardId, () => makeEffector(boardId));
       await engine.setConcurrency(n);
       return json(res, 200, { ok: true, state: serialiseState(engine.getState()) });
+    }
+
+    case 'abandonTask': {
+      if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
+      const engine = await getEngine(boardId, () => makeEffector(boardId));
+      const abandoned = await engine.abandonTask(taskId, 'user');
+      return json(res, abandoned ? 200 : 409, {
+        ok: abandoned,
+        ...(abandoned ? {} : { error: 'that task has already finished' }),
+        state: serialiseState(engine.getState()),
+      });
     }
 
     case 'startTask': {
@@ -449,6 +559,13 @@ async function streamEvents(req, res, boardId) {
   const unsubscribeLive = subscribeLive(boardId, (payload) => {
     if (!send('live', payload)) cleanup();
   });
+  // P9-A. Failures that stop work from *starting* are deliberately not journaled
+  // — a start that never happened is not a completed side effect, and putting it
+  // in the fold would make replay disagree with reality. No `id:` either, for the
+  // same reason as `live`: a reconnect must not treat one as a journal seq.
+  const unsubscribeErrors = subscribeErrors(boardId, (payload) => {
+    if (!send('error', payload)) cleanup();
+  });
 
   if (resumeFrom > 0) {
     // Resuming: just the tail the client missed.
@@ -477,6 +594,20 @@ async function streamEvents(req, res, boardId) {
   buffered = [];
   for (const event of pending) deliver(event);
 
+  // Whatever is failing to start right now, for a client that connected after
+  // the frame that said so. Error frames are live-only, so without this a window
+  // opened mid-failure shows a board reading `running` with nothing happening and
+  // no explanation — the exact symptom P9-A exists to abolish.
+  for (const failure of engine.getStartFailures()) {
+    send('error', {
+      boardId,
+      taskId: failure.taskId,
+      role: failure.role,
+      message: failure.message,
+      consecutive: failure.consecutive,
+    });
+  }
+
   const heartbeat = setInterval(() => {
     try {
       res.write(': ping\n\n');
@@ -494,6 +625,7 @@ async function streamEvents(req, res, boardId) {
     // socket cannot keep the board's event stream alive through this closure.
     unsubscribe();
     unsubscribeLive();
+    unsubscribeErrors();
     try {
       res.end();
     } catch {

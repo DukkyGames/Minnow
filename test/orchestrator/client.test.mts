@@ -654,12 +654,52 @@ describe('the renderer writes nothing', () => {
   it('exposes no way to set board state', () => {
     const client = createBoardClient('x', { openStream: openTestStream });
     client.close();
+    // `setConcurrency` and `setModel` are named for the commands they issue —
+    // `board.started` and `board.model.set`, both journal appends the engine
+    // performs. What must not exist is anything that assigns state locally, and
+    // the test below is the one that actually proves it.
+    const commands = new Set(['setConcurrency', 'setModel']);
     for (const name of Object.keys(client)) {
+      if (commands.has(name)) continue;
       assert.doesNotMatch(
         name,
-        /^(set|update|patch|write|mutate|apply)(?!Concurrency$)/,
+        /^(set|update|patch|write|mutate|apply)/,
         `the client exposes ${name}`,
       );
+    }
+  });
+
+  it('leaves the local state untouched when a command is issued', async () => {
+    // The property behind the naming rule: a command POSTs and returns, and the
+    // board moves when — and only when — the engine says so over the stream.
+    const boardId = await makeBoard();
+    const client = createBoardClient(boardId, { openStream: openTestStream });
+    try {
+      client.connect();
+      await until(() => client.getState() !== null, 'the snapshot frame');
+      const before = client.getState()!;
+      const wasConcurrency = before.concurrency;
+      assert.equal(before.model, null);
+
+      await client.setConcurrency(wasConcurrency + 2);
+      // The copy this view was handed never moves. Only the *next* copy, built
+      // when `board.started` arrives over the stream, carries the new number.
+      assert.equal(before.concurrency, wasConcurrency);
+      await until(
+        () => client.getState()!.concurrency === wasConcurrency + 2,
+        'the engine to report the new concurrency',
+      );
+      assert.equal(before.concurrency, wasConcurrency, 'the old copy was mutated');
+      assert.notEqual(client.getState(), before, 'a change must produce a new identity');
+
+      assert.throws(
+        () => {
+          (before.tasks as Map<string, unknown>).set('W9-Z', {});
+        },
+        /cannot be written to/,
+      );
+    } finally {
+      client.close();
     }
   });
 

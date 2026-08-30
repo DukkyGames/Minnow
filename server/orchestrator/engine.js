@@ -43,6 +43,7 @@ import {
 import { makeEvent } from './core/events.js';
 import { foldInto } from './core/derive.js';
 import * as diskJournal from './journal.js';
+import { emitError } from './live-events.js';
 
 /** How often the safety-net tick fires. */
 export const DEFAULT_TICK_MS = 5_000;
@@ -125,6 +126,14 @@ function isAgentRole(role) {
  * @property {(handler: (end: AttemptEnd) => Promise<void> | void) => void} [onEnd]
  *   Called when an attempt finishes, with its outcome. Without this the engine
  *   would have to poll for completion, and a poller is a watchdog by another name.
+ * @property {() => Promise<void>} [preflight]
+ *   Check everything `start()` needs that is not per-task — the model binding,
+ *   the role prompts — and **throw** with a readable message when it is missing.
+ *
+ *   P9-A. This exists so `POST /start` can refuse before it answers, rather than
+ *   returning 200 to a board that will then fail to start every attempt forever.
+ *   It is not a substitute for `start()` rejecting: preconditions can also break
+ *   on tick 40 of a six-hour run, which is what the error channel is for.
  */
 
 /**
@@ -198,6 +207,23 @@ export function createEngine(options) {
    * @type {Map<string, AttemptEnd>}
    */
   const bufferedEnds = new Map();
+
+  /**
+   * How many times each piece of work has failed to *start* in a row — P9-A.
+   *
+   * Keyed `role:taskId`, cleared the moment that work starts successfully. The
+   * count is what turns a permanent failure into one escalating line rather than
+   * one toast per tick: the UI shows the latest message and how long it has been
+   * going, and a six-hour run that breaks on tick 40 says so.
+   *
+   * The last message is kept alongside the count so a window that connects
+   * *after* the failure can still be told what is wrong — the frames are
+   * live-only, and a board reading `running` with nothing happening and no
+   * explanation is the exact symptom this exists to abolish.
+   *
+   * @type {Map<string, { consecutive: number, message: string }>}
+   */
+  const startFailures = new Map();
 
   /**
    * Append and advance the in-memory state.
@@ -382,19 +408,31 @@ export function createEngine(options) {
    * @returns {Promise<void>}
    */
   async function startAttempt(want) {
+    const key = `${want.role}:${want.taskId ?? ''}`;
+
     /** @type {{ attemptId: string, worktree?: string }} */
     let handle;
     try {
       handle = await effector.start(want);
     } catch (err) {
       // The process does not exist, so nothing is journaled — there is no effect
-      // to record. The next tick tries again, which is the whole recovery story.
-      console.warn(
-        `[orchestrator] ${boardId}: could not start ${want.role} for ${want.taskId}:`,
-        /** @type {Error} */ (err)?.message ?? err,
-      );
+      // to record, and a journal line for a start that never happened would make
+      // replay disagree with reality. But it is not invisible either: P9-A puts
+      // it on the live channel, where the board can show it.
+      const message = /** @type {Error} */ (err)?.message ?? String(err);
+      const consecutive = (startFailures.get(key)?.consecutive ?? 0) + 1;
+      startFailures.set(key, { consecutive, message });
+      emitError({ boardId, taskId: want.taskId ?? null, role: want.role, message, consecutive });
+      if (consecutive === 1) {
+        console.warn(
+          `[orchestrator] ${boardId}: could not start ${want.role} for ${want.taskId}:`,
+          message,
+        );
+      }
       return;
     }
+    // It started, so whatever was wrong is not wrong any more.
+    startFailures.delete(key);
 
     // The process exists. Only now is there a completed side effect to record.
     if (!isAgentRole(want.role)) return;
@@ -603,6 +641,116 @@ export function createEngine(options) {
     },
 
     /**
+     * Everything `start()` will need, checked before anything is promised.
+     *
+     * P9-A. Rejects with the effector's own message, which is what
+     * `POST /start` turns into a 400 on the button instead of a 200 followed by
+     * a silent retry loop. An effector with no preconditions has no
+     * `preflight` and this resolves.
+     *
+     * @returns {Promise<void>}
+     */
+    async preflight() {
+      await effector.preflight?.();
+    },
+
+    /**
+     * Work that is currently failing to start, and for how long — P9-A.
+     *
+     * Read by a *newly connected* stream: the error frames are live-only, so a
+     * client that opens after the failure would otherwise see a board reading
+     * `running` with nothing happening and no explanation.
+     *
+     * @returns {Array<{ role: string, taskId: string | null, consecutive: number, message: string }>}
+     */
+    getStartFailures() {
+      return [...startFailures.entries()].map(([key, failure]) => {
+        const cut = key.indexOf(':');
+        const taskId = key.slice(cut + 1);
+        return {
+          role: key.slice(0, cut),
+          taskId: taskId || null,
+          consecutive: failure.consecutive,
+          message: failure.message,
+        };
+      });
+    },
+
+    /**
+     * Bind this board to a model — P9-C.
+     *
+     * Journaled, so which model an attempt ran against is part of the record
+     * rather than whatever Settings happened to say. The effector reads it
+     * first; a board with no binding still falls back to Settings → Autopilot.
+     *
+     * @param {{ providerId: string, id: string, reasoning?: string | null }} model
+     * @returns {Promise<void>}
+     */
+    async setModel(model) {
+      await append([
+        makeEvent('board.model.set', {
+          providerId: model.providerId,
+          id: model.id,
+          ...(model.reasoning ? { reasoning: model.reasoning } : {}),
+        }),
+      ]);
+      await tick();
+    },
+
+    /**
+     * Rename the board — P9-E.
+     *
+     * A command like any other, not a state write: it goes on the journal, so it
+     * survives replay and reaches every other open window through the same
+     * stream as everything else.
+     *
+     * @param {string} name
+     * @returns {Promise<void>}
+     */
+    async rename(name) {
+      await append([makeEvent('board.renamed', { name })]);
+    },
+
+    /**
+     * Give up on a task by hand — P9-H.
+     *
+     * **The open decision, resolved.** A human override has to be a journaled
+     * command or it breaks replay, so this appends the same `task.abandoned` the
+     * policy table appends, with `reason: 'user'` distinguishing it. There is no
+     * separate manual-skip: `task.skipped` means *stranded by a dependency*,
+     * which is a fact about the graph that a person cannot assert, and the fold
+     * already treats both as terminal-and-unmerged. Downstream tasks are
+     * stranded by the next tick's `pendingSkips`, exactly as they would be by an
+     * automatic abandonment — the point of routing this through the journal
+     * rather than a button that writes state.
+     *
+     * Nothing is stopped here. `plan()` stops desiring the task the moment the
+     * abandonment is folded, and the reconcile diff stops what is running, which
+     * is the same path every other stop takes.
+     *
+     * @param {string} taskId
+     * @param {string} [reason]
+     * @returns {Promise<boolean>} false when there is no such task, or it is already terminal
+     */
+    async abandonTask(taskId, reason = 'user') {
+      if (!state) throw new Error('engine not loaded');
+      const task = state.tasks.get(taskId);
+      if (!task) return false;
+      if (task.phase === 'merged' || task.phase === 'abandoned' || task.phase === 'skipped') {
+        return false;
+      }
+      await append([
+        makeEvent('task.abandoned', {
+          taskId,
+          reason,
+          evidence: { by: 'user', phase: task.phase, attempts: task.attempts.length },
+        }),
+      ]);
+      await tick();
+      return true;
+    },
+
+    /**
      * @param {number} concurrency
      * @returns {Promise<void>}
      */
@@ -619,6 +767,8 @@ export function createEngine(options) {
     async stopBoard(reason = 'user') {
       await append([makeEvent('board.stopped', { reason })]);
       stopTimer();
+      // Nothing is being retried any more, so nothing is still failing to start.
+      startFailures.clear();
       // Stopping is a reconcile like any other: `plan()` now desires nothing, so
       // the diff stops everything. There is no separate teardown path.
       await tick();

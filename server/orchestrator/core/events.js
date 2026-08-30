@@ -121,6 +121,14 @@ export const EVENT_SCHEMAS = /** @type {const} */ ({
     required: { summary: 'str' },
     optional: {},
   },
+  'board.model.set': {
+    required: { providerId: 'id', id: 'id' },
+    optional: { reasoning: 'str' },
+  },
+  'board.renamed': {
+    required: { name: 'str' },
+    optional: {},
+  },
 });
 
 /** Every known event type, in declaration order. */

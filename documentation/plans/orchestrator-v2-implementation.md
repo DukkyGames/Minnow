@@ -304,7 +304,7 @@ Phase 1's P1-E deliberately built the smallest surface that proves "the renderer
 
 - **P9-G — Finish report.** `run.finished` carries a summary string that renders as one paragraph. V1 had a finish dashboard (`orchestrate-finish-dashboard.ts`, MIN-208). P3-G writes the real end-of-run report; this renders it — per-task outcomes, attempt counts, evidence, what was abandoned and why, the integration sha, and the Final Tester's run instructions.
 
-- **P9-H — Command parity.** The engine exposes `startBoard`, `stopBoard`, `setConcurrency`, `startTask`; the board can therefore be started, stopped, re-paced, and hand-started, and nothing else. V1 could also retry, skip, and abandon a task by hand. **Open decision:** manual abandon/skip is new engine surface, not new UI — the policy table owns automatic routing (decision 7), and a human override has to be a journaled command (`task.abandoned { reason: 'user' }`) or it breaks replay. Decide before building; do not add a button that writes state locally.
+- **P9-H — Command parity.** The engine exposes `startBoard`, `stopBoard`, `setConcurrency`, `startTask`; the board can therefore be started, stopped, re-paced, and hand-started, and nothing else. V1 could also retry, skip, and abandon a task by hand. **Decision, taken:** a manual override is a journaled command and nothing else — `engine.abandonTask()` appends the same `task.abandoned` the policy table appends, with `reason: 'user'` distinguishing it, and downstream tasks are stranded by the next tick's `pendingSkips` exactly as they would be by an automatic abandonment. There is **no** manual skip: `task.skipped` means *stranded by a dependency*, which is a fact about the graph a person cannot assert, and the fold already treats both as terminal-and-unmerged. Retry is not a new command either — retrying *is* `startTask`, because `nextAction()` reads the journal and picks the seed, so the button only changes its label.
 
 - **P9-I — States, a11y, tests.** Loading skeletons instead of "Loading the board…", a real empty state, the error states P9-A now has something to show, focus management across repaints (the surface calls `replaceChildren` on every frame — anything focused is lost), and DOM tests over the column mapping and the failure frames. `test/ui/orchestrator-boards-create.test.mts` is the pattern.
 
@@ -323,10 +323,10 @@ Ordering note: **before Phase 4.** Phase 4 deletes `orchestrate-board.ts` and it
 - [ ] Cloud and local streams leave composer/scroll/clicks responsive; local tok/s not regressed (Phase 7 gate)
 - [ ] A sub-agent spawned from a chat survives a renderer reload and a server restart, and finishes (Phase 8 gate)
 - [ ] A sub-agent that runs past its wall-clock limit is retried by policy, not cancelled with its work discarded (Phase 8 gate)
-- [ ] Starting a board with no model bound fails at the button with a readable message, and never enters a silent retry loop (Phase 9 gate)
-- [ ] Every failure that stops work from starting is visible on the board without opening a server log (Phase 9 gate)
-- [ ] Tasks render as waves × kanban columns, and no column a card sits in is written by the renderer (Phase 9 gate)
-- [ ] A failed task's attempt transcript is readable from the board (Phase 9 gate)
+- [x] Starting a board with no model bound fails at the button with a readable message, and never enters a silent retry loop (Phase 9 gate)
+- [x] Every failure that stops work from starting is visible on the board without opening a server log (Phase 9 gate)
+- [x] Tasks render as waves × kanban columns, and no column a card sits in is written by the renderer (Phase 9 gate)
+- [x] A failed task's attempt transcript is readable from the board (Phase 9 gate)
 - [ ] `grep -rn "lastHeartbeatAt\|tier1Attempted\|progressStallMs" src/` returns nothing (Phase 8 gate)
 
 ## Notes for Build Agents

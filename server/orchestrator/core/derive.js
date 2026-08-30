@@ -46,6 +46,8 @@ export function emptyState() {
     taskOrder: [],
     mergeQueue: [],
     integrationSha: null,
+    /** P9-C: the board's model override, or null to fall back to Settings. */
+    model: null,
     finalTest: null,
     finished: false,
     stopReason: null,
@@ -264,6 +266,26 @@ function apply(state, event) {
     case 'run.finished': {
       state.finished = true;
       state.runSummary = event.summary;
+      return;
+    }
+
+    // P9-C. The board's own model override, journaled so that replay reproduces
+    // which model an attempt was started against rather than re-reading whatever
+    // Settings happens to say at replay time.
+    case 'board.model.set': {
+      state.model = {
+        providerId: event.providerId,
+        id: event.id,
+        reasoning: typeof event.reasoning === 'string' && event.reasoning ? event.reasoning : null,
+      };
+      return;
+    }
+
+    // P9-E. Renaming is a command, not a state write: the name lives on the
+    // journal like everything else, so a rename survives replay and shows up on
+    // every other window through the same stream as any other event.
+    case 'board.renamed': {
+      state.name = event.name;
       return;
     }
 

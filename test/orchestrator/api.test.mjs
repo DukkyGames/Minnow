@@ -513,16 +513,21 @@ describe('SSE', () => {
 });
 
 describe('the surface itself', () => {
-  it('exposes exactly the nine documented routes', async () => {
+  it('exposes exactly the documented routes', async () => {
     assert.deepEqual(
       ROUTES.map((r) => `${r.method} ${r.name}`).sort(),
       [
+        'DELETE delete',
+        'GET attempt',
         'GET events',
         'GET get',
         'GET journal',
         'GET list',
+        'PATCH rename',
+        'POST abandonTask',
         'POST concurrency',
         'POST create',
+        'POST model',
         'POST start',
         'POST startTask',
         'POST stop',
@@ -533,15 +538,26 @@ describe('the surface itself', () => {
   it('has no route that writes board state', async () => {
     // Locked decision 2 made enforceable: there is no mutation verb the renderer
     // can reach that is not a command the engine chose to expose.
+    //
+    // P9-E adds the only PATCH and the only DELETE, and neither is a state
+    // write: the PATCH journals `board.renamed` like every other command, and
+    // the DELETE removes the journal outright rather than editing it. Anything
+    // else with a mutation verb still has to not exist.
+    const lifecycle = new Set(['PATCH rename', 'DELETE delete']);
     for (const route of ROUTES) {
+      if (lifecycle.has(`${route.method} ${route.name}`)) continue;
       assert.notEqual(route.method, 'PUT', `${route.name} is a PUT`);
       assert.notEqual(route.method, 'PATCH', `${route.name} is a PATCH`);
       assert.notEqual(route.method, 'DELETE', `${route.name} is a DELETE`);
     }
+    assert.equal(ROUTES.some((r) => r.method === 'PUT'), false, 'a PUT exists');
+
     const boardId = await createBoard();
-    for (const method of ['PUT', 'PATCH', 'DELETE']) {
-      assert.equal((await call(method, `/api/boards/${boardId}`)).status, 404, method);
-    }
+    assert.equal((await call('PUT', `/api/boards/${boardId}`)).status, 404, 'PUT');
+    // A PATCH carrying anything other than a name is refused, so the verb is a
+    // rename command and not a door into board state.
+    const bad = await call('PATCH', `/api/boards/${boardId}`, { status: 'running' });
+    assert.equal(bad.status, 400);
   });
 
   it('matches routes exactly, with no prefix surprises', () => {

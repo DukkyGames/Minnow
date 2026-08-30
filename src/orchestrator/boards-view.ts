@@ -20,11 +20,21 @@
  * local state here beyond which task is expanded and which requests are in
  * flight.
  *
+ * ## Phase 9
+ *
+ * P1-E built the smallest surface that proves the property above — a wave-grouped
+ * list, a merge queue, a raw journal. Phase 9 finishes it against what V1's
+ * Orchestrate actually did: waves × kanban (P9-B), a per-board model binding
+ * (P9-C), attempt transcripts (P9-D), rename and delete (P9-E), the `ob-*`
+ * twin-shape vocabulary (P9-F), a finish report (P9-G), and manual abandon
+ * (P9-H). **Every one of those is a read, a POST, or new engine surface.** None
+ * of them is a renderer-owned write, which is why the rule above still holds.
+ *
  * ## What it cannot do yet
  *
  * Merge and Final are still instant-pass (P3 owns a real merge queue). Live
  * agent output arrives as SSE `event: live` from P2-F; this view renders the
- * current tool name on the running task row.
+ * current tool name on the running task card.
  */
 
 import '../styles/orchestrator-boards.css';
@@ -34,17 +44,26 @@ import {
   createBoardClient,
   createBoardFromPlan,
   createBoardListClient,
+  deleteBoard,
   PlanParseFailure,
+  readAttemptTranscript,
   readJournal,
   type BoardClient,
   type BoardListClient,
   type BoardSummary,
 } from './client';
+import { populateMultiProviderModelSelect } from '../api/models';
+import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
 import {
   renderBoardHeader,
+  renderBoardSkeleton,
+  renderEngineErrors,
+  renderFinishReport,
   renderMergeQueue,
+  renderTaskDetail,
   renderTaskList,
   renderTimeline,
+  type TranscriptView,
 } from './board-render';
 import { withSessionToken } from '../api/session-token';
 import {
@@ -90,6 +109,24 @@ let showTimeline = false;
 const pendingTasks = new Set<string>();
 /** The last thing that went wrong, shown until the next successful command. */
 let notice: { text: string; tone: 'warn' | 'bad' } | null = null;
+/** The attempt transcript open in the detail panel — P9-D. */
+let transcript: TranscriptView | null = null;
+/** Board ids whose delete is awaiting a second click — P9-E. */
+const confirmingDelete = new Set<string>();
+/** The board id currently being renamed inline, if any — P9-E. */
+let renamingBoardId: string | null = null;
+/**
+ * The model dropdown's options, fetched once — P9-C.
+ *
+ * The pane is rebuilt on every journal event, so the `<select>` is a new element
+ * several times a minute on a live board. Re-running the provider round trip
+ * each time would put a burst of HTTP against every enabled provider behind a
+ * running run; the options do not change that fast. `null` means "not fetched
+ * yet", and a failed fetch is retried on the next repaint rather than cached.
+ */
+let modelOptionsHtml: string | null = null;
+/** In flight, so a burst of repaints asks once. */
+let modelOptionsRequest: Promise<void> | null = null;
 
 // ---------------------------------------------------------------------------
 // Mount
@@ -112,10 +149,15 @@ export async function openBoardsView(): Promise<void> {
   const area = document.getElementById('chatArea');
   if (!area) return;
 
-  const root = el('div', 'ov2');
+  // P9-F: the twin-shape vocabulary — `ob-shell` / `ob-rail` / `ob-main` — the
+  // same one Super Plan and Research use. The `ov2-*` classes stay alongside it
+  // because they are what Phase 4 leaves standing; the `ob-*` ones are what make
+  // this read as the same page family rather than a second invention.
+  const root = el('div', 'ov2 ob-shell');
   root.id = BOARDS_ROOT_ID;
-  const listPane = el('aside', 'ov2__list');
-  const boardPane = el('section', 'ov2__board');
+  const listPane = el('aside', 'ov2__list ob-rail');
+  const boardPane = el('section', 'ov2__board ob-main');
+  boardPane.tabIndex = -1;
   root.append(listPane, boardPane);
 
   area.replaceChildren(root);
@@ -159,6 +201,13 @@ export function teardownBoardsView(): void {
   surface = null;
   selectedTaskId = null;
   pendingTasks.clear();
+  confirmingDelete.clear();
+  renamingBoardId = null;
+  transcript = null;
+  // Dropped with the surface: reopening Boards is the natural moment to notice
+  // a provider that was enabled in the meantime.
+  modelOptionsHtml = null;
+  modelOptionsRequest = null;
   notice = null;
   syncRailButton();
 }
@@ -192,7 +241,10 @@ function selectBoard(boardId: string | null): void {
   selectedBoardId = boardId;
   selectedTaskId = null;
   showTimeline = false;
+  transcript = null;
   pendingTasks.clear();
+  confirmingDelete.clear();
+  renamingBoardId = null;
   notice = null;
 
   if (boardId) {
@@ -255,9 +307,10 @@ function paintList(): void {
 }
 
 function renderListItem(board: BoardSummary): HTMLElement {
-  const item = el('li', 'ov2__board-item');
+  const item = el('li', 'ov2__board-item ob-row');
   const btn = el('button', 'ov2__board-btn');
   btn.type = 'button';
+  btn.dataset.focusKey = `board:${board.boardId}`;
   if (board.boardId === selectedBoardId) btn.classList.add('is-selected');
   btn.addEventListener('click', () => selectBoard(board.boardId));
 
@@ -272,9 +325,57 @@ function renderListItem(board: BoardSummary): HTMLElement {
   meta.appendChild(el('span', undefined, `${board.taskCount} tasks`));
   if (board.status === 'running') meta.appendChild(el('span', undefined, `N=${board.concurrency}`));
   btn.appendChild(meta);
-
   item.appendChild(btn);
+
+  // P9-E. Two clicks, and the second one says what it takes with it: the journal
+  // is the only record of the run, so "are you sure" has to name what is lost
+  // rather than ask an abstract question.
+  const confirming = confirmingDelete.has(board.boardId);
+  const remove = el(
+    'button',
+    `ov2__board-delete${confirming ? ' is-confirming' : ''}`,
+    confirming ? 'Delete the journal too?' : 'Delete',
+  );
+  remove.type = 'button';
+  remove.dataset.focusKey = `delete:${board.boardId}`;
+  remove.title = confirming
+    ? `Deleting ${board.boardId} removes its journal — the only record of what the run did.`
+    : `Delete ${board.boardId}`;
+  remove.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (!confirming) {
+      confirmingDelete.clear();
+      confirmingDelete.add(board.boardId);
+      paintList();
+      return;
+    }
+    confirmingDelete.delete(board.boardId);
+    void commandDeleteBoard(board.boardId);
+  });
+  item.appendChild(remove);
   return item;
+}
+
+/**
+ * Delete a board — P9-E.
+ *
+ * Boards accumulated forever and a typo'd board id was permanent, because
+ * `ROUTES` had no delete. The selection falls back to nothing rather than to the
+ * next board: silently landing on someone else's run is worse than an empty pane.
+ */
+async function commandDeleteBoard(boardId: string): Promise<void> {
+  try {
+    await deleteBoard(boardId);
+    if (selectedBoardId === boardId) selectBoard(null);
+    await list?.refresh();
+    paintList();
+  } catch (err) {
+    notice = {
+      text: `Could not delete ${boardId}: ${err instanceof Error ? err.message : String(err)}`,
+      tone: 'bad',
+    };
+    paintBoard();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -490,47 +591,163 @@ function renderCreateError(err: unknown): HTMLElement {
 // The board
 // ---------------------------------------------------------------------------
 
+/**
+ * What has focus right now, as something a repaint can put it back on — P9-I.
+ *
+ * The surface calls `replaceChildren` on every frame, so the focused node is
+ * destroyed several times a minute on a live board. Restoring by *key* rather
+ * than by node identity is what makes that survivable: a card that is still on
+ * the board after the repaint gets its focus back, and one that moved column
+ * keeps it too, because the key is the task, not the position.
+ */
+function captureFocus(): { key: string; selectionStart: number | null } | null {
+  const active = document.activeElement as HTMLElement | null;
+  if (!active || !surface?.root.contains(active)) return null;
+  const key = active.dataset?.focusKey;
+  if (!key) return null;
+  const input = active as HTMLInputElement;
+  return {
+    key,
+    selectionStart: typeof input.selectionStart === 'number' ? input.selectionStart : null,
+  };
+}
+
+function restoreFocus(captured: { key: string; selectionStart: number | null } | null): void {
+  if (!captured || !surface) return;
+  const target = surface.root.querySelector<HTMLElement>(
+    `[data-focus-key="${CSS.escape(captured.key)}"]`,
+  );
+  if (!target) return;
+  target.focus();
+  if (captured.selectionStart === null) return;
+  const input = target as HTMLInputElement;
+  try {
+    input.setSelectionRange(captured.selectionStart, captured.selectionStart);
+  } catch {
+    // Not a text input any more. The focus is the part that mattered.
+  }
+}
+
 function paintBoard(): void {
   if (!surface) return;
   const pane = surface.boardPane;
 
   if (!selectedBoardId) {
-    pane.replaceChildren(empty('Pick a board, or create one from a plan.'));
+    pane.replaceChildren(renderNoSelection());
     return;
   }
 
   const state = client?.getState() ?? null;
   if (!state) {
-    pane.replaceChildren(empty('Loading the board…'));
+    // A skeleton in the board's own shape, not the word "Loading" — P9-I.
+    pane.replaceChildren(renderBoardSkeleton());
     return;
   }
 
   const connected = client?.isConnected() ?? false;
   const scrollTop = pane.scrollTop;
+  const focused = captureFocus();
   pane.replaceChildren();
   pane.appendChild(renderBoardHeader(state, connected));
   pane.appendChild(renderControls(state));
+  const errors = renderEngineErrors(client?.getEngineErrors());
+  if (errors) pane.appendChild(errors);
   if (notice) {
-    pane.appendChild(el('p', `ov2-notice ov2-notice--${notice.tone}`, notice.text));
+    const line = el('p', `ov2-notice ov2-notice--${notice.tone}`, notice.text);
+    line.setAttribute('role', 'status');
+    pane.appendChild(line);
   }
-  pane.appendChild(
-    renderTaskList(
-      state,
-      {
-        startTask: (taskId) => void commandStartTask(taskId),
-        select: (taskId) => {
-          selectedTaskId = taskId;
-          paintBoard();
-        },
-      },
-      { selectedTaskId, pendingTaskIds: pendingTasks, liveHeadlines: client?.getLiveHeadlines() },
-    ),
-  );
+
+  const actions = {
+    startTask: (taskId: string) => void commandStartTask(taskId),
+    abandonTask: (taskId: string) => void commandAbandonTask(taskId),
+    select: (taskId: string | null) => {
+      selectedTaskId = taskId;
+      transcript = null;
+      paintBoard();
+    },
+    openTranscript: (attemptId: string) => void toggleTranscript(attemptId),
+  };
+  const options = {
+    selectedTaskId,
+    pendingTaskIds: pendingTasks,
+    liveHeadlines: client?.getLiveHeadlines(),
+    engineErrors: client?.getEngineErrors(),
+    transcript,
+  };
+
+  pane.appendChild(renderTaskList(state, actions, options));
+
+  const selected = selectedTaskId ? state.tasks.get(selectedTaskId) : undefined;
+  if (selected) pane.appendChild(renderTaskDetail(state, selected, actions, options));
+
+  const report = renderFinishReport(state);
+  if (report) pane.appendChild(report);
+
   pane.appendChild(renderMergeQueue(state));
   pane.appendChild(renderTimelineSection());
   // Repainting from scratch is what keeps the view a pure function of the
-  // state; restoring the scroll offset is what stops that being felt.
+  // state; restoring the scroll offset and the focus is what stops that being
+  // felt as a keyboard user losing their place every five seconds.
   pane.scrollTop = scrollTop;
+  restoreFocus(focused);
+}
+
+/** The pane with no board selected — P9-I. */
+function renderNoSelection(): HTMLElement {
+  const wrap = el('div', 'ov2-blank ob-pane--ask');
+  wrap.appendChild(el('p', 'ov2-blank__title', 'No board open.'));
+  wrap.appendChild(
+    el(
+      'p',
+      'ov2-blank__body',
+      'Pick one from the rail, or create a board from a plan under documentation/plans/. ' +
+        'A board is a snapshot of the plan it was made from, and its journal is kept forever.',
+    ),
+  );
+  wrap.appendChild(
+    button({
+      label: 'New board',
+      variant: 'primary',
+      onClick: () => openCreateForm(),
+    }),
+  );
+  return wrap;
+}
+
+/**
+ * Load, or close, one attempt's transcript — P9-D.
+ *
+ * A read and nothing else: transcripts live beside the journal and no part of
+ * the board state depends on them, so opening one cannot affect the run.
+ */
+async function toggleTranscript(attemptId: string): Promise<void> {
+  const boardId = selectedBoardId;
+  if (!boardId) return;
+  if (transcript?.attemptId === attemptId) {
+    transcript = null;
+    paintBoard();
+    return;
+  }
+  transcript = { attemptId, status: 'loading', events: [], truncated: false, capped: false };
+  paintBoard();
+  try {
+    const result = await readAttemptTranscript(boardId, attemptId, { limit: 500 });
+    // The user may have moved on while this was in flight.
+    if (transcript?.attemptId !== attemptId || boardId !== selectedBoardId) return;
+    transcript = { attemptId, status: 'ready', ...result };
+  } catch (err) {
+    if (transcript?.attemptId !== attemptId || boardId !== selectedBoardId) return;
+    transcript = {
+      attemptId,
+      status: 'error',
+      events: [],
+      truncated: false,
+      capped: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+  paintBoard();
 }
 
 function renderControls(state: BoardState): HTMLElement {
@@ -576,6 +793,9 @@ function renderControls(state: BoardState): HTMLElement {
   );
   bar.appendChild(stepper);
 
+  bar.appendChild(renderModelChip(state));
+  bar.appendChild(renderRenameControl(state));
+
   if (!running && !state.finished) {
     // PRD §6: Manual = Stopped, with the user starting individual tasks by hand.
     bar.appendChild(
@@ -583,6 +803,147 @@ function renderControls(state: BoardState): HTMLElement {
     );
   }
   return bar;
+}
+
+/**
+ * The board's model binding — P9-C.
+ *
+ * V2 resolved a model from Settings → Autopilot or the active chat's menubar
+ * binding, both invisible from here and neither addressable per board. That is
+ * what made P9-A's failure mode unfixable in place: the board said "no model
+ * bound for this attempt" and the control that would fix it was three screens
+ * away. The `board.model.set` command puts it on the journal, where the effector
+ * reads it first and replay reproduces which model an attempt actually ran on.
+ */
+function renderModelChip(state: BoardState): HTMLElement {
+  const wrap = el('div', 'ov2-controls__model');
+  wrap.appendChild(el('span', 'ov2-controls__label', 'Model'));
+
+  const select = el('select', 'ov2-controls__select');
+  select.setAttribute('aria-label', 'Model for this board');
+  select.dataset.focusKey = 'board-model';
+  select.addEventListener('change', () => {
+    const decoded = decodeModelSelectKey(select.value);
+    if (!decoded) return;
+    void commandSetModel(decoded.providerId, decoded.modelId, reasoning.value);
+  });
+  wrap.appendChild(select);
+
+  const bound = state.model;
+  const selected = bound ? encodeModelSelectKey(bound.providerId, bound.id) : '';
+  if (modelOptionsHtml !== null) {
+    select.innerHTML = modelOptionsHtml;
+    select.value = [...select.options].some((o) => o.value === selected) ? selected : '';
+  } else {
+    // Fetched after mount, once: the provider round trip must not hold up a
+    // repaint, and this pane repaints on every journal event.
+    select.innerHTML = '<option value="">Loading models…</option>';
+    modelOptionsRequest ??= populateMultiProviderModelSelect(select, {
+      includeEmptyOption: true,
+      emptyLabel: '(Settings → Autopilot)',
+      ...(bound ? { selectedProviderId: bound.providerId, selectedModelId: bound.id } : {}),
+    })
+      .then(() => {
+        modelOptionsHtml = select.innerHTML;
+      })
+      .catch(() => {
+        // Not cached, so the next repaint tries again.
+        select.innerHTML = '<option value="">Cannot reach providers</option>';
+      })
+      .finally(() => {
+        modelOptionsRequest = null;
+      });
+  }
+
+  // Reasoning is the other half of a binding: a thinking model bound with
+  // thinking off is a different model in every way that matters.
+  const reasoning = el('select', 'ov2-controls__select ov2-controls__select--narrow');
+  reasoning.setAttribute('aria-label', 'Reasoning for this board');
+  reasoning.dataset.focusKey = 'board-reasoning';
+  for (const [value, label] of [
+    ['', 'Reasoning: default'],
+    ['on', 'Reasoning: on'],
+    ['off', 'Reasoning: off'],
+  ] as const) {
+    const option = el('option');
+    option.value = value;
+    option.textContent = label;
+    reasoning.appendChild(option);
+  }
+  reasoning.value = state.model?.reasoning ?? '';
+  reasoning.addEventListener('change', () => {
+    // Reasoning rides on the same journaled binding, so it needs a model to
+    // ride on. Saying so beats silently doing nothing.
+    if (!state.model) {
+      notice = { text: 'Pick a model for this board first.', tone: 'warn' };
+      paintBoard();
+      return;
+    }
+    void commandSetModel(state.model.providerId, state.model.id, reasoning.value);
+  });
+  wrap.appendChild(reasoning);
+
+  if (!bound) {
+    wrap.appendChild(
+      el('span', 'ov2-controls__hint', 'Unbound — attempts use the Autopilot planner model.'),
+    );
+  }
+  return wrap;
+}
+
+/**
+ * Rename the board — P9-E.
+ *
+ * A journaled command (`board.renamed`), not a field assignment: it reaches every
+ * other open window over the same stream as everything else, and a replay of the
+ * journal produces the same name.
+ */
+function renderRenameControl(state: BoardState): HTMLElement {
+  if (renamingBoardId !== state.boardId) {
+    return button({
+      label: 'Rename',
+      title: 'Rename this board',
+      variant: 'ghost',
+      onClick: () => {
+        renamingBoardId = state.boardId;
+        paintBoard();
+        surface?.boardPane
+          .querySelector<HTMLInputElement>('[data-focus-key="board-rename"]')
+          ?.select();
+      },
+    });
+  }
+
+  const form = el('form', 'ov2-controls__rename');
+  const input = el('input', 'ov2-controls__input');
+  input.type = 'text';
+  input.value = state.name || state.boardId;
+  input.maxLength = 200;
+  input.setAttribute('aria-label', 'Board name');
+  input.dataset.focusKey = 'board-rename';
+  form.appendChild(input);
+
+  const save = el('button', 'ov2-btn ov2-btn--primary', 'Save');
+  save.type = 'submit';
+  form.appendChild(save);
+  form.appendChild(
+    button({
+      label: 'Cancel',
+      variant: 'ghost',
+      onClick: () => {
+        renamingBoardId = null;
+        paintBoard();
+      },
+    }),
+  );
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const name = input.value.trim();
+    if (!name) return;
+    renamingBoardId = null;
+    void commandRename(name);
+  });
+  return form;
 }
 
 function renderTimelineSection(): HTMLElement {
@@ -661,6 +1022,53 @@ function commandConcurrency(n: number): Promise<void> {
     await client?.setConcurrency(n);
     void list?.refresh();
   });
+}
+
+function commandSetModel(providerId: string, id: string, reasoning: string): Promise<void> {
+  return run('Model', async () => {
+    await client?.setModel({
+      providerId,
+      id,
+      ...(reasoning === 'on' || reasoning === 'off' ? { reasoning } : {}),
+    });
+  });
+}
+
+function commandRename(name: string): Promise<void> {
+  return run('Rename', async () => {
+    await client?.rename(name);
+    void list?.refresh();
+  });
+}
+
+/**
+ * Give up on a task by hand — P9-H.
+ *
+ * The board does not grey the card out. It POSTs, the engine journals
+ * `task.abandoned { reason: 'user' }`, and the card moves to Complete when the
+ * fold says it did — the same path an automatic abandonment takes. That is the
+ * difference between a manual override and a renderer-owned write, and it is why
+ * anything depending on this task is stranded correctly rather than left in a
+ * state only this window knows about.
+ */
+async function commandAbandonTask(taskId: string): Promise<void> {
+  if (!client || pendingTasks.has(taskId)) return;
+  pendingTasks.add(taskId);
+  paintBoard();
+  try {
+    const abandoned = await client.abandonTask(taskId);
+    notice = abandoned
+      ? null
+      : { text: `${taskId} has already finished.`, tone: 'warn' };
+  } catch (err) {
+    notice = {
+      text: `Could not abandon ${taskId}: ${err instanceof Error ? err.message : String(err)}`,
+      tone: 'bad',
+    };
+  } finally {
+    pendingTasks.delete(taskId);
+    paintBoard();
+  }
 }
 
 async function commandStartTask(taskId: string): Promise<void> {

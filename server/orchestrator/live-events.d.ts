@@ -14,3 +14,20 @@ export function subscribeLive(
 ): () => void;
 
 export function emitLive(payload: LiveAttemptEvent): void;
+
+/** A failure that stopped work from starting. Non-journaled — P9-A. */
+export interface BoardErrorEvent {
+  boardId: string;
+  taskId: string | null;
+  role: string;
+  message: string;
+  /** How many times this work has failed to start in a row. */
+  consecutive: number;
+}
+
+export function subscribeErrors(
+  boardId: string,
+  handler: (payload: BoardErrorEvent) => void,
+): () => void;
+
+export function emitError(payload: BoardErrorEvent): void;

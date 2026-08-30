@@ -14,6 +14,8 @@ export interface RunnerEffector {
     sameWorktree?: boolean;
   }): Promise<{ attemptId: string; worktree?: string }>;
   stop(attemptId: string): Promise<void>;
+  /** Check the model binding and role prompts. Throws when something is missing. */
+  preflight(): Promise<void>;
   onEnd(
     handler: (end: {
       attemptId: string;

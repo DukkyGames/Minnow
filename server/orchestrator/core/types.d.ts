@@ -76,7 +76,9 @@ export type KnownEventType =
   | 'task.skipped'
   | 'touches.overflow'
   | 'final.test.ended'
-  | 'run.finished';
+  | 'run.finished'
+  | 'board.model.set'
+  | 'board.renamed';
 
 /** Discriminant of a journal event. Widened, because unknown types are tolerated. */
 export type JournalEventType = KnownEventType | (string & {});
@@ -170,6 +172,13 @@ export type FinalTestEndedEvent = EventEnvelope & {
   evidence?: Evidence;
 };
 export type RunFinishedEvent = EventEnvelope & { type: 'run.finished'; summary: string };
+export type BoardModelSetEvent = EventEnvelope & {
+  type: 'board.model.set';
+  providerId: string;
+  id: string;
+  reasoning?: string;
+};
+export type BoardRenamedEvent = EventEnvelope & { type: 'board.renamed'; name: string };
 
 /** An event the fold understands. */
 export type KnownEvent =
@@ -185,7 +194,9 @@ export type KnownEvent =
   | TaskSkippedEvent
   | TouchesOverflowEvent
   | FinalTestEndedEvent
-  | RunFinishedEvent;
+  | RunFinishedEvent
+  | BoardModelSetEvent
+  | BoardRenamedEvent;
 
 /** Anything else on the journal: readable, ignorable, never an error. */
 export type OpaqueEvent = EventEnvelope & Record<string, unknown>;
@@ -321,6 +332,20 @@ export interface TaskState {
   touchesOverflow: TouchesOverflow[];
 }
 
+/**
+ * The board's own model binding — P9-C.
+ *
+ * Journaled as `board.model.set` rather than read from Settings at start time,
+ * so which model an attempt ran against is part of the record and a board can
+ * be bound without changing anything global.
+ */
+export interface BoardModel {
+  providerId: string;
+  id: string;
+  /** Reasoning / thinking mode for this board's attempts, or null for off. */
+  reasoning: string | null;
+}
+
 /** Result of the end-of-run static (and later browser) verification ladder. */
 export interface FinalTestState {
   outcome: 'pass' | 'fail';
@@ -342,6 +367,8 @@ export interface BoardState {
   /** Enqueued and not yet merged or conflicted, in enqueue order. */
   mergeQueue: string[];
   integrationSha: string | null;
+  /** Per-board model override. `null` falls back to Settings → Autopilot. */
+  model: BoardModel | null;
   finalTest: FinalTestState | null;
   finished: boolean;
   stopReason: StopReason | null;
