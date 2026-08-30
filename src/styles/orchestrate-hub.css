@@ -26,7 +26,12 @@
 .main-column:has(.chat-area--orchestrate):not(.main-column--board-chat) .tool-approval-host,
 .main-column:has(.chat-area--orchestrate):not(.main-column--board-chat) .question-host,
 .main-column:has(.chat-area--orchestrate):not(.main-column--board-chat) .code-change-strip-wrap,
-.main-column:has(.chat-area--orchestrate):not(.main-column--board-chat) .chat-jump-latest {
+.main-column:has(.chat-area--orchestrate):not(.main-column--board-chat) .chat-jump-latest,
+.main-column:has(#orchestrateBoardPage):not(.main-column--board-chat) .input-bar,
+.main-column:has(#orchestrateBoardPage):not(.main-column--board-chat) .tool-approval-host,
+.main-column:has(#orchestrateBoardPage):not(.main-column--board-chat) .question-host,
+.main-column:has(#orchestrateBoardPage):not(.main-column--board-chat) .code-change-strip-wrap,
+.main-column:has(#orchestrateBoardPage):not(.main-column--board-chat) .chat-jump-latest {
   display: none !important;
 }
 

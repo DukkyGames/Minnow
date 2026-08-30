@@ -57,8 +57,7 @@ import {
   type BoardListClient,
   type BoardSummary,
 } from './client';
-import { populateMultiProviderModelSelect } from '../api/models';
-import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
+import { withSessionToken } from '../api/session-token';
 import {
   renderBoardHeader,
   renderBoardSkeleton,
@@ -71,12 +70,18 @@ import {
   renderRunLedger,
   type TranscriptView,
 } from './board-render';
-import { withSessionToken } from '../api/session-token';
 import {
   discoverOrchestratePlans,
   type DiscoverOrchestratePlansResult,
 } from '../chat/orchestrate/list-plans';
 import { button, el, empty, pill } from './dom';
+import { createIcon } from '../ui/icon';
+import {
+  attachV2BoardHeaderInstruments,
+  detachV2BoardHeaderInstruments,
+  teardownV2BoardHeaderInstruments,
+} from './board-header-v2';
+import { isBoardJournalReasoning } from './board-journal-reasoning';
 
 /** UI copy for discoverOrchestratePlans error codes (kept here so V2 does not import V1 picker UI). */
 const PLAN_LIST_HINTS: Record<string, string> = {
@@ -111,6 +116,12 @@ let unsubscribeList: (() => void) | null = null;
 let selectedBoardId: string | null = null;
 let selectedTaskId: string | null = null;
 let showTimeline = false;
+/** Last journal GET, so a live-board repaint does not flash "Loading…" over the log. */
+let journalView: {
+  boardId: string;
+  events: readonly Record<string, unknown>[];
+  truncated: boolean;
+} | null = null;
 /** Manual starts awaiting their answer, so a button can say it is working. */
 const pendingTasks = new Set<string>();
 /** The last thing that went wrong, shown until the next successful command. */
@@ -121,18 +132,6 @@ let transcript: TranscriptView | null = null;
 const confirmingDelete = new Set<string>();
 /** The board id currently being renamed inline, if any — P9-E. */
 let renamingBoardId: string | null = null;
-/**
- * The model dropdown's options, fetched once — P9-C.
- *
- * The pane is rebuilt on every journal event, so the `<select>` is a new element
- * several times a minute on a live board. Re-running the provider round trip
- * each time would put a burst of HTTP against every enabled provider behind a
- * running run; the options do not change that fast. `null` means "not fetched
- * yet", and a failed fetch is retried on the next repaint rather than cached.
- */
-let modelOptionsHtml: string | null = null;
-/** In flight, so a burst of repaints asks once. */
-let modelOptionsRequest: Promise<void> | null = null;
 /** Persisted P3-G report, keyed by board. Presentation only — never folded. */
 const finishReportByBoard = new Map<string, string>();
 /** In-flight GET so a paint loop does not stampede the endpoint. */
@@ -204,6 +203,7 @@ export function teardownBoardsView(): void {
   list?.stop();
   list = null;
 
+  teardownV2BoardHeaderInstruments();
   document.getElementById(BOARDS_ROOT_ID)?.remove();
   const area = document.getElementById('chatArea');
   area?.classList.remove(CHAT_AREA_CLASS);
@@ -214,10 +214,6 @@ export function teardownBoardsView(): void {
   confirmingDelete.clear();
   renamingBoardId = null;
   transcript = null;
-  // Dropped with the surface: reopening Boards is the natural moment to notice
-  // a provider that was enabled in the meantime.
-  modelOptionsHtml = null;
-  modelOptionsRequest = null;
   notice = null;
   syncRailButton();
 }
@@ -251,6 +247,7 @@ function selectBoard(boardId: string | null): void {
   selectedBoardId = boardId;
   selectedTaskId = null;
   showTimeline = false;
+  journalView = null;
   transcript = null;
   pendingTasks.clear();
   confirmingDelete.clear();
@@ -317,7 +314,10 @@ function paintList(): void {
 }
 
 function renderListItem(board: BoardSummary): HTMLElement {
-  const item = el('li', 'ov2__board-item ob-row');
+  // No `ob-row` here: that class pulls V1 padding from `ob-page.css` onto the
+  // <li>, nesting a padded button inside a padded row and leaving a dead margin
+  // around the selected card (and room for the old text "Delete" label).
+  const item = el('li', 'ov2__board-item');
   const btn = el('button', 'ov2__board-btn');
   btn.type = 'button';
   btn.dataset.focusKey = `board:${board.boardId}`;
@@ -339,18 +339,18 @@ function renderListItem(board: BoardSummary): HTMLElement {
 
   // P9-E. Two clicks, and the second one says what it takes with it: the journal
   // is the only record of the run, so "are you sure" has to name what is lost
-  // rather than ask an abstract question.
+  // rather than ask an abstract question. Icon-only; confirm stays a trash glyph
+  // with danger styling so the row does not reserve space for a text label.
   const confirming = confirmingDelete.has(board.boardId);
-  const remove = el(
-    'button',
-    `ov2__board-delete${confirming ? ' is-confirming' : ''}`,
-    confirming ? 'Delete the journal too?' : 'Delete',
-  );
+  const remove = el('button', `ov2__board-delete${confirming ? ' is-confirming' : ''}`);
   remove.type = 'button';
   remove.dataset.focusKey = `delete:${board.boardId}`;
+  const deleteLabel = confirming ? 'Delete the journal too?' : `Delete ${board.boardId}`;
+  remove.setAttribute('aria-label', deleteLabel);
   remove.title = confirming
     ? `Deleting ${board.boardId} removes its journal — the only record of what the run did.`
-    : `Delete ${board.boardId}`;
+    : deleteLabel;
+  remove.appendChild(createIcon('trash', { className: 'ov2__board-delete-icon', size: 12 }));
   remove.addEventListener('click', (event) => {
     event.stopPropagation();
     if (!confirming) {
@@ -643,12 +643,14 @@ function paintBoard(): void {
   const pane = surface.boardPane;
 
   if (!selectedBoardId) {
+    detachV2BoardHeaderInstruments();
     pane.replaceChildren(renderNoSelection());
     return;
   }
 
   const state = client?.getState() ?? null;
   if (!state) {
+    detachV2BoardHeaderInstruments();
     // A skeleton in the board's own shape, not the word "Loading" — P9-I.
     pane.replaceChildren(renderBoardSkeleton());
     return;
@@ -657,9 +659,21 @@ function paintBoard(): void {
   const connected = client?.isConnected() ?? false;
   const scrollTop = pane.scrollTop;
   const focused = captureFocus();
+  // The model chip and reasoning strip live outside this wipe — detach first
+  // so replaceChildren cannot destroy the open picker.
+  detachV2BoardHeaderInstruments();
   pane.replaceChildren();
-  pane.appendChild(renderBoardHeader(state, connected));
-  pane.appendChild(renderControls(state));
+  pane.appendChild(renderBoardHeader(state, connected, renderControls(state)));
+  const headerControls = pane.querySelector('.board-header__controls');
+  if (headerControls instanceof HTMLElement) {
+    attachV2BoardHeaderInstruments(headerControls, state, {
+      setModel: commandSetModel,
+      onNeedModel: () => {
+        notice = { text: 'Pick a model for this board first.', tone: 'warn' };
+        paintBoard();
+      },
+    });
+  }
   const errors = renderEngineErrors(client?.getEngineErrors());
   if (errors) pane.appendChild(errors);
   if (notice) {
@@ -699,7 +713,10 @@ function paintBoard(): void {
   if (ledger) pane.appendChild(ledger);
 
   pane.appendChild(renderMergeQueue(state));
-  pane.appendChild(renderTimelineSection());
+  if (showTimeline) {
+    pane.appendChild(renderTimelineSection());
+    if (journalView?.boardId !== selectedBoardId) void loadTimeline();
+  }
   // Repainting from scratch is what keeps the view a pure function of the
   // state; restoring the scroll offset and the focus is what stops that being
   // felt as a keyboard user losing their place every five seconds.
@@ -764,199 +781,97 @@ async function toggleTranscript(attemptId: string): Promise<void> {
   paintBoard();
 }
 
+/**
+ * Interactive cluster for the V1-shaped board header.
+ *
+ * Same commands as the old boxed `.ov2-controls` bar (start, stop, concurrency,
+ * model, rename, timeline). The chrome is the Orchestrator instrument strip so
+ * Boards does not invent a second control vocabulary.
+ *
+ * `setConcurrency` journals `board.started`, which *starts* a stopped board.
+ * That is why N only POSTs while the loop is already running; Start carries N
+ * for the first tick.
+ */
 function renderControls(state: BoardState): HTMLElement {
-  const bar = el('div', 'ov2-controls');
+  const controls = el('div', 'board-header__controls');
   const finished = state.finished;
   const running = state.status === 'running';
-  // Created boards are not ticking — that is Stopped in PRD §6's pair, even
-  // though the fold still says `created` until the first start.
-  const loopOn = running;
 
-  const status = el('div', 'ov2-controls__status');
-  status.setAttribute('role', 'group');
-  status.setAttribute('aria-label', 'Board loop');
-  status.appendChild(
-    button({
-      label: 'Running',
-      title: 'Start or keep the reconcile loop. Sequential is this at N=1; AFK is this with no interactive gates.',
-      variant: loopOn ? 'primary' : 'ghost',
-      disabled: finished || loopOn,
-      onClick: () => void commandStart(readConcurrencyInput()),
-    }),
-  );
-  status.appendChild(
-    button({
-      label: 'Stopped',
-      title: 'Stop the loop. Manual mode is this plus per-task Start on a card.',
-      variant: !loopOn ? 'primary' : 'ghost',
-      disabled: finished || !loopOn,
-      onClick: () => void commandStop(),
-    }),
-  );
-  bar.appendChild(status);
+  // Slot only — the Orchestrate chip is adopted after paint so a live journal
+  // stream cannot remount it (and cannot get stuck on "Loading models…").
+  const modelSlot = el('div', 'board-header__model-slot mn-os-mb-model-slot');
+  modelSlot.title = state.model
+    ? `${state.model.providerId} / ${state.model.id}`
+    : 'Unbound: attempts use the Autopilot planner model.';
+  controls.appendChild(modelSlot);
 
-  const concurrency = el('input', 'ov2-controls__number');
-  concurrency.type = 'number';
-  concurrency.min = '1';
-  concurrency.max = '64';
-  // Pre-start fold is 1; the stepper shows the product default so the first
-  // start journals 2 unless the user changed it.
-  const shownN =
-    state.status === 'created' ? DEFAULT_BOARD_CONCURRENCY : state.concurrency;
-  concurrency.value = String(shownN);
-  concurrency.setAttribute('aria-label', 'Concurrency');
-  concurrency.id = 'ov2-concurrency-input';
-  concurrency.addEventListener('input', () => {
-    const n = Number(concurrency.value);
-    paintResourceHint(bar, Number.isSafeInteger(n) && n >= 1 ? Math.min(64, n) : DEFAULT_BOARD_CONCURRENCY);
+  const settings = el('div', 'board-header__settings');
+  settings.setAttribute('role', 'group');
+  settings.setAttribute('aria-label', 'Run settings');
+  settings.appendChild(renderConcurrencyControl(state, finished, running));
+  controls.appendChild(settings);
+
+  const runBtn = el('button', running ? 'board-header__run-btn board-header__run-btn--stop' : 'board-header__run-btn');
+  runBtn.type = 'button';
+  runBtn.disabled = finished;
+  runBtn.textContent = running ? 'Stop' : 'Start';
+  runBtn.setAttribute('aria-label', running ? 'Stop board' : 'Start board');
+  runBtn.title = running
+    ? 'Stop the loop. In-flight attempts keep running until they finish; nothing new starts.'
+    : 'Start the reconcile loop. N=1 is sequential; higher N runs that many agents at once.';
+  runBtn.addEventListener('click', () => {
+    if (running) void commandStop();
+    else void commandStart(readConcurrencyInput());
   });
+  controls.appendChild(runBtn);
 
-  const stepper = el('div', 'ov2-controls__stepper');
-  stepper.appendChild(el('span', 'ov2-controls__label', 'Concurrency'));
-  stepper.appendChild(
-    button({
-      label: '−',
-      title: 'Lower N. In-flight attempts keep running; only new starts wait.',
-      disabled: finished,
-      onClick: () => {
-        concurrency.value = String(Math.max(1, readConcurrencyInput() - 1));
-        paintResourceHint(bar, readConcurrencyInput());
-      },
-    }),
-  );
-  stepper.appendChild(concurrency);
-  stepper.appendChild(
-    button({
-      label: '+',
-      title: 'Raise N. The next tick may start more work; nothing already running is restarted.',
-      disabled: finished,
-      onClick: () => {
-        concurrency.value = String(Math.min(64, readConcurrencyInput() + 1));
-        paintResourceHint(bar, readConcurrencyInput());
-      },
-    }),
-  );
-  if (running) {
-    stepper.appendChild(
-      button({
-        label: 'Apply',
-        title: 'Takes effect on the next tick. Lowering stops nothing already in flight.',
-        onClick: () => void commandConcurrency(readConcurrencyInput()),
-      }),
-    );
-  }
-  bar.appendChild(stepper);
+  const timelineBtn = el('button', 'board-btn board-btn--compact board-timeline-btn');
+  timelineBtn.type = 'button';
+  timelineBtn.textContent = 'Timeline';
+  timelineBtn.title = showTimeline ? 'Hide the journal' : 'Show the journal';
+  timelineBtn.setAttribute('aria-pressed', showTimeline ? 'true' : 'false');
+  timelineBtn.addEventListener('click', () => {
+    showTimeline = !showTimeline;
+    paintBoard();
+    if (showTimeline) void loadTimeline();
+  });
+  controls.appendChild(timelineBtn);
 
-  const hint = el('p', 'ov2-controls__hint');
-  hint.dataset.role = 'resource-hint';
-  bar.appendChild(hint);
-  // The input is not in the pane yet; use the value we just put on it.
-  paintResourceHint(bar, shownN);
-
-  bar.appendChild(renderModelChip(state));
-  bar.appendChild(renderRenameControl(state));
-
-  if (!loopOn && !finished) {
-    bar.appendChild(
-      el(
-        'span',
-        'ov2-controls__mode',
-        'Stopped — start individual tasks by hand below, or switch to Running.',
-      ),
-    );
-  } else if (loopOn && shownN === 1) {
-    bar.appendChild(el('span', 'ov2-controls__mode', 'Sequential: Running at N=1.'));
-  } else if (loopOn) {
-    bar.appendChild(
-      el('span', 'ov2-controls__mode', 'AFK: Running with no interactive gates.'),
-    );
-  }
-  return bar;
+  controls.appendChild(renderRenameControl(state));
+  return controls;
 }
 
-/**
- * The board's model binding — P9-C.
- *
- * V2 resolved a model from Settings → Autopilot or the active chat's menubar
- * binding, both invisible from here and neither addressable per board. That is
- * what made P9-A's failure mode unfixable in place: the board said "no model
- * bound for this attempt" and the control that would fix it was three screens
- * away. The `board.model.set` command puts it on the journal, where the effector
- * reads it first and replay reproduces which model an attempt actually ran on.
- */
-function renderModelChip(state: BoardState): HTMLElement {
-  const wrap = el('div', 'ov2-controls__model');
-  wrap.appendChild(el('span', 'ov2-controls__label', 'Model'));
+/** Number input labelled "run", matching the Orchestrator concurrency field. */
+function renderConcurrencyControl(
+  state: BoardState,
+  finished: boolean,
+  running: boolean,
+): HTMLElement {
+  const wrap = el('label', 'board-header__concurrency');
+  wrap.title =
+    'Agents running at once. Each is a model call and a worktree. There is no hard cap; pick what this machine can hold. Changing N while running takes effect on the next tick; in-flight attempts keep going.';
 
-  const select = el('select', 'ov2-controls__select');
-  select.setAttribute('aria-label', 'Model for this board');
-  select.dataset.focusKey = 'board-model';
-  select.addEventListener('change', () => {
-    const decoded = decodeModelSelectKey(select.value);
-    if (!decoded) return;
-    void commandSetModel(decoded.providerId, decoded.modelId, reasoning.value);
+  const label = el('span', 'board-header__field-label', 'run');
+  wrap.appendChild(label);
+
+  const input = el('input', 'board-header__concurrency-input');
+  input.type = 'number';
+  input.min = '1';
+  input.max = '64';
+  // Pre-start fold is 1; show the product default so the first start journals 2
+  // unless the user changed it.
+  const shownN =
+    state.status === 'created' ? DEFAULT_BOARD_CONCURRENCY : state.concurrency;
+  input.value = String(shownN);
+  input.setAttribute('aria-label', 'Tasks running at once');
+  input.id = 'ov2-concurrency-input';
+  input.dataset.focusKey = 'board-concurrency';
+  input.disabled = finished;
+  input.addEventListener('change', () => {
+    if (!running || finished) return;
+    void commandConcurrency(readConcurrencyInput());
   });
-  wrap.appendChild(select);
-
-  const bound = state.model;
-  const selected = bound ? encodeModelSelectKey(bound.providerId, bound.id) : '';
-  if (modelOptionsHtml !== null) {
-    select.innerHTML = modelOptionsHtml;
-    select.value = [...select.options].some((o) => o.value === selected) ? selected : '';
-  } else {
-    // Fetched after mount, once: the provider round trip must not hold up a
-    // repaint, and this pane repaints on every journal event.
-    select.innerHTML = '<option value="">Loading models…</option>';
-    modelOptionsRequest ??= populateMultiProviderModelSelect(select, {
-      includeEmptyOption: true,
-      emptyLabel: '(Settings → Autopilot)',
-      ...(bound ? { selectedProviderId: bound.providerId, selectedModelId: bound.id } : {}),
-    })
-      .then(() => {
-        modelOptionsHtml = select.innerHTML;
-      })
-      .catch(() => {
-        // Not cached, so the next repaint tries again.
-        select.innerHTML = '<option value="">Cannot reach providers</option>';
-      })
-      .finally(() => {
-        modelOptionsRequest = null;
-      });
-  }
-
-  // Reasoning is the other half of a binding: a thinking model bound with
-  // thinking off is a different model in every way that matters.
-  const reasoning = el('select', 'ov2-controls__select ov2-controls__select--narrow');
-  reasoning.setAttribute('aria-label', 'Reasoning for this board');
-  reasoning.dataset.focusKey = 'board-reasoning';
-  for (const [value, label] of [
-    ['', 'Reasoning: default'],
-    ['on', 'Reasoning: on'],
-    ['off', 'Reasoning: off'],
-  ] as const) {
-    const option = el('option');
-    option.value = value;
-    option.textContent = label;
-    reasoning.appendChild(option);
-  }
-  reasoning.value = state.model?.reasoning ?? '';
-  reasoning.addEventListener('change', () => {
-    // Reasoning rides on the same journaled binding, so it needs a model to
-    // ride on. Saying so beats silently doing nothing.
-    if (!state.model) {
-      notice = { text: 'Pick a model for this board first.', tone: 'warn' };
-      paintBoard();
-      return;
-    }
-    void commandSetModel(state.model.providerId, state.model.id, reasoning.value);
-  });
-  wrap.appendChild(reasoning);
-
-  if (!bound) {
-    wrap.appendChild(
-      el('span', 'ov2-controls__hint', 'Unbound — attempts use the Autopilot planner model.'),
-    );
-  }
+  wrap.appendChild(input);
   return wrap;
 }
 
@@ -969,22 +884,21 @@ function renderModelChip(state: BoardState): HTMLElement {
  */
 function renderRenameControl(state: BoardState): HTMLElement {
   if (renamingBoardId !== state.boardId) {
-    return button({
-      label: 'Rename',
-      title: 'Rename this board',
-      variant: 'ghost',
-      onClick: () => {
-        renamingBoardId = state.boardId;
-        paintBoard();
-        surface?.boardPane
-          .querySelector<HTMLInputElement>('[data-focus-key="board-rename"]')
-          ?.select();
-      },
+    const btn = el('button', 'board-btn board-btn--compact', 'Rename');
+    btn.type = 'button';
+    btn.title = 'Rename this board';
+    btn.addEventListener('click', () => {
+      renamingBoardId = state.boardId;
+      paintBoard();
+      surface?.boardPane
+        .querySelector<HTMLInputElement>('[data-focus-key="board-rename"]')
+        ?.select();
     });
+    return btn;
   }
 
-  const form = el('form', 'ov2-controls__rename');
-  const input = el('input', 'ov2-controls__input');
+  const form = el('form', 'board-header__rename');
+  const input = el('input', 'board-header__rename-input');
   input.type = 'text';
   input.value = state.name || state.boardId;
   input.maxLength = 200;
@@ -992,19 +906,16 @@ function renderRenameControl(state: BoardState): HTMLElement {
   input.dataset.focusKey = 'board-rename';
   form.appendChild(input);
 
-  const save = el('button', 'ov2-btn ov2-btn--primary', 'Save');
+  const save = el('button', 'board-btn board-btn--compact board-btn--primary', 'Save');
   save.type = 'submit';
   form.appendChild(save);
-  form.appendChild(
-    button({
-      label: 'Cancel',
-      variant: 'ghost',
-      onClick: () => {
-        renamingBoardId = null;
-        paintBoard();
-      },
-    }),
-  );
+  const cancel = el('button', 'board-btn board-btn--compact', 'Cancel');
+  cancel.type = 'button';
+  cancel.addEventListener('click', () => {
+    renamingBoardId = null;
+    paintBoard();
+  });
+  form.appendChild(cancel);
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     const name = input.value.trim();
@@ -1020,16 +931,6 @@ function readConcurrencyInput(): number {
   const n = Number(input?.value);
   if (!Number.isSafeInteger(n) || n < 1) return DEFAULT_BOARD_CONCURRENCY;
   return Math.min(64, n);
-}
-
-function paintResourceHint(bar: HTMLElement, n: number): void {
-  const hint = bar.querySelector<HTMLElement>('[data-role="resource-hint"]');
-  if (!hint) return;
-  // Surface the cost; do not enforce a host cap. Concurrent agents are
-  // concurrent model calls and concurrent worktrees — the user picks N.
-  hint.textContent =
-    `N=${n} means up to ${n} concurrent agents: ${n} model calls and ${n} worktrees. ` +
-    'There is no hard cap; pick what this machine can hold.';
 }
 
 /**
@@ -1061,24 +962,15 @@ async function loadFinishReport(boardId: string): Promise<void> {
 }
 
 function renderTimelineSection(): HTMLElement {
-  const wrap = el('section', 'ov2-journal');
-  const head = el('div', 'ov2-journal__head');
-  head.appendChild(el('h3', 'ov2-journal__title', 'Journal'));
-  head.appendChild(
-    button({
-      label: showTimeline ? 'Hide' : 'Show',
-      variant: 'ghost',
-      onClick: () => {
-        showTimeline = !showTimeline;
-        paintBoard();
-        if (showTimeline) void loadTimeline();
-      },
-    }),
-  );
-  wrap.appendChild(head);
-  if (showTimeline) {
-    wrap.appendChild(el('div', 'ov2-journal__body', 'Loading…'));
-    wrap.dataset.role = 'journal';
+  const wrap = el('section', 'ov2-journal ob-sec');
+  wrap.appendChild(el('h3', 'ov2-journal__title', 'Journal'));
+  const body = el('div', 'ov2-journal__body');
+  wrap.appendChild(body);
+  wrap.dataset.role = 'journal';
+  if (journalView?.boardId === selectedBoardId) {
+    body.replaceChildren(renderTimeline(journalView.events, journalView.truncated));
+  } else {
+    body.textContent = 'Loading…';
   }
   return wrap;
 }
@@ -1089,9 +981,11 @@ async function loadTimeline(): Promise<void> {
   try {
     const { events, truncated } = await readJournal(boardId, { limit: TIMELINE_LIMIT });
     if (boardId !== selectedBoardId || !showTimeline) return;
+    journalView = { boardId, events, truncated };
     const body = surface?.boardPane.querySelector<HTMLElement>('.ov2-journal__body');
     body?.replaceChildren(renderTimeline(events, truncated));
   } catch (err) {
+    if (boardId !== selectedBoardId || !showTimeline) return;
     const body = surface?.boardPane.querySelector<HTMLElement>('.ov2-journal__body');
     body?.replaceChildren(
       el('p', 'ov2-notice ov2-notice--warn', err instanceof Error ? err.message : String(err)),
@@ -1143,7 +1037,7 @@ function commandSetModel(providerId: string, id: string, reasoning: string): Pro
     await client?.setModel({
       providerId,
       id,
-      ...(reasoning === 'on' || reasoning === 'off' ? { reasoning } : {}),
+      ...(isBoardJournalReasoning(reasoning) ? { reasoning } : {}),
     });
   });
 }

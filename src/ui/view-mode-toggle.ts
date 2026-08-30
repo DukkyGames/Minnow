@@ -7,6 +7,7 @@
 import { normalizeModeId } from '../chat/modes/types';
 import { isChatStreaming } from '../chat/streaming-state';
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
+import { emitChatSidebarChanged } from './layout-events';
 import {
   isBoardSetupIncomplete,
 } from '../chat/orchestrate/board-setup';
@@ -71,13 +72,22 @@ export function isBoardViewActive(): boolean {
   return isOrchestrateBoardViewActive();
 }
 
-/** Toggle main-column layout class: hides chat composer in board view. */
+/** Toggle main-column layout class: hides chat composer and session list in board view. */
 export function syncBoardViewChrome(): void {
   const mainColumn = document.getElementById('mainColumn');
   if (!mainColumn) return;
   const boardView = isBoardViewActive();
   const initSplit = mainColumn.classList.contains('main-column--orchestrate-init-split');
-  mainColumn.classList.toggle('main-column--board-view', boardView && !initSplit);
+  const next = boardView && !initSplit;
+  const was = mainColumn.classList.contains('main-column--board-view');
+  mainColumn.classList.toggle('main-column--board-view', next);
+  if (was !== next) {
+    // Chats in the view bar mirrors stage-view hiding; preview guests need a relayout.
+    emitChatSidebarChanged();
+    void import('./preview-electron-visibility').then((m) => {
+      m.scheduleElectronPreviewHostLayoutSync();
+    });
+  }
   void import('./chat-scroll').then((m) => m.refreshChatJumpChipVisibility());
   notifyAskQuestionDisplayContextChanged();
 }
@@ -316,3 +326,4 @@ export function initViewModeToggle(): void {
   if (boardBtn) wireViewToggleButton(boardBtn, 'board');
   syncViewModeToggleFromActiveChat();
 }
+

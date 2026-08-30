@@ -158,6 +158,7 @@ import {
 import {
   isOrchestrateBoardViewActive,
   setOrchestrateViewMode,
+  syncBoardViewChrome,
   syncViewModeToggleFromActiveChat,
 } from './view-mode-toggle';
 import {
@@ -3530,6 +3531,9 @@ export function renderBoardView(group: ChatGroup): void {
     refreshBoardChatHeader();
     return;
   }
+  // Re-stamp chrome on every rebuild so a stripped overlay class cannot leave
+  // the Code composer sitting under the kanban.
+  syncBoardViewChrome();
   teardownOrchestrateHub();
   teardownHub();
   const area = document.getElementById('chatArea');

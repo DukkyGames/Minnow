@@ -1,8 +1,10 @@
 /*
  * Orchestrator V2 — the Boards surface.
  *
- * Scoped entirely under `.ov2`, with no selector reaching a V1 orchestrate
- * class, so Phase 4 deleting V1 cannot take a rule out from under this.
+ * Scoped under `.ov2`. Live-board chrome reuses the V1 `.board-header*` class
+ * names so Boards and Orchestrate share one instrument strip; the *rules* are
+ * restated here rather than imported from `orchestrate-board.css`, because that
+ * file is V1's stylesheet and Phase 4 deletes it.
  *
  * Apps run inside MinnowOS windows, so width is a container question, not a
  * viewport one: `@media` never matches an app's width here.
@@ -12,11 +14,7 @@
  * The markup carries the confirmed `ob-*` names (`ob-shell` / `ob-rail` /
  * `ob-main` / `ob-runhead` / `ob-sec` / `ob-row`), so Boards reads as the same
  * page family as Super Plan and Research rather than a second invention. The
- * *rules* are still written here rather than imported from `ob-page.css`,
- * because that file is V1's orchestrate page stylesheet and Phase 4 deletes it —
- * a surface that survives Phase 4 cannot have its layout come from a file that
- * does not. Only the small number of `ob-*` rules this surface actually needs
- * are restated, and they are marked as such.
+ * *rules* are still written here rather than imported from `ob-page.css`.
  */
 
 /*
@@ -133,44 +131,445 @@
   overflow-y: auto;
 }
 
-.ov2-board__header {
+/*
+ * Live-board runhead: restatement of V1 `.board-header` under `.ov2`.
+ * One instrument strip (identity + telemetry + run controls), not a boxed
+ * control card. Container queries key off the header's own inline size.
+ */
+.ov2 .board-header {
+  container: boardhdr / inline-size;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
+  padding: 0 0 8px;
+  margin: 0 0 10px;
+  border-bottom: 1px solid var(--mn-border);
+  background: transparent;
 }
 
-.ov2-board__title {
+.ov2 .board-header__toolbar {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.ov2-board__name {
-  margin: 0;
-  font-size: 19px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-}
-
-.ov2-board__plan {
-  color: var(--mn-fg-subtle);
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
-  font-size: 11px;
-}
-
-.ov2-board__status {
-  display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 8px 14px;
+  column-gap: 16px;
+  row-gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
 }
 
-.ov2-board__reason,
-.ov2-board__summary {
+.ov2 .board-header__leading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.ov2 .board-header__title {
   margin: 0;
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--mn-fg);
+  min-width: 0;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+}
+
+.ov2 .board-header__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ov2 .board-header__badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.ov2 .board-header__badge--ready {
+  color: var(--mn-fg-subtle);
+  border-color: var(--mn-border);
+  background: var(--mn-bg);
+}
+
+.ov2 .board-header__badge--running {
+  color: var(--mn-warning);
+  border-color: var(--mn-warning-border);
+  background: var(--mn-warning-soft);
+}
+
+.ov2 .board-header__badge--complete {
+  color: var(--mn-success);
+  border-color: var(--mn-success-border);
+  background: var(--mn-success-soft);
+}
+
+.ov2 .board-header__badge--failed,
+.ov2 .board-header__badge--stopped,
+.ov2 .board-header__badge--stalled {
+  color: var(--mn-danger);
+  border-color: var(--mn-danger-border);
+  background: var(--mn-danger-soft);
+}
+
+.ov2 .board-header__badge--stalled .board-header__badge-dot,
+.ov2 .board-header__badge--running .board-header__badge-dot {
+  animation: ov2-board-badge-pulse 1.4s var(--ease-out, ease-out) infinite;
+}
+
+@keyframes ov2-board-badge-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ov2 .board-header__badge--running .board-header__badge-dot,
+  .ov2 .board-header__badge--stalled .board-header__badge-dot {
+    animation: none;
+  }
+}
+
+.ov2 .board-header__telemetry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 28rem;
+}
+
+.ov2 .board-header__metrics {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: nowrap;
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ov2 .board-header__metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.ov2 .board-header__metric-value {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  color: var(--mn-fg);
+}
+
+.ov2 .board-header__metric-label {
+  font-family: var(--font-ui);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   color: var(--mn-fg-muted);
+  text-transform: lowercase;
+}
+
+.ov2 .board-header__metric-sep {
+  flex-shrink: 0;
+  margin: 0 7px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+  line-height: 1;
+  color: var(--mn-fg-subtle);
+}
+
+.ov2 .board-header__progress {
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mn-border) 65%, transparent);
+  overflow: hidden;
+}
+
+.ov2 .board-header__progress-fill {
+  height: 100%;
+  width: 100%;
+  background: var(--mn-accent);
+  border-radius: 999px;
+  transform: scaleX(var(--progress-scale, 0));
+  transform-origin: left center;
+  transition: transform var(--duration-normal, 200ms) var(--ease-out, ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ov2 .board-header__progress-fill {
+    transition: none;
+  }
+}
+
+.ov2 .board-header__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.ov2 .board-header__meta-note {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--mn-fg-muted);
+}
+
+.ov2 .board-header__controls {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  column-gap: 10px;
+  row-gap: 8px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.ov2 .board-header__settings {
+  display: flex;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
+  min-width: 0;
+  padding: 0 2px;
+}
+
+.ov2 .board-header__settings::before,
+.ov2 .board-header__settings::after {
+  content: '';
+  align-self: stretch;
+  width: 1px;
+  margin: 4px 2px;
+  background: var(--mn-border);
+}
+
+.ov2 .board-header__field-label {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--mn-fg-subtle);
+  white-space: nowrap;
+}
+
+.ov2 .board-header__concurrency {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+}
+
+.ov2 .board-header__concurrency-input {
+  width: 52px;
+  height: 32px;
+  padding: 0 6px;
+  font-family: var(--font-ui);
   font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--mn-fg);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+}
+
+.ov2 .board-header__concurrency-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ov2 .board-header__model-slot,
+.ov2 .board-header__reasoning {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 6px;
+  min-height: 32px;
+  overflow: visible;
+}
+
+.ov2 .board-reasoning-control-wrap.hidden,
+.ov2 .board-reasoning-effort-wrap.hidden {
+  display: none;
+}
+
+.ov2 .board-reasoning-effort-select {
+  min-height: 28px;
+  max-width: 148px;
+  padding: 0 8px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mn-fg);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+}
+
+.ov2 .board-header__run-btn {
+  height: 32px;
+  padding: 0 14px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--mn-accent);
+  background: var(--mn-accent);
+  color: var(--mn-fg-on-accent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ov2 .board-header__run-btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.ov2 .board-header__run-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ov2 .board-header__run-btn--stop {
+  border-color: var(--mn-danger-border);
+  background: transparent;
+  color: var(--mn-danger);
+}
+
+.ov2 .board-header__run-btn:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.ov2 .board-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 10px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  cursor: pointer;
+}
+
+.ov2 .board-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ov2 .board-btn:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.ov2 .board-btn--primary {
+  border-color: var(--mn-accent);
+  background: var(--mn-accent);
+  color: var(--mn-fg-on-accent);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ov2 .board-btn:hover:not(:disabled):not(.board-btn--primary) {
+    border-color: var(--mn-accent);
+    background: var(--mn-accent);
+    color: var(--mn-fg-on-accent);
+  }
+}
+
+.ov2 .board-btn[aria-pressed='true'] {
+  border-color: var(--mn-fg);
+  color: var(--mn-fg);
+}
+
+.ov2 .board-header__rename {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ov2 .board-header__rename-input {
+  width: 160px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 12px;
+}
+
+@container boardhdr (max-width: 1459px) {
+  .ov2 .board-header__toolbar {
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .ov2 .board-header__leading {
+    flex: 1 1 100%;
+  }
+
+  .ov2 .board-header__telemetry {
+    max-width: none;
+  }
+
+  .ov2 .board-header__controls {
+    flex: 1 1 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+}
+
+@container boardhdr (max-width: 899px) {
+  .ov2 .board-header__title {
+    max-width: 10rem;
+  }
+
+  .ov2 .board-header__controls,
+  .ov2 .board-header__settings {
+    flex-wrap: wrap;
+  }
+
+  .ov2 .board-header__settings::before,
+  .ov2 .board-header__settings::after {
+    display: none;
+  }
 }
 
 .ov2-board__final {
@@ -306,74 +705,6 @@
   border-color: var(--mn-danger-border);
   background: var(--mn-danger-soft);
   color: var(--mn-danger-ink);
-}
-
-/* ── Controls ──────────────────────────────────────────────────────────── */
-
-.ov2-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--mn-border);
-  border-radius: 9px;
-  background: var(--mn-surface-0);
-}
-
-.ov2-controls__stepper {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.ov2-controls__label {
-  color: var(--mn-fg-subtle);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-size: 10px;
-}
-
-.ov2-controls__number {
-  width: 56px;
-  padding: 4px 6px;
-  border: 1px solid var(--mn-border-strong);
-  border-radius: 6px;
-  background: var(--mn-surface-1);
-  color: var(--mn-fg);
-  font: inherit;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.ov2-controls__status {
-  display: inline-flex;
-  border: 1px solid var(--mn-border-strong);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.ov2-controls__status .ov2-btn {
-  border-radius: 0;
-  border: 0;
-  border-right: 1px solid var(--mn-border);
-}
-
-.ov2-controls__status .ov2-btn:last-child {
-  border-right: 0;
-}
-
-.ov2-controls__hint {
-  flex: 1 1 100%;
-  margin: 0;
-  color: var(--mn-fg-muted);
-  font-size: 11.5px;
-  line-height: 1.4;
-}
-
-.ov2-controls__mode {
-  color: var(--mn-fg-muted);
-  font-size: 11.5px;
 }
 
 /* ── Tasks: waves x kanban (P9-B) ──────────────────────────────────────── */
@@ -973,83 +1304,65 @@ select.ov2-create__input {
   font-size: 11px;
 }
 
-/* ── Model binding + rename (P9-C, P9-E) ───────────────────────────────── */
-
-.ov2-controls__model {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.ov2-controls__select {
-  max-width: 220px;
-  padding: 4px 6px;
-  border: 1px solid var(--mn-border-strong);
-  border-radius: 6px;
-  background: var(--mn-surface-1);
-  color: var(--mn-fg);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.ov2-controls__select--narrow {
-  max-width: 150px;
-}
-
-.ov2-controls__hint {
-  color: var(--mn-fg-subtle);
-  font-size: 11px;
-}
-
-.ov2-controls__rename {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.ov2-controls__input {
-  width: 200px;
-  padding: 4px 7px;
-  border: 1px solid var(--mn-border-strong);
-  border-radius: 6px;
-  background: var(--mn-surface-1);
-  color: var(--mn-fg);
-  font: inherit;
-  font-size: 12px;
-}
-
 /* ── Board rows: delete (P9-E) ─────────────────────────────────────────── */
 
 .ov2__board-item {
   position: relative;
 }
 
+/*
+ * Icon-only trash control. Hidden until hover/focus/confirm so the row does not
+ * reserve a text-label gutter. `pointer-events: none` while opacity is 0 keeps
+ * the hit target from stealing clicks meant for the board button underneath.
+ */
 .ov2__board-delete {
   position: absolute;
-  top: 7px;
-  right: 7px;
-  padding: 2px 7px;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
   color: var(--mn-fg-subtle);
-  font: inherit;
-  font-size: 10.5px;
   cursor: pointer;
   opacity: 0;
+  pointer-events: none;
+}
+
+.ov2__board-delete .ov2__board-delete-icon {
+  display: block;
+  line-height: 1;
 }
 
 .ov2__board-item:hover .ov2__board-delete,
 .ov2__board-delete:focus-visible,
 .ov2__board-delete.is-confirming {
   opacity: 1;
+  pointer-events: auto;
+}
+
+.ov2__board-delete:hover {
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
+}
+
+.ov2__board-delete:focus-visible {
+  outline: 2px solid var(--mn-focus-ring, var(--mn-accent));
+  outline-offset: 1px;
 }
 
 .ov2__board-delete.is-confirming {
   border-color: var(--mn-danger-border);
+  background: var(--mn-danger-soft);
+  color: var(--mn-danger-ink);
+}
+
+.ov2__board-delete.is-confirming:hover {
   background: var(--mn-danger-soft);
   color: var(--mn-danger-ink);
 }
@@ -1341,9 +1654,7 @@ select.ov2-create__input {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .ov2-controls__select,
-  .ov2-controls__input {
+  .ov2 .board-header__rename-input {
     max-width: none;
-    width: 100%;
   }
 }

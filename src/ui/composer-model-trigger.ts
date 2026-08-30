@@ -4,8 +4,6 @@
  */
 
 import { decodeModelSelectKey, resolveModelSelectValueForChat } from '../lib/model-select-key';
-import { resolveBoardModelBinding } from '../chat/orchestrate/board-model-binding.ts';
-import { setBoardModel } from '../state/orchestrate-board-actions.ts';
 import { syncBoardHeaderReasoning } from './orchestrate-board-reasoning.ts';
 import { getModelRowForSelectOrCanonicalId, updateModelLoadUnloadButtons } from '../api/models';
 import { modelCache } from '../app-state';
@@ -36,7 +34,6 @@ import {
   unregisterChromePopover,
 } from './preview-electron-visibility';
 
-import type { Chat, ChatGroup } from '../types';
 import { iconHtml } from './icon';
 
 const CHEVRON_SVG = iconHtml('chevronDown', { size: 10 });
@@ -56,14 +53,14 @@ type ComposerModelSurfaceVariant = Exclude<ComposerModelVariant, 'menubar' | 'bo
 
 type MenubarStyleVariant = 'menubar' | 'board';
 
-interface BoardModelTriggerContext {
-  group: ChatGroup;
-  board: NonNullable<ChatGroup['orchestrateBoard']>;
-  plannerChat: Chat;
+/** Per-board model chip: display + persist, so V1 store and V2 journal can share the UI. */
+export interface BoardModelChipContext {
+  resolveBinding: () => { providerId: string; modelId: string };
+  persist: (providerId: string, modelId: string) => void;
   onChanged: () => void;
 }
 
-let boardModelTriggerContext: BoardModelTriggerContext | null = null;
+let boardModelTriggerContext: BoardModelChipContext | null = null;
 
 /** How long the menubar hover label stays visible before collapsing. */
 const MENUBAR_EXPAND_HOLD_MS = 3200;
@@ -144,7 +141,7 @@ function isMenubarStyleVariant(variant: ComposerModelVariant): variant is Menuba
 }
 
 /** Update board model chip context (orchestrate board header). */
-export function setBoardModelTriggerContext(ctx: BoardModelTriggerContext | null): void {
+export function setBoardModelTriggerContext(ctx: BoardModelChipContext | null): void {
   boardModelTriggerContext = ctx;
   const boardTrigger = findBoardModelTrigger();
   if (boardTrigger) syncTrigger(boardTrigger);
@@ -184,11 +181,7 @@ function resolveTriggerSelectValue(trigger: ComposerModelTrigger): string {
   }
   if (trigger.variant === 'board' && boardModelTriggerContext) {
     const values = [...sel.options].map((o) => o.value);
-    const binding = resolveBoardModelBinding(
-      boardModelTriggerContext.plannerChat,
-      boardModelTriggerContext.board,
-    );
-    return resolveModelSelectValueForChat(binding, values);
+    return resolveModelSelectValueForChat(boardModelTriggerContext.resolveBinding(), values);
   }
   if (trigger.variant === 'research') {
     const values = [...sel.options].map((o) => o.value);
@@ -331,22 +324,13 @@ function handleComposerModelPick(trigger: ComposerModelTrigger, modelId: string)
     const canonicalModelId = decoded?.modelId ?? modelId.trim();
     const providerId =
       decoded?.providerId?.trim() ||
-      boardModelTriggerContext.plannerChat.providerId?.trim() ||
+      boardModelTriggerContext.resolveBinding().providerId.trim() ||
       '';
     if (!canonicalModelId || !providerId) return;
-    setBoardModel(
-      boardModelTriggerContext.group,
-      providerId,
-      canonicalModelId,
-      boardModelTriggerContext.plannerChat,
-    );
+    boardModelTriggerContext.persist(providerId, canonicalModelId);
     boardModelTriggerContext.onChanged();
     syncTrigger(trigger);
-    syncBoardHeaderReasoning(
-      boardModelTriggerContext.group,
-      boardModelTriggerContext.board,
-      boardModelTriggerContext.plannerChat,
-    );
+    syncBoardHeaderReasoning();
     return;
   }
   if (trigger.variant === 'research') {
@@ -710,6 +694,9 @@ function buildMenubarStyleTrigger(variant: MenubarStyleVariant): ComposerModelTr
   triggerBtn.setAttribute('aria-haspopup', 'listbox');
   triggerBtn.setAttribute('aria-expanded', 'false');
   triggerBtn.setAttribute('aria-label', 'Default model');
+  if (variant === 'board') {
+    triggerBtn.dataset.focusKey = 'board-model';
+  }
 
   const dotEl = document.createElement('span');
   dotEl.className = 'model-load-dot mn-os-mb-model-dot';
@@ -839,6 +826,20 @@ export function mountBoardModelChipTrigger(anchor: HTMLElement): void {
   if (anchor.querySelector('.composer-model-trigger-wrap--board')) return;
   const entry = buildMenubarStyleTrigger('board');
   anchor.appendChild(entry.root);
+}
+
+/**
+ * Re-home the existing board chip, or mount one. Live Boards paints replace the
+ * header; moving the node keeps the menu and the `#modelSelect` catalog intact.
+ */
+export function adoptBoardModelChipTrigger(anchor: HTMLElement): void {
+  ensureGlobals();
+  const existing = findBoardModelTrigger();
+  if (existing) {
+    if (existing.root.parentElement !== anchor) anchor.appendChild(existing.root);
+    return;
+  }
+  mountBoardModelChipTrigger(anchor);
 }
 
 /** Tear down the board model chip and floating menu (board header rebuild). */

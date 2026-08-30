@@ -147,6 +147,7 @@
 /*
  * One list, not two. Each Code view-bar destination owns the stage and carries
  * its own navigation; leaving the session list open duplicates work on screen.
+ * Orchestrate board view is the same: `#orchestrateBoardPage` already has `.ob-rail`.
  * The user's open/closed preference is preserved in session state — this is
  * display-only suppression, like Super Plan.
  */
@@ -156,6 +157,10 @@ html:has(#codeBrainMapRoot) #chatSidebar,
 html:has(#codeBrainMapRoot) #chatSidebarResizer,
 html:has(#orchestrateHub) #chatSidebar,
 html:has(#orchestrateHub) #chatSidebarResizer,
+html:has(#orchestrateBoardPage) #chatSidebar,
+html:has(#orchestrateBoardPage) #chatSidebarResizer,
+html:has(.main-column--board-view) #chatSidebar,
+html:has(.main-column--board-view) #chatSidebarResizer,
 html:has(#orchestratePlanScreen) #chatSidebar,
 html:has(#orchestratePlanScreen) #chatSidebarResizer,
 html:has(#devServerScreenRoot) #chatSidebar,
@@ -163,6 +168,8 @@ html:has(#devServerScreenRoot) #chatSidebarResizer,
 html:has(#codeOverviewRoot) #sidebarBackdrop,
 html:has(#codeBrainMapRoot) #sidebarBackdrop,
 html:has(#orchestrateHub) #sidebarBackdrop,
+html:has(#orchestrateBoardPage) #sidebarBackdrop,
+html:has(.main-column--board-view) #sidebarBackdrop,
 html:has(#orchestratePlanScreen) #sidebarBackdrop,
 html:has(#devServerScreenRoot) #sidebarBackdrop {
   display: none;

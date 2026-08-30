@@ -101,10 +101,10 @@ function isCodeStageRootHidingChatSidebar(): boolean {
 export function isCodeStageViewHidingChatSidebar(): boolean {
   if (isSuperPlanChromeActive()) return true;
   if (isCodeStageRootHidingChatSidebar()) return true;
-
-  // Kanban board uses chat-area--orchestrate for layout; Chats still toggles the rail.
+  // Board view has `.ob-rail`; the Code session list is a second list.
+  if (document.getElementById('orchestrateBoardPage')) return true;
   const boardGroup = getActiveBoardGroup();
-  if (boardGroup?.viewMode === 'board') return false;
+  if (boardGroup?.viewMode === 'board') return true;
 
   return isMainColumnOverlaySuppressingChatDom();
 }
@@ -271,6 +271,20 @@ export async function closeActiveCodeStageView(): Promise<void> {
   const hub = await import('./orchestrate-hub');
   if (hub.isOrchestrateHubMounted()) {
     hub.closeOrchestrateHub();
+    return;
+  }
+
+  // Board view is not a view-bar overlay root, but it hides the session list
+  // the same way. Chats leaves the kanban and restores the transcript.
+  // Skip when Overview / Super Plan / hub / map still own the stage — a board
+  // folder can stay in viewMode `board` underneath those overlays.
+  if (
+    !isCodeStageOverlayMounted() &&
+    (document.getElementById('orchestrateBoardPage') ||
+      getActiveBoardGroup()?.viewMode === 'board')
+  ) {
+    const { setOrchestrateViewMode } = await import('./view-mode-toggle');
+    setOrchestrateViewMode('chat');
     return;
   }
 

@@ -81,6 +81,10 @@ main#chatArea.chat-area:has(.ob-page) {
  * the main pane — an agent that asks a question or a tool that needs approval
  * is unusable without them.
  *
+ * `#orchestrateBoardPage` is listed as well as `.chat-area--orchestrate`: the
+ * overlay class can be stripped while the page is still mounted, which used to
+ * leave the Code composer sitting under the kanban.
+ *
  * The exclusion keys off `.main-column--board-chat` rather than
  * `:not(:has(.ob-chat))`: `:has()` did not reliably re-invalidate when the chat
  * host is inserted several levels down, which left the composer hidden.
@@ -94,7 +98,12 @@ main#chatArea.chat-area:has(.ob-page) {
 .main-column:has(.chat-area--orchestrate):not(.main-column--board-chat) .tool-approval-host,
 .main-column:has(.chat-area--orchestrate):not(.main-column--board-chat) .question-host,
 .main-column:has(.chat-area--orchestrate):not(.main-column--board-chat) .code-change-strip-wrap,
-.main-column:has(.chat-area--orchestrate):not(.main-column--board-chat) .chat-jump-latest {
+.main-column:has(.chat-area--orchestrate):not(.main-column--board-chat) .chat-jump-latest,
+.main-column:has(#orchestrateBoardPage):not(.main-column--board-chat) .input-bar,
+.main-column:has(#orchestrateBoardPage):not(.main-column--board-chat) .tool-approval-host,
+.main-column:has(#orchestrateBoardPage):not(.main-column--board-chat) .question-host,
+.main-column:has(#orchestrateBoardPage):not(.main-column--board-chat) .code-change-strip-wrap,
+.main-column:has(#orchestrateBoardPage):not(.main-column--board-chat) .chat-jump-latest {
   display: none !important;
 }
 

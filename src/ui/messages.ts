@@ -84,7 +84,7 @@ import {
 } from './chat-mount';
 import { dismissCodeOverviewForNavigation } from './code-overview';
 import { dismissDevServerScreenForNavigation } from './dev-server-screen';
-import { isBoardViewActive } from './view-mode-toggle';
+import { isBoardViewActive, syncBoardViewChrome } from './view-mode-toggle';
 import { closeDrawer } from './settings';
 import { appConfirm } from './app-dialog';
 import { setStatus } from './status';
@@ -358,6 +358,9 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   const boardGroup = codeMount && !boardChatHost ? getActiveBoardGroup() : null;
   if (boardGroup?.viewMode === 'board') {
     teardownHub();
+    // Hide the Code composer before the board module finishes loading — the
+    // kanban import is async and used to leave `.input-bar` on screen.
+    syncBoardViewChrome();
     void import('./orchestrate-board-setup-banner').then((m) => m.removeBoardSetupReturnBanner());
     void import('./orchestrate-board').then((m) => {
       m.renderBoardView(boardGroup);

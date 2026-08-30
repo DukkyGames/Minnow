@@ -604,9 +604,17 @@ export function createRunnerEffector(options = {}) {
       // way that matters. Carried on the `TurnModel`, which is where `runTurn`
       // already looks before it falls back to the deps.
       const reasoning = options.model ? null : state.model?.reasoning ?? null;
-      const turnModel = reasoning === 'on' || reasoning === 'off'
-        ? { ...model, thinking: { mode: reasoning } }
-        : model;
+      const thinkingOn =
+        reasoning === 'on' ||
+        reasoning === 'low' ||
+        reasoning === 'medium' ||
+        reasoning === 'high';
+      const turnModel =
+        reasoning === 'off'
+          ? { ...model, thinking: { mode: 'off' } }
+          : thinkingOn
+            ? { ...model, thinking: { mode: 'on' } }
+            : model;
 
       const attemptId = `r-${randomUUID()}`;
       /** @type {string} */

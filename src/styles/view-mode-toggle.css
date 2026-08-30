@@ -126,9 +126,13 @@
  * Board view: hide chat composer (kanban + header controls only).
  * A board chat open in `.ob-main` is a real conversation, so it keeps the
  * composer, the jump chip and the diff strip.
+ *
+ * `#orchestrateBoardPage` is the same hide keyed off the mounted page, so the
+ * composer stays gone even if `main-column--board-view` lags the DOM.
  */
 
-.main-column.main-column--board-view:not(.main-column--board-chat) .input-bar {
+.main-column.main-column--board-view:not(.main-column--board-chat) .input-bar,
+.main-column:has(#orchestrateBoardPage):not(.main-column--board-chat) .input-bar {
 
   display: none !important;
 

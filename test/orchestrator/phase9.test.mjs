@@ -293,12 +293,19 @@ describe('P9-C — per-board model binding', () => {
         await call('POST', `/api/boards/${boardId}/model`, {
           providerId: 'p',
           id: 'm',
-          reasoning: 'medium',
+          reasoning: 'turbo',
         })
       ).status,
       400,
-      "reasoning must be one of the two states runTurn understands",
+      'reasoning must be a value the header and runTurn can honour',
     );
+    const effort = await call('POST', `/api/boards/${boardId}/model`, {
+      providerId: 'p',
+      id: 'm',
+      reasoning: 'medium',
+    });
+    assert.equal(effort.status, 200);
+    assert.equal(effort.body.state.model.reasoning, 'medium');
   });
 });
 

@@ -312,12 +312,16 @@ async function dispatch(route, req, res) {
       if (!providerId || !id) {
         return json(res, 400, { ok: false, error: 'providerId and id are required' });
       }
-      // Only the two states `runTurn` actually understands. A free-form string
-      // would journal a binding no attempt can honour, and the journal is not the
-      // place to record something that will never happen.
-      const reasoning = body.reasoning === 'on' || body.reasoning === 'off' ? body.reasoning : '';
+      // Header effort (low/medium/high) is journaled for the picker; attempts
+      // still only honour thinking on/off on TurnModel.
+      const allowed = new Set(['on', 'off', 'low', 'medium', 'high']);
+      const raw = typeof body.reasoning === 'string' ? body.reasoning : '';
+      const reasoning = allowed.has(raw) ? raw : '';
       if (body.reasoning !== undefined && body.reasoning !== null && !reasoning) {
-        return json(res, 400, { ok: false, error: "reasoning must be 'on' or 'off'" });
+        return json(res, 400, {
+          ok: false,
+          error: "reasoning must be 'on', 'off', 'low', 'medium', or 'high'",
+        });
       }
       const engine = await getEngine(boardId, () => makeEffector(boardId));
       await engine.setModel({ providerId, id, reasoning: reasoning || null });

@@ -12,7 +12,6 @@ import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-ch
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, ChatGroup } from '../types';
 import { getChatLastMessageAt } from './session-workspace-scope';
-import { collapseChatSidebarForBoardEnter } from '../ui/layout';
 import {
   markGroupDeleted,
   markGroupDirty,
@@ -449,13 +448,18 @@ export function getPlannerChatForGroup(group: ChatGroup): Chat | undefined {
 /** Mount board view for a folder after session fields are set. */
 function activateBoardGroupView(groupId: string, group: ChatGroup): void {
   const state = requireSession();
-  collapseChatSidebarForBoardEnter();
   state.activeBoardGroupId = groupId;
   // Survives navigating away, so re-entering Orchestrator returns here.
   state.lastBoardGroupId = groupId;
   markSessionScalarsDirty();
   group.viewMode = 'board';
   persistGroupChange(groupId);
+  // Stamp board-view chrome now so the Code composer and session list hide
+  // before the async board module paints. Preference for the list stays put
+  // (Super Plan pattern) — CSS suppresses it while the board is up.
+  void import('../ui/view-mode-toggle')
+    .then((m) => m.syncBoardViewChrome())
+    .catch((err) => reportBackgroundError('board-view-chrome-sync', err));
 
   /*
    * Board state is committed above, so the file tree can resolve this board's

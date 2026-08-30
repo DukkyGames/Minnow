@@ -14,6 +14,7 @@ import { derive } from '../../server/orchestrator/core/derive.js';
 import type { BoardState } from '../../server/orchestrator/core/types';
 import { bucketWave, columnOf, isBlocked } from '../../src/orchestrator/board-columns.ts';
 import {
+  renderBoardHeader,
   renderBoardSkeleton,
   renderEngineErrors,
   renderRunLedger,
@@ -377,5 +378,70 @@ describe('loading states (P9-I)', () => {
     // The skeleton itself is decoration and must not be read out line by line.
     assert.equal(node.querySelector('.ov2-skeleton')!.getAttribute('aria-hidden'), 'true');
     assert.ok(node.querySelectorAll('.ov2-skeleton__line').length > 0);
+  });
+});
+
+describe('renderBoardHeader', () => {
+  test('uses the orchestrator instrument strip, not a boxed control card', () => {
+    setupDom();
+    const node = renderBoardHeader(board(), true);
+    assert.equal(node.className, 'board-header ob-runhead');
+    assert.equal(node.querySelector('.ov2-controls'), null);
+    assert.equal(node.querySelector('.ov2-board__header'), null);
+    assert.equal(node.querySelector('.board-header__title')?.textContent, 'Example');
+    assert.equal(
+      node.querySelector('.board-header__badge-label')?.textContent,
+      'Running',
+    );
+    assert.ok(node.querySelector('.board-header__badge--running'));
+    assert.equal(
+      node.querySelector('[data-board-metric="tasks"] .board-header__metric-value')
+        ?.textContent,
+      '1/4',
+    );
+    assert.ok(node.querySelector('.board-header__progress-fill'));
+    assert.ok(node.querySelector('.board-header__controls'));
+  });
+
+  test('a created board is Ready', () => {
+    setupDom();
+    const state = derive([
+      {
+        v: 1,
+        seq: 1,
+        type: 'board.created',
+        boardId: 'b1',
+        planPath: 'documentation/plans/x.md',
+        name: 'Example',
+        waves: [{ n: 1, name: 'Foundations' }],
+        tasks: [{ id: 'W1-A', title: 'A', wave: 1, dependsOn: [], touches: ['a.ts'] }],
+      },
+    ]);
+    const node = renderBoardHeader(state, true);
+    assert.equal(node.querySelector('.board-header__badge-label')?.textContent, 'Ready');
+    assert.ok(node.querySelector('.board-header__badge--ready'));
+  });
+
+  test('a dropped stream on a running board is Reconnecting, not Stopped', () => {
+    setupDom();
+    const node = renderBoardHeader(board(), false);
+    assert.equal(
+      node.querySelector('.board-header__badge-label')?.textContent,
+      'Reconnecting',
+    );
+    assert.ok(node.querySelector('.board-header__badge--stalled'));
+  });
+
+  test('passed-in run controls sit in the toolbar, not under a second card', () => {
+    setupDom();
+    const controls = document.createElement('div');
+    controls.className = 'board-header__controls';
+    const start = document.createElement('button');
+    start.className = 'board-header__run-btn';
+    start.textContent = 'Start';
+    controls.appendChild(start);
+    const node = renderBoardHeader(board(), true, controls);
+    assert.equal(node.querySelector('.board-header__toolbar .board-header__run-btn'), start);
+    assert.equal(node.querySelectorAll('.board-header__controls').length, 1);
   });
 });

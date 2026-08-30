@@ -99,46 +99,172 @@ function phaseLabel(state: BoardState, task: TaskState): string {
 }
 
 // ---------------------------------------------------------------------------
-// Runhead
+// Runhead — V1 `.board-header` instrument strip (restated under `.ov2`)
 // ---------------------------------------------------------------------------
 
 /**
- * The board's status strip — `ob-runhead` in the twin-shape vocabulary (P9-F).
+ * The board's status strip. Markup matches the Orchestrator `.board-header`
+ * (title, badge, telemetry, then run controls) so Boards is the same instrument
+ * rather than a second chrome vocabulary. `ob-runhead` stays for the twin-shape
+ * name; the rules live under `.ov2` so Phase 4 can delete V1 CSS.
  *
  * `connected` is separate from `status` on purpose: a board can be running while
  * this window is not receiving its events, and a view that conflated the two
  * would show a stalled board as a stopped one.
+ *
+ * `controls` is the interactive cluster (model, concurrency, Start/Stop). It is
+ * passed in so this file stays a pure function of state: the POSTs live in the
+ * view, not here.
  */
-export function renderBoardHeader(state: BoardState, connected: boolean): HTMLElement {
-  const header = el('header', 'ov2-board__header ob-runhead');
+export function renderBoardHeader(
+  state: BoardState,
+  connected: boolean,
+  controls?: HTMLElement,
+): HTMLElement {
+  const header = el('header', 'board-header ob-runhead');
 
-  const title = el('div', 'ov2-board__title');
-  title.appendChild(el('h2', 'ov2-board__name', state.name || state.boardId));
-  title.appendChild(el('span', 'ov2-board__plan', state.planPath));
-  header.appendChild(title);
+  const toolbar = el('div', 'board-header__toolbar');
+  const leading = el('div', 'board-header__leading');
 
-  const strip = el('div', 'ov2-board__status');
-  strip.appendChild(
-    pill(
-      state.finished ? 'finished' : state.status,
-      state.finished ? 'good' : state.status === 'running' ? 'live' : 'neutral',
-    ),
-  );
-  if (state.status === 'stopped' && state.stopReason) {
-    strip.appendChild(el('span', 'ov2-board__reason', `stopped: ${state.stopReason}`));
+  const title = el('h2', 'board-header__title', state.name || state.boardId);
+  title.title = state.planPath;
+  leading.appendChild(title);
+  leading.appendChild(renderStatusBadge(state, connected));
+  leading.appendChild(renderHeaderTelemetry(state));
+
+  toolbar.appendChild(leading);
+  const cluster = controls ?? el('div', 'board-header__controls');
+  if (!cluster.classList.contains('board-header__controls')) {
+    cluster.classList.add('board-header__controls');
   }
-  strip.appendChild(field('Concurrency', String(state.concurrency)));
-  strip.appendChild(field('Tasks', String(state.tasks.size)));
-  strip.appendChild(field('Merged', String(countPhase(state, 'merged'))));
-  if (state.integrationSha) {
-    strip.appendChild(field('Integration', state.integrationSha.slice(0, 8)));
-  }
-  strip.appendChild(
-    pill(connected ? 'live' : 'reconnecting…', connected ? 'live' : 'warn'),
-  );
-  header.appendChild(strip);
+  toolbar.appendChild(cluster);
+  header.appendChild(toolbar);
+
+  const meta = renderHeaderMeta(state, connected);
+  if (meta) header.appendChild(meta);
 
   return header;
+}
+
+/** Status chip: Ready / Running / Stopped / Complete / Failed / Reconnecting. */
+function renderStatusBadge(state: BoardState, connected: boolean): HTMLElement {
+  const { variant, label } = headerStatus(state, connected);
+  const badge = el('span', `board-header__badge board-header__badge--${variant}`);
+  badge.setAttribute('role', 'status');
+  const dot = el('span', 'board-header__badge-dot');
+  dot.setAttribute('aria-hidden', 'true');
+  badge.appendChild(dot);
+  badge.appendChild(el('span', 'board-header__badge-label', label));
+  return badge;
+}
+
+function headerStatus(
+  state: BoardState,
+  connected: boolean,
+): { variant: string; label: string } {
+  // A live run whose stream dropped is stalled, not stopped: Stop would be a lie.
+  if (!connected && state.status === 'running') {
+    return { variant: 'stalled', label: 'Reconnecting' };
+  }
+  if (state.finished || state.stopReason === 'complete') {
+    return { variant: 'complete', label: 'Complete' };
+  }
+  if (state.status === 'running') return { variant: 'running', label: 'Running' };
+  if (state.status === 'stopped' && state.stopReason === 'terminal') {
+    return { variant: 'failed', label: 'Failed' };
+  }
+  if (state.status === 'stopped') return { variant: 'stopped', label: 'Stopped' };
+  return { variant: 'ready', label: 'Ready' };
+}
+
+/**
+ * Inline telemetry: done/total tasks, waves, in-flight vs N, thin progress.
+ * Elapsed is omitted: V2's fold has no wall-clock start, and inventing one
+ * in the renderer would be a second clock.
+ */
+function renderHeaderTelemetry(state: BoardState): HTMLElement {
+  const telemetry = el('div', 'board-header__telemetry');
+  const metricsRow = el('div', 'board-header__metrics');
+  metricsRow.setAttribute('role', 'group');
+  metricsRow.setAttribute('aria-label', 'Board metrics');
+
+  const total = state.tasks.size;
+  const done =
+    countPhase(state, 'merged') +
+    countPhase(state, 'abandoned') +
+    countPhase(state, 'skipped');
+  const active =
+    countPhase(state, 'building') +
+    countPhase(state, 'testing') +
+    countPhase(state, 'merging');
+  const totalWaves = Math.max(state.waves.length, groupByWave(state).length);
+  const wavesComplete = countWavesComplete(state);
+
+  const tokens: Array<{ value: string; label: string; key: string }> = [
+    { value: `${done}/${total}`, label: 'tasks', key: 'tasks' },
+    { value: `${wavesComplete}/${totalWaves}`, label: 'waves', key: 'waves' },
+    { value: `${active}/${state.concurrency}`, label: 'run', key: 'running' },
+  ];
+  tokens.forEach((token, index) => {
+    if (index > 0) {
+      const sep = el('span', 'board-header__metric-sep', '·');
+      sep.setAttribute('aria-hidden', 'true');
+      metricsRow.appendChild(sep);
+    }
+    const node = el('span', 'board-header__metric');
+    node.dataset.boardMetric = token.key;
+    node.appendChild(el('span', 'board-header__metric-value', token.value));
+    node.appendChild(el('span', 'board-header__metric-label', token.label));
+    metricsRow.appendChild(node);
+  });
+  telemetry.appendChild(metricsRow);
+
+  const bar = el('div', 'board-header__progress');
+  bar.setAttribute('role', 'progressbar');
+  bar.setAttribute('aria-valuemin', '0');
+  bar.setAttribute('aria-valuemax', '100');
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+  bar.setAttribute('aria-valuenow', String(pct));
+  bar.setAttribute('aria-label', `${done} of ${total} tasks complete`);
+  const fill = el('div', 'board-header__progress-fill');
+  fill.style.setProperty('--progress-scale', String(pct / 100));
+  bar.appendChild(fill);
+  telemetry.appendChild(bar);
+  return telemetry;
+}
+
+/** Secondary band: only alerts (stop reason, integration sha). */
+function renderHeaderMeta(state: BoardState, connected: boolean): HTMLElement | null {
+  const bits: string[] = [];
+  if (state.status === 'stopped' && state.stopReason) {
+    bits.push(`stopped: ${state.stopReason}`);
+  }
+  if (state.integrationSha) {
+    bits.push(state.integrationSha.slice(0, 8));
+  }
+  if (!connected && state.status !== 'running') {
+    bits.push('reconnecting');
+  }
+  if (bits.length === 0) return null;
+  const meta = el('div', 'board-header__meta');
+  meta.appendChild(el('p', 'board-header__meta-note', bits.join(' · ')));
+  return meta;
+}
+
+function countWavesComplete(state: BoardState): number {
+  let n = 0;
+  for (const [, ids] of groupByWave(state)) {
+    if (ids.length === 0) continue;
+    const allDone = ids.every((id) => {
+      const task = state.tasks.get(id);
+      return (
+        task != null &&
+        (task.phase === 'merged' || task.phase === 'abandoned' || task.phase === 'skipped')
+      );
+    });
+    if (allDone) n += 1;
+  }
+  return n;
 }
 
 function countPhase(state: BoardState, phase: TaskState['phase']): number {

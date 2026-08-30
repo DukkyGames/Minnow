@@ -14,6 +14,7 @@ import {
   type ThinkingTriState,
 } from '../agents/thinking-types.ts';
 import { resolveBoardModelBinding } from '../chat/orchestrate/board-model-binding.ts';
+import type { BoardReasoningPatch } from '../chat/orchestrate/board-reasoning-binding.ts';
 import {
   defaultComposerReasoningLevel,
   formatReasoningEffortLabel,
@@ -31,25 +32,34 @@ import type { Chat, ChatGroup, ReasoningEffortOption } from '../types.ts';
 import { nextThinkingTriStateOnClick } from './composer-thinking.ts';
 import { createIcon } from './icon.ts';
 
-type BoardState = NonNullable<ChatGroup['orchestrateBoard']>;
+type V1BoardState = NonNullable<ChatGroup['orchestrateBoard']>;
 
-interface BoardReasoningContext {
-  group: ChatGroup;
-  board: BoardState;
-  plannerChat: Chat;
+/** Persist + display seam so V1 session boards and V2 journal boards share this strip. */
+export interface BoardHeaderReasoningSource {
+  resolveBinding: () => { providerId: string; modelId: string };
+  getBoard: () => {
+    thinkingMode?: ThinkingTriState;
+    reasoningEffort?: ReasoningEffortOption;
+  };
+  /** V1 planner chat — used when the board field inherits. */
+  getInherit?: () => {
+    thinkingMode?: ThinkingTriState;
+    reasoningEffort?: ReasoningEffortOption;
+  };
+  isRunning: () => boolean;
+  persist: (patch: BoardReasoningPatch) => void;
   onChanged: () => void;
 }
 
-let boardReasoningContext: BoardReasoningContext | null = null;
+let boardReasoningSource: BoardHeaderReasoningSource | null = null;
 let wrapEl: HTMLElement | null = null;
 let toggleBtn: HTMLButtonElement | null = null;
 let selectEl: HTMLSelectElement | null = null;
 let selectWrapEl: HTMLElement | null = null;
 
 function effectiveCapabilities(): ReturnType<typeof resolveSendCapabilities> | undefined {
-  if (!boardReasoningContext) return undefined;
-  const { board, plannerChat } = boardReasoningContext;
-  const binding = resolveBoardModelBinding(plannerChat, board);
+  if (!boardReasoningSource) return undefined;
+  const binding = boardReasoningSource.resolveBinding();
   if (!binding.modelId || !binding.providerId) return undefined;
   return resolveSendCapabilities(binding.providerId, binding.modelId);
 }
@@ -62,13 +72,14 @@ function getLevelOptions(): ReasoningEffortOption[] {
 }
 
 function controlsDisabled(): boolean {
-  if (!boardReasoningContext) return true;
-  return isBoardRunning(boardReasoningContext.group);
+  if (!boardReasoningSource) return true;
+  return boardReasoningSource.isRunning();
 }
 
 function resolveDisplayEffort(levels: ReasoningEffortOption[]): ReasoningEffortOption | undefined {
-  if (!boardReasoningContext || levels.length === 0) return undefined;
-  const { board, plannerChat } = boardReasoningContext;
+  if (!boardReasoningSource || levels.length === 0) return undefined;
+  const board = boardReasoningSource.getBoard();
+  const inherit = boardReasoningSource.getInherit?.() ?? {};
   const caps = effectiveCapabilities();
 
   if (board.reasoningEffort && levels.includes(board.reasoningEffort)) {
@@ -78,10 +89,10 @@ function resolveDisplayEffort(levels: ReasoningEffortOption[]): ReasoningEffortO
   const resolved = resolveThinkingMode({
     kind: 'work-agent',
     agentKey: null,
-    chatThinkingMode: board.thinkingMode ?? plannerChat.thinkingMode,
+    chatThinkingMode: board.thinkingMode ?? inherit.thinkingMode,
   });
   const effort = resolveEffectiveReasoningEffort(
-    { reasoningEffort: board.reasoningEffort ?? plannerChat.reasoningEffort },
+    { reasoningEffort: board.reasoningEffort ?? inherit.reasoningEffort },
     caps,
     resolved.mode,
   );
@@ -92,8 +103,8 @@ function resolveDisplayEffort(levels: ReasoningEffortOption[]): ReasoningEffortO
 function isDropdownReasoningActive(
   caps: ReturnType<typeof resolveSendCapabilities>,
 ): boolean {
-  if (!boardReasoningContext) return false;
-  const { board } = boardReasoningContext;
+  if (!boardReasoningSource) return false;
+  const board = boardReasoningSource.getBoard();
   if (board.reasoningEffort === 'off') return false;
   if (
     board.reasoningEffort === 'low' ||
@@ -111,16 +122,15 @@ function isDropdownReasoningActive(
   return effort !== 'off' && effort !== undefined;
 }
 
-function persistAndRefresh(patch: Parameters<typeof setBoardReasoning>[2]): void {
-  if (!boardReasoningContext) return;
-  const { group, plannerChat, onChanged } = boardReasoningContext;
-  setBoardReasoning(group, plannerChat, patch);
+function persistAndRefresh(patch: BoardReasoningPatch): void {
+  if (!boardReasoningSource) return;
+  boardReasoningSource.persist(patch);
   syncBoardHeaderReasoning();
-  onChanged();
+  boardReasoningSource.onChanged();
 }
 
 function onSelectChange(): void {
-  if (!selectEl || selectEl.disabled || !boardReasoningContext) return;
+  if (!selectEl || selectEl.disabled || !boardReasoningSource) return;
   const levels = getLevelOptions();
   const value = selectEl.value as ReasoningEffortOption;
   if (!levels.includes(value)) return;
@@ -132,8 +142,8 @@ function onSelectChange(): void {
 
 function applyDropdownModeBrainToggle(): void {
   const caps = effectiveCapabilities();
-  if (!boardReasoningContext) return;
-  if (boardReasoningContext.board.reasoningEffort === 'off') {
+  if (!boardReasoningSource) return;
+  if (boardReasoningSource.getBoard().reasoningEffort === 'off') {
     const level = defaultComposerReasoningLevel(caps);
     persistAndRefresh({
       reasoningEffort: level ?? 'medium',
@@ -162,14 +172,14 @@ function applyThinkingTriState(mode: ThinkingTriState): void {
 }
 
 function onToggleClick(): void {
-  if (!toggleBtn || toggleBtn.disabled || !boardReasoningContext) return;
+  if (!toggleBtn || toggleBtn.disabled || !boardReasoningSource) return;
   const caps = effectiveCapabilities();
   if (modelUsesComposerReasoningDropdown(caps)) {
     applyDropdownModeBrainToggle();
     return;
   }
 
-  const { board } = boardReasoningContext;
+  const board = boardReasoningSource.getBoard();
   const tri = normalizeThinkingTriState(board.thinkingMode, 'inherit');
   const resolved = resolveThinkingMode({
     kind: 'work-agent',
@@ -194,22 +204,8 @@ function populateSelect(
   if (display) selectEl.value = display;
 }
 
-/** Mount reasoning controls beside the board model chip. */
-export function wireBoardHeaderReasoning(
-  controls: HTMLElement,
-  group: ChatGroup,
-  board: BoardState,
-  plannerChat: Chat,
-  onChanged: () => void,
-): void {
-  const existing = controls.querySelector('.board-header__reasoning');
-  existing?.remove();
-
-  boardReasoningContext = { group, board, plannerChat, onChanged };
-  wrapEl = null;
-  toggleBtn = null;
-  selectEl = null;
-  selectWrapEl = null;
+function ensureReasoningDom(): void {
+  if (wrapEl && toggleBtn && selectEl && selectWrapEl) return;
 
   wrapEl = document.createElement('div');
   wrapEl.className = 'board-header__reasoning board-reasoning-control-wrap hidden';
@@ -233,11 +229,25 @@ export function wireBoardHeaderReasoning(
   selectEl = document.createElement('select');
   selectEl.className = 'composer-reasoning-effort-select board-reasoning-effort-select';
   selectEl.setAttribute('aria-label', 'Board reasoning effort');
+  selectEl.dataset.focusKey = 'board-reasoning';
   selectEl.addEventListener('change', onSelectChange);
   selectWrapEl.appendChild(selectEl);
 
   wrapEl.appendChild(toggleHost);
   wrapEl.appendChild(selectWrapEl);
+}
+
+/** Place the reasoning strip after the model chip, creating the DOM once. */
+export function wireBoardHeaderReasoningSource(
+  controls: HTMLElement,
+  source: BoardHeaderReasoningSource,
+): void {
+  boardReasoningSource = source;
+  ensureReasoningDom();
+  if (!wrapEl) return;
+
+  const stray = controls.querySelector('.board-header__reasoning');
+  if (stray && stray !== wrapEl) stray.remove();
 
   const modelSlot = controls.querySelector('.board-header__model-slot');
   if (modelSlot?.nextSibling) {
@@ -249,19 +259,53 @@ export function wireBoardHeaderReasoning(
   syncBoardHeaderReasoning();
 }
 
+/** Unparent the strip without destroying it — V2 header paints wipe the pane. */
+export function detachBoardHeaderReasoning(): void {
+  wrapEl?.remove();
+}
+
+function v1Source(
+  group: ChatGroup,
+  board: V1BoardState,
+  plannerChat: Chat,
+  onChanged: () => void,
+): BoardHeaderReasoningSource {
+  return {
+    resolveBinding: () => resolveBoardModelBinding(plannerChat, board),
+    getBoard: () => ({
+      thinkingMode: board.thinkingMode,
+      reasoningEffort: board.reasoningEffort,
+    }),
+    getInherit: () => ({
+      thinkingMode: plannerChat.thinkingMode,
+      reasoningEffort: plannerChat.reasoningEffort,
+    }),
+    isRunning: () => isBoardRunning(group),
+    persist: (patch) => setBoardReasoning(group, plannerChat, patch),
+    onChanged,
+  };
+}
+
+/** Mount reasoning controls beside the board model chip. */
+export function wireBoardHeaderReasoning(
+  controls: HTMLElement,
+  group: ChatGroup,
+  board: V1BoardState,
+  plannerChat: Chat,
+  onChanged: () => void,
+): void {
+  wireBoardHeaderReasoningSource(controls, v1Source(group, board, plannerChat, onChanged));
+}
+
 /** Keep board reasoning controls aligned after header refresh or model change. */
 export function syncBoardHeaderReasoning(
   group?: ChatGroup,
-  board?: BoardState,
+  board?: V1BoardState,
   plannerChat?: Chat,
 ): void {
-  if (group && board && plannerChat && boardReasoningContext) {
-    boardReasoningContext = {
-      ...boardReasoningContext,
-      group,
-      board,
-      plannerChat,
-    };
+  if (group && board && plannerChat && boardReasoningSource) {
+    const onChanged = boardReasoningSource.onChanged;
+    boardReasoningSource = v1Source(group, board, plannerChat, onChanged);
   }
   if (!wrapEl || !toggleBtn) return;
 
@@ -307,7 +351,7 @@ export function syncBoardHeaderReasoning(
     return;
   }
 
-  const boardState = boardReasoningContext?.board;
+  const boardState = boardReasoningSource?.getBoard();
   const tri = normalizeThinkingTriState(boardState?.thinkingMode, 'inherit');
   const resolved = resolveThinkingMode({
     kind: 'work-agent',
@@ -340,9 +384,10 @@ export function syncBoardHeaderReasoning(
 
 /** Tear down board reasoning controls when leaving board view. */
 export function teardownBoardHeaderReasoning(): void {
+  wrapEl?.remove();
   wrapEl = null;
   toggleBtn = null;
   selectEl = null;
   selectWrapEl = null;
-  boardReasoningContext = null;
+  boardReasoningSource = null;
 }
