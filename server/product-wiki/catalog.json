@@ -54,7 +54,7 @@
         "Related"
       ],
       "section": "Get started",
-      "hash": "d5bbe1367870018c7c76f16b32a08b4b98b9dcd40b0029d8147b5426db1a04ab"
+      "hash": "5ffb28861b628764840c413f77e1103c40021e318b95c9e8966cd75810222624"
     },
     {
       "path": "documentation/manual/get-started/first-chat.md",
@@ -163,7 +163,7 @@
         "Related"
       ],
       "section": "Chat",
-      "hash": "06f8922a60a952f3e824b39c9f5ae53bf5225a6df037b7dcc6fffe8b9cfdd3f7"
+      "hash": "c8e8c3f8be6c0f83c5ddab581f919e1c3dcef52a2c396b785483afeeebc2fdb9"
     },
     {
       "path": "documentation/manual/chat/skills-and-commands.md",
@@ -217,7 +217,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "c096d27f160a5e07f948eaf05b7740eae662d1dd24d59ea44d802f9ca9a4a287"
+      "hash": "c8ccf53ebf0577a9a936a460599b85d6e25ee04514d8be1cae946fe578ef146f"
     },
     {
       "path": "documentation/manual/apps/research.md",
@@ -256,6 +256,7 @@
       "title": "Models",
       "summary": "This is where you set up what the agents run on: what your machine can handle, what you have downloaded, what is serving, which endpoints Minnow talks to, which model does which job, and what it all costs. You come here to configure, then go back to Code and work. Open it from th",
       "headings": [
+        "Local Server",
         "Recommendations",
         "Library and Installed",
         "MLX on Apple Silicon",
@@ -270,7 +271,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "97704b3175fa0f815d7b5e07ad552f1254d67461a57d47a935c0750733e31956"
+      "hash": "23427027d6503c919b4716d125a8592088f4f53e0e93aa4eef6c2f9a64e641dd"
     },
     {
       "path": "documentation/manual/apps/issues.md",
@@ -286,7 +287,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "48bebf8bfc47dbc226ac851b8531bcc4354a70ef52a963a59dfcd5ca10a30253"
+      "hash": "11777fa60b247c2d422fa0b398a35616b847254fa2b3f892311105fb89d1d68a"
     },
     {
       "path": "documentation/manual/apps/scheduler.md",
