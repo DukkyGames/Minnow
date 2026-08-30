@@ -99,6 +99,25 @@ describe('model-select-library', () => {
     assert.equal(servedContextLength(sampleServe({ llamaSettings: { ctx: 0 } })), undefined);
   });
 
+  test('servedContextLength reads mlx-lm context from mlxSettings', () => {
+    assert.equal(
+      servedContextLength(
+        sampleServe({
+          runtime: 'mlx-lm',
+          llamaSettings: null,
+          mlxSettings: {
+            snapshotPath: '/tmp/snap',
+            quant: 'mlx-4bit',
+            mlxLmVersion: '0.31.3',
+            port: 8087,
+            contextLength: 32768,
+          },
+        }),
+      ),
+      32768,
+    );
+  });
+
   test('resolveUpstreamProviderId maps minnow-library to local runtimes', () => {
     assert.equal(
       resolveUpstreamProviderId(LIBRARY_MODEL_PROVIDER_ID, 'gguf:org/repo:weights.gguf'),

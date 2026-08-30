@@ -283,6 +283,8 @@ export async function initApp(): Promise<void> {
     './state/issues-store.ts'
   );
   await loadIssuesFromStorage();
+  const { loadPrReviewsFromStorage } = await import('./state/pr-review-store.ts');
+  await loadPrReviewsFromStorage();
   if (sessionState) {
     const chatsChanged = await migrateLegacyBugBoardsFromChats(sessionState.chats);
     if (chatsChanged) {

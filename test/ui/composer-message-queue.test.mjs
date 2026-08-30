@@ -19,6 +19,10 @@ function setupCodeComposerDom() {
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
 
+  const chatArea = document.createElement('div');
+  chatArea.id = 'chatArea';
+  document.body.appendChild(chatArea);
+
   const composer = document.createElement('div');
   composer.className = 'input-bar-composer';
 
@@ -36,7 +40,7 @@ function setupCodeComposerDom() {
   hiddenChat.style.display = 'none';
   document.body.appendChild(hiddenChat);
 
-  return { composer, inputRow, input, hiddenChat };
+  return { composer, inputRow, input, hiddenChat, chatArea };
 }
 
 describe('composer message queue mount', () => {
@@ -71,6 +75,34 @@ describe('composer message queue mount', () => {
     assert.equal(hiddenChat.contains(queue), false);
     assert.match(queue.textContent ?? '', /1 Queued/);
     assert.match(queue.textContent ?? '', /hello/);
+
+    const bubbles = document.querySelectorAll('#queuedTranscript .msg--queued');
+    assert.equal(bubbles.length, 1);
+    assert.match(bubbles[0].textContent ?? '', /Queued/);
+    assert.match(bubbles[0].textContent ?? '', /hello/);
+
+    setSessionStateForTests(null);
+    appState.setStreaming(false);
+  });
+
+  test('queued transcript bubbles clear when the queue is empty', () => {
+    const { chatArea } = setupCodeComposerDom();
+    const chat = createEmptyChatObject('m1');
+    chat.id = FIXED_CHAT_ID;
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+    appState.setStreaming(true, chat.id);
+    enqueueComposerMessage(chat, QUEUE_TEXT);
+    syncComposerMessageQueue();
+    assert.equal(chatArea.querySelectorAll('.msg--queued').length, 1);
+
+    chat.pendingMessageQueue = undefined;
+    syncComposerMessageQueue();
+    assert.equal(chatArea.querySelector('#queuedTranscript'), null);
 
     setSessionStateForTests(null);
     appState.setStreaming(false);

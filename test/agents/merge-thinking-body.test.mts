@@ -111,4 +111,30 @@ describe('mergeThinkingIntoCompletionBody', () => {
     assert.equal(body.preserve_thinking, true);
     resetLmStudioThinkingHint();
   });
+
+  test('GLM-5.3 utility off sends enabled + low, not disabled', () => {
+    const body: Record<string, unknown> = { model: 'glm-5.3-flash' };
+    mergeThinkingIntoCompletionBody(
+      body,
+      'off',
+      {
+        id: 'zai',
+        apiKind: 'openai-v1',
+        autoApi: false,
+        modelApiOverrides: {},
+      },
+      {
+        ...levelCaps,
+        reasoningAllowedOptions: ['low', 'high', 'max'],
+        reasoningDefault: 'max',
+      },
+      'off',
+      'openai-v1',
+      null,
+      { modelId: 'glm-5.3-flash' },
+    );
+    assert.deepEqual(body.thinking, { type: 'enabled' });
+    assert.equal(body.reasoning_effort, 'low');
+    assert.notEqual(body.enable_thinking, false);
+  });
 });

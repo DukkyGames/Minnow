@@ -10,6 +10,7 @@ import {
   feedSseEventBuffer,
   flushSseEventBuffer,
   parseCompletionResponseBody,
+  parseKeepaliveComment,
   parseSseEventBlock,
 } from '../../src/api/sse-parse.ts';
 import { extractStreamErrorMessage } from '../../src/api/chat.ts';
@@ -68,6 +69,49 @@ describe('parseSseEventBlock', () => {
     assert.equal(chunks.length, 2);
     assert.equal(chunks[0].choices[0].delta.content, 'a');
     assert.equal(chunks[1].choices[0].delta.content, 'b');
+  });
+
+  it('turns mlx-lm keepalive comments into prompt_progress', () => {
+    const chunks = [];
+    parseSseEventBlock(': keepalive 128/4096\n', (c) => chunks.push(c));
+    assert.equal(chunks.length, 1);
+    assert.deepEqual(chunks[0].prompt_progress, {
+      processed: 128,
+      total: 4096,
+      cache: 0,
+      time_ms: 0,
+    });
+  });
+
+  it('tolerates extra whitespace on keepalive comments', () => {
+    const chunks = [];
+    parseSseEventBlock(':   keepalive   2048 / 8192  \n', (c) => chunks.push(c));
+    assert.equal(chunks[0].prompt_progress.processed, 2048);
+    assert.equal(chunks[0].prompt_progress.total, 8192);
+  });
+
+  it('ignores unrelated SSE comments', () => {
+    const chunks = [];
+    parseSseEventBlock(': ping\n', (c) => chunks.push(c));
+    parseSseEventBlock(': connected\n', (c) => chunks.push(c));
+    parseSseEventBlock('data: {"choices":[{"delta":{"content":"x"}}]}\n', (c) => chunks.push(c));
+    assert.equal(chunks.length, 1);
+    assert.equal(chunks[0].choices[0].delta.content, 'x');
+  });
+});
+
+describe('parseKeepaliveComment', () => {
+  it('parses the mlx-lm 0.31.3 shape', () => {
+    assert.deepEqual(parseKeepaliveComment(': keepalive 128/4096'), {
+      processed: 128,
+      total: 4096,
+    });
+  });
+
+  it('returns null for other comments', () => {
+    assert.equal(parseKeepaliveComment(': ping'), null);
+    assert.equal(parseKeepaliveComment('keepalive 1/2'), null);
+    assert.equal(parseKeepaliveComment(': keepalive 1/0'), null);
   });
 });
 

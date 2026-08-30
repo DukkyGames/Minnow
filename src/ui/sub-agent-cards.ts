@@ -12,7 +12,7 @@ import { initSubAgentSessionPersistence } from '../state/sub-agent-session-sync'
 import { getActiveChat } from '../state/sessions';
 import { legacyOutcomeFromSummary } from '../agents/sub-agent-structured-outcome';
 import type { Chat, PersistedSubAgentRun } from '../types';
-import { getActiveChatMountElement } from './chat-mount';
+import { appendChatTranscriptNode, getActiveChatMountElement } from './chat-mount';
 import { isBoardChatEmbedOpenForChat } from './orchestrate-board-chat-state';
 import { isHubMounted } from './hub';
 import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
@@ -185,7 +185,7 @@ export function upsertSubAgentCardForRun(
       }
     }
     if (!placed) {
-      area.appendChild(el);
+      appendChatTranscriptNode(el, area);
     }
   }
 

@@ -4,6 +4,7 @@
 
 import {
   getComposerReasoningLevelOptions,
+  modelUsesAlwaysOnReasoning,
   normalizeReasoningAllowedOptions,
 } from '../../lib/reasoning-effort.ts';
 import { resolveSendCapabilities } from '../../providers/model-capabilities.ts';
@@ -76,6 +77,12 @@ export function sanitizeBoardReasoningForModel(
   const caps = resolveSendCapabilities(binding.providerId, binding.modelId);
   const allowed = normalizeReasoningAllowedOptions(caps?.reasoningAllowedOptions ?? []);
   const levels = getComposerReasoningLevelOptions(allowed);
+  const alwaysOn = modelUsesAlwaysOnReasoning(caps);
+
+  // Always-on models (GLM-5.3) cannot persist Off from a previous model.
+  if (board.reasoningEffort === 'off' && alwaysOn) {
+    delete board.reasoningEffort;
+  }
 
   if (board.reasoningEffort && board.reasoningEffort !== 'off') {
     if (levels.length > 0 && !levels.includes(board.reasoningEffort)) {

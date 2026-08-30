@@ -122,7 +122,7 @@ html[data-theme$="-dark"] .context-usage-ring--warn .context-usage-ring__fill {
 
 .context-usage-breakdown__model {
   margin: 4px 0 0;
-  font-family: var(--mn-font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 500;
   line-height: 1.35;
@@ -217,7 +217,7 @@ html[data-theme$="-dark"] .context-usage-ring--warn .context-usage-ring__fill {
 }
 
 .context-usage-breakdown__summary-value {
-  font-family: var(--mn-font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -242,7 +242,7 @@ html[data-theme$="-dark"] .context-usage-ring--warn .context-usage-ring__fill {
 }
 
 .context-usage-breakdown__summary-foot-value {
-  font-family: var(--mn-font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
@@ -280,7 +280,7 @@ html[data-theme$="-dark"] .context-usage-ring--warn .context-usage-ring__fill {
 .context-usage-breakdown__gauge-pct {
   flex-shrink: 0;
   min-width: 2.25em;
-  font-family: var(--mn-font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -319,7 +319,7 @@ html[data-theme$="-dark"] .context-usage-ring--warn .context-usage-ring__fill {
 }
 
 .context-usage-breakdown__api-turn-value {
-  font-family: var(--mn-font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--mn-fg);
@@ -383,7 +383,7 @@ html[data-theme$="-dark"] .context-usage-ring--warn .context-usage-ring__fill {
 
 .context-usage-row__count {
   text-align: right;
-  font-family: var(--mn-font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;

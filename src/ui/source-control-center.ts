@@ -21,7 +21,9 @@ import {
   gitStatus,
   type GitOpResult,
 } from '../state/git-api';
-import { forgeRefresh, forgeStatus, type ForgeStatus } from '../state/forge-api';
+import { forgeRefresh, forgeStatus, prList, type ForgeStatus } from '../state/forge-api';
+import { matchPrForBranch } from '../chat/review/pr-review-target';
+import { startPrReview } from '../chat/review/run-pr-review';
 import { getWorkspacePath } from '../state/workspace';
 import { filterUserFacingBranches } from '../lib/worktree-list-parse';
 import { resolveTrunkBranchName } from '../lib/git-trunk-branch';
@@ -47,7 +49,7 @@ import { resolvePanelWorktreeCwd } from './panel-worktree-cwd';
 import { createChangesView, focusCommitMessage } from './scc-changes';
 import { createChecksView } from './scc-checks';
 import { createHistoryView } from './scc-history';
-import { createPullsView } from './scc-pulls';
+import { createPullsView, requestPullsSelection } from './scc-pulls';
 import { createBranchesView, createStashesView, createWorktreesView } from './scc-refs';
 import { refreshForgeRailBadges, refreshGitRailBadges } from './scc-rail-badges';
 import { isCommandPaletteOpen, openCommandPalette } from './command-palette';
@@ -584,6 +586,37 @@ function advancedContext() {
   };
 }
 
+/** Review the open PR for the checked-out branch without focusing the review chat. */
+async function reviewCurrentBranchPr(): Promise<void> {
+  const repo = forge?.repo?.trim();
+  if (!repo) {
+    showToast('Repository is unknown', 'error');
+    return;
+  }
+  const listed = await prList({ cwd: effectiveCwd(), state: 'open' });
+  if (!listed.ok) {
+    showToast(listed.error ?? 'Could not list pull requests', 'error');
+    return;
+  }
+  const match = matchPrForBranch(listed.prs ?? [], currentBranch);
+  if (!match) {
+    showToast('No open pull request for this branch', 'error');
+    return;
+  }
+  requestPullsSelection(match.number);
+  await showSection('pulls');
+  const result = await startPrReview({
+    cwd: effectiveCwd(),
+    repo,
+    number: match.number,
+  });
+  if (!result.ok) {
+    showToast(result.error, 'error');
+    return;
+  }
+  showToast(`Reviewing #${match.number}`, 'success');
+}
+
 function buildCommands(): Command[] {
   const onGitHub = (): boolean => Boolean(forge?.supported);
   const conflictHost = paneEl ?? document.createElement('div');
@@ -766,6 +799,14 @@ function buildCommands(): Command[] {
       keywords: 'pr github list',
       available: onGitHub,
       run: () => void showSection('pulls'),
+    },
+    {
+      id: 'pr.review',
+      title: 'Review the current branch PR',
+      group: 'Pull requests',
+      keywords: 'pr review agent findings',
+      available: onGitHub,
+      run: () => void reviewCurrentBranchPr(),
     },
 
     {

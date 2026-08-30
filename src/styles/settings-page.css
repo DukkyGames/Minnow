@@ -1013,7 +1013,7 @@ label.settings-action-btn {
 }
 
 .settings-proposal-body {
-  font-family: var(--mn-font-mono);
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
@@ -1022,7 +1022,7 @@ label.settings-action-btn {
   padding: 8px 10px;
   border-radius: var(--mn-radius-sm, 6px);
   background: color-mix(in srgb, var(--mn-bg-elevated) 90%, var(--mn-fg) 2%);
-  font-family: var(--mn-font-mono);
+  font-family: var(--font-mono);
   font-size: 11px;
   white-space: pre-wrap;
   word-break: break-word;
@@ -1176,7 +1176,7 @@ label.settings-action-btn {
   padding: 10px 12px;
   max-height: 240px;
   overflow: auto;
-  font-family: var(--mn-font-mono);
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.45;
   white-space: pre-wrap;
@@ -1211,7 +1211,7 @@ label.settings-action-btn {
 }
 
 .settings-search-managed-url__endpoint {
-  font-family: var(--font-mono, var(--mn-font-mono));
+  font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.35;

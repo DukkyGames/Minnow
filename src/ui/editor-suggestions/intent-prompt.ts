@@ -273,7 +273,13 @@ export async function resolveIntentSuggestion(
     : undefined;
   const modelCaps =
     modelRow?.capabilities ?? (modelRow ? catalogCapabilitiesFromRow(modelRow) : undefined);
-  const { body: thinkingPatch } = thinkingToCompletionBody('off', provider.apiKind, modelCaps);
+  const { body: thinkingPatch } = thinkingToCompletionBody(
+    'off',
+    provider.apiKind,
+    modelCaps,
+    null,
+    modelId,
+  );
   Object.assign(body, thinkingPatch);
 
   const contentAcc = new StreamingContentAccumulator();

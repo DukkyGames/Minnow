@@ -114,7 +114,7 @@ export function isNonMutatingPersistedRecord(record: PersistedRunRecord): boolea
   if (cat === 'build' || cat === 'fix') return false;
   if (type === 'shell') return false;
   if (cat === 'research' || cat === 'test') return true;
-  if (type === 'explore' || type === 'researcher' || type === 'plan-reviewer') return true;
+  if (type === 'explore' || type === 'researcher' || type === 'plan-reviewer' || type === 'pr-reviewer') return true;
   return false;
 }
 

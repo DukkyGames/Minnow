@@ -35,6 +35,14 @@ describe('parseLoadProgress', () => {
   test('rejects out-of-range values', () => {
     assert.equal(parseLoadProgress('loading 480 %'), null);
   });
+
+  test('does not treat tokenizer or jinja `{%` as a load percent', () => {
+    assert.equal(
+      parseLoadProgress('llama_model_loader: - kv  12: tokenizer.chat_template str = {%- if tools %}'),
+      null,
+    );
+    assert.equal(parseLoadProgress('{%- set x = 35 %}\n{% endif %}'), null);
+  });
 });
 
 describe('classifyLogLine', () => {
@@ -52,6 +60,7 @@ describe('describeLoadPhase', () => {
     assert.equal(describeLoadPhase(''), 'Starting runtime');
     assert.equal(describeLoadPhase('load_tensors: loading model tensors'), 'Loading weights');
     assert.equal(describeLoadPhase('llama_kv_cache: size = 512.00 MiB'), 'Allocating context');
+    assert.equal(describeLoadPhase('clip_model_loader: model name:   Qwen3.8-27B'), 'Warming up');
     assert.equal(describeLoadPhase('main: server is listening'), 'Starting the server');
   });
 
@@ -100,5 +109,15 @@ describe('toLogLines', () => {
     const lines = toLogLines(text, 100);
     assert.equal(lines.length, 100);
     assert.equal(lines.at(-1), 'line 799');
+  });
+
+  test('drops idle-slot heartbeats before applying the cap', () => {
+    const idle = 'srv  update_slots: all slots are idle';
+    const real = Array.from({ length: 20 }, (_, i) => `I srv real ${i}`);
+    const text = [...real, ...Array.from({ length: 80 }, () => idle)].join('\n');
+    const lines = toLogLines(text, 20);
+    assert.equal(lines.length, 20);
+    assert.ok(lines.every((line) => !/all slots are idle/.test(line)));
+    assert.equal(lines.at(-1), 'I srv real 19');
   });
 });

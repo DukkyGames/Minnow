@@ -7,11 +7,14 @@ import { describe, test } from 'node:test';
 import {
   defaultComposerReasoningLevel,
   getComposerReasoningLevelOptions,
+  ensureGlm53ReasoningAllowedOptions,
   ensureQwen38ReasoningAllowedOptions,
   inferReasoningOptionsFromModelId,
+  isGlm53ModelId,
   isQwen38ModelId,
   modelHasSelectableReasoningEffort,
   modelShowsComposerBrainToggle,
+  modelUsesAlwaysOnReasoning,
   modelUsesComposerReasoningBinaryDropdown,
   modelUsesComposerReasoningDropdown,
   modelUsesComposerThinkingToggle,
@@ -297,5 +300,110 @@ describe('isQwen38ModelId', () => {
     assert.equal(normalizeReasoningCatalogValue('none'), 'off');
     assert.equal(normalizeReasoningCatalogValue('medium'), 'medium');
     assert.equal(normalizeReasoningCatalogValue('nope'), undefined);
+  });
+});
+
+describe('isGlm53ModelId', () => {
+  test('matches GLM-5.3 family ids, not 5.2 / 5.1 / 5 / 4.x', () => {
+    assert.equal(isGlm53ModelId('glm-5.3'), true);
+    assert.equal(isGlm53ModelId('glm-5.3-flash'), true);
+    assert.equal(isGlm53ModelId('z-ai/glm-5.3-flash'), true);
+    assert.equal(isGlm53ModelId('GLM-5.3-Flash-GGUF'), true);
+    assert.equal(isGlm53ModelId('glm5.3'), true);
+    assert.equal(isGlm53ModelId('glm_5_3'), true);
+    assert.equal(isGlm53ModelId('glm-5.2'), false);
+    assert.equal(isGlm53ModelId('glm-5.1'), false);
+    assert.equal(isGlm53ModelId('glm-5'), false);
+    assert.equal(isGlm53ModelId('glm-4.7'), false);
+  });
+
+  test('ensureGlm53ReasoningAllowedOptions always replaces off/on and low/medium/high', () => {
+    assert.deepEqual(
+      ensureGlm53ReasoningAllowedOptions('glm-5.3-flash', ['off', 'on']),
+      ['low', 'high', 'max'],
+    );
+    assert.deepEqual(
+      ensureGlm53ReasoningAllowedOptions('z-ai/glm-5.3-flash', [
+        'off',
+        'low',
+        'medium',
+        'high',
+      ]),
+      ['low', 'high', 'max'],
+    );
+    assert.deepEqual(
+      ensureGlm53ReasoningAllowedOptions('glm-5.2', ['off', 'on']),
+      ['off', 'on'],
+    );
+  });
+
+  test('infers low/high/max for GLM-5.3 on any api kind', () => {
+    const expected = ['low', 'high', 'max'];
+    assert.deepEqual(
+      inferReasoningOptionsFromModelId('glm-5.3-flash', 'lm-studio-v0'),
+      expected,
+    );
+    assert.deepEqual(
+      inferReasoningOptionsFromModelId('z-ai/glm-5.3-flash', 'openai-v1'),
+      expected,
+    );
+    assert.deepEqual(
+      inferReasoningOptionsFromModelId('GLM-5.3-Flash-GGUF'),
+      expected,
+    );
+  });
+
+  test('maps xhigh / extra_high onto max only for GLM-5.3', () => {
+    assert.equal(normalizeReasoningCatalogValue('xhigh', 'glm-5.3-flash'), 'max');
+    assert.equal(normalizeReasoningCatalogValue('extra_high', 'glm-5.3'), 'max');
+    assert.equal(normalizeReasoningCatalogValue('xhigh', 'qwen/qwen3.8-27b'), 'high');
+    assert.deepEqual(
+      normalizeReasoningAllowedOptions(['xhigh', 'low'], 'glm-5.3-flash'),
+      ['low', 'max'],
+    );
+  });
+
+  test('always-on catalog hides the brain and shows Low/High/Max', () => {
+    const caps = {
+      reasoningAllowedOptions: ['low', 'high', 'max'],
+      reasoningDefault: 'max',
+    };
+    assert.equal(modelUsesAlwaysOnReasoning(caps), true);
+    assert.equal(modelUsesComposerReasoningDropdown(caps), true);
+    assert.equal(modelShowsComposerBrainToggle(caps), false);
+    assert.deepEqual(getComposerReasoningLevelOptions(caps.reasoningAllowedOptions), [
+      'low',
+      'high',
+      'max',
+    ]);
+    assert.equal(defaultComposerReasoningLevel(caps), 'max');
+  });
+
+  test('does not honor stored off when the model is always-on', () => {
+    assert.equal(
+      resolveEffectiveReasoningEffort(
+        { reasoningEffort: 'off' },
+        {
+          reasoningAllowedOptions: ['low', 'high', 'max'],
+          reasoningDefault: 'max',
+        },
+        'on',
+      ),
+      'max',
+    );
+  });
+
+  test('clamps stored medium by falling through to catalog default max', () => {
+    assert.equal(
+      resolveEffectiveReasoningEffort(
+        { reasoningEffort: 'medium' },
+        {
+          reasoningAllowedOptions: ['low', 'high', 'max'],
+          reasoningDefault: 'max',
+        },
+        'on',
+      ),
+      'max',
+    );
   });
 });

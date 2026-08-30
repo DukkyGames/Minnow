@@ -49,6 +49,15 @@ export const SUB_AGENT_SUMMARY_SCHEMA_PRESETS: Record<string, SummarySchemaPrese
     maxDetailChars: 6000,
     requireFindings: false,
   },
+  'minnow.pr-review.v1': {
+    id: 'minnow.pr-review.v1',
+    label: 'PR review (verdict + findings)',
+    maxFindings: 40,
+    maxArtifacts: 20,
+    maxSummaryChars: 2000,
+    maxDetailChars: 6000,
+    requireFindings: false,
+  },
 };
 
 /** Resolve preset id; unknown ids fall back to the default v1 preset. */

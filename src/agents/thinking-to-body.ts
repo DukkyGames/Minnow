@@ -23,14 +23,16 @@
  *   Hosted `openai-v1` providers reject unknown fields, so
  *   `sanitizeCompletionBodyForProvider` strips the kwargs everywhere except local.
  * - An effort level only means something to a model *trained* on one (gpt-oss,
- *   o-series/gpt-5, Qwen3.8); elsewhere the template's `enable_thinking` is the whole
+ *   o-series/gpt-5, Qwen3.8, GLM-5.3); elsewhere the template's `enable_thinking` is the whole
  *   switch and the effort is inert. Inert, though — not harmful — so the composer
  *   still offers levels for bare local catalogs rather than guessing from the id.
  * - Qwen3.8: composer High maps to wire `xhigh`; thinking-on also sends
  *   `preserve_thinking` (LM Studio custom field, or `chat_template_kwargs` on local).
+ * - GLM-5.3 / GLM-5.3-Flash: thinking is always on. Wire effort is `low` | `high` | `max`
+ *   (default max). Off / medium / `thinking.type: disabled` are remapped; never sent.
  */
 
-import { isQwen38ModelId } from '../lib/reasoning-effort';
+import { isGlm53ModelId, isQwen38ModelId } from '../lib/reasoning-effort';
 import type { ApiKind } from '../providers/types';
 import type { ModelCapabilities, ReasoningEffortOption } from '../types';
 import type { ThinkingResolvedMode } from './thinking-types';
@@ -69,6 +71,45 @@ const LOCAL_TEMPLATE_THINKING_OFF = {
 function mapHighEffortForQwen38(effort: string, modelId?: string | null): string {
   if (effort === 'high' && isQwen38ModelId(modelId)) return 'xhigh';
   return effort;
+}
+
+/**
+ * GLM-5.3 wire effort: `low` | `high` | `max` only.
+ * Off / medium / missing → low (cheapest legal). Thinking-on with no level → max.
+ */
+function glm53WireEffort(
+  effort: ReasoningEffortOption | ThinkingResolvedMode | undefined,
+): 'low' | 'high' | 'max' {
+  if (effort === 'high') return 'high';
+  if (effort === 'max') return 'max';
+  if (effort === 'low') return 'low';
+  if (effort === 'on') return 'max';
+  return 'low';
+}
+
+/** Always-on GLM-5.3 body: thinking.enabled + a legal reasoning_effort. Never disabled. */
+function glm53CompletionPatch(
+  effort: ReasoningEffortOption | ThinkingResolvedMode | undefined,
+  apiKind: ApiKind,
+  budgetTokens?: number | null,
+  modelId?: string | null,
+): ThinkingCompletionPatch {
+  const wireEffort = glm53WireEffort(effort);
+  const body: Record<string, unknown> = {
+    thinking: { type: 'enabled' },
+    reasoning_effort: wireEffort,
+    reasoning: { effort: wireEffort },
+  };
+  if (budgetTokens != null && budgetTokens > 0) {
+    body.thinking_budget_tokens = budgetTokens;
+  }
+  // Local templates still need enable_thinking true; hosted sanitize strips it.
+  applyLocalTemplateThinkingOn(body, apiKind, wireEffort, modelId);
+  if (apiKind !== 'openai-v1') {
+    body.enable_thinking = true;
+    return { body, hint: LM_STUDIO_BEST_EFFORT };
+  }
+  return { body };
 }
 
 /** Existing template kwargs on the body, as a fresh object. */
@@ -140,6 +181,12 @@ function effortForResolved(mode: ThinkingResolvedMode): string {
 
 function isLevelEffort(effort: ReasoningEffortOption): effort is 'low' | 'medium' | 'high' {
   return effort === 'low' || effort === 'medium' || effort === 'high';
+}
+
+function isWireLevelEffort(
+  effort: ReasoningEffortOption,
+): effort is 'low' | 'medium' | 'high' | 'max' {
+  return isLevelEffort(effort) || effort === 'max';
 }
 
 function reasoningBlocked(
@@ -217,6 +264,11 @@ export function reasoningEffortToCompletionBody(
   budgetTokens?: number | null,
   modelId?: string | null,
 ): ThinkingCompletionPatch {
+  // GLM-5.3 rejects disabled / medium / none — remap before the generic off path.
+  if (isGlm53ModelId(modelId)) {
+    return glm53CompletionPatch(effort, apiKind, budgetTokens, modelId);
+  }
+
   if (reasoningBlocked(effort, modelCapabilities)) {
     return { body: {} };
   }
@@ -265,11 +317,11 @@ export function reasoningEffortToCompletionBody(
       body.thinking_budget_tokens = budgetTokens;
     }
 
-    if (isLevelEffort(effort)) {
+    if (isWireLevelEffort(effort)) {
       const wireEffort = mapHighEffortForQwen38(effort, modelId);
       body.reasoning_effort = wireEffort;
       const allowed = modelCapabilities?.reasoningAllowedOptions;
-      if (allowed?.some((option) => isLevelEffort(option))) {
+      if (allowed?.some((option) => isWireLevelEffort(option))) {
         body.reasoning = { effort: wireEffort };
       }
       if (enabledValue === 'adaptive') {
@@ -329,14 +381,17 @@ export function thinkingToCompletionBody(
   budgetTokens?: number | null,
   modelId?: string | null,
 ): ThinkingCompletionPatch {
+  // GLM-5.3 always thinks: off → low, on → max. Never thinking.type disabled.
+  if (isGlm53ModelId(modelId)) {
+    return glm53CompletionPatch(resolved, apiKind, budgetTokens, modelId);
+  }
+
   const allowed = modelCapabilities?.reasoningAllowedOptions;
   if (allowed && allowed.length > 0) {
     const target = resolved;
     if (!allowed.includes(target)) {
       // Level-only catalogs (off/low/medium/high) — map on/off via effort instead of dropping fields.
-      const hasLevels = allowed.some(
-        (option) => option === 'low' || option === 'medium' || option === 'high',
-      );
+      const hasLevels = allowed.some((option) => isWireLevelEffort(option));
       if (target === 'on' && hasLevels) {
         const fallback: ReasoningEffortOption = isQwen38ModelId(modelId) ? 'high' : 'medium';
         return reasoningEffortToCompletionBody(

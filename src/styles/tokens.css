@@ -30,6 +30,9 @@ body {
   --duration-fast: 0.15s;
   --duration-normal: 0.22s;
   --duration-slow: 0.35s;
+  /* Typography stacks. Appearance → Fonts overrides these on documentElement
+     via applyAppearanceFonts(). There is no --mn-font-* alias — consumers
+     must use --font-ui / --font-mono so the user preference actually applies. */
   --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
   --bp-compact: 600px;

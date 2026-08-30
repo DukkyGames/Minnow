@@ -3,6 +3,7 @@
  */
 
 import { anthropicThinkingTypeFromProviderOptions } from '../lib/anthropic-thinking-style';
+import { isGlm53ModelId } from '../lib/reasoning-effort';
 import type { ProviderPublic, ApiKind } from './types';
 import { LLAMA_CPP_LOCAL_PROVIDER_ID, MLX_LM_LOCAL_PROVIDER_ID } from './types';
 import { providerSupportsChatTemplateKwargs } from './provider-host';
@@ -43,6 +44,42 @@ function anthropicThinkingEnabled(body: Record<string, unknown>): boolean {
 function isThinkingExplicitlyDisabled(thinking: unknown): boolean {
   if (!thinking || typeof thinking !== 'object') return false;
   return (thinking as { type?: string }).type === 'disabled';
+}
+
+/**
+ * GLM-5.3 last-line defense: thinking is always on; effort is low | high | max.
+ * Rewrites disabled / none / off / medium / xhigh so Z.ai does not 400.
+ */
+function rewriteGlm53ThinkingBody(
+  next: Record<string, unknown>,
+  modelId: string,
+): void {
+  if (!isGlm53ModelId(modelId)) return;
+  const rawEffort =
+    typeof next.reasoning_effort === 'string' ? next.reasoning_effort : undefined;
+  let wire: 'low' | 'high' | 'max' = 'low';
+  if (rawEffort === 'high') wire = 'high';
+  else if (
+    rawEffort === 'max' ||
+    rawEffort === 'xhigh' ||
+    rawEffort === 'extra_high' ||
+    rawEffort === 'extra high'
+  ) {
+    wire = 'max';
+  } else if (rawEffort === 'low') {
+    wire = 'low';
+  }
+  next.thinking = { type: 'enabled' };
+  next.reasoning_effort = wire;
+  next.reasoning = { effort: wire };
+  if (next.enable_thinking === false) next.enable_thinking = true;
+  const kwargs = next.chat_template_kwargs;
+  if (kwargs && typeof kwargs === 'object') {
+    const nextKwargs = { ...(kwargs as Record<string, unknown>) };
+    if (nextKwargs.enable_thinking === false) nextKwargs.enable_thinking = true;
+    nextKwargs.reasoning_effort = wire;
+    next.chat_template_kwargs = nextKwargs;
+  }
 }
 
 /** GPT-5 / o-series on Responses API reject custom temperature. */
@@ -145,6 +182,7 @@ export function sanitizeCompletionBodyForProvider(
   }
 
   const modelId = typeof next.model === 'string' ? next.model : '';
+  rewriteGlm53ThinkingBody(next, modelId);
   if (typeof next.max_tokens === 'number' && modelUsesMaxCompletionTokens(modelId)) {
     next.max_completion_tokens = next.max_tokens;
     delete next.max_tokens;
