@@ -144,7 +144,7 @@
         "Related"
       ],
       "section": "Core concepts",
-      "hash": "92059962f2632fd62353e201559bc64553becbe49fea43e1d9d0a423f5773dfe"
+      "hash": "c66a17361af01e987b23d9e29ee9c9a0fe97d77576566afdf5f99413f4d5e950"
     },
     {
       "path": "documentation/manual/chat/chatting.md",
@@ -217,7 +217,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "8387bcfc7d2421a35bdb2fb3fe06592f22866c41846b3e2633f27e131dad599a"
+      "hash": "c096d27f160a5e07f948eaf05b7740eae662d1dd24d59ea44d802f9ca9a4a287"
     },
     {
       "path": "documentation/manual/apps/research.md",
@@ -323,7 +323,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "03f42798dee1a78cead9445b7e05302ca96b37efa28fcc91d461f2e5edee5a8a"
+      "hash": "a3ce72b748935e1da12730be0ce0fa10865a2186fc002cb6f2c5453c2cf74e04"
     },
     {
       "path": "documentation/manual/orchestrate/boards.md",

@@ -423,6 +423,9 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
     keywords: ['cursor rules', 'instructions', 'groups'],
   }),
   field('agents.rules.addGroup', 'Add rule group', 'agents', 'rules'),
+  field('agents.rules.deleteGroup', 'Delete rule group', 'agents', 'rules', {
+    keywords: ['remove group'],
+  }),
   field('agents.rules.contextDocuments', 'Workspace context documents', 'agents', 'rules', {
     keywords: ['agents.md', 'context.md', 'cursor rules', 'injection', 'workspace'],
   }),
