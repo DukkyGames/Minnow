@@ -99,6 +99,23 @@ describe('sub-agent config', () => {
     assert.ok(r.deniedTools.includes('spawn_sub_agent'));
   });
 
+  test('pr-reviewer type is registered with execute_command and no writes', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, null);
+    const r = merged.types['pr-reviewer'];
+    assert.ok(r);
+    assert.equal(r.label, 'PR reviewer');
+    assert.equal(r.maxConcurrent, 1);
+    assert.equal(r.timeoutMs, 900000);
+    assert.equal(r.workAgentId, null);
+    assert.equal(r.summarySchema, 'minnow.pr-review.v1');
+    assert.equal(r.contextEnforcementPolicy, 'summarize');
+    assert.ok(r.allowedTools?.includes('execute_command'));
+    assert.ok(r.allowedTools?.includes('git_diff'));
+    assert.ok(r.deniedTools.includes('save_file'));
+    assert.ok(r.deniedTools.includes('git_commit'));
+    assert.ok(r.deniedTools.includes('git_checkout'));
+  });
+
   test('user override merges sampler fields on a type', () => {
     const merged = mergeSubAgentConfig(DEFAULTS as never, {
       types: {

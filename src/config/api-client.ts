@@ -216,6 +216,26 @@ export async function putIssuesTaxonomy(taxonomy: IssuesTaxonomy): Promise<void>
   await parseJsonResponse<{ ok: boolean }>(res);
 }
 
+/**
+ * GET /api/config/reviews
+ * Returns null when the reviews file has never been written.
+ */
+export async function getReviews(): Promise<{ reviews?: Record<string, unknown> } | null> {
+  const res = await fetch('/api/config/reviews', { cache: 'no-store' });
+  if (res.status === 404) return null;
+  return parseJsonResponse<{ reviews?: Record<string, unknown> }>(res);
+}
+
+/** PUT /api/config/reviews */
+export async function putReviews(state: unknown): Promise<void> {
+  const res = await fetch('/api/config/reviews', {
+    method: 'PUT',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(state),
+  });
+  await parseJsonResponse<{ ok: boolean }>(res);
+}
+
 /** Raised when the server rejected a write because another window advanced the store. */
 export class SessionsRevisionConflictError extends Error {
   readonly revision: number | undefined;

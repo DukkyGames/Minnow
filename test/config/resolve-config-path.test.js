@@ -34,4 +34,8 @@ describe('resolveConfigPath', () => {
   test('rejects unknown keys', () => {
     assert.throws(() => resolveConfigPath('providers/foo.json'), /Invalid config path/);
   });
+
+  test('allows reviews/state.json', () => {
+    assert.ok(resolveConfigPath('reviews/state.json'));
+  });
 });

@@ -21,6 +21,7 @@ export const ALLOWED_CONFIG_FILES = new Set([
   'bugs/state.json',
   'issues/state.json',
   'issues/taxonomy.json',
+  'reviews/state.json',
   'onboarding.json',
 ]);
 
@@ -57,6 +58,8 @@ export function resourceToRelativeKey(resource) {
       return 'issues/state.json';
     case 'issues-taxonomy':
       return 'issues/taxonomy.json';
+    case 'reviews':
+      return 'reviews/state.json';
     default:
       return null;
   }
