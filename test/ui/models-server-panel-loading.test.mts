@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
+import type { ServeRecord } from '../../src/models/api-client.ts';
 import type { LoadProgress } from '../../src/ui/models/store.ts';
 
 function sampleLoad(overrides: Partial<LoadProgress> = {}): LoadProgress {
@@ -13,6 +14,30 @@ function sampleLoad(overrides: Partial<LoadProgress> = {}): LoadProgress {
     bytesTotal: 4_000_000_000,
     startedAt: 1_700_000_000_000,
     error: null,
+    ...overrides,
+  };
+}
+
+function sampleStartingServe(overrides: Partial<ServeRecord> = {}): ServeRecord {
+  return {
+    id: 'serve-load-1',
+    runtime: 'llama-cpp',
+    modelPath: '/models/qwen.gguf',
+    modelLabel: 'Qwen',
+    port: 8085,
+    baseUrl: 'http://127.0.0.1:8085',
+    providerId: 'llama-cpp-local',
+    status: 'starting',
+    runId: null,
+    pid: null,
+    error: null,
+    startedAt: 1_700_000_000_000,
+    stoppedAt: null,
+    llamaSettings: null,
+    mlxSettings: null,
+    libraryId: null,
+    exitCode: null,
+    failure: null,
     ...overrides,
   };
 }
@@ -37,6 +62,7 @@ describe('models local server loading card', () => {
     const { getModelsState } = await import('../../src/ui/models/store.ts');
     teardownServerSection();
     getModelsState().loads.length = 0;
+    getModelsState().serves.length = 0;
     document.body.innerHTML = '';
   });
 
@@ -78,5 +104,45 @@ describe('models local server loading card', () => {
 
     assert.equal(document.querySelector('.models-spinner'), null);
     assert.equal(document.querySelector('.models-loaded__state')?.textContent, 'Failed');
+  });
+
+  test('runId appearing during a patched load reconnects the runtime log stream', async () => {
+    // Eject-then-reload opens EventSource on llama-starting (no runId). Load-card
+    // patches must rebind once spawn assigns the log file, or the pane stays empty.
+    const urls: string[] = [];
+    class FakeEventSource {
+      url: string;
+      onmessage: ((msg: MessageEvent) => void) | null = null;
+      constructor(url: string) {
+        this.url = url;
+        urls.push(url);
+      }
+      close() {}
+    }
+    const previous = globalThis.EventSource;
+    globalThis.EventSource = FakeEventSource as unknown as typeof EventSource;
+    (window as unknown as { EventSource: typeof EventSource }).EventSource =
+      FakeEventSource as unknown as typeof EventSource;
+
+    try {
+      const { render } = await import('../../src/ui/models/server-panel.ts');
+      const { getModelsState } = await import('../../src/ui/models/store.ts');
+
+      const serve = sampleStartingServe();
+      getModelsState().loads = [sampleLoad()];
+      getModelsState().serves = [serve];
+      render();
+      const openedBeforeRunId = urls.length;
+      assert.ok(openedBeforeRunId >= 1, 'first paint should follow the starting serve');
+
+      serve.runId = 'run-after-spawn';
+      render();
+      assert.ok(
+        urls.length > openedBeforeRunId,
+        'a patched tick must reopen the stream once runId exists',
+      );
+    } finally {
+      globalThis.EventSource = previous;
+    }
   });
 });

@@ -51,6 +51,8 @@ const ENDPOINTS: Array<{ method: string; path: string; note: string }> = [
 let bound = false;
 let overlayUnsub: (() => void) | null = null;
 let logSource: string | null = null;
+/** Last `runId` we opened EventSource for — null until spawn assigns the log file. */
+let logRunId: string | null = null;
 let logUnsub: (() => void) | null = null;
 let logBuffer = '';
 let autoScroll = true;
@@ -75,13 +77,29 @@ function isActive(): boolean {
   return Boolean(document.getElementById('modelsSection-server')?.classList.contains('is-active'));
 }
 
-/** Follow the log of whichever serve is selected in the log header. */
-function bindLogStream(serveId: string | null): void {
-  if (logSource === serveId && logUnsub) return;
+/** Live row whose log the pane should follow (sticky selection, else newest). */
+function preferredLogServe(serves: ServeRecord[]): ServeRecord | undefined {
+  return serves.find((s) => s.id === logSource) ?? serves[0];
+}
+
+/**
+ * Follow the log of whichever serve is selected in the log header.
+ * Identity is serve id **and** runId so a connect that beat spawn reconnects
+ * once the log file exists, instead of keeping a silent EventSource.
+ */
+function bindLogStream(serve: ServeRecord | null): void {
+  const serveId = serve?.id ?? null;
+  const runId = serve?.runId ?? null;
+  // Idle (no serve) has no EventSource; still treat it as bound so load-card
+  // patches do not clear the buffer every tick.
+  const alreadyBound =
+    logSource === serveId && logRunId === runId && (serveId === null || Boolean(logUnsub));
+  if (alreadyBound) return;
   logUnsub?.();
   logUnsub = null;
   logBuffer = '';
   logSource = serveId;
+  logRunId = runId;
   if (!serveId) {
     renderLogBody();
     return;
@@ -603,7 +621,9 @@ function logsBlock(serves: ServeRecord[]): HTMLElement {
       if (serve.id === logSource) option.selected = true;
       select.appendChild(option);
     }
-    select.addEventListener('change', () => bindLogStream(select.value));
+    select.addEventListener('change', () => {
+      bindLogStream(serves.find((s) => s.id === select.value) ?? null);
+    });
     head.appendChild(select);
   }
 
@@ -646,7 +666,12 @@ export function render(): void {
 
   const state = getModelsState();
   // Load ticks fire ~4×/s. Replacing the tree cancels the spinner animation.
-  if (tryPatchInFlightLoads(host, state.loads, state.serves)) return;
+  // Still (re)bind the log stream: a patch-only tick is how runId arrives after
+  // llama-starting, and skipping bind here left Runtime log empty on reload.
+  if (tryPatchInFlightLoads(host, state.loads, state.serves)) {
+    bindLogStream(preferredLogServe(runningServes()) ?? null);
+    return;
+  }
 
   const serves = runningServes();
   const running = serves.filter((s) => s.status === 'running');
@@ -703,8 +728,7 @@ export function render(): void {
 
   host.replaceChildren(fragment);
 
-  const preferred = serves.find((s) => s.id === logSource) ?? serves[0];
-  bindLogStream(preferred?.id ?? null);
+  bindLogStream(preferredLogServe(serves) ?? null);
   renderLogBody();
 }
 
@@ -736,6 +760,7 @@ export function teardownServerSection(): void {
   logUnsub?.();
   logUnsub = null;
   logSource = null;
+  logRunId = null;
   overlayUnsub?.();
   overlayUnsub = null;
   if (elapsedTimer != null) window.clearInterval(elapsedTimer);

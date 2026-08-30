@@ -189,12 +189,57 @@ export function subscribeServeLog(runId, onChunk) {
 
 /**
  * Follow whichever log backs a serve row (spawn log or shared mlx-lm server log).
- * @param {{ runId?: string | null, runtime?: string }} serve
+ *
+ * `serveOrLookup` may be a snapshot or a function that returns the current row
+ * (sync or async). The follow re-resolves the path every poll so it can wait
+ * for `runId` (commitServes('llama-starting') races spawn) and switch files
+ * when a port/Jinja retry assigns a new run.
+ *
+ * @param {{ runId?: string | null, runtime?: string } | (() =>
+ *   { runId?: string | null, runtime?: string } | null | undefined |
+ *   Promise<{ runId?: string | null, runtime?: string } | null | undefined>)} serveOrLookup
  * @param {(event: { text: string, offset: number, initial?: boolean }) => void} onChunk
- * @returns {() => void} unsubscribe — no-op when the serve has no log source
+ * @returns {() => void} unsubscribe — stays open while waiting for a log path
  */
-export function subscribeServeLogForServe(serve, onChunk) {
-  const logPath = resolveServeLogPath(serve);
-  if (!logPath) return () => {};
-  return subscribeLogFile(logPath, onChunk);
+export function subscribeServeLogForServe(serveOrLookup, onChunk) {
+  const lookup =
+    typeof serveOrLookup === 'function' ? serveOrLookup : () => serveOrLookup;
+
+  let currentPath = null;
+  let innerUnsub = null;
+  let stopped = false;
+  let timer = null;
+  let attaching = false;
+
+  const tick = async () => {
+    if (stopped || attaching) return;
+    attaching = true;
+    try {
+      const serve = await Promise.resolve(lookup());
+      if (stopped) return;
+      const logPath = serve ? resolveServeLogPath(serve) : null;
+      if (logPath !== currentPath) {
+        innerUnsub?.();
+        innerUnsub = null;
+        currentPath = logPath;
+        // Subscribe only once a path exists so we do not emit a fake empty
+        // `initial` tail that the UI would treat as the whole log.
+        if (logPath) innerUnsub = subscribeLogFile(logPath, onChunk);
+      }
+    } catch {
+      // getServe can throw if the id was invalidated mid-follow; keep polling
+      // until the EventSource closes.
+    } finally {
+      attaching = false;
+    }
+    if (!stopped) timer = setTimeout(tick, POLL_MS);
+  };
+
+  void tick();
+
+  return () => {
+    stopped = true;
+    if (timer) clearTimeout(timer);
+    innerUnsub?.();
+  };
 }
