@@ -102,6 +102,8 @@ export interface ComposeContext {
   contextDocumentsBlock: string | null;
   /** True when context document injection is resolved on for this send. */
   contextDocumentsInjectionEnabled?: boolean;
+  /** Standing file/URL chips pinned on this chat (MIN-630). */
+  chatLinksBlock?: string | null;
   /**
    * True when the injected blocks above were rehydrated from persisted `injection`
    * rows rather than retrieved fresh. Suppresses a duplicate transcript notice —
