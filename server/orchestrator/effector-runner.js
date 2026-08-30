@@ -21,7 +21,7 @@ import {
   DEFAULT_HEADLESS_TOOL_IDS,
   postChatCompletionsInProcess,
   runTurn as defaultRunTurn,
-} from '../runner/index.js';
+} from '../runner/node.js';
 import { cancel as cancelGeneration, listGenerationStates } from '../generations/store.js';
 import { getProvider } from '../providers/store.js';
 import { getWorkspaceRoot } from '../workspace/root.js';

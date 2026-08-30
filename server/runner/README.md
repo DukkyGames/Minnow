@@ -75,8 +75,9 @@ There is no product-shaped branch for it in `run-turn.js`.
 
 ## Completions — in-process binding (MIN-700 / P2-C)
 
-Server callers inject `postChatCompletionsInProcess` from this package. It
-creates a generation (`persist: false`), calls `pumpUpstream` in-process, and
+Server callers inject `postChatCompletionsInProcess` from [`node.js`](./node.js)
+(not the isomorphic `index.js` barrel). It creates a generation (`persist: false`),
+calls `pumpUpstream` in-process, and
 returns a synthetic `Response` whose body replays SSE bytes — the same shape
 `sse-parse.js` already consumes. There is no hop through `/api/generations`.
 
@@ -111,9 +112,10 @@ await runTurn({
 Batching is a port of `src/tools/execute-tool-batch.ts` (`MAX_PARALLEL_READ_TOOLS = 6`).
 Do not invent new concurrency rules.
 
-The renderer adapter must **not** import `tool-dispatch.js` (it would pull
-`server/runtime/tools-middleware.js` into Vite). It keeps
-`src/tools/headless-tool-batch.ts`.
+The renderer adapter must **not** import `tool-dispatch.js` or `node.js`
+(it would pull `server/runtime/tools-middleware.js` into Vite). It keeps
+`src/tools/headless-tool-batch.ts`. Vite follows unused named re-exports, so
+in-process adapters are on [`node.js`](./node.js), not the isomorphic `index.js`.
 
 Default unattended tool ids: `DEFAULT_HEADLESS_TOOL_IDS`. Renderer-only tools
 are enumerated in [`tool-set.md`](./tool-set.md) (port vs exclude). The default

@@ -7,10 +7,11 @@
  *
  * P2-B adds `runTurn()`. P2-C/P2-D swap the completion and tool adapters.
  *
- * Node-only adapters (`generation-binding`, `tool-dispatch`) are named exports.
- * The Vite renderer must keep importing `createSubAgentRunner` only — do not
- * add a star re-export or a default that would pull `tools-middleware` into
- * the bundle. Renderer tool batching stays in `src/tools/headless-tool-batch.ts`.
+ * Node-only adapters (`generation-binding`, `tool-dispatch`) live on `node.js`.
+ * Vite follows every static re-export in this file, so naming them here would
+ * pull `tools-middleware` / `officeparser` into the client dep optimizer.
+ * The Vite renderer imports `createSubAgentRunner` from this barrel.
+ * Renderer tool batching stays in `src/tools/headless-tool-batch.ts`.
  *
  * Any change to the `runTurn()` signature is a Phase 6 finding.
  */
@@ -18,16 +19,7 @@
 export { createSubAgentRunner, cloneSubAgentMessages } from './sub-agent-runner.js';
 export { createMemoryTranscriptStore } from './transcript-store.js';
 export { postChatCompletionsHttp, runHeadlessToolBatchStub } from './adapters.js';
-export {
-  createCompletionStream,
-  postChatCompletionsInProcess,
-  RUNNER_FALLBACK_ROLE,
-} from './generation-binding.js';
 export { runTurn, DEFAULT_REPORT_TOOL_NAME } from './run-turn.js';
-export {
-  createInProcessToolDispatch,
-  executeInProcessTool,
-} from './tool-dispatch.js';
 export { executeToolCallBatch, STOPPED_TOOL_MSG } from './tool-batch.js';
 export {
   MAX_PARALLEL_READ_TOOLS,

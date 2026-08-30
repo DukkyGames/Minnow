@@ -25,7 +25,7 @@ import {
   runHeadlessToolBatchStub,
   RUNNER_FALLBACK_ROLE,
   runTurn,
-} from '../../server/runner/index.js';
+} from '../../server/runner/node.js';
 import {
   deleteGenerationsForProviderShutdown,
   getGenerationState,

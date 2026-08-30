@@ -23,7 +23,7 @@ import {
   createMemoryTranscriptStore,
   postChatCompletionsInProcess,
   runHeadlessToolBatchStub,
-} from '../../server/runner/index.js';
+} from '../../server/runner/node.js';
 import {
   deleteGenerationsForProviderShutdown,
   listGenerationStates,

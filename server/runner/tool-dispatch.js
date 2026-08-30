@@ -12,8 +12,8 @@
  * handlers as POST `/api/tools` (host-kill, host-port-bind, windows-pipe,
  * output-cap, plugin loader / manifest validate, MCP).
  *
- * Do not import this file from the Vite renderer. Named exports on
- * `server/runner/index.js` exist for Node callers; the renderer adapter keeps
+ * Do not import this file from the Vite renderer. Node callers import it via
+ * `server/runner/node.js`; the renderer adapter keeps
  * `src/tools/headless-tool-batch.ts`.
  */
 

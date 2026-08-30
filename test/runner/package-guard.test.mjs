@@ -143,6 +143,7 @@ describe('server/runner package guard', () => {
     const modules = runnerModules();
     assert.ok(modules.length > 0, 'no .js modules found under server/runner');
     assert.ok(modules.includes('index.js'), 'server/runner/index.js barrel is missing');
+    assert.ok(modules.includes('node.js'), 'server/runner/node.js Node barrel is missing');
     assert.ok(modules.includes('sub-agent-runner.js'), 'the turn loop module is missing');
     assert.ok(modules.includes('run-turn.js'), 'the runTurn entry is missing');
     assert.ok(modules.includes('tool-dispatch.js'), 'in-process tool dispatch is missing');
@@ -223,28 +224,59 @@ describe('server/runner package guard', () => {
 
   it('the renderer adapter does not import in-process tool dispatch', () => {
     const adapter = fs.readFileSync(path.join(PROJECT_ROOT, ADAPTER_ENTRY), 'utf8');
+    const specifiers = importSpecifiers(adapter);
     assert.equal(
-      adapter.includes('tool-dispatch'),
+      specifiers.some((s) => s.includes('tool-dispatch')),
       false,
       'adapter must not import server/runner/tool-dispatch (tools-middleware into Vite)',
     );
     assert.equal(
-      adapter.includes('tools-middleware'),
+      specifiers.some((s) => s.includes('tools-middleware')),
       false,
       'adapter must not import tools-middleware',
     );
     assert.ok(
-      adapter.includes('headless-tool-batch'),
+      specifiers.some((s) => s.includes('headless-tool-batch')),
       'adapter must keep src/tools/headless-tool-batch.ts',
+    );
+    assert.equal(
+      specifiers.some((s) => s.includes('runner/node')),
+      false,
+      'adapter must not import server/runner/node.js (Node adapters into Vite)',
     );
   });
 
-  it('the barrel uses named re-exports (no star)', () => {
+  it('the isomorphic barrel does not re-export Node-only adapters', () => {
+    const source = fs.readFileSync(path.join(RUNNER_DIR, 'index.js'), 'utf8');
+    const specifiers = importSpecifiers(source);
+    assert.equal(
+      specifiers.some((s) => s.includes('generation-binding')),
+      false,
+      'index.js must not re-export generation-binding (Vite follows unused named exports)',
+    );
+    assert.equal(
+      specifiers.some((s) => s.includes('tool-dispatch')),
+      false,
+      'index.js must not re-export tool-dispatch (Vite follows unused named exports)',
+    );
+    const nodeSource = fs.readFileSync(path.join(RUNNER_DIR, 'node.js'), 'utf8');
+    const nodeSpecifiers = importSpecifiers(nodeSource);
+    assert.ok(
+      nodeSpecifiers.some((s) => s.includes('generation-binding')),
+      'node.js must re-export generation-binding for server callers',
+    );
+    assert.ok(
+      nodeSpecifiers.some((s) => s.includes('tool-dispatch')),
+      'node.js must re-export tool-dispatch for server callers',
+    );
+  });
+
+  it('the isomorphic barrel uses named re-exports (no star)', () => {
     const source = fs.readFileSync(path.join(RUNNER_DIR, 'index.js'), 'utf8');
     assert.equal(
       /\bexport\s+\*\s+from\b/.test(source),
       false,
-      'star re-exports from index.js would pull Node adapters into Vite',
+      'star re-exports from index.js would pull every named module into Vite',
     );
   });
 

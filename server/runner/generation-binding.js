@@ -18,6 +18,7 @@
  * `turn`, `explore`) and those stay as-is — they are not non-agent roles.
  *
  * Do not import `generations/routes.js`. The HTTP path stays for the renderer.
+ * Node callers import this module via `server/runner/node.js`, not `index.js`.
  */
 
 import { validateProviderId } from '../providers/validate.js';

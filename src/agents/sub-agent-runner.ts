@@ -4,6 +4,9 @@
  * The turn loop lives in `server/runner/`. This file injects the existing
  * renderer I/O (session store, `/api/generations`, headless tool batch) so
  * normal chat's sub-agents keep working unchanged.
+ *
+ * Import from `server/runner/index.js` (isomorphic). Do not import
+ * `server/runner/node.js` — Vite follows that barrel into the tool server.
  */
 
 import { createSubAgentRunner, cloneSubAgentMessages } from '../../server/runner/index.js';
