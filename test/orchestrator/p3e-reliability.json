@@ -1,0 +1,116 @@
+{
+  "runs": 10,
+  "concurrency": 2,
+  "completed": 10,
+  "failed": 0,
+  "retries": 0,
+  "abandonments": 0,
+  "overflowEvents": 0,
+  "perRun": [
+    {
+      "n": 1,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "overflowEvents": 0,
+      "ms": 1126
+    },
+    {
+      "n": 2,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "overflowEvents": 0,
+      "ms": 1137
+    },
+    {
+      "n": 3,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "overflowEvents": 0,
+      "ms": 1184
+    },
+    {
+      "n": 4,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "overflowEvents": 0,
+      "ms": 1199
+    },
+    {
+      "n": 5,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "overflowEvents": 0,
+      "ms": 1125
+    },
+    {
+      "n": 6,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "overflowEvents": 0,
+      "ms": 1128
+    },
+    {
+      "n": 7,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "overflowEvents": 0,
+      "ms": 1126
+    },
+    {
+      "n": 8,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "overflowEvents": 0,
+      "ms": 1151
+    },
+    {
+      "n": 9,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "overflowEvents": 0,
+      "ms": 1097
+    },
+    {
+      "n": 10,
+      "finished": true,
+      "merged": 3,
+      "retries": 0,
+      "abandoned": 0,
+      "overflowEvents": 0,
+      "ms": 965
+    }
+  ],
+  "recordedAt": "2026-08-29",
+  "host": "scripts/fake-model-server.mjs",
+  "baseline": {
+    "path": "test/orchestrator/p2g-reliability.json",
+    "concurrency": 1,
+    "completed": 10,
+    "retries": 0,
+    "abandonments": 0
+  },
+  "comparison": {
+    "completedDelta": 0,
+    "retriesDelta": 0,
+    "abandonmentsDelta": 0
+  },
+  "note": "Deterministic fake host at N=2. 10/10 is the host ceiling, not evidence that live agents never retry. Do not raise the default concurrency from this number."
+}

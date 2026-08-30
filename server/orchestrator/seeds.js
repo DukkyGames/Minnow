@@ -27,6 +27,13 @@ export const SEED_KINDS = /** @type {const} */ ([
 ]);
 
 /**
+ * Worktree reuse is not a property of this module — `wantsSameWorktree` in
+ * `core/policy.js` is the mapping (MIN-705 / MIN-707): `repair`, `continue`,
+ * and `rebase` reuse; `failure-aware` and `fix` start fresh. Seeds stay
+ * pure prompt text.
+ */
+
+/**
  * @param {unknown} value
  * @returns {string[]}
  */

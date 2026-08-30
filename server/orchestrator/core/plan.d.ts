@@ -23,7 +23,7 @@ export function pendingEnqueues(state: BoardState): string[];
 
 /**
  * Tasks that can never run because something upstream was abandoned or skipped.
- * The engine journals `task.skipped` for each.
+ * The engine journals `task.skipped` for each. `blockedBy` is the abandoned root.
  */
 export function pendingSkips(state: BoardState): Array<{ taskId: string; blockedBy: string }>;
 
@@ -46,9 +46,36 @@ export function orderedTaskIds(state: BoardState): string[];
 
 /**
  * Do two declared footprints overlap? Pure glob-set intersection over
- * already-expanded patterns; matching against real files is P3-D's job.
+ * patterns. Frozen file expansion is {@link footprintsClash}.
  */
 export function touchesOverlap(a: readonly string[], b: readonly string[]): boolean;
+
+/**
+ * Scheduling clash: declared glob overlap, or intersection of journaled
+ * expanded file sets. Empty / missing expansion adds no extra clash.
+ */
+export function footprintsClash(
+  a: { touches?: readonly string[] | null; touchesExpanded?: readonly string[] | null },
+  b: { touches?: readonly string[] | null; touchesExpanded?: readonly string[] | null },
+): boolean;
+
+export function expandedFilesOverlap(
+  a: readonly string[] | null | undefined,
+  b: readonly string[] | null | undefined,
+): boolean;
+
+/** Match declared globs against a file list. No I/O. */
+export function expandTouches(
+  globs: readonly string[],
+  repoFiles: readonly string[],
+): { expanded: string[]; emptyGlobs: string[] };
+
+/** Changed paths that sit outside the declared globs. */
+export function overflowPaths(declared: readonly string[], actual: readonly string[]): string[];
+
+export function pathMatchesGlob(file: string, glob: string): boolean;
+
+export function normalizeRepoPath(value: string): string;
 
 /** Could these two globs match a common path? */
 export function globsIntersect(a: string, b: string): boolean;

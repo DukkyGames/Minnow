@@ -16,7 +16,7 @@ import { bucketWave, columnOf, isBlocked } from '../../src/orchestrator/board-co
 import {
   renderBoardSkeleton,
   renderEngineErrors,
-  renderFinishReport,
+  renderRunLedger,
   renderTaskDetail,
   renderTaskList,
   type BoardActions,
@@ -272,10 +272,10 @@ describe('renderEngineErrors (P9-A)', () => {
   });
 });
 
-describe('renderFinishReport (P9-G)', () => {
+describe('renderRunLedger (P9-G)', () => {
   test('is absent while the run is still going', () => {
     setupDom();
-    assert.equal(renderFinishReport(board()), null);
+    assert.equal(renderRunLedger(board()), null);
   });
 
   test('reports per-task outcomes, attempt counts and why', () => {
@@ -286,7 +286,7 @@ describe('renderFinishReport (P9-G)', () => {
       { v: 1, seq: 10, type: 'final.test.ended', outcome: 'pass', runInstructions: 'npm test' },
       { v: 1, seq: 11, type: 'run.finished', summary: '1 merged, 1 abandoned, 1 skipped' },
     ]);
-    const node = renderFinishReport(state)!;
+    const node = renderRunLedger(state)!;
     const text = node.textContent!;
     assert.match(text, /1 merged, 1 abandoned, 1 skipped/);
     assert.match(text, /builder-failed-twice/);
@@ -302,7 +302,7 @@ describe('renderFinishReport (P9-G)', () => {
       { v: 1, seq: 8, type: 'task.abandoned', taskId: 'W1-D', reason: 'user' },
       { v: 1, seq: 9, type: 'run.finished', summary: 'done' },
     ]);
-    assert.match(renderFinishReport(state)!.textContent!, /abandoned by hand/);
+    assert.match(renderRunLedger(state)!.textContent!, /abandoned by hand/);
   });
 });
 

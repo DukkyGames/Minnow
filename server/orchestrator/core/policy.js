@@ -14,12 +14,12 @@
  * | builder | fail               | >= 2     | abandon                                  |
  * | builder | blocked            | < 1      | retry builder, repair seed (same worktree)|
  * | builder | blocked            | >= 1     | abandon                                  |
- * | builder | no_report          | < 1      | retry builder, continue seed              |
- * | builder | crashed or timeout | < 2      | retry builder, continue seed              |
+ * | builder | no_report          | < 1      | retry builder, continue seed (same worktree) |
+ * | builder | crashed or timeout | < 2      | retry builder, continue seed (same worktree) |
  * | tester  | pass               | —        | advance → merge queue                    |
  * | tester  | fail               | < 2      | retry builder, fix seed carrying test out |
  * | tester  | fail               | >= 2     | abandon                                  |
- * | merge   | conflicted         | < 2      | retry builder, rebase seed                |
+ * | merge   | conflicted         | < 2      | retry builder, rebase seed (same worktree)|
  * | merge   | conflicted         | >= 2     | abandon                                  |
  * ```
  *
@@ -121,11 +121,11 @@ export const POLICY_TABLE = /** @type {const} */ ([
   // `blocked` is the env-fixer's replacement: same agent, same worktree, repair seed.
   { role: 'builder', outcome: 'blocked', under: 1, action: retry('repair', true) },
   { role: 'builder', outcome: 'blocked', under: null, action: abandon('builder-blocked') },
-  { role: 'builder', outcome: 'no_report', under: 1, action: retry('continue') },
+  { role: 'builder', outcome: 'no_report', under: 1, action: retry('continue', true) },
   { role: 'builder', outcome: 'no_report', under: null, action: abandon('builder-no-report') },
-  { role: 'builder', outcome: 'crashed', under: 2, action: retry('continue') },
+  { role: 'builder', outcome: 'crashed', under: 2, action: retry('continue', true) },
   { role: 'builder', outcome: 'crashed', under: null, action: abandon('builder-crashed') },
-  { role: 'builder', outcome: 'timeout', under: 2, action: retry('continue') },
+  { role: 'builder', outcome: 'timeout', under: 2, action: retry('continue', true) },
   { role: 'builder', outcome: 'timeout', under: null, action: abandon('builder-timeout') },
 
   // --- tester -------------------------------------------------------------
@@ -136,19 +136,19 @@ export const POLICY_TABLE = /** @type {const} */ ([
   { role: 'tester', outcome: 'blocked', under: null, action: abandon('tester-blocked') },
   // A tester that crashed or never reported did not disprove the build, so the
   // cheapest correct move is the same one the builder gets: continue and re-test.
-  { role: 'tester', outcome: 'no_report', under: 1, action: retry('continue') },
+  { role: 'tester', outcome: 'no_report', under: 1, action: retry('continue', true) },
   { role: 'tester', outcome: 'no_report', under: null, action: abandon('tester-no-report') },
-  { role: 'tester', outcome: 'crashed', under: 2, action: retry('continue') },
+  { role: 'tester', outcome: 'crashed', under: 2, action: retry('continue', true) },
   { role: 'tester', outcome: 'crashed', under: null, action: abandon('tester-crashed') },
-  { role: 'tester', outcome: 'timeout', under: 2, action: retry('continue') },
+  { role: 'tester', outcome: 'timeout', under: 2, action: retry('continue', true) },
   { role: 'tester', outcome: 'timeout', under: null, action: abandon('tester-timeout') },
 
   // --- merge --------------------------------------------------------------
   { role: 'merge', outcome: 'pass', under: null, action: advance('done') },
-  { role: 'merge', outcome: 'conflicted', under: 2, action: retry('rebase') },
+  { role: 'merge', outcome: 'conflicted', under: 2, action: retry('rebase', true) },
   { role: 'merge', outcome: 'conflicted', under: null, action: abandon('merge-conflicted') },
   // Any other way a merge can end is mechanical and rebase is still the answer.
-  { role: 'merge', outcome: '*', under: 2, action: retry('rebase') },
+  { role: 'merge', outcome: '*', under: 2, action: retry('rebase', true) },
   { role: 'merge', outcome: '*', under: null, action: abandon('merge-failed') },
 
   // --- final --------------------------------------------------------------
@@ -193,11 +193,9 @@ export function decide(input) {
 }
 
 /**
- * The evidence an abandonment carries.
- *
- * PRD §11 keeps open the option of retroactively measuring how many
- * abandonments a smarter policy would have saved. That is only possible if the
- * inputs to the decision are captured at the moment it is made.
+ * The last-attempt inputs to the decision. Full attempt history is attached
+ * by `bundleAbandonmentEvidence` in `nextAction()` — `decide()` stays a table
+ * over `(role, outcome, attemptCount)` so it cannot grow an I/O or LLM call.
  *
  * @param {{ role: string, outcome: string, attemptCount: number, summary?: string | null,
  *           evidence?: Record<string, unknown> | null }} input
@@ -216,6 +214,16 @@ function evidenceFor(input) {
 }
 
 /**
+ * Seed kinds that reuse the previous attempt's worktree (MIN-705 / MIN-707).
+ *
+ * Encoded next to the kinds rather than as an effector "current slot" map:
+ * `repair` and `continue` stay where the work already is; `rebase` stays on
+ * the conflicted task branch so the owner can resolve it (MIN-707).
+ * `failure-aware` and `fix` start fresh off integration.
+ */
+export const SAME_WORKTREE_SEED_KINDS = /** @type {const} */ (['repair', 'continue', 'rebase']);
+
+/**
  * Does this seed kind repair in place rather than in a fresh worktree?
  *
  * Derived from the seed rather than carried alongside it, so a resumed attempt
@@ -226,7 +234,7 @@ function evidenceFor(input) {
  * @returns {boolean}
  */
 export function wantsSameWorktree(seedKind) {
-  return seedKind === 'repair';
+  return seedKind === 'repair' || seedKind === 'continue' || seedKind === 'rebase';
 }
 
 /**

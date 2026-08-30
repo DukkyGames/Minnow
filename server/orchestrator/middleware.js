@@ -12,7 +12,7 @@
  * | GET    | `/api/boards`                       | List                                      |
  * | GET    | `/api/boards/:id`                   | Current derived state                     |
  * | GET    | `/api/boards/:id/events`            | SSE stream                                |
- * | POST   | `/api/boards/:id/start`             | `{ concurrency }`                         |
+ * | POST   | `/api/boards/:id/start`             | `{ concurrency }` (omit → default 2)      |
  * | POST   | `/api/boards/:id/stop`              | —                                         |
  * | POST   | `/api/boards/:id/concurrency`       | `{ n }`                                   |
  * | POST   | `/api/boards/:id/tasks/:taskId/start` | Manual single-task start                |
@@ -22,6 +22,7 @@
  * | PATCH  | `/api/boards/:id`                   | `{ name }` — rename (P9-E)                |
  * | DELETE | `/api/boards/:id`                   | Delete the board and its journal (P9-E)   |
  * | GET    | `/api/boards/:id/journal`           | Raw events; `?since=<seq>&limit=<n>`      |
+ * | GET    | `/api/boards/:id/report`            | Persisted end-of-run markdown (P3-G)      |
  *
  * **No endpoint accepts board state.** Every write above is a command the engine
  * chose to expose, and each one turns into a journal append the engine performs
@@ -33,6 +34,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import { DEFAULT_BOARD_CONCURRENCY } from './core/derive.js';
 import { formatParseErrors, isParseErrors, parsePlan } from './core/parse-plan.js';
 import { makeEvent } from './core/events.js';
 import { stateToJSON } from './core/snapshot.js';
@@ -47,9 +49,11 @@ import {
   loadState,
   readEvents,
 } from './journal.js';
+import { readReport } from './report.js';
 import { subscribeErrors, subscribeLive } from './live-events.js';
 import { readTranscript } from './transcripts.js';
 import { resolveSafePath } from '../runtime/path-access.js';
+import { attachTouchesExpansion, listRepoFiles } from './touches.js';
 
 /** Heartbeat cadence. Intermediaries close idle streams without it. */
 const HEARTBEAT_MS = 15_000;
@@ -129,6 +133,7 @@ export const ROUTES = [
   { method: 'GET', pattern: /^\/api\/boards\/([^/]+)$/, name: 'get' },
   { method: 'GET', pattern: /^\/api\/boards\/([^/]+)\/events$/, name: 'events' },
   { method: 'GET', pattern: /^\/api\/boards\/([^/]+)\/journal$/, name: 'journal' },
+  { method: 'GET', pattern: /^\/api\/boards\/([^/]+)\/report$/, name: 'report' },
   { method: 'POST', pattern: /^\/api\/boards\/([^/]+)\/start$/, name: 'start' },
   { method: 'POST', pattern: /^\/api\/boards\/([^/]+)\/stop$/, name: 'stop' },
   { method: 'POST', pattern: /^\/api\/boards\/([^/]+)\/concurrency$/, name: 'concurrency' },
@@ -237,6 +242,13 @@ async function dispatch(route, req, res) {
       return json(res, 200, { ok: true, state: serialiseState(state) });
     }
 
+    case 'report': {
+      if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
+      const markdown = await readReport(boardId);
+      if (markdown == null) return json(res, 404, { ok: false, error: 'no report yet' });
+      return json(res, 200, { ok: true, markdown, path: 'report.md' });
+    }
+
     case 'journal': {
       if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
       // Journals are kept forever by design, so a timeline drawer that opens
@@ -263,7 +275,13 @@ async function dispatch(route, req, res) {
     case 'start': {
       if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
       const body = await readJsonBody(req);
-      const concurrency = normaliseConcurrency(body.concurrency);
+      // Omit means the product default. An explicit nonsense value is still 400 —
+      // silent coercion would hide a bad client. The fold stays at 1 until this
+      // event, so a GET before start must not look like N=2 is already live.
+      const concurrency =
+        body.concurrency === undefined
+          ? DEFAULT_BOARD_CONCURRENCY
+          : normaliseConcurrency(body.concurrency);
       if (concurrency === null) {
         return json(res, 400, { ok: false, error: 'concurrency must be an integer >= 1' });
       }
@@ -448,13 +466,15 @@ async function createFromPlan(req, res) {
   }
 
   await createBoard(boardId);
+  const repoFiles = await listRepoFiles();
+  const tasks = attachTouchesExpansion(parsed.tasks, repoFiles);
   await appendEvent(
     boardId,
     makeEvent('board.created', {
       boardId,
       planPath,
       name: parsed.name,
-      tasks: parsed.tasks,
+      tasks,
       waves: parsed.waves,
     }),
   );

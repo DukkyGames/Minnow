@@ -21,6 +21,8 @@ const FILES = [
   ['builder', 'lite', path.join(PROMPTS_DIR, 'builder', 'agent.lite.md')],
   ['tester', 'full', path.join(PROMPTS_DIR, 'tester', 'agent.full.md')],
   ['tester', 'lite', path.join(PROMPTS_DIR, 'tester', 'agent.lite.md')],
+  ['final', 'full', path.join(PROMPTS_DIR, 'final', 'agent.full.md')],
+  ['final', 'lite', path.join(PROMPTS_DIR, 'final', 'agent.lite.md')],
 ];
 
 function read(abs) {
@@ -108,4 +110,18 @@ describe('V2 builder has no "do not call delegate_tasks" leftover', () => {
     assert.equal(full.includes('delegate_tasks'), false);
     assert.equal(lite.includes('delegate_tasks'), false);
   });
+});
+
+describe('Final Tester prompt is a fixed ladder, not a chooser', () => {
+  for (const profile of ['full', 'lite']) {
+    it(`${profile} runs execute_command, reports runInstructions, does not reopen work`, () => {
+      const body = read(path.join(PROMPTS_DIR, 'final', `agent.${profile}.md`));
+      assert.match(body, /execute_command/);
+      assert.match(body, /runInstructions/);
+      assert.match(body, /command:/);
+      assert.match(body, /cwd:/);
+      assert.match(body, /reopen/i);
+      assert.equal(body.includes("outcome: \"pass\" | \"fail\" | \"blocked\""), false);
+    });
+  }
 });

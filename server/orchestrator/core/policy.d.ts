@@ -18,6 +18,9 @@ export function decide(input: {
   evidence?: Evidence | null;
 }): Action;
 
+/** Seed kinds that reuse the previous attempt's worktree (MIN-705 / MIN-707). */
+export const SAME_WORKTREE_SEED_KINDS: readonly ['repair', 'continue', 'rebase'];
+
 /** Does this seed kind repair in place rather than in a fresh worktree? */
 export function wantsSameWorktree(seedKind: string | null | undefined): boolean;
 

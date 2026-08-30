@@ -205,6 +205,12 @@ describe('validateEvent — envelope', () => {
     assert.equal(makeEvent('run.finished', { summary: '' }).v, ENVELOPE_VERSION);
     assert.equal(ENVELOPE_VERSION, 1);
   });
+
+  it('accepts optional beforeSha on merge results (P3-C snapshot)', () => {
+    assert.equal(validateEvent({ ...sample('merge.succeeded'), beforeSha: 'abc123' }).ok, true);
+    assert.equal(validateEvent({ ...sample('merge.conflicted'), beforeSha: 'abc123' }).ok, true);
+    assert.equal(validateEvent({ ...sample('merge.succeeded'), beforeSha: '' }).ok, false);
+  });
 });
 
 describe('validateEvent — tolerance', () => {

@@ -12,6 +12,8 @@ import {
   decide,
   formatPolicyTable,
   POLICY_TABLE,
+  SAME_WORKTREE_SEED_KINDS,
+  wantsSameWorktree,
 } from '../../server/orchestrator/core/policy.js';
 
 /** Every outcome the table can be asked about — the six-way union plus merge's. */
@@ -82,19 +84,19 @@ describe('decide — the documented rows, cell for cell', () => {
       ['builder', 'fail', 3, 'abandon'],
       ['builder', 'blocked', 0, { kind: 'retry', role: 'builder', seedKind: 'repair', sameWorktree: true }],
       ['builder', 'blocked', 1, 'abandon'],
-      ['builder', 'no_report', 0, { kind: 'retry', role: 'builder', seedKind: 'continue', sameWorktree: false }],
+      ['builder', 'no_report', 0, { kind: 'retry', role: 'builder', seedKind: 'continue', sameWorktree: true }],
       ['builder', 'no_report', 1, 'abandon'],
-      ['builder', 'crashed', 0, { kind: 'retry', role: 'builder', seedKind: 'continue', sameWorktree: false }],
-      ['builder', 'crashed', 1, { kind: 'retry', role: 'builder', seedKind: 'continue', sameWorktree: false }],
+      ['builder', 'crashed', 0, { kind: 'retry', role: 'builder', seedKind: 'continue', sameWorktree: true }],
+      ['builder', 'crashed', 1, { kind: 'retry', role: 'builder', seedKind: 'continue', sameWorktree: true }],
       ['builder', 'crashed', 2, 'abandon'],
-      ['builder', 'timeout', 0, { kind: 'retry', role: 'builder', seedKind: 'continue', sameWorktree: false }],
+      ['builder', 'timeout', 0, { kind: 'retry', role: 'builder', seedKind: 'continue', sameWorktree: true }],
       ['builder', 'timeout', 2, 'abandon'],
       ['tester', 'pass', 0, { kind: 'advance', to: 'merge' }],
       ['tester', 'fail', 0, { kind: 'retry', role: 'builder', seedKind: 'fix', sameWorktree: false }],
       ['tester', 'fail', 1, { kind: 'retry', role: 'builder', seedKind: 'fix', sameWorktree: false }],
       ['tester', 'fail', 2, 'abandon'],
-      ['merge', 'conflicted', 0, { kind: 'retry', role: 'builder', seedKind: 'rebase', sameWorktree: false }],
-      ['merge', 'conflicted', 1, { kind: 'retry', role: 'builder', seedKind: 'rebase', sameWorktree: false }],
+      ['merge', 'conflicted', 0, { kind: 'retry', role: 'builder', seedKind: 'rebase', sameWorktree: true }],
+      ['merge', 'conflicted', 1, { kind: 'retry', role: 'builder', seedKind: 'rebase', sameWorktree: true }],
       ['merge', 'conflicted', 2, 'abandon'],
     ];
     for (const [role, outcome, attemptCount, expected] of rows) {
@@ -122,27 +124,27 @@ describe('decide — the documented rows, cell for cell', () => {
         '| builder | fail | — | abandon (builder-failed) |',
         '| builder | blocked | < 1 | retry builder, repair seed (same worktree) |',
         '| builder | blocked | — | abandon (builder-blocked) |',
-        '| builder | no_report | < 1 | retry builder, continue seed |',
+        '| builder | no_report | < 1 | retry builder, continue seed (same worktree) |',
         '| builder | no_report | — | abandon (builder-no-report) |',
-        '| builder | crashed | < 2 | retry builder, continue seed |',
+        '| builder | crashed | < 2 | retry builder, continue seed (same worktree) |',
         '| builder | crashed | — | abandon (builder-crashed) |',
-        '| builder | timeout | < 2 | retry builder, continue seed |',
+        '| builder | timeout | < 2 | retry builder, continue seed (same worktree) |',
         '| builder | timeout | — | abandon (builder-timeout) |',
         '| tester | pass | — | advance → merge |',
         '| tester | fail | < 2 | retry builder, fix seed |',
         '| tester | fail | — | abandon (tester-failed) |',
         '| tester | blocked | < 1 | retry builder, repair seed (same worktree) |',
         '| tester | blocked | — | abandon (tester-blocked) |',
-        '| tester | no_report | < 1 | retry builder, continue seed |',
+        '| tester | no_report | < 1 | retry builder, continue seed (same worktree) |',
         '| tester | no_report | — | abandon (tester-no-report) |',
-        '| tester | crashed | < 2 | retry builder, continue seed |',
+        '| tester | crashed | < 2 | retry builder, continue seed (same worktree) |',
         '| tester | crashed | — | abandon (tester-crashed) |',
-        '| tester | timeout | < 2 | retry builder, continue seed |',
+        '| tester | timeout | < 2 | retry builder, continue seed (same worktree) |',
         '| tester | timeout | — | abandon (tester-timeout) |',
         '| merge | pass | — | advance → done |',
-        '| merge | conflicted | < 2 | retry builder, rebase seed |',
+        '| merge | conflicted | < 2 | retry builder, rebase seed (same worktree) |',
         '| merge | conflicted | — | abandon (merge-conflicted) |',
-        '| merge | * | < 2 | retry builder, rebase seed |',
+        '| merge | * | < 2 | retry builder, rebase seed (same worktree) |',
         '| merge | * | — | abandon (merge-failed) |',
         '| final | pass | — | advance → done |',
         '| final | * | — | abandon (final-test-failed) |',
@@ -356,5 +358,28 @@ describe('decide — what is deliberately absent', () => {
     const repair = decide({ role: 'builder', outcome: 'blocked', attemptCount: 0 });
     assert.equal(repair.seedKind, 'repair');
     assert.equal(repair.sameWorktree, true);
+  });
+});
+
+describe('wantsSameWorktree — MIN-705 / MIN-707 mapping', () => {
+  it('reuses for repair, continue, and rebase; fresh for failure-aware and fix', () => {
+    assert.deepEqual([...SAME_WORKTREE_SEED_KINDS], ['repair', 'continue', 'rebase']);
+    assert.equal(wantsSameWorktree('repair'), true);
+    assert.equal(wantsSameWorktree('continue'), true);
+    assert.equal(wantsSameWorktree('rebase'), true);
+    assert.equal(wantsSameWorktree('failure-aware'), false);
+    assert.equal(wantsSameWorktree('fix'), false);
+    assert.equal(wantsSameWorktree('initial'), false);
+  });
+
+  it('matches every retry row so the table cannot drift from the seed mapping', () => {
+    for (const row of POLICY_TABLE) {
+      if (row.action.kind !== 'retry') continue;
+      assert.equal(
+        row.action.sameWorktree,
+        wantsSameWorktree(row.action.seedKind),
+        `${row.role}/${row.outcome} seed ${row.action.seedKind}`,
+      );
+    }
   });
 });

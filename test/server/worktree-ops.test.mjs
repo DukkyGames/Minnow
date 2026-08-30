@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { after, before, describe, test } from 'node:test';
+import { resetMinnowHomeCache } from '../../server/config/home.js';
 import {
   checkMerged,
   checkWorktreeDirty,
@@ -20,9 +21,12 @@ import {
   integrationStats,
   mergeIntegrationIntoWorkspace,
   mergeIntoIntegration,
+  peakBoardIntegrationLockDepth,
   pushIntegration,
+  rebaseOntoIntegration,
   refreshIntegrationDeps,
   removeWorktree,
+  resetBoardIntegrationLock,
   restoreIntegration,
   verifyIntegrationMerge,
   workspaceLandingStats,
@@ -506,5 +510,286 @@ describe('worktree conflict merge and verification', () => {
     assert.equal(full.keptIntegration, false);
 
     await assert.rejects(() => fs.access(intPath));
+  });
+});
+
+/**
+ * MIN-706 / P3-B — rebaseOntoIntegration.
+ *
+ * Each test gets its own temp repo + MINNOW_HOME so histories do not leak.
+ * Workspace root and home cache are process-global; this describe is sequential.
+ */
+describe('rebaseOntoIntegration (MIN-706)', { concurrency: false }, () => {
+  let previousHome;
+
+  before(() => {
+    previousHome = process.env.MINNOW_HOME;
+  });
+
+  after(() => {
+    if (previousHome === undefined) delete process.env.MINNOW_HOME;
+    else process.env.MINNOW_HOME = previousHome;
+    resetMinnowHomeCache();
+    resetBoardIntegrationLock();
+  });
+
+  /**
+   * Throwaway git repo + board integration worktree.
+   * @param {string} suffix
+   */
+  async function makeRepo(suffix) {
+    const boardId = `test-board-rebase-${suffix}`;
+    resetBoardIntegrationLock();
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), `minnow-wt-rebase-${suffix}-`));
+    const repoDir = path.join(root, 'repo');
+    const minnowHome = path.join(root, 'minnow-home');
+    await fs.mkdir(repoDir, { recursive: true });
+    await fs.mkdir(minnowHome, { recursive: true });
+    process.env.MINNOW_HOME = minnowHome;
+    resetMinnowHomeCache();
+    await setWorkspaceRoot(repoDir);
+
+    const git = async (args, cwd = repoDir) =>
+      execFileAsync('git', args, { cwd, windowsHide: true });
+
+    await git(['init']);
+    await git(['config', 'user.email', 'test@example.com']);
+    await git(['config', 'user.name', 'Test']);
+    await fs.writeFile(path.join(repoDir, 'README.md'), '# base\n', 'utf8');
+    await fs.writeFile(path.join(repoDir, 'shared.txt'), 'base\n', 'utf8');
+    await git(['add', '.']);
+    await git(['commit', '-m', 'init']);
+
+    const integrationBranch = `minnow/board/${boardId}/integration`;
+    const ensured = await ensureIntegration({ boardId, branch: integrationBranch });
+    assert.equal(ensured.ok, true, ensured.output);
+
+    return { boardId, repoDir, integrationBranch, git };
+  }
+
+  /**
+   * Attach a task slot. When `files` is set, write and commit them in the slot.
+   * @param {{ boardId: string, integrationBranch: string, git: Function, repoDir: string }} h
+   * @param {string} slotId
+   * @param {Record<string, string> | null} [files]
+   */
+  async function addTask(h, slotId, files = null) {
+    const branch = `minnow/board/${h.boardId}/task/${slotId}`;
+    const created = await createWorktree({
+      boardId: h.boardId,
+      slotId,
+      branch,
+      baseRef: h.integrationBranch,
+    });
+    assert.equal(created.ok, true, created.output || created.error);
+    const wt = getWorktreeSlotPath(h.boardId, slotId, h.repoDir);
+    if (files) {
+      for (const [name, content] of Object.entries(files)) {
+        await fs.writeFile(path.join(wt, name), content, 'utf8');
+      }
+      await h.git(['add', '-A'], wt);
+      await h.git(['commit', '-m', `commit ${slotId}`], wt);
+    }
+    return { branch, wt };
+  }
+
+  /** @param {string} cwd */
+  async function headSha(cwd) {
+    const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], {
+      cwd,
+      windowsHide: true,
+    });
+    return stdout.trim();
+  }
+
+  /** @param {string} cwd */
+  async function porcelain(cwd) {
+    const { stdout } = await execFileAsync('git', ['status', '--porcelain'], {
+      cwd,
+      windowsHide: true,
+    });
+    return stdout;
+  }
+
+  /**
+   * Worktree-aware rebase state dirs. Linked worktrees store these under
+   * `.git/worktrees/<id>/`, not the checkout root.
+   * @param {string} wtPath
+   */
+  async function rebaseLeftovers(wtPath) {
+    async function gitPath(name) {
+      const { stdout } = await execFileAsync('git', ['rev-parse', '--git-path', name], {
+        cwd: wtPath,
+        windowsHide: true,
+      });
+      const p = stdout.trim();
+      return path.isAbsolute(p) ? p : path.resolve(wtPath, p);
+    }
+    async function exists(abs) {
+      try {
+        await fs.access(abs);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return {
+      merge: await exists(await gitPath('rebase-merge')),
+      apply: await exists(await gitPath('rebase-apply')),
+    };
+  }
+
+  /** @param {string} wtPath */
+  async function assertNoRebaseState(wtPath) {
+    const left = await rebaseLeftovers(wtPath);
+    assert.equal(left.merge, false, `${wtPath} left rebase-merge behind`);
+    assert.equal(left.apply, false, `${wtPath} left rebase-apply behind`);
+  }
+
+  test('clean rebase: a task branch behind integration rebases and reports the new sha', async () => {
+    const h = await makeRepo('clean');
+    const a = await addTask(h, 'task-A', { 'file-a.txt': 'from A\n' });
+    const b = await addTask(h, 'task-B', { 'file-b.txt': 'from B\n' });
+
+    const merged = await mergeIntoIntegration({
+      boardId: h.boardId,
+      fromBranch: a.branch,
+      message: 'merge A',
+    });
+    assert.equal(merged.ok, true, merged.output);
+
+    const shaBefore = await headSha(b.wt);
+    const rebased = await rebaseOntoIntegration({ boardId: h.boardId, slotId: 'task-B' });
+    assert.equal(rebased.ok, true, rebased.error);
+    assert.ok(rebased.sha);
+    assert.notEqual(rebased.sha, shaBefore);
+    assert.equal(await headSha(b.wt), rebased.sha);
+
+    await fs.access(path.join(b.wt, 'file-a.txt'));
+    await fs.access(path.join(b.wt, 'file-b.txt'));
+    await assertNoRebaseState(b.wt);
+  });
+
+  test('conflicting rebase reports exact paths, aborts cleanly, and restores porcelain', async () => {
+    const h = await makeRepo('conflict');
+    const a = await addTask(h, 'task-A', { 'shared.txt': 'version A\n' });
+    const b = await addTask(h, 'task-B', { 'shared.txt': 'version B\n' });
+
+    const merged = await mergeIntoIntegration({
+      boardId: h.boardId,
+      fromBranch: a.branch,
+      message: 'merge A',
+    });
+    assert.equal(merged.ok, true, merged.output);
+
+    const shaBefore = await headSha(b.wt);
+    const porcelainBefore = await porcelain(b.wt);
+
+    const rebased = await rebaseOntoIntegration({ boardId: h.boardId, slotId: 'task-B' });
+    assert.equal(rebased.ok, false);
+    assert.ok(Array.isArray(rebased.conflicts));
+    assert.ok(rebased.conflicts.includes('shared.txt'));
+
+    assert.equal(await headSha(b.wt), shaBefore);
+    assert.equal(await porcelain(b.wt), porcelainBefore);
+    await assertNoRebaseState(b.wt);
+
+    const intPath = getWorktreeSlotPath(h.boardId, 'integration', h.repoDir);
+    await assertNoRebaseState(intPath);
+  });
+
+  test('already-current branch returns ok with no change', async () => {
+    const h = await makeRepo('current');
+    const b = await addTask(h, 'task-B', { 'file-b.txt': 'from B\n' });
+    const shaBefore = await headSha(b.wt);
+    const porcelainBefore = await porcelain(b.wt);
+
+    const rebased = await rebaseOntoIntegration({ boardId: h.boardId, slotId: 'task-B' });
+    assert.equal(rebased.ok, true, rebased.error);
+    assert.equal(rebased.sha, shaBefore);
+    assert.equal(await headSha(b.wt), shaBefore);
+    assert.equal(await porcelain(b.wt), porcelainBefore);
+    await assertNoRebaseState(b.wt);
+  });
+
+  test('empty branch (no commits) returns ok without touching anything', async () => {
+    const h = await makeRepo('empty');
+    const b = await addTask(h, 'task-B', null);
+    const shaBefore = await headSha(b.wt);
+    const porcelainBefore = await porcelain(b.wt);
+    const reflogBefore = (await h.git(['reflog', '-1'], b.wt)).stdout.trim();
+
+    const rebased = await rebaseOntoIntegration({ boardId: h.boardId, slotId: 'task-B' });
+    assert.equal(rebased.ok, true, rebased.error);
+    assert.equal(rebased.sha, shaBefore);
+    assert.equal(await headSha(b.wt), shaBefore);
+    assert.equal(await porcelain(b.wt), porcelainBefore);
+    assert.equal((await h.git(['reflog', '-1'], b.wt)).stdout.trim(), reflogBefore);
+    await assertNoRebaseState(b.wt);
+  });
+
+  test('concurrent rebase and merge against one integration branch serialise', async () => {
+    const h = await makeRepo('serial');
+    const a = await addTask(h, 'task-A', { 'file-a.txt': 'from A\n' });
+    const b = await addTask(h, 'task-B', { 'file-b.txt': 'from B\n' });
+    const c = await addTask(h, 'task-C', { 'file-c.txt': 'from C\n' });
+
+    // Advance integration so B is behind (rebase has work) while C can still merge.
+    const mergedA = await mergeIntoIntegration({
+      boardId: h.boardId,
+      fromBranch: a.branch,
+      message: 'merge A',
+    });
+    assert.equal(mergedA.ok, true, mergedA.output);
+
+    resetBoardIntegrationLock();
+
+    const [rebased, mergedC] = await Promise.all([
+      rebaseOntoIntegration({ boardId: h.boardId, slotId: 'task-B' }),
+      mergeIntoIntegration({
+        boardId: h.boardId,
+        fromBranch: c.branch,
+        message: 'merge C',
+      }),
+    ]);
+
+    assert.equal(rebased.ok, true, rebased.error);
+    assert.equal(mergedC.ok, true, mergedC.output);
+    assert.equal(
+      peakBoardIntegrationLockDepth(h.boardId),
+      1,
+      'rebase and merge must not overlap on one board',
+    );
+
+    await assertNoRebaseState(b.wt);
+    const intPath = getWorktreeSlotPath(h.boardId, 'integration', h.repoDir);
+    await assertNoRebaseState(intPath);
+    assert.equal((await porcelain(intPath)).trim(), '');
+    assert.equal((await porcelain(b.wt)).trim(), '');
+  });
+
+  test('failure path never leaves rebase-merge or rebase-apply behind', async () => {
+    const h = await makeRepo('leftover');
+    const a = await addTask(h, 'task-A', { 'shared.txt': 'version A\n', 'only-a.txt': 'a\n' });
+    const b = await addTask(h, 'task-B', { 'shared.txt': 'version B\n', 'only-b.txt': 'b\n' });
+
+    const merged = await mergeIntoIntegration({
+      boardId: h.boardId,
+      fromBranch: a.branch,
+      message: 'merge A',
+    });
+    assert.equal(merged.ok, true, merged.output);
+
+    const rebased = await rebaseOntoIntegration({ boardId: h.boardId, slotId: 'task-B' });
+    assert.equal(rebased.ok, false);
+    assert.ok(rebased.conflicts.includes('shared.txt'));
+
+    await assertNoRebaseState(b.wt);
+    const intPath = getWorktreeSlotPath(h.boardId, 'integration', h.repoDir);
+    await assertNoRebaseState(intPath);
+
+    // Agent-usable: the unique file from B is still there, A's is not mixed in.
+    await fs.access(path.join(b.wt, 'only-b.txt'));
+    await assert.rejects(() => fs.access(path.join(b.wt, 'only-a.txt')));
   });
 });

@@ -23,8 +23,12 @@
  *
  * 1. A task is ready when every `dependsOn` id has `phase === 'merged'`.
  * 2. Never two concurrent attempts on one task.
- * 3. Never two concurrently-running tasks whose `touches` globs overlap, **even
- *    when `dependsOn` permits it**.
+ * 3. Never two concurrently-running tasks whose footprints overlap, **even
+ *    when `dependsOn` permits it**. A footprint is the declared globs plus the
+ *    frozen expanded file set journaled at board creation (P3-D). Pattern
+ *    overlap still serialises; expansion catches disjoint globs that name the
+ *    same files. Empty expansion overlaps nothing extra — that is the same
+ *    empty-list rule as {@link touchesOverlap}.
  * 4. Respect the concurrency cap `N` — for *starting* work. Attempts already in
  *    flight keep their slot, so lowering `N` mid-run stops nothing that is
  *    already running; it stops new work being picked up.
@@ -44,6 +48,7 @@
  */
 
 import { attemptCount, deadEnded, lastEndedAttempt, readyTasks } from './derive.js';
+import { bundleAbandonmentEvidence } from './evidence.js';
 import { decide, wantsSameWorktree } from './policy.js';
 
 /**
@@ -95,7 +100,13 @@ export function nextAction(state, taskId) {
     if (action.to === 'merge') return { kind: 'enqueue' };
     return { kind: 'none' };
   }
-  return { kind: 'abandon', reason: action.reason, evidence: action.evidence };
+  // Policy names the reason; this call site attaches the full attempt history
+  // PRD §11 needs. `decide()` stays last-attempt-only so the table stays a table.
+  return {
+    kind: 'abandon',
+    reason: action.reason,
+    evidence: bundleAbandonmentEvidence(task, action),
+  };
 }
 
 /**
@@ -132,7 +143,7 @@ export function manualStart(state, taskId, running = []) {
   for (const other of running) {
     if (other.taskId === null || other.taskId === taskId) continue;
     const against = state.tasks.get(other.taskId);
-    if (against && touchesOverlap(task.touches, against.touches)) return { kind: 'none' };
+    if (against && footprintsClash(task, against)) return { kind: 'none' };
   }
 
   const next = nextAction(state, taskId);
@@ -243,9 +254,10 @@ export function plan(state) {
     const next = nextAction(state, id);
     if (next.kind !== 'start') continue;
     // Rule 3. Checked against everything already claimed this tick, running or new.
-    const clashes = occupied.some((other) =>
-      touchesOverlap(task.touches, state.tasks.get(other)?.touches ?? []),
-    );
+    const clashes = occupied.some((other) => {
+      const against = state.tasks.get(other);
+      return against ? footprintsClash(task, against) : false;
+    });
     if (clashes) continue;
     desired.push({
       taskId: id,
@@ -345,9 +357,11 @@ export function isRunComplete(state) {
  * Tasks that can never run because something upstream was abandoned or skipped,
  * and which are not yet recorded as skipped themselves.
  *
- * The engine journals `task.skipped` for each. This is what stops an abandoned
- * task on minute three from stalling an overnight run: the dead branch is closed
- * out and everything independent of it keeps going.
+ * The engine journals `task.skipped` for each. `blockedBy` is the abandoned
+ * root (MIN-712), not the immediate skipped parent. Sharing a wave or touching
+ * adjacent files is not a dependency. This is what stops an abandoned task on
+ * minute three from stalling an overnight run: the dead branch is closed out
+ * and everything independent of it keeps going.
  *
  * @param {import('./types').BoardState} state
  * @returns {Array<{ taskId: string, blockedBy: string }>}
@@ -390,11 +404,119 @@ export function orderedTaskIds(state) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Do two tasks' scheduling footprints clash?
+ *
+ * Declared glob overlap still serialises (overlapping patterns never run
+ * together, even if expansion is empty). Frozen expanded file sets serialise
+ * when they intersect, even if the declared globs look disjoint. Expansion
+ * that was never journaled (`null`) is ignored so pre-P3-D journals keep the
+ * glob-only gate. An empty expansion overlaps nothing extra.
+ *
+ * @param {{ touches?: readonly string[] | null, touchesExpanded?: readonly string[] | null }} a
+ * @param {{ touches?: readonly string[] | null, touchesExpanded?: readonly string[] | null }} b
+ * @returns {boolean}
+ */
+export function footprintsClash(a, b) {
+  if (touchesOverlap(a?.touches ?? [], b?.touches ?? [])) return true;
+  return expandedFilesOverlap(a?.touchesExpanded, b?.touchesExpanded);
+}
+
+/**
+ * @param {readonly string[] | null | undefined} a
+ * @param {readonly string[] | null | undefined} b
+ * @returns {boolean}
+ */
+export function expandedFilesOverlap(a, b) {
+  if (!a?.length || !b?.length) return false;
+  const right = new Set(b.map(normalizeRepoPath));
+  for (const file of a) {
+    if (right.has(normalizeRepoPath(file))) return true;
+  }
+  return false;
+}
+
+/**
+ * Match declared globs against a frozen file list. Pure: the I/O that produced
+ * `repoFiles` lives outside the core so replay does not re-walk the disk.
+ *
+ * @param {readonly string[]} globs
+ * @param {readonly string[]} repoFiles
+ * @returns {{ expanded: string[], emptyGlobs: string[] }}
+ */
+export function expandTouches(globs, repoFiles) {
+  const files = (repoFiles ?? []).map(normalizeRepoPath).filter(Boolean);
+  /** @type {string[]} */
+  const emptyGlobs = [];
+  /** @type {Set<string>} */
+  const expanded = new Set();
+  for (const glob of globs ?? []) {
+    const pattern = String(glob);
+    let hits = 0;
+    for (const file of files) {
+      if (pathMatchesGlob(file, pattern)) {
+        expanded.add(file);
+        hits += 1;
+      }
+    }
+    if (hits === 0) emptyGlobs.push(pattern);
+  }
+  return { expanded: [...expanded].sort(), emptyGlobs };
+}
+
+/**
+ * Paths from a worktree diff that sit outside the declared globs.
+ *
+ * @param {readonly string[]} declared
+ * @param {readonly string[]} actual
+ * @returns {string[]}
+ */
+export function overflowPaths(declared, actual) {
+  const globs = declared ?? [];
+  /** @type {string[]} */
+  const extra = [];
+  for (const file of actual ?? []) {
+    const path = normalizeRepoPath(file);
+    if (!path) continue;
+    if (!globs.some((glob) => pathMatchesGlob(path, glob))) extra.push(path);
+  }
+  return extra.sort();
+}
+
+/**
+ * Does this repo-relative path match a declared glob?
+ *
+ * Reuses {@link globsIntersect} so expansion, overflow, and the scheduling
+ * gate share one matcher — a file the gate treats as inside the footprint
+ * must not also count as overflow.
+ *
+ * @param {string} file
+ * @param {string} glob
+ * @returns {boolean}
+ */
+export function pathMatchesGlob(file, glob) {
+  return globsIntersect(normalizeRepoPath(file), String(glob));
+}
+
+/**
+ * Repo-relative paths are compared with `/` so Windows worktrees and the
+ * journal agree.
+ *
+ * @param {string} value
+ * @returns {string}
+ */
+export function normalizeRepoPath(value) {
+  return String(value ?? '')
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+    .replace(/^\/+/, '');
+}
+
+/**
  * Do two declared footprints overlap?
  *
- * Pure set intersection over already-expanded glob strings. Matching globs
- * against real files needs I/O and belongs in P3-D; this decides only whether
- * two *patterns* could ever name the same path.
+ * Pure set intersection over glob strings. Matching globs against real files
+ * is journaled at board creation (P3-D) and folded onto `touchesExpanded`;
+ * this function decides only whether two *patterns* could name the same path.
  *
  * An empty footprint overlaps nothing. `parsePlan()` requires at least one glob
  * per task, so an empty list is a deliberate statement rather than a gap.

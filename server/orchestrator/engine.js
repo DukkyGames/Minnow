@@ -44,6 +44,20 @@ import { makeEvent } from './core/events.js';
 import { foldInto } from './core/derive.js';
 import * as diskJournal from './journal.js';
 import { emitError } from './live-events.js';
+import {
+  integrationBranch,
+  liveWorktreePaths,
+  reconcileOrphanWorktrees,
+  WORKTREE_DISCARDED_TYPE,
+} from './worktree-lifecycle.js';
+import { detectAttemptOverflow, captureWorktreeDiff } from './touches.js';
+import {
+  journalHasReport,
+  REPORT_EVENT_TYPE,
+  formatMechanicalReport,
+  writeEndOfRunReport,
+  defaultComplete,
+} from './report.js';
 
 /** How often the safety-net tick fires. */
 export const DEFAULT_TICK_MS = 5_000;
@@ -119,7 +133,7 @@ function isAgentRole(role) {
  *   An attempt that is genuinely gone — killed, vanished — simply stops
  *   appearing, with no end delivered, and the next tick restarts it. That is a
  *   different case, and it is the supported one.
- * @property {(desired: import('./core/types').Desired) => Promise<{ attemptId: string, worktree?: string }>} start
+ * @property {(desired: import('./core/types').Desired) => Promise<{ attemptId: string, worktree?: string, discarded?: Record<string, unknown>[] }>} start
  *   Resolves once the process **exists**. That resolution is what licenses the
  *   `task.attempt.started` append.
  * @property {(attemptId: string) => Promise<void>} stop
@@ -146,7 +160,9 @@ function isAgentRole(role) {
  * @property {Record<string, unknown>} [evidence]
  * @property {string} [sha]      merge only
  * @property {string[]} [files]  merge conflict only
+ * @property {string} [beforeSha]  merge only — integration tip before this merge
  * @property {string} [runInstructions]  final only
+ * @property {Record<string, unknown>} [discarded]  dirty worktree released on this end
  */
 
 /**
@@ -158,6 +174,7 @@ function isAgentRole(role) {
  *   clock?: typeof systemClock,
  *   tickMs?: number,
  *   journal?: typeof diskJournal,
+ *   complete?: import('./report.js').ReportComplete,
  * }} options
  */
 export function createEngine(options) {
@@ -169,6 +186,11 @@ export function createEngine(options) {
   // scheduler suite that pays for a filesystem write on every tick is a
   // scheduler suite nobody runs.
   const journal = options.journal ?? diskJournal;
+  // Injected so tests can stub the one LLM call. Omitted `complete` is the
+  // mechanical fallback (no model) so scheduler suites stay model-free.
+  // Production `getEngine` supplies `defaultComplete`.
+  const complete =
+    options.complete ?? (async ({ input }) => formatMechanicalReport(input));
 
   /** @type {import('./core/types').BoardState | null} */
   let state = null;
@@ -314,8 +336,10 @@ export function createEngine(options) {
     const desired = plan(/** @type {import('./core/types').BoardState} */ (state));
     const actual = effector.inspect();
 
-    // Stop what is running and no longer wanted. Stopping comes first so a
-    // concurrency reduction frees its slot before anything tries to fill it.
+    // Stop what is running and no longer wanted. In-flight work stays in
+    // `desired` even when N is lowered — the cap gates starting, not
+    // continuing — so this does not kill those attempts. It stops work the
+    // fold no longer wants (board.stopped, a finished attempt, a skip).
     for (const running of actual) {
       if (!desired.some((d) => sameWork(d, running))) {
         await effector.stop(running.attemptId);
@@ -334,6 +358,45 @@ export function createEngine(options) {
         makeEvent('board.stopped', { reason: 'complete' }),
       ]);
       stopTimer();
+      // The report is terminal output. It is written after the last merge and
+      // the final test, and it never feeds plan()/derive()/policy/merge.
+      await maybeWriteEndOfRunReport();
+    }
+  }
+
+  /**
+   * Exactly one report per run, from this function only.
+   *
+   * Triggered after `run.finished` (success / partial) and after a user stop.
+   * Skips when the journal already has `run.report.written`, so a second tick
+   * or a restart cannot spend another model call.
+   *
+   * @returns {Promise<void>}
+   */
+  async function maybeWriteEndOfRunReport() {
+    if (disposed || !state) return;
+    const events = await journal.readEvents(boardId);
+    if (journalHasReport(events)) return;
+    const userStopped = state.stopReason === 'user';
+    if (!state.finished && !userStopped) return;
+    try {
+      const result = await writeEndOfRunReport({
+        boardId,
+        events,
+        state,
+        complete,
+      });
+      await append([
+        makeEvent(REPORT_EVENT_TYPE, {
+          path: result.relativePath,
+          usedFallback: result.usedFallback,
+        }),
+      ]);
+    } catch (err) {
+      console.warn(
+        `[orchestrator] ${boardId}: end-of-run report failed:`,
+        /** @type {Error} */ (err)?.message ?? err,
+      );
     }
   }
 
@@ -410,7 +473,7 @@ export function createEngine(options) {
   async function startAttempt(want) {
     const key = `${want.role}:${want.taskId ?? ''}`;
 
-    /** @type {{ attemptId: string, worktree?: string }} */
+    /** @type {{ attemptId: string, worktree?: string, discarded?: Record<string, unknown>[] }} */
     let handle;
     try {
       handle = await effector.start(want);
@@ -437,7 +500,16 @@ export function createEngine(options) {
     // The process exists. Only now is there a completed side effect to record.
     if (!isAgentRole(want.role)) return;
 
-    await append([
+    /** @type {Record<string, unknown>[]} */
+    const events = [];
+    // Dirty trees released to make room for a fresh slot are recorded *before*
+    // the new start so the discarded path is never mistaken for this attempt.
+    if (Array.isArray(handle.discarded)) {
+      for (const payload of handle.discarded) {
+        events.push(makeEvent(WORKTREE_DISCARDED_TYPE, payload));
+      }
+    }
+    events.push(
       makeEvent('task.attempt.started', {
         taskId: want.taskId,
         attemptId: handle.attemptId,
@@ -445,7 +517,8 @@ export function createEngine(options) {
         ...(handle.worktree ? { worktree: handle.worktree } : {}),
         ...(want.seedKind ? { seedKind: want.seedKind } : {}),
       }),
-    ]);
+    );
+    await append(events);
     journaledStarts.add(handle.attemptId);
 
     // If it already finished while that write was in flight, deal with it now,
@@ -492,6 +565,23 @@ export function createEngine(options) {
     /** @type {Record<string, unknown>[]} */
     const events = [];
     if (isAgentRole(end.role)) {
+      const task = end.taskId ? state.tasks.get(end.taskId) : undefined;
+      const attempt = task?.attempts.find((a) => a.attemptId === end.attemptId);
+      // Diff capture is I/O. Core never does it; the bundle later copies
+      // whatever landed on this attempt's evidence (capped to a patch, not a repo).
+      let evidence = end.evidence;
+      const worktree = attempt?.worktree;
+      if (worktree) {
+        try {
+          const diff = await captureWorktreeDiff(worktree, integrationBranch(boardId));
+          if (diff) evidence = { ...(evidence ?? {}), diff };
+        } catch (err) {
+          console.warn(
+            `[orchestrator] ${boardId}: attempt diff capture failed for ${end.attemptId}:`,
+            /** @type {Error} */ (err)?.message ?? err,
+          );
+        }
+      }
       events.push(
         makeEvent('task.attempt.ended', {
           taskId: end.taskId,
@@ -499,14 +589,54 @@ export function createEngine(options) {
           role: end.role,
           outcome: end.outcome,
           ...(end.summary === undefined ? {} : { summary: end.summary }),
-          ...(end.evidence === undefined ? {} : { evidence: end.evidence }),
+          ...(evidence === undefined ? {} : { evidence }),
         }),
       );
+      // Overflow is evidence, not a failure. Journal it beside the pass so
+      // replay still shows a passing attempt with a recorded footprint miss.
+      if (end.outcome === 'pass' && end.role === 'builder' && end.taskId) {
+        try {
+          const overflow = await detectAttemptOverflow({
+            worktree: attempt?.worktree,
+            declared: task?.touches ?? [],
+            baseRef: integrationBranch(boardId),
+          });
+          if (overflow) {
+            events.push(
+              makeEvent('touches.overflow', {
+                taskId: end.taskId,
+                attemptId: end.attemptId,
+                declared: overflow.declared,
+                actual: overflow.actual,
+              }),
+            );
+          }
+        } catch (err) {
+          console.warn(
+            `[orchestrator] ${boardId}: touches overflow check failed for ${end.attemptId}:`,
+            /** @type {Error} */ (err)?.message ?? err,
+          );
+        }
+      }
     } else if (end.role === 'merge') {
+      // `beforeSha` is the pre-merge integration tip the queue snapped so a
+      // failed verify can restore. Optional on the event (same source of
+      // truth as the end — not a second event type).
+      /** @type {Record<string, unknown>} */
+      const mergeExtra =
+        typeof end.beforeSha === 'string' && end.beforeSha ? { beforeSha: end.beforeSha } : {};
       events.push(
         end.outcome === 'pass'
-          ? makeEvent('merge.succeeded', { taskId: end.taskId, sha: end.sha ?? 'unknown' })
-          : makeEvent('merge.conflicted', { taskId: end.taskId, files: end.files ?? [] }),
+          ? makeEvent('merge.succeeded', {
+              taskId: end.taskId,
+              sha: end.sha ?? 'unknown',
+              ...mergeExtra,
+            })
+          : makeEvent('merge.conflicted', {
+              taskId: end.taskId,
+              files: end.files ?? [],
+              ...mergeExtra,
+            }),
       );
     } else if (end.role === 'final') {
       events.push(
@@ -516,6 +646,9 @@ export function createEngine(options) {
           ...(end.evidence === undefined ? {} : { evidence: end.evidence }),
         }),
       );
+    }
+    if (end.discarded) {
+      events.push(makeEvent(WORKTREE_DISCARDED_TYPE, end.discarded));
     }
 
     if (events.length > 0) await append(events);
@@ -567,7 +700,9 @@ export function createEngine(options) {
     const arm = () => {
       timer = clock.setTimer(() => {
         timer = null;
-        void tick().then(() => {
+        // Return the pass so a clock that awaits the callback (tests) does not
+        // treat the tick as done until `maybeWriteEndOfRunReport` has finished.
+        return tick().then(() => {
           if (wantsTicking()) arm();
         });
       }, tickMs);
@@ -594,6 +729,23 @@ export function createEngine(options) {
       // `inspect()` until this resolves, which is what stops a tick landing in
       // the gap between "finished" and "recorded as finished".
       effector.onEnd?.((end) => handleAttemptEnd(end));
+      // Reclaim orphans *before* the first tick. Live paths come from open
+      // journal attempts; a tick that ran first would reap them as crashed and
+      // this would then delete the trees a continue retry needs.
+      try {
+        const result = await reconcileOrphanWorktrees({
+          boardId,
+          livePaths: liveWorktreePaths(state),
+        });
+        if (result.discarded.length > 0) {
+          await append(result.discarded.map((payload) => makeEvent(WORKTREE_DISCARDED_TYPE, payload)));
+        }
+      } catch (err) {
+        console.warn(
+          `[orchestrator] ${boardId}: worktree reconcile failed:`,
+          /** @type {Error} */ (err)?.message ?? err,
+        );
+      }
       if (state.status === 'running') startTimer();
     },
 
@@ -772,6 +924,7 @@ export function createEngine(options) {
       // Stopping is a reconcile like any other: `plan()` now desires nothing, so
       // the diff stops everything. There is no separate teardown path.
       await tick();
+      if (reason === 'user') await maybeWriteEndOfRunReport();
     },
 
     /**
@@ -910,7 +1063,12 @@ export function getEngine(boardId, makeEffector, options = {}) {
   const existing = engines.get(boardId);
   if (existing) return existing;
 
-  const engine = createEngine({ boardId, effector: makeEffector(), ...options });
+  const engine = createEngine({
+    boardId,
+    effector: makeEffector(),
+    complete: defaultComplete,
+    ...options,
+  });
   const loading = engine.load().then(() => {
     // Only registered as loaded if this entry is still the current one — a
     // `disposeEngines` during the load must not resurrect it.

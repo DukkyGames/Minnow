@@ -5,6 +5,10 @@
  *
  * Merges run INSIDE the integration worktree so the user's main working tree and
  * checked-out branch are never touched.
+ *
+ * Rebase (MIN-706 / P3-B) runs INSIDE the task worktree onto the integration tip.
+ * A conflict is a typed result, not an exception: abort, then hand the worktree
+ * back clean. Rebase and merge share one in-process mutex keyed by boardId.
  */
 
 import fs from 'node:fs/promises';
@@ -49,11 +53,145 @@ async function branchExists(branch) {
 }
 
 /** Resolve a git ref to a full commit SHA (null when missing). */
-async function resolveRef(ref) {
-  const r = await git(['rev-parse', '--verify', ref]);
+async function resolveRef(ref, cwd = getWorkspaceRoot()) {
+  const r = await git(['rev-parse', '--verify', ref], cwd);
   if (!ok(r)) return null;
   const sha = `${r.stdout ?? ''}`.trim().split(/\s/)[0];
   return sha || null;
+}
+
+/**
+ * One promise chain per board for ops that mutate the integration lineage
+ * (merge into integration, rebase a task onto it, abort, restore).
+ *
+ * `mergeInProgress` is only a MERGE_HEAD probe — it is not a mutex. Two
+ * concurrent rebase+merge calls against one board would otherwise race:
+ * rebase rewriting a branch merge is reading, or merge advancing the tip
+ * rebase is onto-ing. Same shape as journal.js `serialise`.
+ *
+ * @type {Map<string, Promise<unknown>>}
+ */
+const integrationOpChains = new Map();
+
+/** Currently executing locked-op count per board (0 or 1 when the chain holds). */
+const activeIntegrationOps = new Map();
+
+/** Peak overlapping locked ops observed per board — 1 means they serialised. */
+const peakIntegrationOps = new Map();
+
+/**
+ * Run `task` after every integration op already queued for this board.
+ * A rejection must not break the chain, or one failed merge wedges the board.
+ *
+ * @template T
+ * @param {string} boardId
+ * @param {() => Promise<T>} task
+ * @returns {Promise<T>}
+ */
+function withBoardIntegrationLock(boardId, task) {
+  const key = boardId || '';
+  const previous = integrationOpChains.get(key) ?? Promise.resolve();
+  const run = async () => {
+    const nextActive = (activeIntegrationOps.get(key) ?? 0) + 1;
+    activeIntegrationOps.set(key, nextActive);
+    peakIntegrationOps.set(key, Math.max(peakIntegrationOps.get(key) ?? 0, nextActive));
+    try {
+      return await task();
+    } finally {
+      const left = (activeIntegrationOps.get(key) ?? 1) - 1;
+      if (left <= 0) activeIntegrationOps.delete(key);
+      else activeIntegrationOps.set(key, left);
+    }
+  };
+  const next = previous.then(run, run);
+  integrationOpChains.set(
+    key,
+    next.catch(() => {}),
+  );
+  return next;
+}
+
+/** Test seam: peak overlapping rebase/merge ops for one board (1 = serialised). */
+export function peakBoardIntegrationLockDepth(boardId) {
+  return peakIntegrationOps.get(boardId || '') ?? 0;
+}
+
+/** Test seam: clear the mutex between fixtures. */
+export function resetBoardIntegrationLock() {
+  integrationOpChains.clear();
+  activeIntegrationOps.clear();
+  peakIntegrationOps.clear();
+}
+
+/** True while a locked merge/rebase/abort/restore is executing for this board. */
+function isBoardIntegrationLocked(boardId) {
+  return (activeIntegrationOps.get(boardId || '') ?? 0) > 0;
+}
+
+/**
+ * Absolute path git would use for a named git-dir file (worktree-aware).
+ * Linked worktrees store rebase state under `.git/worktrees/<id>/`, not the
+ * checkout root, so callers must not look at `<wt>/.git/rebase-merge` directly.
+ *
+ * @param {string} wtPath
+ * @param {string} name
+ * @returns {Promise<string | null>}
+ */
+async function gitDirPath(wtPath, name) {
+  const r = await git(['rev-parse', '--git-path', name], wtPath);
+  const p = `${r.stdout ?? ''}`.trim();
+  if (!p) return null;
+  return path.isAbsolute(p) ? p : path.resolve(wtPath, p);
+}
+
+/** True when `rebase-merge` or `rebase-apply` exists for this worktree. */
+async function rebaseStateExists(wtPath) {
+  const mergePath = await gitDirPath(wtPath, 'rebase-merge');
+  const applyPath = await gitDirPath(wtPath, 'rebase-apply');
+  return (
+    Boolean(mergePath && (await pathExists(mergePath))) ||
+    Boolean(applyPath && (await pathExists(applyPath)))
+  );
+}
+
+/**
+ * Abort an in-progress rebase and verify the state dirs are gone.
+ * `git rebase --abort`'s exit code is not trusted; we check the files.
+ * `shaBefore` is the pre-rebase HEAD used if abort leaves the tree dirty.
+ *
+ * @param {string} wtPath
+ * @param {string | null} shaBefore
+ */
+async function abortRebaseAndVerify(wtPath, shaBefore) {
+  if (!(await rebaseStateExists(wtPath))) return;
+  await git(['rebase', '--abort'], wtPath);
+  if (!(await rebaseStateExists(wtPath))) return;
+
+  // --abort did not clear state. --quit drops the rebase files; then restore tip.
+  await git(['rebase', '--quit'], wtPath);
+  if (shaBefore) {
+    await git(['reset', '--hard', shaBefore], wtPath);
+  }
+  await git(['clean', '-fd'], wtPath);
+  if (!(await rebaseStateExists(wtPath))) return;
+
+  // Last resort: remove leftover dirs so an agent never inherits a half-rebase.
+  const mergePath = await gitDirPath(wtPath, 'rebase-merge');
+  const applyPath = await gitDirPath(wtPath, 'rebase-apply');
+  if (mergePath && (await pathExists(mergePath))) {
+    await fs.rm(mergePath, { recursive: true, force: true });
+  }
+  if (applyPath && (await pathExists(applyPath))) {
+    await fs.rm(applyPath, { recursive: true, force: true });
+  }
+}
+
+/** Split `git diff --name-only` stdout into path strings. */
+function parseNameOnly(stdout) {
+  return `${stdout ?? ''}`
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 /**
@@ -198,7 +336,12 @@ export async function createWorktree({ boardId, slotId, branch, baseRef }) {
  * to record a true two-parent merge.
  * @param {{ boardId: string, fromBranch: string, message?: string }} input
  */
-export async function mergeIntoIntegration({ boardId, fromBranch, message }) {
+export async function mergeIntoIntegration(input) {
+  return withBoardIntegrationLock(input.boardId, () => mergeIntoIntegrationUnlocked(input));
+}
+
+/** @param {{ boardId: string, fromBranch: string, message?: string }} input */
+async function mergeIntoIntegrationUnlocked({ boardId, fromBranch, message }) {
   const intPath = getWorktreeSlotPath(boardId, 'integration');
   try {
     await fs.access(intPath);
@@ -213,10 +356,7 @@ export async function mergeIntoIntegration({ boardId, fromBranch, message }) {
   const m = await git(args, intPath);
   if (!ok(m)) {
     const diff = await git(['diff', '--name-only', '--diff-filter=U'], intPath);
-    const conflictedFiles = `${diff.stdout ?? ''}`
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean);
+    const conflictedFiles = parseNameOnly(diff.stdout);
     return {
       ok: false,
       conflict: true,
@@ -230,7 +370,8 @@ export async function mergeIntoIntegration({ boardId, fromBranch, message }) {
 
 /**
  * True when a merge is actively in progress in the integration worktree
- * (MERGE_HEAD is set). Returns { ok: true, inProgress: boolean }.
+ * (MERGE_HEAD is set) or a locked rebase/merge is executing for this board.
+ * Returns { ok: true, inProgress: boolean }.
  * @param {{ boardId: string }} input
  */
 export async function mergeInProgress({ boardId }) {
@@ -241,7 +382,97 @@ export async function mergeInProgress({ boardId }) {
     return { ok: false, error: 'integration worktree missing' };
   }
   const r = await git(['rev-parse', '--verify', 'MERGE_HEAD'], intPath);
-  return { ok: true, inProgress: r.code === 0 };
+  return { ok: true, inProgress: r.code === 0 || isBoardIntegrationLocked(boardId) };
+}
+
+/**
+ * Resolve a ref inside the board integration worktree (MIN-707).
+ *
+ * The merge queue snapshots HEAD before merging (`beforeSha`) so a failed
+ * verify can `restoreIntegration`, and reads HEAD afterwards for the
+ * `merge.succeeded` sha. `MERGE_HEAD` / `ORIG_HEAD` are the restart-recovery
+ * probes: a half-applied merge is never left sitting.
+ *
+ * @param {{ boardId: string, ref?: string }} input
+ * @returns {Promise<string | null>}
+ */
+export async function readIntegrationRef({ boardId, ref = 'HEAD' }) {
+  const intPath = getWorktreeSlotPath(boardId, 'integration');
+  try {
+    await fs.access(intPath);
+  } catch {
+    return null;
+  }
+  const name = (ref && String(ref).trim()) || 'HEAD';
+  return resolveRef(name, intPath);
+}
+
+/**
+ * Rebase a task/wave worktree onto the current board integration tip (MIN-706).
+ *
+ * A conflict is a normal outcome, not an exception: `{ ok: false, conflicts }`
+ * after aborting so the worktree is the pre-rebase tree, agent-usable.
+ * Already-up-to-date and empty (nothing to replay) return `{ ok: true, sha }`
+ * with the unchanged SHA and do not start a rebase.
+ *
+ * Serialised with `mergeIntoIntegration` via the board-keyed mutex.
+ *
+ * @param {{ boardId: string, slotId: string }} input
+ * @returns {Promise<{ ok: true, sha: string } | { ok: false, conflicts: string[], error?: string }>}
+ */
+export async function rebaseOntoIntegration(input) {
+  return withBoardIntegrationLock(input.boardId, () => rebaseOntoIntegrationUnlocked(input));
+}
+
+/** @param {{ boardId: string, slotId: string }} input */
+async function rebaseOntoIntegrationUnlocked({ boardId, slotId }) {
+  const wtPath = getWorktreeSlotPath(boardId, slotId);
+  const intPath = getWorktreeSlotPath(boardId, 'integration');
+  try {
+    await fs.access(wtPath);
+  } catch {
+    return { ok: false, error: 'worktree missing', conflicts: [] };
+  }
+  try {
+    await fs.access(intPath);
+  } catch {
+    return { ok: false, error: 'integration worktree missing', conflicts: [] };
+  }
+
+  const shaBefore = await resolveRef('HEAD', wtPath);
+  const intSha = await resolveRef('HEAD', intPath);
+  if (!shaBefore) return { ok: false, error: 'could not resolve worktree HEAD', conflicts: [] };
+  if (!intSha) return { ok: false, error: 'could not resolve integration HEAD', conflicts: [] };
+
+  // Unique commits on the task branch vs the integration tip. Zero means there
+  // is nothing to replay — empty branch or already merged — so do not start a
+  // rebase (git can report a spurious conflict on an empty replay).
+  const unique = await git(['rev-list', '--count', `${intSha}..HEAD`], wtPath);
+  const uniqueCount = Number.parseInt(`${unique.stdout ?? ''}`.trim(), 10) || 0;
+  if (uniqueCount === 0) {
+    return { ok: true, sha: shaBefore };
+  }
+
+  const rebase = await git(['rebase', intSha], wtPath);
+  if (ok(rebase)) {
+    const shaAfter = (await resolveRef('HEAD', wtPath)) || shaBefore;
+    return { ok: true, sha: shaAfter };
+  }
+
+  // Capture conflicted paths BEFORE abort — abort clears the unmerged index.
+  const diff = await git(['diff', '--name-only', '--diff-filter=U'], wtPath);
+  const conflicts = parseNameOnly(diff.stdout);
+
+  await abortRebaseAndVerify(wtPath, shaBefore);
+
+  if (conflicts.length > 0) {
+    return { ok: false, conflicts };
+  }
+  return {
+    ok: false,
+    conflicts: [],
+    error: out(rebase) || 'rebase failed',
+  };
 }
 
 /**
@@ -308,7 +539,12 @@ export async function checkMerged({ boardId, fromBranch }) {
  * hard-reset to `sha`, and remove untracked files. Used when a merge fixer fails.
  * @param {{ boardId: string, sha: string }} input
  */
-export async function restoreIntegration({ boardId, sha }) {
+export async function restoreIntegration(input) {
+  return withBoardIntegrationLock(input.boardId, () => restoreIntegrationUnlocked(input));
+}
+
+/** @param {{ boardId: string, sha: string }} input */
+async function restoreIntegrationUnlocked({ boardId, sha }) {
   const intPath = getWorktreeSlotPath(boardId, 'integration');
   try {
     await fs.access(intPath);
@@ -375,7 +611,12 @@ export async function verifyIntegrationMerge({ boardId, fromBranch }) {
  * Abort an in-progress merge inside the integration worktree (best-effort).
  * @param {{ boardId: string }} input
  */
-export async function abortMerge({ boardId }) {
+export async function abortMerge(input) {
+  return withBoardIntegrationLock(input.boardId, () => abortMergeUnlocked(input));
+}
+
+/** @param {{ boardId: string }} input */
+async function abortMergeUnlocked({ boardId }) {
   const intPath = getWorktreeSlotPath(boardId, 'integration');
   try {
     await fs.access(intPath);

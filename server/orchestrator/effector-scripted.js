@@ -38,6 +38,7 @@
  *   files?: string[],
  *   delayMs?: number,
  *   vanish?: boolean,
+ *   worktree?: string,
  * }} emit
  */
 
@@ -158,7 +159,10 @@ export function createScriptedEffector(options = {}) {
       // for an attempt it has not yet recorded as started.
       else void Promise.resolve().then(fire);
 
-      return { attemptId };
+      return {
+        attemptId,
+        ...(typeof emit.worktree === 'string' && emit.worktree ? { worktree: emit.worktree } : {}),
+      };
     },
 
     /**

@@ -11,6 +11,7 @@
  * ```
  * boards/<boardId>/journal.jsonl     append-only, kept forever
  * boards/<boardId>/snapshot.json     a cache; safe to delete at any time
+ * boards/<boardId>/report.md         P3-G end-of-run report; safe to delete (re-run the writer)
  * ```
  *
  * ## Journals are never pruned
@@ -27,6 +28,7 @@ import readline from 'node:readline';
 
 import { getMinnowHome, ensureMinnowLayout } from '../config/home.js';
 import { derive } from './core/derive.js';
+import { queryAbandonments } from './core/evidence.js';
 import { validateEvent } from './core/events.js';
 import {
   deriveFrom,
@@ -586,6 +588,17 @@ export async function loadState(boardId) {
   const snapshot = await readSnapshot(boardId);
   if (!snapshot || !isSnapshotUsable(snapshot, events)) return derive(events);
   return deriveFrom(snapshot, events);
+}
+
+/**
+ * Abandonments with full attempt history reconstructed from this board's
+ * journal alone (MIN-712 / PRD §11). No LLM, no derived cache.
+ *
+ * @param {string} boardId
+ * @returns {Promise<Array<{ taskId: string, reason: unknown, evidence: Record<string, unknown> }>>}
+ */
+export async function loadAbandonments(boardId) {
+  return queryAbandonments(await readEvents(boardId));
 }
 
 // ---------------------------------------------------------------------------

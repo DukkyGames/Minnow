@@ -10,6 +10,9 @@ import { describe, it } from 'node:test';
 import { derive } from '../../server/orchestrator/core/derive.js';
 import { makeEvent } from '../../server/orchestrator/core/events.js';
 import {
+  abandonmentEvidenceIsComplete,
+} from '../../server/orchestrator/core/evidence.js';
+import {
   globsIntersect,
   manualStart,
   nextAction,
@@ -18,6 +21,7 @@ import {
   pendingEnqueues,
   pendingSkips,
   plan,
+  footprintsClash,
   touchesOverlap,
 } from '../../server/orchestrator/core/plan.js';
 
@@ -136,6 +140,48 @@ describe('plan — the six rules', () => {
     ];
     const free = boardOf({ tasks: disjoint, concurrency: 2 });
     assert.deepEqual(nonMerge(plan(free)).map((d) => d.taskId), ['A', 'B']);
+  });
+
+  it('rule 3: expanded file overlap serialises even when declared globs look disjoint', () => {
+    const tasks = [
+      task('A', { touches: ['src/a/**'], touchesExpanded: ['src/shared/x.ts', 'src/a/one.ts'] }),
+      task('B', { touches: ['src/b/**'], touchesExpanded: ['src/shared/x.ts', 'src/b/two.ts'] }),
+    ];
+    const state = boardOf({ tasks, concurrency: 2 });
+    assert.deepEqual(nonMerge(plan(state)).map((d) => d.taskId), ['A']);
+  });
+
+  it('rule 3: frozen expansion does not change when later files would overlap', () => {
+    const tasks = [
+      task('A', { touches: ['src/a/**'], touchesExpanded: ['src/a/one.ts'] }),
+      task('B', { touches: ['src/b/**'], touchesExpanded: ['src/b/two.ts'] }),
+    ];
+    const state = boardOf({ tasks, concurrency: 2 });
+    assert.deepEqual(nonMerge(plan(state)).map((d) => d.taskId), ['A', 'B']);
+    // A file that appeared after board.created is irrelevant: plan() never re-walks.
+    assert.equal(
+      footprintsClash(
+        { touches: ['src/a/**'], touchesExpanded: ['src/a/one.ts'] },
+        { touches: ['src/b/**'], touchesExpanded: ['src/b/two.ts'] },
+      ),
+      false,
+    );
+  });
+
+  it('rule 3: empty expansion overlaps nothing extra (declared globs still apply)', () => {
+    const empty = [
+      task('A', { touches: ['nope/a/**'], touchesExpanded: [] }),
+      task('B', { touches: ['nope/b/**'], touchesExpanded: [] }),
+    ];
+    const free = boardOf({ tasks: empty, concurrency: 2 });
+    assert.deepEqual(nonMerge(plan(free)).map((d) => d.taskId), ['A', 'B']);
+
+    const stillDeclared = [
+      task('A', { touches: ['src/shared/**'], touchesExpanded: [] }),
+      task('B', { touches: ['src/shared/x.ts'], touchesExpanded: [] }),
+    ];
+    const serial = boardOf({ tasks: stillDeclared, concurrency: 2 });
+    assert.deepEqual(nonMerge(plan(serial)).map((d) => d.taskId), ['A']);
   });
 
   it('rule 4: respects the concurrency cap', () => {
@@ -292,6 +338,24 @@ describe('plan — the sequential deadlock regression', () => {
     assert.deepEqual(at(), [], 'the run is done');
   });
 
+  it('a failed final test does not re-desire builders, testers, or merges', () => {
+    // Guessing which task broke the ladder is a V1 sin. Failure journals
+    // and reports; plan() must not reopen work.
+    const state = boardOf(
+      { tasks: [task('A'), task('B')], concurrency: 4 },
+      ...merged('A', 's1'),
+      ...merged('B', 's2'),
+      makeEvent('final.test.ended', {
+        outcome: 'fail',
+        runInstructions: 'command: npx tsc --noEmit\ncwd: /tmp/integration',
+      }),
+    );
+    assert.deepEqual(plan(state), []);
+    assert.equal(state.tasks.get('A').phase, 'merged');
+    assert.equal(state.tasks.get('B').phase, 'merged');
+    assert.equal(state.finalTest.outcome, 'fail');
+  });
+
   it('recovers a slot the moment a blocked builder is retried, with the same worktree', () => {
     // The env-fixer's replacement. Same agent, same worktree, repair seed.
     const state = boardOf(
@@ -420,6 +484,17 @@ describe('plan — in-flight attempts', () => {
     ]);
   });
 
+  it('describes a resumed continue attempt as same-worktree too', () => {
+    const state = boardOf(
+      { tasks: [task('A')], concurrency: 1 },
+      ...attempt('A', 'a1', 'builder', 'crashed'),
+      started('A', 'a2', 'builder', { seedKind: 'continue' }),
+    );
+    assert.deepEqual(plan(state), [
+      { taskId: 'A', role: 'builder', seedKind: 'continue', sameWorktree: true },
+    ]);
+  });
+
   it('lets running work continue when the cap is lowered beneath it', () => {
     // The cap gates starting, not continuing. Killing a builder mid-edit to
     // enforce a number the user changed afterwards throws away real work.
@@ -468,7 +543,7 @@ describe('pendingSkips — dead ends never stall the run', () => {
     );
     assert.deepEqual(pendingSkips(state), [
       { taskId: 'B', blockedBy: 'A' },
-      { taskId: 'C', blockedBy: 'B' },
+      { taskId: 'C', blockedBy: 'A' },
     ]);
     // And the independent task keeps going — the whole point.
     assert.deepEqual(nonMerge(plan(state)).map((d) => d.taskId), ['D']);
@@ -479,7 +554,7 @@ describe('pendingSkips — dead ends never stall the run', () => {
       { tasks: chain, concurrency: 4 },
       makeEvent('task.abandoned', { taskId: 'A', reason: 'builder-failed' }),
       makeEvent('task.skipped', { taskId: 'B', blockedBy: 'A' }),
-      makeEvent('task.skipped', { taskId: 'C', blockedBy: 'B' }),
+      makeEvent('task.skipped', { taskId: 'C', blockedBy: 'A' }),
     );
     assert.deepEqual(pendingSkips(state), []);
   });
@@ -510,6 +585,39 @@ describe('pendingSkips — dead ends never stall the run', () => {
     assert.deepEqual(nonMerge(plan(state)).map((d) => d.taskId), ['E']);
     assert.deepEqual(pendingSkips(state).map((s) => s.taskId), ['A', 'B']);
   });
+
+  it('skips a diamond DAG behind the abandoned root, and nothing else', () => {
+    const diamond = [
+      task('A'),
+      task('B', { wave: 2, dependsOn: ['A'] }),
+      task('C', { wave: 2, dependsOn: ['A'] }),
+      task('D', { wave: 3, dependsOn: ['B', 'C'] }),
+      task('E', { wave: 2, touches: ['src/e/**'] }),
+    ];
+    const state = boardOf(
+      { tasks: diamond, concurrency: 4 },
+      makeEvent('task.abandoned', { taskId: 'A', reason: 'builder-failed' }),
+    );
+    assert.deepEqual(pendingSkips(state), [
+      { taskId: 'B', blockedBy: 'A' },
+      { taskId: 'C', blockedBy: 'A' },
+      { taskId: 'D', blockedBy: 'A' },
+    ]);
+    assert.deepEqual(nonMerge(plan(state)).map((d) => d.taskId), ['E']);
+  });
+
+  it('does not skip a task that only shares a wave', () => {
+    const sameWave = [
+      task('A', { wave: 1 }),
+      task('B', { wave: 1, touches: ['src/b/**'] }),
+    ];
+    const state = boardOf(
+      { tasks: sameWave, concurrency: 4 },
+      makeEvent('task.abandoned', { taskId: 'A', reason: 'builder-failed' }),
+    );
+    assert.deepEqual(pendingSkips(state), []);
+    assert.deepEqual(nonMerge(plan(state)).map((d) => d.taskId), ['B']);
+  });
 });
 
 describe('nextAction — the single policy call site', () => {
@@ -524,9 +632,9 @@ describe('nextAction — the single policy call site', () => {
     const cases = [
       [['fail'], { kind: 'start', role: 'builder', seedKind: 'failure-aware', sameWorktree: false }],
       [['blocked'], { kind: 'start', role: 'builder', seedKind: 'repair', sameWorktree: true }],
-      [['crashed'], { kind: 'start', role: 'builder', seedKind: 'continue', sameWorktree: false }],
-      [['timeout'], { kind: 'start', role: 'builder', seedKind: 'continue', sameWorktree: false }],
-      [['no_report'], { kind: 'start', role: 'builder', seedKind: 'continue', sameWorktree: false }],
+      [['crashed'], { kind: 'start', role: 'builder', seedKind: 'continue', sameWorktree: true }],
+      [['timeout'], { kind: 'start', role: 'builder', seedKind: 'continue', sameWorktree: true }],
+      [['no_report'], { kind: 'start', role: 'builder', seedKind: 'continue', sameWorktree: true }],
       [['pass'], { kind: 'start', role: 'tester', seedKind: 'initial', sameWorktree: false }],
     ];
     for (const [outcomes, expected] of cases) {
@@ -567,7 +675,11 @@ describe('nextAction — the single policy call site', () => {
     const next = nextAction(state, 'A');
     assert.equal(next.kind, 'abandon');
     assert.equal(next.reason, 'builder-failed');
-    assert.deepEqual(next.evidence, { role: 'builder', outcome: 'fail', attemptCount: 2 });
+    assert.equal(next.evidence.role, 'builder');
+    assert.equal(next.evidence.outcome, 'fail');
+    assert.equal(next.evidence.attemptCount, 2);
+    assert.equal(next.evidence.attempts.length, 3, 'attempt history must not be truncated');
+    assert.ok(abandonmentEvidenceIsComplete(next.evidence));
     assert.deepEqual(pendingAbandonments(state), [
       { taskId: 'A', reason: 'builder-failed', evidence: next.evidence },
     ]);
@@ -596,7 +708,7 @@ describe('nextAction — the single policy call site', () => {
       makeEvent('merge.conflicted', { taskId: 'A', files: ['src/a.ts'] }),
     );
     assert.deepEqual(nextAction(state, 'A'), {
-      kind: 'start', role: 'builder', seedKind: 'rebase', sameWorktree: false,
+      kind: 'start', role: 'builder', seedKind: 'rebase', sameWorktree: true,
     });
     assert.deepEqual(plan(state).map((d) => d.seedKind), ['rebase']);
   });

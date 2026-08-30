@@ -346,6 +346,31 @@
   font-variant-numeric: tabular-nums;
 }
 
+.ov2-controls__status {
+  display: inline-flex;
+  border: 1px solid var(--mn-border-strong);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ov2-controls__status .ov2-btn {
+  border-radius: 0;
+  border: 0;
+  border-right: 1px solid var(--mn-border);
+}
+
+.ov2-controls__status .ov2-btn:last-child {
+  border-right: 0;
+}
+
+.ov2-controls__hint {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--mn-fg-muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
 .ov2-controls__mode {
   color: var(--mn-fg-muted);
   font-size: 11.5px;
@@ -612,6 +637,11 @@
 .ov2-task__note--warn {
   background: var(--mn-warning-soft);
   color: var(--mn-warning);
+}
+
+.ov2-task__note--info {
+  background: var(--mn-accent-soft);
+  color: var(--mn-accent-ink);
 }
 
 /* ── Attempts ──────────────────────────────────────────────────────────── */
@@ -885,7 +915,7 @@ select.ov2-create__input {
   font-size: 11.5px;
 }
 
-.ov2-create__error {
+  .ov2-create__error {
   margin: 0;
   color: var(--mn-danger-ink);
   font-size: 12px;
@@ -1220,6 +1250,48 @@ select.ov2-create__input {
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
+}
+
+/* ── Finish report (P3-G) ──────────────────────────────────────────────── */
+
+.ov2-finish {
+  margin: 12px 14px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--mn-border);
+  border-radius: 10px;
+  background: var(--mn-surface-0);
+}
+
+.ov2-finish--idle {
+  display: none;
+}
+
+.ov2-finish__title {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ov2-finish__pending,
+.ov2-finish .ov2-empty {
+  margin: 0;
+  color: var(--mn-fg-muted);
+  font-size: 12.5px;
+}
+
+.ov2-finish__body {
+  margin: 0;
+  max-height: 420px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--mn-surface-1);
+  color: var(--mn-fg);
+  font-family: var(--mn-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* ── Narrow ────────────────────────────────────────────────────────────── */

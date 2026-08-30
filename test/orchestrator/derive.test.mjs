@@ -70,6 +70,7 @@ describe('derive — shape', () => {
     assert.deepEqual([...state.tasks.keys()], ['W1-A', 'W1-B', 'W2-C']);
     assert.deepEqual(state.waves, [{ n: 1, name: 'One' }, { n: 2, name: 'Two' }]);
     assert.equal(state.status, 'created');
+    assert.equal(state.concurrency, 1, 'fold placeholder until board.started');
     assert.equal(state.tasks.get('W2-C').dependsOn.join(','), 'W1-A,W1-B');
     assert.deepEqual(state.tasks.get('W1-A').touches, ['src/a/**']);
     assert.equal(state.tasks.get('W1-A').buildSpec, 'b');
@@ -174,6 +175,32 @@ describe('derive — shape', () => {
     assert.equal(state.tasks.get('W1-A').phase, 'building');
     assert.equal(state.tasks.get('W1-A').touchesOverflow.length, 1);
     assert.deepEqual(state.tasks.get('W1-A').touchesOverflow[0].actual, ['src/a/x.ts', 'package-lock.json']);
+  });
+
+  it('folds journaled expansion and empty-glob warnings from board.created', () => {
+    const state = derive(
+      journal(
+        makeEvent('board.created', {
+          boardId: 'b',
+          planPath: 'p.md',
+          waves: [],
+          tasks: [
+            {
+              id: 'W1-A',
+              title: 'A',
+              wave: 1,
+              dependsOn: [],
+              touches: ['src/a/**', 'missing/**'],
+              touchesExpanded: ['src/a/x.ts'],
+              emptyTouchesGlobs: ['missing/**'],
+            },
+          ],
+        }),
+      ),
+    );
+    const task = state.tasks.get('W1-A');
+    assert.deepEqual(task.touchesExpanded, ['src/a/x.ts']);
+    assert.deepEqual(task.emptyTouchesGlobs, ['missing/**']);
   });
 
   it('records the final test and the run summary', () => {
@@ -318,9 +345,32 @@ describe('derive — readiness and dead ends', () => {
       ),
     );
     const dead = deadEnded(state);
-    assert.deepEqual([...dead.entries()], [['B', 'A'], ['C', 'B']]);
+    assert.deepEqual([...dead.entries()], [['B', 'A'], ['C', 'A']]);
     assert.equal(dead.has('D'), false, 'an independent task must not be stranded');
     assert.deepEqual(readyTasks(state), ['D']);
+  });
+
+  it('names the abandoned root on a diamond DAG, not the skipped parents', () => {
+    const graph = [
+      { id: 'A', title: 'A', wave: 1, dependsOn: [], touches: [] },
+      { id: 'B', title: 'B', wave: 2, dependsOn: ['A'], touches: [] },
+      { id: 'C', title: 'C', wave: 2, dependsOn: ['A'], touches: [] },
+      { id: 'D', title: 'D', wave: 3, dependsOn: ['B', 'C'], touches: [] },
+      { id: 'E', title: 'E', wave: 2, dependsOn: [], touches: [] },
+    ];
+    const state = derive(
+      journal(
+        makeEvent('board.created', { boardId: 'b', planPath: 'p', tasks: graph, waves: [] }),
+        makeEvent('task.abandoned', { taskId: 'A', reason: 'builder-failed-twice' }),
+      ),
+    );
+    const dead = deadEnded(state);
+    assert.deepEqual([...dead.entries()], [
+      ['B', 'A'],
+      ['C', 'A'],
+      ['D', 'A'],
+    ]);
+    assert.equal(dead.has('E'), false);
   });
 });
 

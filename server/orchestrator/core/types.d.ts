@@ -141,11 +141,15 @@ export type MergeSucceededEvent = EventEnvelope & {
   type: 'merge.succeeded';
   taskId: string;
   sha: string;
+  /** Integration tip before this merge. Written by P3-C; older journals omit it. */
+  beforeSha?: string;
 };
 export type MergeConflictedEvent = EventEnvelope & {
   type: 'merge.conflicted';
   taskId: string;
   files: string[];
+  /** Integration tip before this merge. Written by P3-C; older journals omit it. */
+  beforeSha?: string;
 };
 export type TaskAbandonedEvent = EventEnvelope & {
   type: 'task.abandoned';
@@ -227,6 +231,14 @@ export interface PlanTask {
   dependsOn: string[];
   /** Repo-relative globs this task may write. Required, and never empty. */
   touches: string[];
+  /**
+   * Files those globs matched at board creation. Optional: parsePlan is pure
+   * and does not walk the repo; middleware journals this so `plan()` can
+   * replay without re-expanding.
+   */
+  touchesExpanded?: string[];
+  /** Declared globs that matched no file at board creation. Warning, not a blocker. */
+  emptyTouchesGlobs?: string[];
   build: string;
   test: string;
   accept: string;
@@ -317,6 +329,14 @@ export interface TaskState {
   wave: number;
   dependsOn: string[];
   touches: string[];
+  /**
+   * Frozen expansion of `touches` against the workspace at `board.created`.
+   * `null` means the journal predates P3-D — `plan()` uses declared globs only.
+   * `[]` means every glob matched nothing (empty expansion overlaps nothing extra).
+   */
+  touchesExpanded: string[] | null;
+  /** Globs that matched no files when the board was created. Informational. */
+  emptyTouchesGlobs: string[];
   buildSpec: string | null;
   testSpec: string | null;
   accept: string | null;
@@ -353,7 +373,16 @@ export interface FinalTestState {
   evidence: Evidence | null;
 }
 
-/** The whole board, derived. The only state the engine has. */
+/**
+ * The whole board, derived. The only state the engine has.
+ *
+ * Autonomy is this pair and nothing else (PRD §6): `status` is whether the
+ * reconcile loop is ticking, `concurrency` is how many attempts may *start*.
+ * Sequential is Running at N=1; AFK is Running with no interactive gates;
+ * Manual is Stopped plus per-task start. V1's `executionMode` / `handsOff` /
+ * `pendingAfk` / `autoRunning` / `systemPaused` / `userStopped` are not here —
+ * they could contradict each other. Field deletion from V1 structs is P4-F.
+ */
 export interface BoardState {
   boardId: string;
   name: string;
@@ -385,7 +414,11 @@ export interface Desired {
   taskId: string | null;
   role: Role;
   seedKind: SeedKind;
-  /** `blocked` repairs in the worktree it broke in rather than a fresh one. */
+  /**
+   * `repair`, `continue`, and `rebase` reuse the previous worktree;
+   * `failure-aware` and `fix` start fresh (MIN-705 / MIN-707). Derived from
+   * `seedKind` via `wantsSameWorktree`.
+   */
   sameWorktree: boolean;
 }
 
@@ -417,7 +450,7 @@ export interface RetryAction {
   kind: 'retry';
   role: 'builder';
   seedKind: SeedKind;
-  /** `blocked` repairs in the worktree it broke in. */
+  /** True for `repair`, `continue`, and `rebase` (MIN-705 / MIN-707). */
   sameWorktree: boolean;
 }
 

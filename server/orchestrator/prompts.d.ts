@@ -1,7 +1,7 @@
 export function stripPromptFrontmatter(raw: string): string;
 
 export function loadRolePrompt(
-  role: 'builder' | 'tester',
+  role: 'builder' | 'tester' | 'final',
   variant?: 'full' | 'lite',
 ): Promise<string>;
 
