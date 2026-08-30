@@ -91,6 +91,20 @@ function truncateStatus(message: string, max = 80): string {
   return `${trimmed.slice(0, max - 1)}…`;
 }
 
+/**
+ * Chromium reports a ResizeObserver notification backlog as a window `error`.
+ * It is not a crash: a callback changed layout in the same frame, so later
+ * observations were deferred. CodeMirror, xterm, and compact composer all
+ * hit this on workspace mount.
+ */
+const RESIZE_OBSERVER_LOOP_RE =
+  /^ResizeObserver loop (completed with undelivered notifications|limit exceeded)\.?$/i;
+
+/** True when the browser is only warning about a ResizeObserver notification loop. */
+export function isBenignResizeObserverLoopError(message: string): boolean {
+  return RESIZE_OBSERVER_LOOP_RE.test(message.trim());
+}
+
 function report(kind: string, message: string, stack?: string): void {
   const key = buildSurfaceKey(kind, message, stack);
   const decision = shouldSurface(key, Date.now());
@@ -178,6 +192,10 @@ export function installRendererDiagnostics(): void {
   window.addEventListener('error', (ev) => {
     const message =
       ev.message || (ev.error instanceof Error ? ev.error.message : '') || 'Script error';
+    if (isBenignResizeObserverLoopError(message)) {
+      ev.preventDefault();
+      return;
+    }
     const stack = ev.error instanceof Error ? ev.error.stack : undefined;
     report('uncaught-error', message, stack);
   });

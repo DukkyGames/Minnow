@@ -17,6 +17,7 @@ import {
   type CalendarRow,
 } from '../../calendar/client';
 import { getMaxInlineEvents, loadCalendarPrefs, type CalendarPrefs } from '../../calendar/prefs';
+import { scheduleAnimationFrame } from '../../lib/schedule-animation-frame';
 import { openEventEditorWindow } from './event-editor-overlay';
 import { openCalendarSettings } from './calendar-settings';
 export interface CalendarPanelOptions {
@@ -673,8 +674,8 @@ export async function renderCalendarPanel(
     applyRailState();
   }
 
-  const layoutObserver = new ResizeObserver((entries) => {
-    const width = entries[0]?.contentRect.width ?? 0;
+  const applyLayout = scheduleAnimationFrame(() => {
+    const width = windowBody.clientWidth;
     const narrow = width < 720;
     windowBody.classList.toggle('calendar-window-body--narrow', narrow);
     if (narrow && !rail.classList.contains('calendar-rail--force-expanded')) {
@@ -682,6 +683,7 @@ export async function renderCalendarPanel(
       applyRailState();
     }
   });
+  const layoutObserver = new ResizeObserver(() => applyLayout());
   layoutObserver.observe(windowBody);
   applyRailState();
 

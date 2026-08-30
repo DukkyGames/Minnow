@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 import {
   buildSurfaceKey,
   firstStackFrame,
+  isBenignResizeObserverLoopError,
   resetDiagnosticsSurfaceStateForTests,
   shouldSurface,
 } from '../../src/boot/diagnostics.ts';
@@ -36,5 +37,16 @@ describe('renderer diagnostics dedupe', () => {
     const overflow = shouldSurface('key-overflow', t0 + 10);
     assert.equal(overflow.surfaceUi, false);
     assert.equal(overflow.rollSuppressionCard, true);
+  });
+
+  test('isBenignResizeObserverLoopError matches Chromium ResizeObserver loop messages', () => {
+    assert.equal(
+      isBenignResizeObserverLoopError(
+        'ResizeObserver loop completed with undelivered notifications.',
+      ),
+      true,
+    );
+    assert.equal(isBenignResizeObserverLoopError('ResizeObserver loop limit exceeded'), true);
+    assert.equal(isBenignResizeObserverLoopError('TypeError: boom'), false);
   });
 });

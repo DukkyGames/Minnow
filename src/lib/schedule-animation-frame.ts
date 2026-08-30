@@ -6,6 +6,10 @@
 export function scheduleAnimationFrame(fn: () => void): () => void {
   let rafId = 0;
   return () => {
+    if (typeof requestAnimationFrame !== 'function') {
+      fn();
+      return;
+    }
     if (rafId) return;
     rafId = requestAnimationFrame(() => {
       rafId = 0;

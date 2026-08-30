@@ -53,6 +53,7 @@ import {
 } from '../chat/orchestrate/plan-preview';
 import { findChatById } from '../state/sessions';
 import type { Chat } from '../types';
+import { scheduleAnimationFrame } from '../lib/schedule-animation-frame';
 import { bindComposerAutoResize } from './composer-auto-resize';
 import { cancelComposerExpandFor, initComposerExpand } from './composer-expand';
 
@@ -409,14 +410,15 @@ class SuperPlanPage {
   private autoCollapseRailWhenNarrow(): void {
     if (typeof ResizeObserver !== 'function') return;
     let wasNarrow: boolean | null = null;
-    const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 0;
+    const applyNarrow = scheduleAnimationFrame(() => {
+      const width = this.root.clientWidth;
       if (width <= 0) return;
       const narrow = width < 660;
       if (narrow === wasNarrow) return;
       wasNarrow = narrow;
       this.root.classList.toggle('is-rail-hidden', narrow);
     });
+    const observer = new ResizeObserver(() => applyNarrow());
     observer.observe(this.root);
     this.railObserver = observer;
   }
@@ -436,7 +438,7 @@ class SuperPlanPage {
       body.style.setProperty('--sp-runhead-h', `${Math.round(head.offsetHeight)}px`);
       body.style.setProperty('--sp-runbody-h', `${Math.round(body.clientHeight)}px`);
     };
-    const observer = new ResizeObserver(publish);
+    const observer = new ResizeObserver(scheduleAnimationFrame(publish));
     observer.observe(head);
     observer.observe(body);
     publish();
