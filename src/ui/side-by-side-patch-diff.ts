@@ -146,10 +146,26 @@ function mountCell(
   return el;
 }
 
+export interface RenderSideBySidePatchDiffOptions {
+  /** When true, long lines wrap inside each column (MIN-675). Default false. */
+  wordWrap?: boolean;
+}
+
+/** Apply or clear the wrap class on a mounted side-by-side host. */
+export function setSideBySidePatchDiffWordWrap(host: HTMLElement, wordWrap: boolean): void {
+  host.classList.toggle('sbs-diff--wrap', wordWrap);
+}
+
 /** Render aligned side-by-side diff into `host` (scrolls as one surface). */
-export function renderSideBySidePatchDiff(host: HTMLElement, patch: string): void {
+export function renderSideBySidePatchDiff(
+  host: HTMLElement,
+  patch: string,
+  options: RenderSideBySidePatchDiffOptions = {},
+): void {
   host.replaceChildren();
   host.classList.add('sbs-diff');
+  // Word wrap keeps long commit-review lines in view instead of forcing sideways scroll.
+  setSideBySidePatchDiffWordWrap(host, options.wordWrap === true);
 
   const allRows = buildSideBySideRowsFromPatch(patch);
   const truncated = allRows.length > MAX_RENDER_ROWS;

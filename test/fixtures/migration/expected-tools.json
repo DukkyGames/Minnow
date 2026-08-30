@@ -225,5 +225,9 @@
   "toolCache": {
     "enabled": true
   },
+  "toolOutput": {
+    "enabled": true,
+    "maxChars": 128000
+  },
   "plugins": {}
 }
