@@ -94,6 +94,7 @@ import {
   llamaServerSpawnCwd,
   resolveLlamaServer,
   detectLlamaThinkingBudgetSupport,
+  assertLlamaServerMatchesHostArch,
 } from './llama-runtime.js';
 
 /** @typedef {'starting' | 'running' | 'stopped' | 'error' | 'crashed' | 'unhealthy'} ServeStatus */
@@ -945,6 +946,9 @@ export async function startServe(body) {
         'llama-server is not installed — install from Models or Settings → Servers before serving',
       );
     }
+    // Wrong-arch PE produces a 0-byte serve log (process never starts). Fail
+    // here so Local Server shows the Settings remediation instead of silence.
+    assertLlamaServerMatchesHostArch(llamaServerPath);
     llamaVariant = (await getInstalledLlamaVariant()) ?? 'cpu';
   }
   if (runtime === 'ollama' && !runtimes.ollama.serving) {

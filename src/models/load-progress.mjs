@@ -279,7 +279,9 @@ export function updateLoadRate(previousBytesPerMs, sample) {
  * @property {string} [logText] Everything the serve has printed so far.
  * @property {number} elapsedMs Wall time since the process was spawned.
  * @property {number} [weightsBytes] Size of the weights being loaded.
- * @property {number} [bytesPerMs] From `resolveBytesPerMs`; 0 disables the time model.
+ * @property {number} [bytesPerMs] From `resolveBytesPerMs`. Floored at
+ *   FIRST_LOAD_BYTES_PER_MS when `weightsBytes` is known so a slow prior cannot
+ *   paint 35% on a 7s reload. 0 with no size uses the saturating clock.
  * @property {number | null} [previousPercent] Last value shown, to hold the bar monotonic.
  * @property {number | null} [lastElapsedMs] Elapsed ms on the previous tick, so skipped-phase catch-up can be rate-limited.
  * @property {number | null} [reportedPercent] A real percentage from the runtime, if a
@@ -300,10 +302,18 @@ export function updateLoadRate(previousBytesPerMs, sample) {
  */
 
 /**
- * Typical wall time for a first load with no rate prior. Paces the climb and
- * the overtime leak past a silent phase ceiling. Not shown as an ETA.
+ * Typical wall time for a first load with no rate prior. Paces the climb from
+ * a late phase floor and the overtime leak when we *do* have a size+rate.
+ * Not used as the 0–100 ruler when size is unknown — that path is saturating
+ * (a 7s CUDA load on a 25s clock is how the chip used to read 35% at Ready).
  */
 const DEFAULT_LOAD_MS = 25_000;
+
+/**
+ * Half-life of the no-size saturating clock. 7.09s (the captured Qwen3.8-27B
+ * load) lands around 80%, not 7/25 = 28%.
+ */
+const SATURATING_HALF_LIFE_MS = 3_000;
 
 /**
  * When the log skips a phase (fitting 4% then offload at 70%), ease toward the
@@ -330,27 +340,47 @@ const PHASE_CATCHUP_SPAN = 82;
  *
  * @param {{ floor: number, ceiling: number }} phase
  * @param {number} elapsedMs
- * @param {number} typicalTotalMs Rate-prior duration, or DEFAULT_LOAD_MS.
+ * @param {number} typicalTotalMs Size÷rate duration, or 0 when we have no size.
  */
 function modelledPercentForPhase(phase, elapsedMs, typicalTotalMs) {
-  const totalMs = typicalTotalMs > 0 ? typicalTotalMs : DEFAULT_LOAD_MS;
-  const timePercent = totalMs > 0 ? (Math.max(0, elapsedMs) / totalMs) * 100 : 0;
+  const hasRate = typicalTotalMs > 0;
+  // Climb-from-floor still needs a duration when the log is already at KV-cache
+  // and the clock is behind. Saturating is the 0–100 ruler only when we have
+  // no file size — otherwise a 7s load finishes at 28% of a 25s stick.
+  const climbMs = hasRate ? typicalTotalMs : DEFAULT_LOAD_MS;
+  const timePercent = hasRate
+    ? (Math.max(0, elapsedMs) / typicalTotalMs) * 100
+    : saturatingPercent(elapsedMs);
 
   if (timePercent < phase.floor) {
-    const t = totalMs > 0 ? Math.min(0.999, Math.max(0, elapsedMs) / totalMs) : 0;
+    const t = climbMs > 0 ? Math.min(0.999, Math.max(0, elapsedMs) / climbMs) : 0;
     return phase.floor + (phase.ceiling - phase.floor) * t;
   }
 
   if (timePercent <= phase.ceiling) return timePercent;
 
-  const typicalMsForCeiling = (phase.ceiling / 100) * totalMs;
+  if (!hasRate) {
+    return Math.min(MAX_PERCENT_BEFORE_HEALTHY, Math.max(phase.ceiling, timePercent));
+  }
+
+  const typicalMsForCeiling = (phase.ceiling / 100) * typicalTotalMs;
   const overtimeMs = Math.max(0, elapsedMs - typicalMsForCeiling);
-  const leakSpan = Math.max(totalMs, DEFAULT_LOAD_MS);
+  const leakSpan = Math.max(typicalTotalMs, DEFAULT_LOAD_MS);
   // Listening's ceiling is 100; remaining must not go negative or a long
   // wait on "server is listening" walks the bar backwards from 99.
   const remaining = Math.max(0, MAX_PERCENT_BEFORE_HEALTHY - phase.ceiling);
   const leak = leakSpan > 0 ? (overtimeMs / leakSpan) * remaining : 0;
   return Math.min(MAX_PERCENT_BEFORE_HEALTHY, phase.ceiling + leak);
+}
+
+/**
+ * Asymptote toward 99 when we do not know the GGUF size. Linear elapsed/25s
+ * is why a 7s mmap reload painted ~35% and then jumped to Ready.
+ * @param {number} elapsedMs
+ */
+function saturatingPercent(elapsedMs) {
+  const elapsed = Math.max(0, elapsedMs);
+  return MAX_PERCENT_BEFORE_HEALTHY * (1 - 2 ** -(elapsed / SATURATING_HALF_LIFE_MS));
 }
 
 /**
@@ -401,14 +431,16 @@ export function computeLoadProgress(input) {
   // paint (tab was in the background) can catch up instead of sitting at 0.
   const dtMs = Number.isFinite(lastElapsedMs) ? Math.max(0, elapsedMs - lastElapsedMs) : elapsedMs;
   const weightsBytes = positive(input.weightsBytes);
-  const bytesPerMs =
-    positive(input.bytesPerMs) || (weightsBytes > 0 ? FIRST_LOAD_BYTES_PER_MS : 0);
+  // A cold-cache lastLoadMs (20s) must not beat the first-load floor: 7s / 20s
+  // is the 35% the chip showed when this file became Ready on a warm mmap.
+  // A faster measured prior still wins.
+  const priorRate = positive(input.bytesPerMs);
+  const seededRate = weightsBytes > 0 ? FIRST_LOAD_BYTES_PER_MS : 0;
+  const bytesPerMs = Math.max(priorRate, seededRate);
   const predictedTotalMs = weightsBytes > 0 && bytesPerMs > 0 ? weightsBytes / bytesPerMs : 0;
 
-  // Rate prior when we have one, else file size at FIRST_LOAD_BYTES_PER_MS, else
-  // the 25s clock. The phase floor still holds us up; the weights band is wide
-  // enough that a 7s CUDA copy of a 13 GiB file does not finish painted at 40%.
-  const typicalTotalMs = predictedTotalMs > 0 ? predictedTotalMs : DEFAULT_LOAD_MS;
+  // 0 means "no size" — saturating clock, not the 25s ruler.
+  const typicalTotalMs = predictedTotalMs > 0 ? predictedTotalMs : 0;
   let modelledPercent = modelledPercentForPhase(phase, elapsedMs, typicalTotalMs);
   const dots = parseWeightLoadDots(input.logText);
   if (dots != null) modelledPercent = Math.max(modelledPercent, percentFromWeightDots(dots));

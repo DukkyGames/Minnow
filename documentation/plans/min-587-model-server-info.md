@@ -32,6 +32,9 @@ todos:
   - id: load-progress-checkpoints
     content: Retune LOAD_PHASES from a captured b9628 Qwen3.8-27B log; dots map onto the wide weights band; first-load rate so 13 GiB at 7s is not 40%
     status: completed
+  - id: load-progress-35-at-ready
+    content: Floor slow lastLoadMs; saturating clock when size unknown; Windows path size lookup; log follow must not skip after tokenizer dump; last tick paints 100
+    status: completed
 isProject: false
 ---
 
@@ -67,3 +70,7 @@ Companion plan: the Cursor plan `min-587_mlx_mac`. mlx-lm 0.31.3 has no `/slots`
 - **Live GEN** — count streamed completion deltas when `timings.predicted_n` is absent.
 - **Chips** — one synthesized `ServeActivity` slot from the Minnow overlay. Idle = Ready. No fake `requests_deferred`.
 - **Loaded with** — snapshot path, quant, mlx-lm version, port, context from `config.json`. Not spawn tunables.
+
+## Addendum — 35% at Ready
+
+A 7s warm mmap of Qwen3.8-27B IQ4_XS still showed **~35%** then jumped to Ready. That is 7/20: either a cold `lastLoadMs` beating the first-load floor, a missing GGUF size (Windows `E:\Models\...` vs `/`, or `trackLoad(serve, null)`), or the log follower skipping past a >512 KiB tokenizer dump so checkpoints never arrived. Floor slow priors, saturating clock when size is unknown, normalised path + `libraryId` for size, drain the follow until EOF, paint 100 on the last tick.

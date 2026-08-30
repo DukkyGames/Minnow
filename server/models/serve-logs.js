@@ -69,7 +69,7 @@ async function readLogFileTail(logPath, maxBytes = DEFAULT_TAIL_BYTES) {
     handle = await fsp.open(logPath, 'r');
     const buf = Buffer.alloc(stat.size - start);
     await handle.read(buf, 0, buf.length, start);
-    return { text: buf.toString('utf8'), size: stat.size };
+    return { text: buf.toString('utf8'), size: stat.size, more: false };
   } catch {
     return null;
   } finally {
@@ -80,7 +80,7 @@ async function readLogFileTail(logPath, maxBytes = DEFAULT_TAIL_BYTES) {
 /**
  * @param {string} logPath
  * @param {number} offset
- * @returns {Promise<{ text: string, size: number } | null>}
+ * @returns {Promise<{ text: string, size: number, more: boolean } | null>}
  */
 async function readLogFileSince(logPath, offset) {
   let handle;
@@ -88,11 +88,17 @@ async function readLogFileSince(logPath, offset) {
     const stat = await fsp.stat(logPath);
     // Truncated or rotated behind us — restart from the tail.
     if (stat.size < offset) return readLogFileTail(logPath);
-    if (stat.size === offset) return { text: '', size: stat.size };
+    if (stat.size === offset) return { text: '', size: stat.size, more: false };
     handle = await fsp.open(logPath, 'r');
-    const buf = Buffer.alloc(Math.min(stat.size - offset, MAX_TAIL_BYTES));
+    const toRead = Math.min(stat.size - offset, MAX_TAIL_BYTES);
+    const buf = Buffer.alloc(toRead);
     await handle.read(buf, 0, buf.length, offset);
-    return { text: buf.toString('utf8'), size: stat.size };
+    // Next offset is what we actually consumed. Returning `stat.size` here
+    // skipped every byte past MAX_TAIL_BYTES — the Qwen3.8 tokenizer dump is
+    // several MB, so `loading model tensors` and `server is listening` never
+    // reached the modelled bar.
+    const end = offset + buf.length;
+    return { text: buf.toString('utf8'), size: end, more: end < stat.size };
   } catch {
     return null;
   } finally {
@@ -144,10 +150,15 @@ function subscribeLogFile(logPath, onChunk) {
 
   const tick = async () => {
     if (stopped) return;
-    const chunk = await readLogFileSince(logPath, offset);
-    if (!stopped && chunk) {
+    // Drain until EOF in this tick so a >512 KiB burst (tokenizer dump) does
+    // not wait N polls to catch up while /health already flipped the card.
+    for (;;) {
+      const chunk = await readLogFileSince(logPath, offset);
+      if (stopped) return;
+      if (!chunk) break;
       offset = chunk.size;
       if (chunk.text) onChunk({ text: chunk.text, offset });
+      if (!chunk.more) break;
     }
     if (!stopped) timer = setTimeout(tick, POLL_MS);
   };

@@ -161,12 +161,24 @@ describe('updateLoadRate', () => {
 
 describe('computeLoadProgress', () => {
   const weightsBytes = 10 * GB;
-  const bytesPerMs = weightsBytes / 20_000; // a 20-second load
+  const bytesPerMs = weightsBytes / 20_000; // a 20-second load — floored at first-load rate
+  // Faster than FIRST_LOAD_BYTES_PER_MS so tests that pin remaining time keep this prior.
+  const fastBytesPerMs = weightsBytes / 5_000;
 
   it('sweeps inside the current phase band as time passes', () => {
     const log = 'load_tensors: loading model tensors, this can take a while...';
-    const early = computeLoadProgress({ logText: log, elapsedMs: 5_000, weightsBytes, bytesPerMs });
-    const later = computeLoadProgress({ logText: log, elapsedMs: 10_000, weightsBytes, bytesPerMs });
+    const early = computeLoadProgress({
+      logText: log,
+      elapsedMs: 1_500,
+      weightsBytes,
+      bytesPerMs: fastBytesPerMs,
+    });
+    const later = computeLoadProgress({
+      logText: log,
+      elapsedMs: 3_000,
+      weightsBytes,
+      bytesPerMs: fastBytesPerMs,
+    });
     assert.ok(later.percent > early.percent);
     assert.equal(early.phaseKey, 'weights');
     // Mid-load, still inside the weights band (overtime leak has not started).
@@ -287,11 +299,11 @@ describe('computeLoadProgress', () => {
   it('reports the remaining time from the rate prior', () => {
     const result = computeLoadProgress({
       logText: 'load_tensors: loading model tensors',
-      elapsedMs: 8_000,
+      elapsedMs: 2_000,
       weightsBytes,
-      bytesPerMs,
+      bytesPerMs: fastBytesPerMs,
     });
-    assert.equal(result.etaMs, 12_000);
+    assert.equal(result.etaMs, 3_000);
   });
 
   it('lets a real runtime percentage win over the model', () => {
@@ -345,6 +357,29 @@ describe('computeLoadProgress', () => {
     assert.equal(formatLoadPercentLabel(37.4), '37%');
   });
 
+  it('a stale 20s lastLoadMs does not paint 35% at 7s on a 13 GiB file', () => {
+    // Warm mmap of this GGUF is ~7s; a cold prior of 20s is 7/20 = 35%.
+    const result = computeLoadProgress({
+      logText: 'load_tensors: loading model tensors, this can take a while... (mmap = true)',
+      elapsedMs: 7_090,
+      weightsBytes: 13.26 * GB,
+      bytesPerMs: (13.26 * GB) / 20_000,
+    });
+    assert.equal(result.phaseKey, 'weights');
+    assert.ok(result.percent > 60);
+    assert.ok(result.percent < 100);
+  });
+
+  it('a 7s load with no file size is well past 35%', () => {
+    // Extra-folder path mismatch used to leave weightsBytes at 0, then 7/25 ≈ 28%.
+    const result = computeLoadProgress({
+      logText: '',
+      elapsedMs: 7_090,
+    });
+    assert.ok(result.percent > 60);
+    assert.ok(result.percent < 100);
+  });
+
   it('a 13 GiB first load at 7s is well past 40% from the tensors checkpoint alone', () => {
     // Captured: Qwen3.8-27B IQ4_XS (13.26 GiB) reached /health at 7.09s. With only
     // `loading model tensors` on disk (the copy is silent), a 25s clock painted ~40%.
@@ -391,6 +426,7 @@ describe('computeLoadProgress', () => {
 describe('mlx-lm load progress', () => {
   const weightsBytes = 10 * GB;
   const bytesPerMs = weightsBytes / 20_000;
+  const fastBytesPerMs = weightsBytes / 5_000;
 
   it('does not scrape llama phase labels from an empty or unmatched log', () => {
     const empty = computeLoadProgress({
@@ -419,18 +455,18 @@ describe('mlx-lm load progress', () => {
   it('climbs with a size+rate prior inside the 0–97 band', () => {
     const early = computeLoadProgress({
       logText: '',
-      elapsedMs: 5_000,
+      elapsedMs: 1_500,
       weightsBytes,
-      bytesPerMs,
+      bytesPerMs: fastBytesPerMs,
       runtime: 'mlx-lm',
     });
     const later = computeLoadProgress({
       logText: '',
-      elapsedMs: 10_000,
+      elapsedMs: 3_000,
       weightsBytes,
-      bytesPerMs,
+      bytesPerMs: fastBytesPerMs,
       previousPercent: early.percent,
-      lastElapsedMs: 5_000,
+      lastElapsedMs: 1_500,
       runtime: 'mlx-lm',
     });
     assert.ok(later.percent > early.percent);
@@ -445,7 +481,7 @@ describe('mlx-lm load progress', () => {
       bytesPerMs,
       runtime: 'mlx-lm',
     });
-    assert.equal(loading.percent, 97);
+    assert.equal(loading.percent, MAX_PERCENT_BEFORE_HEALTHY);
     assert.ok(loading.percent < 100);
 
     const ready = computeLoadProgress({

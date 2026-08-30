@@ -113,6 +113,33 @@ describe('serve log tail', () => {
     assert.ok(!events[1].text.includes('boot'), 'follow-up chunks are deltas, not the whole file');
   });
 
+  test('follow does not skip checkpoints after a dump larger than one read', async () => {
+    // Qwen3.8 dumps tokenizer.ggml.tokens (~248k strings) before `loading model
+    // tensors`. Returning EOF as the follow offset used to jump past that suffix.
+    const runId = 'run-big-dump';
+    const logPath = path.join(modelsLogDir(), `${runId}.log`);
+    await fs.writeFile(logPath, 'boot\n', 'utf8');
+
+    /** @type {string[]} */
+    const texts = [];
+    const unsub = subscribeServeLog(runId, (event) => {
+      texts.push(event.text ?? '');
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const dump = Buffer.concat([
+      Buffer.alloc(600 * 1024, 0x78),
+      Buffer.from('\nload_tensors: loading model tensors\nserver is listening\n'),
+    ]);
+    await fs.appendFile(logPath, dump);
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    unsub();
+
+    const joined = texts.join('');
+    assert.match(joined, /loading model tensors/);
+    assert.match(joined, /server is listening/);
+  });
+
   test('MLX serves resolve to the managed mlx-lm server log', async () => {
     const mlxLogPath = resolveServeLogPath({ runtime: 'mlx-lm', runId: null });
     assert.ok(mlxLogPath?.includes('mlx-lm.log'));

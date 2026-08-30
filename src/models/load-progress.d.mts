@@ -45,7 +45,10 @@ export interface LoadProgressInput {
   elapsedMs: number;
   /** Size of the weights being loaded. */
   weightsBytes?: number;
-  /** From `resolveBytesPerMs`; 0 disables the time model. */
+  /**
+   * From `resolveBytesPerMs`. Floored at the first-load rate when `weightsBytes`
+   * is known so a slow `lastLoadMs` cannot paint 35% on a 7s reload.
+   */
   bytesPerMs?: number;
   /** Last value shown, to hold the bar monotonic. */
   previousPercent?: number | null;

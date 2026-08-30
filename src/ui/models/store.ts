@@ -421,6 +421,27 @@ async function settleTrackedLoad(next: ServeRecord): Promise<void> {
 
   if (next.status === 'running') {
     const modelId = load.modelId;
+    // Paint 100 on this tick so the last modelled frame is not ~35% when
+    // /health wins the race against the log follow.
+    const logText = loadLogText.get(next.id) ?? '';
+    const elapsedMs = Date.now() - load.startedAt;
+    const done = computeLoadProgress({
+      logText,
+      elapsedMs,
+      weightsBytes: load.bytesTotal ?? 0,
+      bytesPerMs: bytesPerMsForLoad(load.modelId, next),
+      previousPercent: load.percent,
+      lastElapsedMs: loadLastElapsedMs.get(next.id) ?? null,
+      reportedPercent: parseLoadProgress(logText),
+      runtime: next.runtime,
+      healthy: true,
+    });
+    updateLoad(next.id, {
+      percent: done.percent,
+      phase: done.label,
+      phaseKey: done.phaseKey,
+      etaMs: 0,
+    });
     stopTracking(next.id);
     state.loads = state.loads.filter((l) => l.serveId !== next.id);
     if (isLibraryModelProviderId(next.providerId) && modelId?.trim()) {
@@ -493,7 +514,7 @@ function recomputeLoad(serveId: string): void {
     logText,
     elapsedMs,
     weightsBytes: entry.bytesTotal ?? 0,
-    bytesPerMs: bytesPerMsForLoad(entry.modelId),
+    bytesPerMs: bytesPerMsForLoad(entry.modelId, serve),
     previousPercent: entry.percent,
     lastElapsedMs: loadLastElapsedMs.get(serveId) ?? null,
     reportedPercent: parseLoadProgress(logText),
@@ -509,14 +530,28 @@ function recomputeLoad(serveId: string): void {
 }
 
 /**
+ * Library row for the load bar: launch id, serve.libraryId, then a slash/case
+ * normalised path so `E:\Models\...` still finds the GGUF size.
+ */
+function libraryRowForLoad(serve: ServeRecord, modelId: string | null): LibraryModel | undefined {
+  const id = modelId?.trim() || serve.libraryId?.trim() || '';
+  if (id) {
+    const byId = state.library.find((m) => m.id === id);
+    if (byId) return byId;
+  }
+  if (!serve.modelPath) return undefined;
+  const want = normalizeServePath(serve.modelPath);
+  return state.library.find((m) => m.path && normalizeServePath(m.path) === want);
+}
+
+/**
  * Weights size for the time model. The library row is authoritative; a serve resumed
- * after a restart has no model id, and then the bar steps between phases with no ETA
- * rather than inventing a denominator.
+ * after a restart has no model id, and then we still match on libraryId / path so a
+ * 13 GiB extra-folder GGUF is not timed against a 25s clock (35% at Ready).
  */
 function weightsBytesForLoad(serve: ServeRecord, modelId: string | null): number | null {
-  const byId = modelId ? state.library.find((m) => m.id === modelId) : undefined;
-  const byPath = byId ?? state.library.find((m) => m.path && m.path === serve.modelPath);
-  return byPath && byPath.sizeBytes > 0 ? byPath.sizeBytes : null;
+  const row = libraryRowForLoad(serve, modelId);
+  return row && row.sizeBytes > 0 ? row.sizeBytes : null;
 }
 
 /**
@@ -536,8 +571,10 @@ function ensureVariantLoadRate(): void {
 }
 
 /** Per-model prior first, then the rolling per-variant rate from the installed runtime. */
-function bytesPerMsForLoad(modelId: string | null): number {
-  const saved = modelId ? getLibraryLaunchSettingsForId(modelId) : null;
+function bytesPerMsForLoad(modelId: string | null, serve?: ServeRecord | null): number {
+  const row = serve ? libraryRowForLoad(serve, modelId) : undefined;
+  const id = row?.id ?? modelId;
+  const saved = id ? getLibraryLaunchSettingsForId(id) : null;
   return resolveBytesPerMs({
     lastLoadMs: saved?.lastLoadMs,
     lastWeightsBytes: saved?.lastWeightsBytes,

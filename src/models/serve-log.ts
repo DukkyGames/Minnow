@@ -32,9 +32,10 @@ export function foldServeLogEvent(previous: string, event: ServeLogChunk): strin
   return event.initial ? chunk : `${previous}${chunk}`;
 }
 
-/** Percent forms llama.cpp has used across builds. */
+/** Percent forms llama.cpp has used across builds. `loader` and jinja `{%` are not progress. */
 const PERCENT_PATTERNS = [
-  /(?:load|loading)[^\n%]{0,40}?(\d{1,3}(?:\.\d+)?)\s*%/i,
+  /load(?:ing|ed)?[^\n]{0,80}?progress\s*[:=]\s*(\d{1,3}(?:\.\d+)?)\s*%/i,
+  /\bloading\s+(\d{1,3}(?:\.\d+)?)\s*%/i,
   /progress\s*[:=]\s*(\d{1,3}(?:\.\d+)?)\s*%/i,
 ];
 /** Fractional form: `progress = 0.0917`. */

@@ -35,6 +35,14 @@ describe('parseLoadProgress', () => {
   test('rejects out-of-range values', () => {
     assert.equal(parseLoadProgress('loading 480 %'), null);
   });
+
+  test('does not treat tokenizer or jinja `{%` as a load percent', () => {
+    assert.equal(
+      parseLoadProgress('llama_model_loader: - kv  12: tokenizer.chat_template str = {%- if tools %}'),
+      null,
+    );
+    assert.equal(parseLoadProgress('{%- set x = 35 %}\n{% endif %}'), null);
+  });
 });
 
 describe('classifyLogLine', () => {
