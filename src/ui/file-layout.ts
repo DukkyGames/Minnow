@@ -224,7 +224,7 @@ function refreshUnifiedTabsIfPresent(): void {
 }
 
 /**
- * Sync the Files pane button: always the folder-tree glyph, highlighted when
+ * Sync the Files pane button: always the folder glyph, highlighted when
  * the files view is the active left pane (MIN-655).
  */
 export function syncFileSidebarFilesPaneButton(options?: { gitOpen?: boolean }): void {
@@ -239,7 +239,7 @@ export function syncFileSidebarFilesPaneButton(options?: { gitOpen?: boolean }):
     ? !mobileOpen
     : side.classList.contains('collapsed') || getFilePanelState().fileSidebarCollapsed;
 
-  // Stable glyph — active highlight marks the pane, not a chevron swap.
+  // Stable folder glyph — active highlight marks the pane, not a chevron swap.
   btn.innerHTML = ICON_FILE_TREE;
 
   const filesActive = !collapsed && !gitOpen;

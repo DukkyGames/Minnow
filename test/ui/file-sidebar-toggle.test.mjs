@@ -19,7 +19,7 @@ const {
   resetGitPanelForTests,
 } = await import('../../src/ui/git-panel.ts');
 
-const FILE_TREE_CLASS = 'fi-rr-folder-tree';
+const FILE_TREE_CLASS = 'fi-rr-folder';
 
 function stubMatchMedia(win, matches) {
   const stub = (query) => ({
@@ -91,7 +91,7 @@ describe('file sidebar toggle icons', { concurrency: false }, () => {
     }
   });
 
-  test('desktop expanded shows file-tree icon and Files active highlight', () => {
+  test('desktop expanded shows folder icon and Files active highlight', () => {
     matchMediaRestore = stubMatchMedia(globalThis.window, false);
     setFilePanelState({ ...DEFAULT_FILE_PANEL_STATE, fileSidebarCollapsed: false });
 
@@ -104,7 +104,7 @@ describe('file sidebar toggle icons', { concurrency: false }, () => {
     assert.equal(btn.getAttribute('aria-label'), 'Collapse file tree');
   });
 
-  test('desktop collapsed shows file-tree icon without Files active highlight', () => {
+  test('desktop collapsed shows folder icon without Files active highlight', () => {
     matchMediaRestore = stubMatchMedia(globalThis.window, false);
     setFilePanelState({ ...DEFAULT_FILE_PANEL_STATE, fileSidebarCollapsed: true });
 
@@ -117,7 +117,7 @@ describe('file sidebar toggle icons', { concurrency: false }, () => {
     assert.equal(btn.getAttribute('aria-label'), 'Expand file tree');
   });
 
-  test('mobile overlay open shows file-tree icon and Files active highlight', () => {
+  test('mobile overlay open shows folder icon and Files active highlight', () => {
     matchMediaRestore = stubMatchMedia(globalThis.window, true);
     const side = document.getElementById('fileSidebar');
     side.classList.add('mobile-open');
@@ -130,7 +130,7 @@ describe('file sidebar toggle icons', { concurrency: false }, () => {
     assert.equal(btn.getAttribute('aria-label'), 'Close file tree');
   });
 
-  test('mobile overlay closed shows file-tree icon', () => {
+  test('mobile overlay closed shows folder icon', () => {
     matchMediaRestore = stubMatchMedia(globalThis.window, true);
 
     applyFileSidebarVisuals();
