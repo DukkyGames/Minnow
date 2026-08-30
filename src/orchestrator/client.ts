@@ -31,6 +31,7 @@
  * given throws instead of silently corrupting itself.
  */
 
+import type { DiffLine } from '../chat/prompts/text-diff';
 import { foldInto } from '../../server/orchestrator/core/derive.js';
 import { stateFromJSON } from '../../server/orchestrator/core/snapshot.js';
 import type {
@@ -323,6 +324,63 @@ export async function readAttemptTranscript(
     truncated: Boolean(body.truncated),
     capped: Boolean(body.capped),
   };
+}
+
+/** One changed file at a task's merge commit. */
+export interface TaskFileStat {
+  path: string;
+  additions: number;
+  deletions: number;
+  binary: boolean;
+}
+
+export interface TaskFilesResult {
+  /** `merged` when the numbers came from git; `planned` when only the footprint is known. */
+  source: 'merged' | 'planned';
+  sha: string | null;
+  files: TaskFileStat[];
+  additions: number;
+  deletions: number;
+  truncated: boolean;
+}
+
+/**
+ * What a task actually changed.
+ *
+ * Read from git at `mergedSha`, not from the journal: a diffstat is derivable
+ * from the repository, and a derived number kept on an append-only log is a
+ * second source of truth waiting to disagree with the first.
+ */
+export async function readTaskFiles(
+  boardId: string,
+  taskId: string,
+): Promise<TaskFilesResult> {
+  const body = await request(
+    `/${encodeURIComponent(boardId)}/tasks/${encodeURIComponent(taskId)}/files`,
+  );
+  return {
+    source: body.source === 'merged' ? 'merged' : 'planned',
+    sha: typeof body.sha === 'string' ? body.sha : null,
+    files: Array.isArray(body.files) ? body.files : [],
+    additions: Number(body.additions) || 0,
+    deletions: Number(body.deletions) || 0,
+    truncated: Boolean(body.truncated),
+  };
+}
+
+/** One file's unified diff at the task's merge commit. `null` when git had nothing. */
+export async function readTaskFileDiff(
+  boardId: string,
+  taskId: string,
+  filePath: string,
+): Promise<{ lines: DiffLine[]; truncated: boolean } | null> {
+  const body = await request(
+    `/${encodeURIComponent(boardId)}/tasks/${encodeURIComponent(taskId)}/files` +
+      `?path=${encodeURIComponent(filePath)}`,
+  );
+  const file = body.file;
+  if (!file || !Array.isArray(file.lines)) return null;
+  return { lines: file.lines as DiffLine[], truncated: Boolean(file.truncated) };
 }
 
 /**

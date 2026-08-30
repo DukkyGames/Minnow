@@ -53,6 +53,8 @@ import {
   readAttemptTranscript,
   readJournal,
   readBoardReport,
+  readTaskFileDiff,
+  readTaskFiles,
   type BoardClient,
   type BoardListClient,
   type BoardSummary,
@@ -64,12 +66,18 @@ import {
   renderEngineErrors,
   renderFinishReport,
   renderMergeQueue,
-  renderTaskDetail,
   renderTaskList,
   renderTimeline,
   renderRunLedger,
+  type FileDiffView,
+  type TaskFilesView,
   type TranscriptView,
 } from './board-render';
+import {
+  renderTaskDetail,
+  resetTaskDetailLogUi,
+  resetTaskDetailUi,
+} from './task-detail';
 import {
   discoverOrchestratePlans,
   type DiscoverOrchestratePlansResult,
@@ -128,6 +136,17 @@ const pendingTasks = new Set<string>();
 let notice: { text: string; tone: 'warn' | 'bad' } | null = null;
 /** The attempt transcript open in the detail panel — P9-D. */
 let transcript: TranscriptView | null = null;
+/**
+ * The selected task's changed files, read from git at its merge commit.
+ *
+ * Held here for the same reason the transcript is: it is a read beside the
+ * journal, it is keyed to the selection, and nothing folds it.
+ */
+let taskFiles: TaskFilesView | null = null;
+/** Diffs for rows the reader opened, mutable so a fetch can land into the view. */
+const fileDiffs = new Map<string, FileDiffView>();
+/** Which file rows are open. Kept out of `taskFiles` so a refetch cannot close them. */
+const expandedFiles = new Set<string>();
 /** Board ids whose delete is awaiting a second click — P9-E. */
 const confirmingDelete = new Set<string>();
 /** The board id currently being renamed inline, if any — P9-E. */
@@ -215,7 +234,7 @@ export function teardownBoardsView(): void {
   pendingTasks.clear();
   confirmingDelete.clear();
   renamingBoardId = null;
-  transcript = null;
+  clearTaskDetailState();
   notice = null;
   syncRailButton();
 }
@@ -236,8 +255,11 @@ function onBoardsDocumentKeydown(event: KeyboardEvent): void {
 function selectTaskDetail(taskId: string | null): void {
   const previous = selectedTaskId;
   selectedTaskId = taskId;
-  transcript = null;
+  clearTaskDetailState();
   paintBoard();
+  // The diffstat is a git read, so it is asked for once per opened task rather
+  // than on every paint. `loadTaskFiles` returns early if it is already loaded.
+  if (taskId) void loadTaskFiles(taskId);
   if (taskId === null && previous) {
     surface?.root
       .querySelector<HTMLElement>(`[data-focus-key="task:${CSS.escape(previous)}"]`)
@@ -279,7 +301,7 @@ function selectBoard(boardId: string | null): void {
   selectedTaskId = null;
   showTimeline = false;
   journalView = null;
-  transcript = null;
+  clearTaskDetailState();
   pendingTasks.clear();
   confirmingDelete.clear();
   renamingBoardId = null;
@@ -722,6 +744,8 @@ function paintBoard(): void {
     abandonTask: (taskId: string) => void commandAbandonTask(taskId),
     select: (taskId: string | null) => selectTaskDetail(taskId),
     openTranscript: (attemptId: string) => void toggleTranscript(attemptId),
+    toggleFileDiff: (path: string) => void toggleFileDiff(path),
+    openFile: (path: string) => openTaskFile(path),
   };
   const options = {
     selectedTaskId,
@@ -729,6 +753,7 @@ function paintBoard(): void {
     liveHeadlines: client?.getLiveHeadlines(),
     engineErrors: client?.getEngineErrors(),
     transcript,
+    files: taskFilesView(),
   };
 
   pane.appendChild(renderTaskList(state, actions, options));
@@ -756,6 +781,7 @@ function paintBoard(): void {
   surface.root.classList.toggle('is-detail-open', Boolean(selected));
   surface.root.querySelector('.ov2-detail-overlay')?.remove();
   if (selected) surface.root.appendChild(renderTaskDetail(state, selected, actions, options));
+  syncLogPolling(state);
 
   restoreFocus(focused);
 }
@@ -782,6 +808,163 @@ function renderNoSelection(): HTMLElement {
   return wrap;
 }
 
+/** Everything the detail panel holds about one task. Cleared when it changes. */
+function clearTaskDetailState(): void {
+  transcript = null;
+  taskFiles = null;
+  fileDiffs.clear();
+  expandedFiles.clear();
+  stopLogPolling();
+  resetTaskDetailUi();
+}
+
+/**
+ * Keep an open log on a *running* attempt current.
+ *
+ * `event: live` only repaints the board for tool traffic (a repaint per token
+ * would be a repaint per token), so a long reasoning block would otherwise sit
+ * on screen unchanged until the next tool call. This tops the log up on a slow
+ * timer while it is open, and stops the moment the attempt ends or the log is
+ * closed: nothing polls unless someone is reading.
+ */
+const LOG_POLL_MS = 1_200;
+let logPollTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopLogPolling(): void {
+  if (logPollTimer === null) return;
+  clearInterval(logPollTimer);
+  logPollTimer = null;
+}
+
+function syncLogPolling(state: BoardState): void {
+  const attemptId = transcript?.attemptId;
+  const task = selectedTaskId ? state.tasks.get(selectedTaskId) : undefined;
+  const attempt = attemptId
+    ? task?.attempts.find((candidate) => candidate.attemptId === attemptId)
+    : undefined;
+  // A finished attempt's transcript is final, so there is nothing to poll for.
+  const wanted = Boolean(attempt && !attempt.ended);
+  if (!wanted) {
+    stopLogPolling();
+    return;
+  }
+  if (logPollTimer !== null) return;
+  logPollTimer = setInterval(() => {
+    if (!transcript || transcript.status === 'loading') return;
+    void refreshTranscript(transcript.attemptId);
+  }, LOG_POLL_MS);
+}
+
+/** Re-read an open transcript in place. No skeleton: the log is already on screen. */
+async function refreshTranscript(attemptId: string): Promise<void> {
+  const boardId = selectedBoardId;
+  if (!boardId) return;
+  try {
+    const result = await readAttemptTranscript(boardId, attemptId, { limit: 500 });
+    if (transcript?.attemptId !== attemptId || boardId !== selectedBoardId) return;
+    transcript = { attemptId, status: 'ready', ...result };
+    paintBoard();
+  } catch {
+    // A failed top-up leaves the log as it was. It is a read, and the next tick
+    // tries again; replacing readable content with an error would be worse.
+  }
+}
+
+/** Rebuild the immutable view the panel reads from the mutable maps above. */
+function taskFilesView(): TaskFilesView | null {
+  if (!taskFiles) return null;
+  return { ...taskFiles, diffs: fileDiffs, expanded: expandedFiles };
+}
+
+/**
+ * What the selected task changed, from git at its merge commit.
+ *
+ * The journal is not asked and is not written: a diffstat is derivable from the
+ * repository, so keeping one on an append-only log would only create a second
+ * number that can disagree with the first.
+ */
+async function loadTaskFiles(taskId: string): Promise<void> {
+  const boardId = selectedBoardId;
+  if (!boardId) return;
+  if (taskFiles?.taskId === taskId && taskFiles.status !== 'error') return;
+
+  taskFiles = {
+    taskId,
+    status: 'loading',
+    source: 'planned',
+    files: [],
+    additions: 0,
+    deletions: 0,
+    truncated: false,
+    diffs: fileDiffs,
+    expanded: expandedFiles,
+  };
+  paintBoard();
+  try {
+    const result = await readTaskFiles(boardId, taskId);
+    // The reader may have moved on while this was in flight.
+    if (selectedTaskId !== taskId || boardId !== selectedBoardId) return;
+    taskFiles = { ...taskFiles, ...result, status: 'ready' };
+  } catch (err) {
+    if (selectedTaskId !== taskId || boardId !== selectedBoardId) return;
+    taskFiles = {
+      ...taskFiles,
+      status: 'error',
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+  paintBoard();
+}
+
+/**
+ * Open, or close, one changed file's diff — the chat file list's own gesture.
+ *
+ * Patches are fetched per row rather than with the stat list: a task that merged
+ * forty files would otherwise pull forty patches to show three.
+ */
+async function toggleFileDiff(path: string): Promise<void> {
+  const boardId = selectedBoardId;
+  const taskId = selectedTaskId;
+  if (!boardId || !taskId) return;
+
+  if (expandedFiles.has(path)) {
+    expandedFiles.delete(path);
+    paintBoard();
+    return;
+  }
+  expandedFiles.add(path);
+  if (fileDiffs.get(path)?.status === 'ready') {
+    paintBoard();
+    return;
+  }
+  fileDiffs.set(path, { status: 'loading', lines: [], truncated: false });
+  paintBoard();
+  try {
+    const result = await readTaskFileDiff(boardId, taskId, path);
+    if (selectedTaskId !== taskId || boardId !== selectedBoardId) return;
+    fileDiffs.set(
+      path,
+      result
+        ? { status: 'ready', lines: result.lines, truncated: result.truncated }
+        : { status: 'ready', lines: [], truncated: false },
+    );
+  } catch (err) {
+    if (selectedTaskId !== taskId || boardId !== selectedBoardId) return;
+    fileDiffs.set(path, {
+      status: 'error',
+      lines: [],
+      truncated: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+  paintBoard();
+}
+
+/** Jump to a changed file in the editor, the same jump the chat file list makes. */
+function openTaskFile(path: string): void {
+  void import('../ui/file-viewer').then((m) => m.openFileInViewer(path));
+}
+
 /**
  * Load, or close, one attempt's transcript — P9-D.
  *
@@ -793,9 +976,12 @@ async function toggleTranscript(attemptId: string): Promise<void> {
   if (!boardId) return;
   if (transcript?.attemptId === attemptId) {
     transcript = null;
+    resetTaskDetailLogUi();
     paintBoard();
     return;
   }
+  // A different log: forget where the last one was scrolled and what was open.
+  resetTaskDetailLogUi();
   transcript = { attemptId, status: 'loading', events: [], truncated: false, capped: false };
   paintBoard();
   try {

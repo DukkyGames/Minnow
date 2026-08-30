@@ -19,6 +19,7 @@
  * | POST   | `/api/boards/:id/tasks/:taskId/abandon` | Manual abandon (P9-H)                 |
  * | POST   | `/api/boards/:id/model`             | `{ providerId, id, reasoning? }` (P9-C)   |
  * | GET    | `/api/boards/:id/attempts/:attemptId` | One attempt's transcript (P9-D)         |
+ * | GET    | `/api/boards/:id/tasks/:taskId/files` | Diffstat at the merge commit; `?path=` for one file's diff |
  * | PATCH  | `/api/boards/:id`                   | `{ name }` — rename (P9-E)                |
  * | DELETE | `/api/boards/:id`                   | Delete the board and its journal (P9-E)   |
  * | GET    | `/api/boards/:id/journal`           | Raw events; `?since=<seq>&limit=<n>`      |
@@ -52,6 +53,7 @@ import {
 import { readReport } from './report.js';
 import { subscribeErrors, subscribeLive } from './live-events.js';
 import { readTranscript } from './transcripts.js';
+import { readCommitFileDiff, readCommitFileStats } from './task-files.js';
 import { resolveSafePath } from '../runtime/path-access.js';
 import { attachTouchesExpansion, listRepoFiles } from './touches.js';
 
@@ -152,6 +154,11 @@ export const ROUTES = [
     method: 'GET',
     pattern: /^\/api\/boards\/([^/]+)\/attempts\/([^/]+)$/,
     name: 'attempt',
+  },
+  {
+    method: 'GET',
+    pattern: /^\/api\/boards\/([^/]+)\/tasks\/([^/]+)\/files$/,
+    name: 'taskFiles',
   },
   { method: 'PATCH', pattern: /^\/api\/boards\/([^/]+)$/, name: 'rename' },
   { method: 'DELETE', pattern: /^\/api\/boards\/([^/]+)$/, name: 'delete' },
@@ -361,6 +368,50 @@ async function dispatch(route, req, res) {
         ...(Number.isSafeInteger(limit) && limit > 0 ? { limit } : {}),
       });
       return json(res, 200, { ok: true, attemptId: taskId, ...transcript });
+    }
+
+    // What a task changed, read from git rather than from the journal. A read
+    // and only a read; nothing here reaches `plan()` or `derive()`.
+    case 'taskFiles': {
+      if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
+      const engine = await getEngine(boardId, () => makeEffector(boardId));
+      const task = engine.getState().tasks.get(taskId);
+      if (!task) return json(res, 404, { ok: false, error: 'no such task' });
+      const sha = task.mergedSha;
+      // Not merged yet, so there is no commit to diff. The declared footprint
+      // is already in the state the renderer holds; it does not need fetching.
+      if (!sha) return json(res, 200, { ok: true, taskId, sha: null, source: 'planned' });
+
+      const query = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+      const wanted = query.get('path');
+      if (wanted) {
+        const diff = await readCommitFileDiff(sha, wanted);
+        return json(res, 200, {
+          ok: true,
+          taskId,
+          sha,
+          source: 'merged',
+          ...(diff ? { file: diff } : { file: null }),
+        });
+      }
+      const stats = await readCommitFileStats(sha);
+      return json(res, 200, {
+        ok: true,
+        taskId,
+        sha,
+        // `merged` means the numbers came from the commit. A merge whose diff
+        // git could not produce falls back to the plan rather than claiming
+        // the task changed nothing.
+        source: stats ? 'merged' : 'planned',
+        ...(stats
+          ? {
+              files: stats.files,
+              additions: stats.additions,
+              deletions: stats.deletions,
+              truncated: stats.truncated,
+            }
+          : {}),
+      });
     }
 
     case 'stop': {

@@ -30,6 +30,7 @@ import {
   recordTranscriptEnd,
   recordTranscriptEvent,
   resetTranscripts,
+  transcriptPath,
 } from '../../server/orchestrator/transcripts.js';
 
 const PLAN = `---
@@ -432,6 +433,102 @@ describe('P9-D — attempt transcripts', () => {
     const bad = await call('GET', `/api/boards/${boardId}/attempts/${encodeURIComponent('../x')}`);
     assert.equal(bad.status, 500);
     assert.match(String(bad.body.error), /invalid attempt id/);
+  });
+
+  it('folds a growing reasoning block into one line instead of one per snapshot', async () => {
+    const boardId = await createBoard();
+    // `run-turn.js` emits `thinking` on every change to `partialReasoning`, and
+    // that field is the block *so far* — so the naive recording of 40 events was
+    // 40 duplicated prefixes, unreadable and 40 lines against the cap.
+    const whole = 'Let me start by exploring the working directory to understand the layout.';
+    for (let i = 1; i <= whole.length; i += 1) {
+      recordTranscriptEvent({
+        boardId,
+        attemptId: 'r-think',
+        event: { type: 'thinking', text: whole.slice(0, i) },
+      });
+    }
+    recordTranscriptEvent({
+      boardId,
+      attemptId: 'r-think',
+      event: { type: 'tool_call', name: 'read_file' },
+    });
+    await flushTranscripts(boardId, 'r-think');
+
+    const { events } = await readTranscript(boardId, 'r-think');
+    assert.equal(events.length, 2, 'one reasoning line, then the tool call');
+    assert.equal(events[0].type, 'thinking');
+    assert.equal(events[0].text, whole, 'the kept line is the whole block, not a prefix');
+    assert.equal(events[1].name, 'read_file');
+  });
+
+  it('starts a second line when the model begins a genuinely new block', async () => {
+    const boardId = await createBoard();
+    for (const text of ['First thought', 'First thought about it', 'Second, unrelated thought']) {
+      recordTranscriptEvent({ boardId, attemptId: 'r-two', event: { type: 'thinking', text } });
+    }
+    await flushTranscripts(boardId, 'r-two');
+    const { events } = await readTranscript(boardId, 'r-two');
+    assert.deepEqual(
+      events.map((e) => e.text),
+      ['First thought about it', 'Second, unrelated thought'],
+    );
+  });
+
+  it('shows the block still being written, without stranding a prefix on disk', async () => {
+    const boardId = await createBoard();
+    recordTranscriptEvent({ boardId, attemptId: 'r-live', event: { type: 'thinking', text: 'Half' } });
+    const mid = await readTranscript(boardId, 'r-live');
+    assert.equal(mid.events.length, 1, 'a reader sees the block as it stands');
+    assert.equal(mid.events[0].text, 'Half');
+
+    recordTranscriptEvent({
+      boardId,
+      attemptId: 'r-live',
+      event: { type: 'thinking', text: 'Half and the rest' },
+    });
+    recordTranscriptEnd({ boardId, attemptId: 'r-live', outcome: 'pass' });
+    await flushTranscripts(boardId, 'r-live');
+
+    const done = await readTranscript(boardId, 'r-live');
+    assert.deepEqual(
+      done.events.map((e) => e.text ?? e.name),
+      ['Half and the rest', 'pass'],
+      'reading mid-block must not leave a duplicate prefix behind',
+    );
+  });
+
+  it('folds transcripts written before the recorder coalesced', async () => {
+    const boardId = await createBoard();
+    // Written the old way, one line per snapshot. These files are never
+    // rewritten, so the read has to fold them too.
+    const file = transcriptPath(boardId, 'r-old');
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await fs.writeFile(
+      file,
+      ['Th', 'Thin', 'Think'].map((text) => JSON.stringify({ ts: 1, type: 'thinking', text })).join('\n') +
+        '\n' +
+        JSON.stringify({ ts: 2, type: 'attempt_end', name: 'pass' }) +
+        '\n',
+      'utf8',
+    );
+    const { events } = await readTranscript(boardId, 'r-old');
+    assert.deepEqual(
+      events.map((e) => e.text ?? e.name),
+      ['Think', 'pass'],
+    );
+  });
+
+  it('keeps what a tool came back with, not only that it ran', async () => {
+    const boardId = await createBoard();
+    recordTranscriptEvent({
+      boardId,
+      attemptId: 'r-out',
+      event: { type: 'tool_result', name: 'read_file', content: 'export const A = 1;' },
+    });
+    await flushTranscripts(boardId, 'r-out');
+    const { events } = await readTranscript(boardId, 'r-out');
+    assert.equal(events[0].content, 'export const A = 1;');
   });
 
   it('deleting a board takes its transcripts with it', async () => {

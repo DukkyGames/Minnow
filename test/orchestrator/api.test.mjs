@@ -539,6 +539,7 @@ describe('the surface itself', () => {
         'GET journal',
         'GET list',
         'GET report',
+        'GET taskFiles',
         'PATCH rename',
         'POST abandonTask',
         'POST concurrency',

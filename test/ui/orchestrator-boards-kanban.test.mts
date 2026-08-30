@@ -6,6 +6,11 @@
  * this view to put a card anywhere the fold did not put it — so the tests assert
  * the mapping and assert that the writes on the page are commands.
  */
+// First, and before the renderer imports: the detail panel renders task specs
+// through the assistant markdown pipeline, and `dompurify` builds its sanitizer
+// against `globalThis.window` at module eval.
+import '../tools/install-dom-before-imports.mts';
+
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
@@ -18,10 +23,13 @@ import {
   renderBoardSkeleton,
   renderEngineErrors,
   renderRunLedger,
-  renderTaskDetail,
   renderTaskList,
   type BoardActions,
 } from '../../src/orchestrator/board-render.ts';
+import {
+  renderTaskDetail,
+  resetTaskDetailUi,
+} from '../../src/orchestrator/task-detail.ts';
 
 let activeWindow: Window | undefined;
 
@@ -30,6 +38,9 @@ function setupDom(): void {
   const win = new Window();
   activeWindow = win;
   installHappyDomGlobals(win);
+  // The detail panel remembers open disclosures across repaints, so each test
+  // starts from the same place rather than from the last one's clicks.
+  resetTaskDetailUi();
 }
 
 afterEach(() => {
@@ -45,6 +56,8 @@ const NO_ACTIONS: BoardActions = {
   abandonTask: () => {},
   select: () => {},
   openTranscript: () => {},
+  toggleFileDiff: () => {},
+  openFile: () => {},
 };
 
 const OPTIONS = { selectedTaskId: null, pendingTaskIds: new Set<string>() };
@@ -324,10 +337,10 @@ describe('renderRunLedger (P9-G)', () => {
   });
 });
 
-describe('renderTaskDetail (P9-D)', () => {
-  test('opens as a modal overlay with compact meta above the scroll body', () => {
-    setupDom();
-    const state = derive([
+describe('renderTaskDetail', () => {
+  /** A task with a spec but no attempts, for the "never run" reading. */
+  function unrunBoard(): BoardState {
+    return derive([
       {
         v: 1,
         seq: 1,
@@ -349,19 +362,45 @@ describe('renderTaskDetail (P9-D)', () => {
         ],
       },
     ]);
-    const task = state.tasks.get('W1-A')!;
-    const node = renderTaskDetail(state, task, NO_ACTIONS, OPTIONS);
+  }
+
+  test('opens as a modal overlay with the facts strip above the scroll body', () => {
+    setupDom();
+    const state = unrunBoard();
+    const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, OPTIONS);
     assert.equal(node.className, 'ov2-detail-overlay');
     const dialog = node.querySelector('.ov2-detail')!;
     assert.equal(dialog.getAttribute('role'), 'dialog');
     assert.equal(dialog.getAttribute('aria-modal'), 'true');
-    assert.ok(node.querySelector('.ov2-detail__meta'));
+    assert.ok(node.querySelector('.ov2-facts'), 'status facts live in the pinned head');
     assert.ok(node.querySelector('.ov2-detail__body'));
+    // The head is not part of the scrolling body, so the title stays put.
+    assert.equal(node.querySelector('.ov2-detail__body .ov2-detail__title'), null);
+  });
+
+  test('leads with the run and keeps the spec last', () => {
+    setupDom();
+    const state = unrunBoard();
+    const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, OPTIONS);
     const bodyText = node.querySelector('.ov2-detail__body')!.textContent!;
-    const buildAt = bodyText.indexOf('Build');
+    const filesAt = bodyText.indexOf('Files');
     const attemptsAt = bodyText.indexOf('Attempts');
-    assert.ok(buildAt >= 0 && attemptsAt > buildAt, 'Build specs precede Attempts');
-    assert.match(bodyText, /Create package\.json/);
+    const specAt = bodyText.indexOf('Spec');
+    assert.ok(filesAt >= 0 && attemptsAt > filesAt, 'Files precede Attempts');
+    assert.ok(specAt > attemptsAt, 'the spec is last, not the first screen');
+  });
+
+  test('opens the spec for a task that has not run, and folds it once it has', () => {
+    setupDom();
+    const unrun = unrunBoard();
+    const fresh = renderTaskDetail(unrun, unrun.tasks.get('W1-A')!, NO_ACTIONS, OPTIONS);
+    assert.equal(fresh.querySelector<HTMLDetailsElement>('.ov2-spec')!.open, true);
+
+    setupDom();
+    const ran = board();
+    const after = renderTaskDetail(ran, ran.tasks.get('W1-A')!, NO_ACTIONS, OPTIONS);
+    const spec = after.querySelector<HTMLDetailsElement>('.ov2-spec');
+    if (spec) assert.equal(spec.open, false, 'a task with attempts folds its spec away');
   });
 
   test('Close and scrim both dismiss via select(null)', () => {
@@ -380,65 +419,167 @@ describe('renderTaskDetail (P9-D)', () => {
     assert.deepEqual(calls, [null]);
   });
 
-  test('offers a log for agent attempts and not for synthesised merges', () => {
+  test('the attempt row itself opens the log, and merges have none to open', () => {
     setupDom();
     const state = board();
     const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, OPTIONS);
-    const opens = [...node.querySelectorAll('.ov2-attempt__open')].map(
-      (b) => (b as HTMLElement).dataset.focusKey,
-    );
+    const opens = [...node.querySelectorAll('.ov2-attempt__header')]
+      .map((row) => (row as HTMLElement).dataset.focusKey)
+      .filter(Boolean);
     // W1-A ran one builder (a1) and has one merge attempt the fold synthesised.
     assert.deepEqual(opens, ['transcript:a1']);
+    assert.equal(node.querySelectorAll('.ov2-attempt__header--static').length, 1);
   });
 
-  test('renders a loading transcript as a skeleton, not as a word', () => {
+  test('falls back to the declared footprint before a task has merged', () => {
+    setupDom();
+    const state = unrunBoard();
+    const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, OPTIONS);
+    assert.ok(node.querySelector('.ov2-files--planned'));
+    assert.match(node.textContent!, /a\.ts/);
+    assert.match(node.textContent!, /Line counts arrive when the task merges/);
+    // No invented zeroes: an unmerged task has no diffstat to show.
+    assert.equal(node.querySelector('.ov2-stat--add'), null);
+  });
+
+  test('shows real line counts once git has answered', () => {
+    setupDom();
+    const state = board();
+    const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, {
+      ...OPTIONS,
+      files: {
+        taskId: 'W1-A',
+        status: 'ready' as const,
+        source: 'merged' as const,
+        files: [{ path: 'src/a.ts', additions: 12, deletions: 3, binary: false }],
+        additions: 12,
+        deletions: 3,
+        truncated: false,
+        diffs: new Map(),
+        expanded: new Set<string>(),
+      },
+    });
+    assert.match(node.querySelector('.ov2-panel__meta')!.textContent!, /1 file/);
+    assert.equal(node.querySelector('.ov2-stat--add')!.textContent, '+12');
+    // Directory and filename are separate so the filename never gets truncated.
+    assert.equal(node.querySelector('.ov2-file__dir')!.textContent, 'src/');
+    assert.equal(node.querySelector('.ov2-file__name')!.textContent, 'a.ts');
+  });
+
+  test('a file row asks for its own diff rather than loading every patch', () => {
+    setupDom();
+    const state = board();
+    const asked: string[] = [];
+    const node = renderTaskDetail(
+      state,
+      state.tasks.get('W1-A')!,
+      { ...NO_ACTIONS, toggleFileDiff: (path) => asked.push(path) },
+      {
+        ...OPTIONS,
+        files: {
+          taskId: 'W1-A',
+          status: 'ready' as const,
+          source: 'merged' as const,
+          files: [{ path: 'src/a.ts', additions: 1, deletions: 0, binary: false }],
+          additions: 1,
+          deletions: 0,
+          truncated: false,
+          diffs: new Map(),
+          expanded: new Set<string>(),
+        },
+      },
+    );
+    node.querySelector<HTMLButtonElement>('[data-focus-key="file-toggle:src/a.ts"]')!.click();
+    assert.deepEqual(asked, ['src/a.ts']);
+  });
+
+  test('renders a loading log as a skeleton, not as a word', () => {
     setupDom();
     const state = board();
     const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, {
       ...OPTIONS,
       transcript: {
         attemptId: 'a1',
-        status: 'loading',
+        status: 'loading' as const,
         events: [],
         truncated: false,
         capped: false,
       },
     });
-    assert.ok(node.querySelector('.ov2-transcript__skeleton'));
-    assert.equal(node.querySelector('.ov2-transcript__list'), null);
+    assert.ok(node.querySelector('.ov2-skeleton--log'));
+    assert.equal(node.querySelector('.ov2-log__list'), null);
   });
 
-  test('renders transcript entries, and says when it was capped', () => {
+  test('renders log entries, and says when it was capped', () => {
     setupDom();
     const state = board();
     const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, {
       ...OPTIONS,
       transcript: {
         attemptId: 'a1',
-        status: 'ready',
+        status: 'ready' as const,
         events: [{ type: 'tool_call', name: 'read_file', arguments: '{"path":"a.ts"}' }],
         truncated: false,
         capped: true,
       },
     });
     assert.match(node.textContent!, /read_file/);
-    assert.match(node.textContent!, /more than the transcript keeps/);
+    // The argument reads as a value, not as a JSON blob.
+    assert.match(node.querySelector('.ov2-log__trail')!.textContent!, /path: a\.ts/);
+    assert.match(node.textContent!, /ran longer than the log keeps/);
   });
 
-  test('an empty transcript says so rather than showing nothing', () => {
+  test('reasoning renders as prose and tool traffic as mono, in separate rows', () => {
     setupDom();
     const state = board();
     const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, {
       ...OPTIONS,
       transcript: {
         attemptId: 'a1',
-        status: 'ready',
+        status: 'ready' as const,
+        events: [
+          { type: 'thinking', text: 'Let me start by exploring the working directory.' },
+          { type: 'tool_call', name: 'read_file' },
+          { type: 'attempt_end', name: 'pass', summary: 'Created the file.' },
+        ],
+        truncated: false,
+        capped: false,
+      },
+    });
+    assert.equal(node.querySelectorAll('.ov2-log__row').length, 3);
+    assert.equal(node.querySelector('.ov2-log__label')!.textContent, 'Thought');
+    assert.ok(node.querySelector('.ov2-log__thought'), 'reasoning is prose, not a code row');
+    assert.ok(node.querySelector('.ov2-log__row--good'), 'a pass is toned as one');
+  });
+
+  test('an empty log says so rather than showing nothing', () => {
+    setupDom();
+    const state = board();
+    const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, {
+      ...OPTIONS,
+      transcript: {
+        attemptId: 'a1',
+        status: 'ready' as const,
         events: [],
         truncated: false,
         capped: false,
       },
     });
     assert.match(node.textContent!, /Nothing was recorded/);
+  });
+
+  test('says outright that a skipped task did not fail, above everything else', () => {
+    setupDom();
+    const state = board([
+      { v: 1, seq: 8, type: 'task.abandoned', taskId: 'W1-B', reason: 'builder-failed-twice' },
+      { v: 1, seq: 9, type: 'task.skipped', taskId: 'W1-C', blockedBy: 'W1-B' },
+    ]);
+    const node = renderTaskDetail(state, state.tasks.get('W1-C')!, NO_ACTIONS, OPTIONS);
+    const alert = node.querySelector('.ov2-alert--warn')!;
+    assert.match(alert.textContent!, /did not fail itself/);
+    // Alerts come before every section, because they are why the card was opened.
+    const body = node.querySelector('.ov2-detail__body')!;
+    assert.ok(body.firstElementChild!.classList.contains('ov2-alert'));
   });
 });
 

@@ -11,20 +11,21 @@
  *
  * ## Phase 9
  *
- * The task list is waves × kanban columns (P9-B) rather than a flat list, the
- * detail panel can read an attempt's transcript (P9-D), a finished run gets a
- * report instead of one paragraph (P9-G), and failures that stop work from
- * starting have somewhere to appear (P9-A). None of that changes the rule above:
- * a card's column is `columnOf()` over the fold, and the only writes on this
- * page are the callbacks in {@link BoardActions}, each of which is a POST.
+ * The task list is waves × kanban columns (P9-B) rather than a flat list, a
+ * finished run gets a report instead of one paragraph (P9-G), and failures that
+ * stop work from starting have somewhere to appear (P9-A). None of that changes
+ * the rule above: a card's column is `columnOf()` over the fold, and the only
+ * writes on this page are the callbacks in {@link BoardActions}, each of which
+ * is a POST.
+ *
+ * The selected task's detail overlay lives in `task-detail.ts`. It is the same
+ * kind of pure function of state, split out only because it grew a reading
+ * surface (files, attempts, logs) that the board itself does not have.
  */
 
-import type {
-  Attempt,
-  BoardState,
-  TaskState,
-} from '../../server/orchestrator/core/types';
-import type { EngineError } from './client';
+import type { BoardState, TaskState } from '../../server/orchestrator/core/types';
+import type { DiffLine } from '../chat/prompts/text-diff';
+import type { EngineError, TaskFileStat } from './client';
 import {
   bucketWave,
   COLUMNS,
@@ -44,6 +45,10 @@ export interface BoardActions {
   select: (taskId: string | null) => void;
   /** Load one attempt's transcript into the detail panel. */
   openTranscript: (attemptId: string) => void;
+  /** Fetch, or collapse, one changed file's diff in the detail panel. */
+  toggleFileDiff: (path: string) => void;
+  /** Open a changed file in the editor, the same jump the chat file list makes. */
+  openFile: (path: string) => void;
 }
 
 /** A transcript being shown in the detail panel — P9-D. */
@@ -54,6 +59,34 @@ export interface TranscriptView {
   truncated: boolean;
   capped: boolean;
   error?: string;
+}
+
+/** One changed file's diff, fetched only when its row is opened. */
+export interface FileDiffView {
+  status: 'loading' | 'ready' | 'error';
+  lines: readonly DiffLine[];
+  truncated: boolean;
+  error?: string;
+}
+
+/**
+ * What the selected task changed, read from git at its merge commit.
+ *
+ * `source: 'planned'` means the task has not merged (or git could not answer),
+ * so the panel shows the declared footprint from `TaskState` instead and the
+ * absence of line counts reads as "not yet" rather than "nothing".
+ */
+export interface TaskFilesView {
+  taskId: string;
+  status: 'loading' | 'ready' | 'error';
+  source: 'merged' | 'planned';
+  files: readonly TaskFileStat[];
+  additions: number;
+  deletions: number;
+  truncated: boolean;
+  error?: string;
+  diffs: ReadonlyMap<string, FileDiffView>;
+  expanded: ReadonlySet<string>;
 }
 
 export interface BoardViewOptions {
@@ -69,9 +102,11 @@ export interface BoardViewOptions {
   engineErrors?: ReadonlyMap<string, EngineError>;
   /** The transcript open in the detail panel, if any. */
   transcript?: TranscriptView | null;
+  /** The selected task's changed files. Read-only, like the transcript. */
+  files?: TaskFilesView | null;
 }
 
-const PHASE_TONE: Record<TaskState['phase'], 'neutral' | 'live' | 'good' | 'warn' | 'bad'> = {
+export const PHASE_TONE: Record<TaskState['phase'], 'neutral' | 'live' | 'good' | 'warn' | 'bad'> = {
   idle: 'neutral',
   building: 'live',
   testing: 'live',
@@ -81,7 +116,7 @@ const PHASE_TONE: Record<TaskState['phase'], 'neutral' | 'live' | 'good' | 'warn
   skipped: 'warn',
 };
 
-const OUTCOME_TONE: Record<string, 'neutral' | 'good' | 'warn' | 'bad'> = {
+export const OUTCOME_TONE: Record<string, 'neutral' | 'good' | 'warn' | 'bad'> = {
   pass: 'good',
   fail: 'bad',
   blocked: 'warn',
@@ -92,7 +127,7 @@ const OUTCOME_TONE: Record<string, 'neutral' | 'good' | 'warn' | 'bad'> = {
 };
 
 /** Human wording for a phase. The state's vocabulary, not a second one. */
-function phaseLabel(state: BoardState, task: TaskState): string {
+export function phaseLabel(state: BoardState, task: TaskState): string {
   if (task.phase === 'idle' && isBlocked(state, task)) return 'blocked';
   if (task.phase === 'idle' && task.attempts.length > 0) return 'waiting';
   return task.phase;
@@ -614,248 +649,6 @@ function attachKeyboardGrid(list: HTMLElement): void {
     }
     if (handled) event.preventDefault();
   });
-}
-
-// ---------------------------------------------------------------------------
-// Task detail
-// ---------------------------------------------------------------------------
-
-/**
- * The selected task, in full — as a centered overlay over the board.
- *
- * Specs and notes are the reason you open a card; meta stays a compact strip
- * under the title. A growing in-grid card would reflow its column, and a
- * bottom dock pushes Finish / ledger off-screen for the same long content.
- */
-export function renderTaskDetail(
-  state: BoardState,
-  task: TaskState,
-  actions: BoardActions,
-  options: BoardViewOptions,
-): HTMLElement {
-  const titleId = `ov2-detail-title-${task.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
-
-  // Scrim owns dismiss-on-outside; the dialog stops propagation so clicks inside stay open.
-  const overlay = el('div', 'ov2-detail-overlay');
-  overlay.dataset.focusKey = 'detail-overlay';
-  overlay.addEventListener('click', () => actions.select(null));
-
-  const detail = el('section', 'ov2-detail ob-sec');
-  detail.setAttribute('role', 'dialog');
-  detail.setAttribute('aria-modal', 'true');
-  detail.setAttribute('aria-labelledby', titleId);
-  detail.addEventListener('click', (event) => event.stopPropagation());
-
-  // Escape also bubbles from focus inside the dialog; boards-view adds a
-  // document capture listener so dismiss still works if focus drifts.
-  const dismissOnEscape = (event: KeyboardEvent) => {
-    if (event.key !== 'Escape') return;
-    event.preventDefault();
-    event.stopPropagation();
-    actions.select(null);
-  };
-  overlay.addEventListener('keydown', dismissOnEscape);
-  detail.addEventListener('keydown', dismissOnEscape);
-
-  const head = el('div', 'ov2-detail__head');
-  const title = el('h3', 'ov2-detail__title');
-  title.id = titleId;
-  title.appendChild(el('span', 'ov2-detail__id', task.id));
-  title.appendChild(el('span', undefined, task.title));
-  head.appendChild(title);
-  head.appendChild(pill(phaseLabel(state, task), PHASE_TONE[task.phase]));
-  const close = el('button', 'ov2-btn ov2-btn--ghost', 'Close');
-  close.type = 'button';
-  close.dataset.focusKey = 'detail-close';
-  close.addEventListener('click', () => actions.select(null));
-  head.appendChild(close);
-  detail.appendChild(head);
-
-  // Compact instrument strip — status facts, not the reading surface.
-  const meta = el('div', 'ov2-detail__meta ov2-task__meta');
-  meta.appendChild(field('Column', columnLabel(columnOf(state, task))));
-  meta.appendChild(field('Wave', String(task.wave)));
-  meta.appendChild(field('Touches', task.touches.join(', ') || '—'));
-  meta.appendChild(
-    field('Depends on', task.dependsOn.length > 0 ? task.dependsOn.join(', ') : 'nothing'),
-  );
-  if (task.mergedSha) meta.appendChild(field('Merged', task.mergedSha.slice(0, 12)));
-  detail.appendChild(meta);
-
-  const body = el('div', 'ov2-detail__body');
-
-  for (const [label, value] of [
-    ['Build', task.buildSpec],
-    ['Test', task.testSpec],
-    ['Accept', task.accept],
-  ] as const) {
-    if (!value) continue;
-    const spec = el('div', 'ov2-task__spec');
-    spec.appendChild(el('span', 'ov2-task__spec-label', label));
-    // Preserve newlines from plan specs; white-space is handled in CSS.
-    spec.appendChild(el('p', 'ov2-task__spec-text', value));
-    body.appendChild(spec);
-  }
-
-  if (task.abandonedReason) {
-    const reason = el('div', 'ov2-task__note ov2-task__note--bad');
-    reason.appendChild(el('strong', undefined, 'Abandoned'));
-    reason.appendChild(
-      el(
-        'span',
-        undefined,
-        task.abandonedReason === 'user' ? 'by hand' : task.abandonedReason,
-      ),
-    );
-    body.appendChild(reason);
-  }
-  if (task.skippedBy) {
-    // Skipped is not a failure of this task — it is waiting on something that failed.
-    const reason = el('div', 'ov2-task__note ov2-task__note--warn');
-    reason.appendChild(el('strong', undefined, 'Skipped'));
-    reason.appendChild(
-      el(
-        'span',
-        undefined,
-        `waiting on ${task.skippedBy}, which failed — this task did not fail`,
-      ),
-    );
-    body.appendChild(reason);
-  }
-  if (task.mergeConflicts && task.mergeConflicts.length > 0) {
-    const conflict = el('div', 'ov2-task__note ov2-task__note--warn');
-    conflict.appendChild(el('strong', undefined, 'Merge conflict'));
-    conflict.appendChild(el('span', undefined, task.mergeConflicts.join(', ')));
-    body.appendChild(conflict);
-  }
-  for (const overflow of task.touchesOverflow) {
-    const note = el('div', 'ov2-task__note ov2-task__note--info');
-    note.appendChild(el('strong', undefined, 'Wrote outside its footprint'));
-    note.appendChild(el('span', undefined, overflow.actual.join(', ')));
-    body.appendChild(note);
-  }
-  if (task.emptyTouchesGlobs && task.emptyTouchesGlobs.length > 0) {
-    const note = el('div', 'ov2-task__note ov2-task__note--warn');
-    note.appendChild(el('strong', undefined, 'Glob matched no files'));
-    note.appendChild(el('span', undefined, task.emptyTouchesGlobs.join(', ')));
-    body.appendChild(note);
-  }
-
-  body.appendChild(renderAttempts(task.attempts, actions, options));
-  if (options.transcript) body.appendChild(renderTranscript(options.transcript));
-
-  detail.appendChild(body);
-  overlay.appendChild(detail);
-  return overlay;
-}
-
-function columnLabel(id: ColumnId): string {
-  return COLUMNS.find((c) => c.id === id)?.label ?? id;
-}
-
-function renderAttempts(
-  attempts: readonly Attempt[],
-  actions: BoardActions,
-  options: BoardViewOptions,
-): HTMLElement {
-  const wrap = el('div', 'ov2-attempts');
-  wrap.appendChild(el('h4', 'ov2-attempts__title', 'Attempts'));
-  if (attempts.length === 0) {
-    wrap.appendChild(empty('Nothing has been tried yet.'));
-    return wrap;
-  }
-  const list = el('ol', 'ov2-attempts__list');
-  for (const attempt of attempts) {
-    const item = el('li', 'ov2-attempt');
-    item.appendChild(el('span', 'ov2-attempt__role', attempt.role));
-    if (attempt.seedKind) item.appendChild(el('span', 'ov2-attempt__seed', attempt.seedKind));
-    if (attempt.manual && !attempt.ended) item.appendChild(pill('by hand', 'neutral'));
-    item.appendChild(
-      attempt.ended
-        ? pill(attempt.outcome ?? 'ended', OUTCOME_TONE[attempt.outcome ?? ''] ?? 'neutral')
-        : pill('running', 'live'),
-    );
-    if (attempt.summary) item.appendChild(el('span', 'ov2-attempt__summary', attempt.summary));
-
-    // P9-D. Merge attempts are synthesised by the fold and never ran an agent,
-    // so there is nothing to read for them.
-    if (attempt.role === 'builder' || attempt.role === 'tester') {
-      const open = el(
-        'button',
-        'ov2-btn ov2-btn--ghost ov2-attempt__open',
-        options.transcript?.attemptId === attempt.attemptId ? 'Hide log' : 'Read log',
-      );
-      open.type = 'button';
-      open.dataset.focusKey = `transcript:${attempt.attemptId}`;
-      open.addEventListener('click', () => actions.openTranscript(attempt.attemptId));
-      item.appendChild(open);
-    }
-    list.appendChild(item);
-  }
-  wrap.appendChild(list);
-  return wrap;
-}
-
-/**
- * One attempt's transcript — P9-D.
- *
- * Read-only, and that is the whole design. V1's equivalent was a board-owned
- * chat you could talk into (`orchestrate-board-chat.ts`); the half that was
- * load-bearing was reading what happened, and the half that made the renderer
- * an engine was writing into it.
- */
-function renderTranscript(view: TranscriptView): HTMLElement {
-  const wrap = el('div', 'ov2-transcript');
-  wrap.appendChild(el('h4', 'ov2-transcript__title', `Log — ${view.attemptId}`));
-
-  if (view.status === 'loading') {
-    wrap.appendChild(renderSkeleton(4, 'ov2-transcript__skeleton'));
-    return wrap;
-  }
-  if (view.status === 'error') {
-    wrap.appendChild(
-      el('p', 'ov2-notice ov2-notice--warn', view.error ?? 'Could not read the transcript.'),
-    );
-    return wrap;
-  }
-  if (view.events.length === 0) {
-    wrap.appendChild(
-      empty('Nothing was recorded for this attempt. Transcripts start at the first tool call.'),
-    );
-    return wrap;
-  }
-  if (view.truncated || view.capped) {
-    wrap.appendChild(
-      el(
-        'p',
-        'ov2-timeline__note',
-        view.capped
-          ? 'This attempt produced more than the transcript keeps; the rest was dropped.'
-          : 'Showing the most recent entries.',
-      ),
-    );
-  }
-
-  const list = el('ol', 'ov2-transcript__list');
-  for (const event of view.events) {
-    const item = el('li', 'ov2-transcript__item');
-    item.appendChild(el('span', 'ov2-transcript__type', String(event.type ?? '')));
-    const name = event.name ?? event.summary ?? event.text ?? event.error ?? '';
-    item.appendChild(el('span', 'ov2-transcript__name', String(name)));
-    const body = event.arguments ?? event.result;
-    if (body !== undefined) {
-      item.appendChild(
-        el(
-          'span',
-          'ov2-transcript__body',
-          typeof body === 'string' ? body : JSON.stringify(body),
-        ),
-      );
-    }
-    list.appendChild(item);
-  }
-  wrap.appendChild(list);
-  return wrap;
 }
 
 // ---------------------------------------------------------------------------

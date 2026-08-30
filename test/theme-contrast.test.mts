@@ -198,4 +198,44 @@ describe('theme-contrast', () => {
       }
     });
   }
+
+  // The Boards task detail panel. It is dense and small: the gutter labels in
+  // the attempt log run at 9.5px and the file paths at 12.5px, which is exactly
+  // where reaching for `--mn-fg-subtle` costs the most. Every one of those roles
+  // is meaningful text, so they use `--mn-fg-muted`, and the panel's own surface
+  // (`--mn-surface-0` for the log, `--mn-bg` for everything else) is pinned here
+  // so a later token edit cannot quietly take them back under AA.
+  for (const themeId of THEME_IDS) {
+    test(`${themeId}: board task detail text meets WCAG AA`, () => {
+      const vars = readThemeBlock(css, themeId);
+      const bg = vars['--mn-bg'];
+      const surface0 = vars['--mn-surface-0'];
+      assert.ok(bg, `missing --mn-bg for ${themeId}`);
+      assert.ok(surface0, `missing --mn-surface-0 for ${themeId}`);
+
+      const pairs: Array<[string, string, string]> = [
+        // .ov2-detail__title, .ov2-file__name
+        ['--mn-fg', bg, 'task title and changed filenames'],
+        // .ov2-detail__id, .ov2-facts__*, .ov2-panel__title, .ov2-panel__note,
+        // .ov2-attempt__summary, .ov2-attempt__seed, .ov2-file__dir, .ov2-spec__hint
+        ['--mn-fg-muted', bg, 'panel labels, facts, summaries and paths'],
+        // .ov2-log__label, .ov2-log__trail, .ov2-log__more over the log surface
+        ['--mn-fg-muted', surface0, 'attempt log gutter labels and tool output'],
+        // .ov2-stat--add / .ov2-stat--del in the files header and per-row
+        // badges. The `-ink` pair, because the base metric colours are tuned
+        // for dots and bars and fall to 2.88:1 as 11px text on light families.
+        ['--mn-success-ink', bg, 'added-line counts'],
+        ['--mn-danger-ink', bg, 'removed-line counts'],
+      ];
+
+      for (const [token, surface, role] of pairs) {
+        const fg = resolveToken(vars, token);
+        assert.ok(fg, `${token} resolves to a color for ${themeId}`);
+        assert.ok(
+          contrastRatio(fg!, surface) >= 4.5,
+          `${role} (${token}) ${contrastRatio(fg!, surface).toFixed(2)} < 4.5 for ${themeId}`,
+        );
+      }
+    });
+  }
 });
