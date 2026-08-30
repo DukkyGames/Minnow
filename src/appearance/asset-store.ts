@@ -1,5 +1,5 @@
 /**
- * IndexedDB store for appearance uploads (fonts, wallpaper images).
+ * IndexedDB store for appearance uploads (fonts).
  */
 
 import type { AppearanceAssetKind, AppearanceAssetRecord } from './types';
@@ -8,10 +8,8 @@ const DB_NAME = 'minnow-appearance';
 const DB_VERSION = 1;
 const STORE_NAME = 'assets';
 
-const MAX_WALLPAPER_BYTES = 5 * 1024 * 1024;
 const MAX_FONT_BYTES = 2 * 1024 * 1024;
 
-const WALLPAPER_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const FONT_MIMES = new Set([
   'font/woff2',
   'font/woff',
@@ -55,28 +53,22 @@ function inferFontMime(file: File): string {
   return file.type || 'application/octet-stream';
 }
 
-/** Persist a font or wallpaper blob; returns the new asset id. */
+/** Persist a font blob; returns the new asset id. */
 export async function saveAppearanceAsset(
   kind: AppearanceAssetKind,
   file: File,
 ): Promise<string> {
-  const maxBytes = kind === 'wallpaper' ? MAX_WALLPAPER_BYTES : MAX_FONT_BYTES;
-  if (file.size > maxBytes) {
+  if (file.size > MAX_FONT_BYTES) {
     throw new Error(
-      `File exceeds ${Math.round(maxBytes / (1024 * 1024))}MB limit`,
+      `File exceeds ${Math.round(MAX_FONT_BYTES / (1024 * 1024))}MB limit`,
     );
   }
 
-  const mime = kind === 'font' ? inferFontMime(file) : file.type;
-  if (kind === 'wallpaper' && !WALLPAPER_MIMES.has(mime)) {
-    throw new Error('Wallpaper must be JPEG, PNG, or WebP');
-  }
-  if (kind === 'font') {
-    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-    const okExt = ['woff2', 'woff', 'ttf', 'otf'].includes(ext);
-    if (!okExt && !FONT_MIMES.has(mime)) {
-      throw new Error('Font must be WOFF2, WOFF, TTF, or OTF');
-    }
+  const mime = inferFontMime(file);
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  const okExt = ['woff2', 'woff', 'ttf', 'otf'].includes(ext);
+  if (!okExt && !FONT_MIMES.has(mime)) {
+    throw new Error('Font must be WOFF2, WOFF, TTF, or OTF');
   }
 
   const id = newAssetId();

@@ -2281,12 +2281,12 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'get_appearance',
     label: 'Get appearance',
     description:
-      'Read current Minnow appearance: theme family/mode, custom colors, fonts, and desktop wallpaper.',
+      'Read current Minnow appearance: theme family/mode, custom colors, and fonts.',
     category: 'utility',
     serverRequired: false,
     definition: toolSchema(
       'get_appearance',
-      'Return JSON snapshot of browser-local appearance (theme, customColors, fonts, wallpaper). Desktop mode only.',
+      'Return JSON snapshot of browser-local appearance (theme, customColors, fonts). Desktop mode only.',
       {},
       [],
     ),
@@ -2295,7 +2295,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'update_appearance',
     label: 'Update appearance',
     description:
-      'Change theme, custom color tokens, fonts, or desktop wallpaper after user approval. Desktop mode only.',
+      'Change theme, custom color tokens, or fonts after user approval. Desktop mode only.',
     category: 'utility',
     serverRequired: false,
     definition: toolSchema(
@@ -2341,25 +2341,6 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
                 mono: {},
               },
             },
-            wallpaper: {
-              type: 'object',
-              properties: {
-                mode: {
-                  type: 'string',
-                  enum: [
-                    'flat',
-                    'gradient',
-                    'underwater',
-                    'minnow',
-                    'aurora',
-                    'starfield',
-                    'custom',
-                  ],
-                },
-                imageAssetId: { type: 'string' },
-                imageFit: { type: 'string', enum: ['cover', 'contain'] },
-              },
-            },
           },
         },
       },
@@ -2370,14 +2351,14 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'upload_appearance_asset',
     label: 'Upload appearance asset',
     description:
-      'Import a workspace font or wallpaper image into browser appearance storage. Requires Minnow running locally.',
+      'Import a workspace font into browser appearance storage. Requires Minnow running locally.',
     category: 'utility',
     serverRequired: false,
     definition: toolSchema(
       'upload_appearance_asset',
-      'Read a workspace file and store it in IndexedDB for custom fonts or wallpaper. Follow with update_appearance to apply wallpaper asset ids.',
+      'Read a workspace file and store it in IndexedDB for custom fonts. Follow with update_appearance to apply the font to a slot.',
       {
-        kind: { type: 'string', enum: ['wallpaper', 'font'] },
+        kind: { type: 'string', enum: ['font'] },
         path: { type: 'string', description: 'Workspace-relative file path' },
         slot: { type: 'string', enum: ['ui', 'mono'], description: 'Font slot when kind is font' },
         familyName: { type: 'string', description: 'CSS font-family name for uploaded fonts' },
