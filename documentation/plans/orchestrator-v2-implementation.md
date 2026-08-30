@@ -1,6 +1,6 @@
 ---
 name: orchestrator-v2-implementation
-overview: Implementation plan for Orchestrator V2 — a clean-room, server-side, journal-and-reconcile board engine that replaces the V1 renderer orchestrator. Nine phases from a pure decision core through V1 deletion, normal chat and sub-agents adopting the same runner, and coalesced stream paint so the UI stays live mid-generation.
+overview: Implementation plan for Orchestrator V2 — a clean-room, server-side, journal-and-reconcile board engine that replaces the V1 renderer orchestrator. Ten phases from a pure decision core through V1 deletion, normal chat and sub-agents adopting the same runner, coalesced stream paint so the UI stays live mid-generation, and the Boards surface finished to parity with what V1's Orchestrate did.
 isProject: true
 ---
 
@@ -9,7 +9,7 @@ isProject: true
 **Date:** 2026-08-28
 **Goal:** Replace the V1 board engine with a server-side journal + reconcile engine whose state is a pure fold, so multi-agent runs are as reliable as today's sequential single-agent path.
 **PRD:** [`orchestrator-v2.md`](./orchestrator-v2.md) — read it first. This document plans the build; it does not restate the design.
-**Linear:** [Orchestrator V2](https://linear.app/minnowai/project/orchestrator-v2-97ced8c22ad8) (team Minnow AI) — 8 phase parents, `MIN-677`–`MIN-683` plus `MIN-727`, with sub-issues `MIN-684`–`MIN-726` and `MIN-728`–`MIN-731`. Each sub-issue carries its own full plan. Phase 8 is planned below but **not yet filed** — its ids are proposals.
+**Linear:** [Orchestrator V2](https://linear.app/minnowai/project/orchestrator-v2-97ced8c22ad8) (team Minnow AI) — 8 phase parents, `MIN-677`–`MIN-683` plus `MIN-727`, with sub-issues `MIN-684`–`MIN-726` and `MIN-728`–`MIN-731`. Each sub-issue carries its own full plan. Phase 9 is filed as `MIN-741` with sub-issues `MIN-742`–`MIN-750`. Phase 8 is planned below but **not yet filed** — its ids are proposals.
 
 ## Context
 
@@ -25,9 +25,9 @@ The PRD left four questions open (§13) and this pass raised four more. All eigh
 | 2 | §13.3 `touches` overflow | **Journal it, let the merge queue decide.** `touches` stays a *scheduling* gate; a `touches.overflow` event is recorded and the run continues. The serialized rebase-before-merge is the real conflict authority. |
 | 3 | §13.4 save-time validation | **Hard reject at `save_file`.** A plan that does not parse cannot be written, so the Planner fixes it while still in context. |
 | 4 | Linear structure | **Phase parents + sub-issues.** |
-| 5 | V1/V2 coexistence | **Swap the board UI at Phase 1.** V1 becomes unreachable from Phase 1; Phase 4 is pure code removal. Accepted cost: no usable orchestrator between Phase 1 and Phase 2. |
+| 5 | V1/V2 coexistence | **Swap the board UI at Phase 1.** V1 becomes unreachable from Phase 1; Phase 4 is pure code removal. Accepted cost: no usable orchestrator between Phase 1 and Phase 2. *Superseded in practice:* P1-E built a new surface beside V1 rather than retrofitting `orchestrate-board.ts`, V1 is still reachable, and Phase 9 is what closes the parity gap that created. |
 | 6 | §13.2 Final Tester | **Static ladder at Phase 3, browser at Phase 5.** Multi-agent runs are verified end-to-end *before* V1 is deleted. |
-| 7 | Project scope | **Phases 0–8.** Phase 6 issues stay unscheduled until Phase 5 lands. Phase 7 (stream UI lag) can start now — it does not wait on the runner. Phase 8 (sub-agents) is blocked only on Phase 2 and should land *before* Phase 6. |
+| 7 | Project scope | **Phases 0–9.** Phase 6 issues stay unscheduled until Phase 5 lands. Phase 7 (stream UI lag) can start now — it does not wait on the runner. Phase 8 (sub-agents) is blocked only on Phase 2 and should land *before* Phase 6. Phase 9 (finish the Boards surface) is blocked on nothing and must land *before* Phase 4, which deletes what it ports from. |
 | 8 | §13.1 journal retention | **Keep forever + periodic snapshot.** The fold is memoised against a snapshot written every N events. Raw history is never compacted — §11 needs it to measure bad abandonments. |
 
 ## Findings that change the PRD's risk model
@@ -283,6 +283,32 @@ Full research plan: [`chat-stream-ui-lag.md`](./chat-stream-ui-lag.md). Phases 1
 
 Ordering note: this belongs *before* Phase 6, not after. Sub-agents force `ask_question` as an injected capability (MIN-724) on a background surface instead of on the composer, and they give `runTurn()` real non-board traffic before normal chat bets on it. Signature changes found here are recorded as Phase 6 findings, on the same list P2-E and P2-F write to — one interface, one findings log.
 
+### Phase 9 — Complete the Boards surface
+*Proves: Boards is the orchestrator, not a debug view of one. Blocked on nothing; **must land before Phase 4**.*
+
+**MIN-741** · MIN-742 P9-A Engine failures reach the screen · MIN-743 P9-B Kanban restored · MIN-744 P9-C Per-board model binding · MIN-745 P9-D Attempt transcripts · MIN-746 P9-E Board lifecycle · MIN-747 P9-F Twin-shape shell · MIN-748 P9-G Finish report · MIN-749 P9-H Command parity · MIN-750 P9-I States, a11y, tests
+
+Phase 1's P1-E deliberately built the smallest surface that proves "the renderer is a view" — a wave-grouped list of rows, a merge queue, a raw journal. That was the right shape for proving the property and the wrong shape for using the product. This phase closes the gap against what V1's Orchestrate actually does, without giving back the property: **every item below is either a read, a POST, or new engine surface — none of them is a renderer-owned write.**
+
+- **P9-A — Engine failures reach the screen.** A rejected `effector.start()` is a `console.warn` in `startAttempt` (`engine.js:392`) and nothing else: no journal line (correct — nothing happened), no SSE frame, no UI. `resolveAttemptModel` throwing "no model bound for this attempt" therefore presents as *Start does nothing* — the board reads `running`, every tick retries, and the only evidence is a server log the user never sees. Two fixes, both needed. (1) **Validate at the command boundary:** `POST /api/boards/:id/start` resolves the model binding and the effector's prep preconditions before it answers, so a missing binding is a 400 with a message on the button, not a silent loop. (2) **A non-journaled `event: error` frame** on the P2-F live channel — `{ role, taskId, message, consecutive }` — because preconditions can also fail on tick 40 of a 6-hour run. Consecutive failures are a counter in the runhead, not one toast per tick. Deliberately *not* journaled: a start that never happened is not a completed side effect, and putting it in the fold would make replay disagree with reality.
+
+- **P9-B — Kanban restored.** `renderTaskList` becomes waves × columns. The column defs port straight from `src/chat/orchestrate/board-kanban-columns.ts`, re-keyed from `BoardTaskStatus` to `TaskPhase`: `idle`→Planned (Blocked when `dependsOn` has an unmerged entry), `building` + `merging`→In Progress, `testing`→Testing, `merged` + `abandoned` + `skipped`→Complete. The compact wave-strip lane defs port the same way. **Drag-and-drop does not port.** V1's drop *was* a status write (`orchestrate-board-dnd.ts`), and there is no such thing here — a card's column is derived from the fold. The keyboard grid (`orchestrate-board-keyboard.ts`) ports as navigation only; Ctrl/Cmd+Arrow lane moves go with the drag.
+
+- **P9-C — Per-board model binding.** V2 resolves a model from Settings → Autopilot planner or the active chat's menubar binding (`model-binding.js`), both invisible from the board and neither addressable per board. Journal `board.model.set { providerId, id }` as an override the effector reads first, and put V1's header chip (`orchestrate-board-model-select.ts`) and reasoning controls (`orchestrate-board-reasoning.ts`) back in the runhead. This is what makes P9-A's failure mode fixable in place rather than three screens away.
+
+- **P9-D — Attempt transcripts.** A running task shows one live line and a finished one shows a `summary` string; there is no way to read what an agent actually did, which is the first thing anyone asks when a task fails. Persist per-attempt transcripts beside the journal at `~/.minnow/boards/<id>/attempts/<attemptId>.jsonl` — **not** in the journal, for the same unbounded-replay reason P2-F keeps tokens off it — with `GET /api/boards/:id/attempts/:attemptId` and a panel in the task detail. V1's equivalent was a whole board-owned chat (`orchestrate-board-chat.ts`); this is the read-only half of it, which is the half that was load-bearing.
+
+- **P9-E — Board lifecycle.** `ROUTES` has no delete, no rename, no archive, so boards accumulate forever and a typo'd board id is permanent. Add `DELETE /api/boards/:id` and `PATCH /api/boards/:id { name }`. Delete removes the journal — say so in the confirm, because the journal is the only record of the run.
+
+- **P9-F — Twin-shape shell.** The surface is an `<aside>` and a `<section>`; Orchestrate is a confirmed page family (`ob-shell` / rail / `ob-runhead` / mono sections, [`orchestrator-boards-sp-research-twin-shape.md`](./orchestrator-boards-sp-research-twin-shape.md), landed except its visual pass). Adopt that vocabulary rather than inventing a second one, and reuse `ob-page.css` where the markup matches. Container queries, not media queries — app surfaces live inside MinnowOS windows, where `@media` never matches the pane width. Rail collapse and the 4→2→swipe column breakpoints come with the brief.
+
+- **P9-G — Finish report.** `run.finished` carries a summary string that renders as one paragraph. V1 had a finish dashboard (`orchestrate-finish-dashboard.ts`, MIN-208). P3-G writes the real end-of-run report; this renders it — per-task outcomes, attempt counts, evidence, what was abandoned and why, the integration sha, and the Final Tester's run instructions.
+
+- **P9-H — Command parity.** The engine exposes `startBoard`, `stopBoard`, `setConcurrency`, `startTask`; the board can therefore be started, stopped, re-paced, and hand-started, and nothing else. V1 could also retry, skip, and abandon a task by hand. **Open decision:** manual abandon/skip is new engine surface, not new UI — the policy table owns automatic routing (decision 7), and a human override has to be a journaled command (`task.abandoned { reason: 'user' }`) or it breaks replay. Decide before building; do not add a button that writes state locally.
+
+- **P9-I — States, a11y, tests.** Loading skeletons instead of "Loading the board…", a real empty state, the error states P9-A now has something to show, focus management across repaints (the surface calls `replaceChildren` on every frame — anything focused is lost), and DOM tests over the column mapping and the failure frames. `test/ui/orchestrator-boards-create.test.mts` is the pattern.
+
+Ordering note: **before Phase 4.** Phase 4 deletes `orchestrate-board.ts` and its satellites — the kanban column defs, the model chip, the reasoning controls, the finish dashboard, and the `ob-*` shell the twin-shape brief landed. Anything in this phase that ports from V1 has to be ported while V1 still exists. P9-A is not a port and should not wait for the rest of the phase: it is a live bug on the branch today.
 ## Verification Checklist
 
 - [ ] `npm test` passes
@@ -297,6 +323,10 @@ Ordering note: this belongs *before* Phase 6, not after. Sub-agents force `ask_q
 - [ ] Cloud and local streams leave composer/scroll/clicks responsive; local tok/s not regressed (Phase 7 gate)
 - [ ] A sub-agent spawned from a chat survives a renderer reload and a server restart, and finishes (Phase 8 gate)
 - [ ] A sub-agent that runs past its wall-clock limit is retried by policy, not cancelled with its work discarded (Phase 8 gate)
+- [ ] Starting a board with no model bound fails at the button with a readable message, and never enters a silent retry loop (Phase 9 gate)
+- [ ] Every failure that stops work from starting is visible on the board without opening a server log (Phase 9 gate)
+- [ ] Tasks render as waves × kanban columns, and no column a card sits in is written by the renderer (Phase 9 gate)
+- [ ] A failed task's attempt transcript is readable from the board (Phase 9 gate)
 - [ ] `grep -rn "lastHeartbeatAt\|tier1Attempted\|progressStallMs" src/` returns nothing (Phase 8 gate)
 
 ## Notes for Build Agents
