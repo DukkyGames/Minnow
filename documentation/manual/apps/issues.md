@@ -15,7 +15,7 @@ Open it from the app rail for the fullscreen app, or from the Issues button in t
 
 **Capture** with the quick-capture field in the header, or **New issue** (**C**) for the full form. New issues start in **Backlog**.
 
-**Select** several rows with **Ctrl/Cmd+click**, or a range with **Shift+click**. The selection bar can change status, priority, assignee, labels, and project, or delete. **Shift+F10** or right-click opens the row menu: open, copy ID, expand with an agent, send to chat or to a background agent, change status, delete.
+**Select** several rows with **Ctrl/Cmd+click**, or a range with **Shift+click**. The selection bar can change status, priority, assignee, labels, and project, or delete. **Shift+F10** or right-click opens the row menu: open, copy ID, expand (fill title and description from this card), expand with an agent (triage), send to chat or to a background agent, change status, delete.
 
 **j** / **k** (or the arrows) move the focused row. **Enter** opens the peek panel for the description and history — you do not need peek to change a field.
 
@@ -35,7 +35,8 @@ This is what the app is for.
 
 | Action | What happens |
 |--------|--------------|
-| **Expand with agent** | An agent researches the issue and fills in a real description, from the detail panel or a board card |
+| **Expand** | Sparkles on peek, board cards, the row menu, or **E**. Rewrites the title and description from what is already on the card. You review and edit in an overlay; nothing is saved until you apply. Uses the prompt expander model when one is set. |
+| **Expand with agent** | An agent researches the workspace and fills in a real description (triage notes), from the detail panel or the row menu |
 | **Send to chat** | Opens a chat seeded with the issue, in a mode you choose |
 | **Send to background** | Runs it as a background sub-agent instead of taking over your screen |
 | **Send to board** | When the issue has a plan, hands it to an orchestrate board |
