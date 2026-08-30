@@ -249,7 +249,7 @@ export function runningServes(): ServeRecord[] {
 }
 
 /**
- * Models header copy while a llama.cpp serve is starting.
+ * Models header copy while a local serve is starting.
  * Empty percent stays "Loading" so we never print a stuck 0%.
  */
 export function formatModelsHeaderLoadingLabel(loads: LoadProgress[] = state.loads): string {
@@ -448,13 +448,14 @@ async function settleTrackedLoad(next: ServeRecord): Promise<void> {
  * (plus a 15s fallback poll) tell us when the row leaves `starting`.
  */
 function trackLoad(serve: ServeRecord, modelId: string | null): void {
+  const mlx = serve.runtime === 'mlx-lm';
   if (!state.loads.some((l) => l.serveId === serve.id)) {
     state.loads.push({
       serveId: serve.id,
       modelId,
       percent: null,
-      phase: 'Starting runtime',
-      phaseKey: 'spawning',
+      phase: mlx ? 'Loading weights' : 'Starting runtime',
+      phaseKey: mlx ? 'mlx-weights' : 'spawning',
       etaMs: null,
       bytesTotal: weightsBytesForLoad(serve, modelId),
       startedAt: serve.startedAt || Date.now(),
@@ -487,6 +488,7 @@ function recomputeLoad(serveId: string): void {
   if (!entry || entry.error) return;
   const logText = loadLogText.get(serveId) ?? '';
   const elapsedMs = Date.now() - entry.startedAt;
+  const serve = state.serves.find((s) => s.id === serveId);
   const next = computeLoadProgress({
     logText,
     elapsedMs,
@@ -495,6 +497,7 @@ function recomputeLoad(serveId: string): void {
     previousPercent: entry.percent,
     lastElapsedMs: loadLastElapsedMs.get(serveId) ?? null,
     reportedPercent: parseLoadProgress(logText),
+    runtime: serve?.runtime,
   });
   loadLastElapsedMs.set(serveId, elapsedMs);
   updateLoad(serveId, {
@@ -606,13 +609,15 @@ export async function loadModel(
       // which is not an HF cache layout, and a repo id would send the server to
       // the Hub instead of the copy already on disk.
       modelLabel: model.path,
+      libraryId: model.id,
+      quant: model.quant || undefined,
+      weightsGb: model.sizeBytes / 1024 ** 3,
+      async: true,
     });
     upsertServe(serve);
-    // No trackLoad: MLX serves return already running (no spawn progress). Runtime
-    // output lives on the shared mlx-lm managed server log, exposed via serve log routes.
-    // Still watch the serve list so a later mlx-lm exit shows as crashed.
+    trackLoad(serve, model.id);
+    revealLocalServerIfModelsActive();
     ensureServeListWatch();
-    await selectProviderModel(LIBRARY_MODEL_PROVIDER_ID, model.id).catch(() => false);
     const mlxSampler = getLibrarySamplerForId(model.id);
     if (mlxSampler) {
       void saveLibraryInferenceSampler({
@@ -623,7 +628,6 @@ export async function loadModel(
         ),
       }).catch(() => undefined);
     }
-    emit();
     return serve;
   }
 
@@ -700,7 +704,9 @@ export async function retryServe(serve: ServeRecord): Promise<ServeRecord> {
   upsertServe(next);
   if (next.status === 'starting') {
     trackLoad(next, null);
-    if (next.runtime === 'llama-cpp') revealLocalServerIfModelsActive();
+    if (next.runtime === 'llama-cpp' || next.runtime === 'mlx-lm') {
+      revealLocalServerIfModelsActive();
+    }
   }
   emit();
   return next;

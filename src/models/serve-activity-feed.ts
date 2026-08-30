@@ -15,6 +15,7 @@
 
 import { subscribeServeActivity, type ServeActivity } from './api-client';
 import { formatQueuedChipLabel } from './serve-activity-chips';
+import { getInFlightPromptOverlay } from './in-flight-prompt';
 
 type FeedListener = (activity: ServeActivity) => void;
 
@@ -99,16 +100,35 @@ export function serveActivityForModelId(modelId: string): ServeActivity | undefi
  */
 export function activitySuffixForModelId(modelId: string): string {
   const activity = serveActivityForModelId(modelId);
-  if (!activity?.available) return '';
-  const queued = formatQueuedChipLabel(activity.queued ?? 0) ?? '';
-  if (activity.stale) return queued;
-  const busy = activity.slots.find((slot) => slot.state !== 'idle');
-  if (!busy) return queued;
-  const work =
-    busy.state === 'prompt'
-      ? `pp ${compactTokens(busy.promptProcessed)}`
-      : `${compactTokens(busy.decoded)} tok`;
-  return queued ? `${work} · ${queued}` : work;
+  if (activity?.available) {
+    const queued = formatQueuedChipLabel(activity.queued ?? 0) ?? '';
+    if (activity.stale) return queued;
+    const busy = activity.slots.find((slot) => slot.state !== 'idle');
+    if (!busy) return queued;
+    const work =
+      busy.state === 'prompt'
+        ? `pp ${compactTokens(busy.promptProcessed)}`
+        : `${compactTokens(busy.decoded)} tok`;
+    return queued ? `${work} · ${queued}` : work;
+  }
+
+  // mlx-lm has no /slots sample. Show Minnow-owned prefill / gen from the overlay.
+  const overlay = getInFlightPromptOverlay();
+  const needle = modelId.trim();
+  if (
+    overlay &&
+    needle &&
+    (overlay.libraryId === needle || overlay.modelLabel === needle)
+  ) {
+    if (overlay.total > 0 && overlay.processed < overlay.total) {
+      const percent = Math.min(99, Math.floor((overlay.processed / overlay.total) * 100));
+      return `pp ${percent}%`;
+    }
+    if ((overlay.predictedN ?? 0) > 0) {
+      return `${compactTokens(overlay.predictedN)} tok`;
+    }
+  }
+  return '';
 }
 
 /**
@@ -134,7 +154,10 @@ export function anyServeBusy(): boolean {
     if (activity.stale) continue;
     if (activity.slots.some((slot) => slot.state !== 'idle')) return true;
   }
-  return false;
+  const overlay = getInFlightPromptOverlay();
+  if (!overlay) return false;
+  if (overlay.total > 0 && overlay.processed < overlay.total) return true;
+  return (overlay.predictedN ?? 0) > 0;
 }
 
 function compactTokens(tokens: number): string {

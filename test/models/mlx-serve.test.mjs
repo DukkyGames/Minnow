@@ -41,12 +41,14 @@ mock.module('../../server/servers/mlx-lm.js', {
     isMlxSupported: () => true,
     getInstallStatus: async () => ({ installed: mlxInstalled }),
     MLX_UNSUPPORTED_MESSAGE: 'MLX runs only on Apple Silicon Macs.',
+    MLX_LM_VERSION: '0.31.3',
   },
 });
 
 const { resetMinnowHomeCache } = await import('../../server/config/home.js');
 const {
   listServes,
+  getServe,
   resetServesForTests,
   setServeBackgroundRunOverrideForTests,
   setMlxWarmupOverrideForTests,
@@ -254,5 +256,71 @@ describe('MLX serve', () => {
     const [row] = await listServes();
     assert.equal(row.status, 'error');
     assert.match(row.error, /did not finish loading/);
+  });
+
+  test('async:true returns starting before warmup finishes', async () => {
+    let releaseWarmup;
+    const warmupGate = new Promise((resolve) => {
+      releaseWarmup = resolve;
+    });
+    setMlxWarmupOverrideForTests(() => warmupGate);
+
+    const serve = await startServe({
+      modelPath: mlxDir,
+      runtime: 'mlx-lm',
+      modelLabel: mlxDir,
+      libraryId: 'lib-mlx-1',
+      quant: 'mlx-4bit',
+      weightsGb: 4,
+      async: true,
+    });
+
+    assert.equal(serve.status, 'starting');
+    assert.equal(serve.libraryId, 'lib-mlx-1');
+    assert.equal(serve.mlxSettings?.snapshotPath, mlxDir);
+    assert.equal(serve.mlxSettings?.quant, 'mlx-4bit');
+    assert.equal(serve.mlxSettings?.mlxLmVersion, '0.31.3');
+    assert.equal(serve.mlxSettings?.port, 8087);
+    assert.equal(serve.mlxSettings?.contextLength, null);
+
+    const listed = await getServe(serve.id);
+    assert.equal(listed?.status, 'starting');
+    assert.equal(listed?.libraryId, 'lib-mlx-1');
+
+    releaseWarmup();
+    const deadline = Date.now() + 2_000;
+    let running = null;
+    while (Date.now() < deadline) {
+      running = await getServe(serve.id);
+      if (running?.status === 'running') break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    assert.equal(running?.status, 'running');
+    assert.equal(running?.id, serve.id);
+    assert.equal(running?.libraryId, 'lib-mlx-1');
+  });
+
+  test('async warmup failure marks the row error without throwing to the caller', async () => {
+    setMlxWarmupOverrideForTests(async () => {
+      throw new Error('MLX model did not finish loading (HTTP 500)');
+    });
+    const serve = await startServe({
+      modelPath: mlxDir,
+      runtime: 'mlx-lm',
+      modelLabel: mlxDir,
+      libraryId: 'lib-mlx-fail',
+      async: true,
+    });
+    assert.equal(serve.status, 'starting');
+
+    const deadline = Date.now() + 2_000;
+    let errored = null;
+    while (Date.now() < deadline) {
+      errored = await getServe(serve.id);
+      if (errored?.status === 'error') break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    assert.equal(errored?.status, 'error');
+    assert.match(errored?.error ?? '', /did not finish loading/);
   });
 });

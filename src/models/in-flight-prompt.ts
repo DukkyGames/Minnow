@@ -15,6 +15,8 @@ export interface InFlightPromptOverlay {
   processed: number;
   total: number;
   cache: number;
+  /** Live generated-token count; 0 during prefill. */
+  predictedN: number;
 }
 
 let overlay: InFlightPromptOverlay | null = null;
@@ -71,22 +73,31 @@ export function overlayMatchesActivity(
 }
 
 /**
- * Publish overlay from a stream chunk. Chunks without `prompt_progress` leave
- * the previous overlay in place (timings-only ticks). Callers clear on stream end.
+ * Publish overlay from a stream chunk. Keepalive / `prompt_progress` updates
+ * the prefill fraction; `timings.predicted_n` (real or synthesized) updates
+ * the live GEN count. Callers clear on stream end.
  */
 export function publishInFlightPromptFromMeta(
-  meta: { prompt_progress?: LlamaPromptProgress } | null | undefined,
+  meta: {
+    prompt_progress?: LlamaPromptProgress;
+    timings?: { predicted_n?: number };
+  } | null | undefined,
   modelId: string,
 ): void {
   const progress = meta?.prompt_progress;
-  if (!progress || !(progress.total > 0)) return;
+  const predictedN = Number(meta?.timings?.predicted_n);
+  const hasProgress = Boolean(progress && progress.total > 0);
+  const hasGen = Number.isFinite(predictedN) && predictedN > 0;
+  if (!hasProgress && !hasGen) return;
+
   setInFlightPromptOverlay({
-    serveId: null,
+    serveId: overlay?.serveId ?? null,
     libraryId: modelId,
     modelLabel: modelId,
-    processed: progress.processed,
-    total: progress.total,
-    cache: progress.cache,
+    processed: hasProgress && progress ? progress.processed : (overlay?.processed ?? 0),
+    total: hasProgress && progress ? progress.total : (overlay?.total ?? 0),
+    cache: hasProgress && progress ? progress.cache : (overlay?.cache ?? 0),
+    predictedN: hasGen ? predictedN : (overlay?.predictedN ?? 0),
   });
 }
 

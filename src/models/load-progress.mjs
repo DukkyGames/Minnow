@@ -1,5 +1,5 @@
 /**
- * Load progress for a starting llama.cpp serve.
+ * Load progress for a starting local serve (llama.cpp or mlx-lm).
  *
  * llama-server does not print `progress = N %` during a weight load. What it does
  * print (b9628, `-lv 4`, Qwen3.8-27B IQ4_XS on RTX 4090) is a sequence of checkpoints
@@ -21,7 +21,11 @@
  * `/health` answers in the same breath as "listening", so those late lines often
  * never paint. The weights band is therefore wide (16–82): it is the last checkpoint
  * that is reliably on disk during the silent copy. Dots, when they flush, map onto
- * that same band. 100 is only ever claimed on a healthy probe.
+ * that same band. 100 is only ever claimed on a healthy probe (`/health` for
+ * llama.cpp, warmup POST for mlx-lm).
+ *
+ * mlx-lm has no llama log phases. An unmatched / empty log plus `runtime: 'mlx-lm'`
+ * uses a single "Loading weights" band (0–97). Same time+size model, same 100 gate.
  *
  * Pure and I/O-free so the arithmetic is testable without spawning a server.
  */
@@ -101,6 +105,18 @@ export const LOAD_PHASES = [
 ];
 
 /**
+ * Single band for mlx-lm. mlx-lm.log is not llama-server; scraping GGUF phase
+ * regexes would leave the label on "Starting runtime" for the whole warmup.
+ */
+export const MLX_LOAD_PHASE = {
+  key: 'mlx-weights',
+  label: 'Loading weights',
+  floor: 0,
+  ceiling: 97,
+  pattern: null,
+};
+
+/**
  * `srv load_model: [spec] estimated memory usage of MTP context is 168.02 MiB`.
  * `.` excludes newlines in JS, so no character class is needed.
  */
@@ -128,7 +144,7 @@ export function parseSpecContextBytes(text) {
   return Math.round(value * scale);
 }
 
-/** Ceiling until `/health` answers. 100 is only ever claimed on a real probe. */
+/** Ceiling until the serve is actually ready. 100 is only ever claimed on a real probe. */
 export const MAX_PERCENT_BEFORE_HEALTHY = 99;
 
 /**
@@ -154,9 +170,18 @@ const MAX_BYTES_PER_MS = 20_000_000;
 /**
  * The furthest phase the log has reached.
  * @param {string | null | undefined} text
+ * @param {string | null | undefined} [runtime] `mlx-lm` skips llama log regexes.
  * @returns {{ key: string, label: string, floor: number, ceiling: number }}
  */
-export function matchLoadPhase(text) {
+export function matchLoadPhase(text, runtime) {
+  if (runtime === 'mlx-lm') {
+    return {
+      key: MLX_LOAD_PHASE.key,
+      label: MLX_LOAD_PHASE.label,
+      floor: MLX_LOAD_PHASE.floor,
+      ceiling: MLX_LOAD_PHASE.ceiling,
+    };
+  }
   const haystack = String(text ?? '');
   let matched = LOAD_PHASES[0];
   if (haystack) {
@@ -260,7 +285,9 @@ export function updateLoadRate(previousBytesPerMs, sample) {
  * @property {number | null} [reportedPercent] A real percentage from the runtime, if a
  *   future build ever prints one. Always wins over the model. Null/undefined means
  *   none — `Number(null)` is 0 and must not be treated as a reported value.
- * @property {boolean} [healthy] `/health` has answered — the only way to reach 100.
+ * @property {boolean} [healthy] Serve is ready — `/health` for llama.cpp, warmup
+ *   POST for mlx-lm. The only way to reach 100.
+ * @property {string} [runtime] `mlx-lm` uses a single Loading-weights band.
  */
 
 /**
@@ -346,7 +373,7 @@ function easeToward(previous, target, dtMs) {
  * @returns {LoadProgressResult}
  */
 export function computeLoadProgress(input) {
-  const phase = matchLoadPhase(input.logText);
+  const phase = matchLoadPhase(input.logText, input.runtime);
   const previous = Number(input.previousPercent);
   const floorFromPrevious = Number.isFinite(previous) && previous > 0 ? previous : 0;
 

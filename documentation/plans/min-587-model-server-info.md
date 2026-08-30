@@ -57,3 +57,13 @@ A developer waiting on a local GGUF needs to trust the numbers: load percent tha
 - MIN-732 spinner reset
 - Listing composer follow-ups on Local Server
 - Switching to Local Server from Code
+
+## Addendum — MLX on Apple Silicon
+
+Companion plan: the Cursor plan `min-587_mlx_mac`. mlx-lm 0.31.3 has no `/slots`, `/metrics`, `return_progress`, or `timings_per_token`. Substitutions:
+
+- **Load %** — modelled from snapshot size + elapsed time + `recordLaunchLoadPrior`. Client passes `async: true` so `trackLoad` runs during warmup. 100 only when the warmup POST succeeds.
+- **Prefill %** — `: keepalive processed/total` SSE comments parsed into `prompt_progress`.
+- **Live GEN** — count streamed completion deltas when `timings.predicted_n` is absent.
+- **Chips** — one synthesized `ServeActivity` slot from the Minnow overlay. Idle = Ready. No fake `requests_deferred`.
+- **Loaded with** — snapshot path, quant, mlx-lm version, port, context from `config.json`. Not spawn tunables.

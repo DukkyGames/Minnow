@@ -26,7 +26,7 @@ You do not have to sit still and wait.
 
 **Steer instead, when the run is going wrong.** A correction sent mid-turn is injected at the next tool-loop boundary rather than aborting the stream — so the model gets "actually, use the existing helper" before it writes the next file, without losing the work it has already done. This is almost always better than stopping and re-prompting: stopping throws away the context the model had built up.
 
-On a local llama.cpp model the status line beside the assistant row shows a load percent while weights come up, a prefill percent while the prompt is ingested, then a live token count while it generates (including while it is calling a tool).
+On a local llama.cpp or MLX model the status line beside the assistant row shows a load percent while weights come up, a prefill percent while the prompt is ingested, then a live token count while it generates (including while it is calling a tool).
 
 **Stop** when the run is genuinely off the rails. The partial reply stays.
 

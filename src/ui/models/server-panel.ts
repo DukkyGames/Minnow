@@ -33,6 +33,7 @@ import {
 } from './store';
 import type { ServeActivity } from '../../models/api-client';
 import { serveActivityChipLabels } from '../../models/serve-activity-chips';
+import { activityForLoadedServe } from '../../models/mlx-serve-activity';
 import {
   getInFlightPromptOverlay,
   subscribeInFlightPromptOverlay,
@@ -422,7 +423,12 @@ function activityChips(activity: ServeActivity | undefined): HTMLElement[] {
 
 function loadedCard(serve: ServeRecord): HTMLElement {
   const card = el('article', 'models-loaded');
-  const activity = getModelsState().activity.get(serve.id);
+  const overlay = getInFlightPromptOverlay();
+  const activity = activityForLoadedServe(
+    serve,
+    getModelsState().activity.get(serve.id),
+    overlay,
+  );
 
   const head = el('div', 'models-loaded__head');
   for (const chipEl of activityChips(activity)) head.appendChild(chipEl);
@@ -466,6 +472,9 @@ function loadedCard(serve: ServeRecord): HTMLElement {
     | { ctx?: number; parallel?: number; spec_type?: string }
     | null;
   if (settings?.ctx) meta.appendChild(chip(`ctx ${settings.ctx}`));
+  if (serve.mlxSettings?.contextLength) {
+    meta.appendChild(chip(`ctx ${serve.mlxSettings.contextLength}`));
+  }
   if (settings?.parallel) meta.appendChild(chip(`parallel ${settings.parallel}`));
   if (settings?.spec_type && settings.spec_type !== 'none') {
     meta.appendChild(chip(settings.spec_type));

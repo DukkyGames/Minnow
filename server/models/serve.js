@@ -33,8 +33,10 @@ import {
 import {
   getInstallStatus as getMlxInstallStatus,
   isMlxSupported,
+  MLX_LM_VERSION,
   MLX_UNSUPPORTED_MESSAGE,
 } from '../servers/mlx-lm.js';
+import { contextLengthFromTransformersConfig } from './mlx-context-length.js';
 import { detectHardware } from '../system/hardware.js';
 import { detectRuntimes } from './runtime-detect.js';
 import {
@@ -129,8 +131,18 @@ import {
  * @property {number} [restartCount]
  * @property {string} [libraryId]
  * @property {Record<string, unknown>} [llamaSettings]
+ * @property {MlxServeSettings} [mlxSettings] Snapshot the inspector shows for mlx-lm (no llama flags).
  * @property {object} [launchPlan] Planner output plus geometry/hardware for Phase 3 OOM replan.
  * @property {number} [lastUsedAt] Completions + successful load; LRU / idle TTL.
+ */
+
+/**
+ * @typedef {object} MlxServeSettings
+ * @property {string} snapshotPath Absolute weights directory mlx_lm.server loaded.
+ * @property {string | null} quant e.g. `mlx-4bit`, from the library row or config.json.
+ * @property {string} mlxLmVersion Pinned mlx-lm package this process is running.
+ * @property {number} port
+ * @property {number | null} contextLength From the snapshot's config.json.
  */
 
 /** Statuses that still own a live (or wedged) process. */
@@ -571,6 +583,10 @@ function publicServe(row) {
     startedAt: row.startedAt,
     stoppedAt: row.stoppedAt ?? null,
     llamaSettings: row.llamaSettings ?? null,
+    mlxSettings: row.mlxSettings ?? null,
+    // Overlay matching for MLX chips needs the library id on the wire; llama
+    // activity already carries it from the server-side /slots poller.
+    libraryId: row.libraryId ?? null,
     exitCode: row.exitCode ?? null,
     failure: row.failure ?? null,
   };
@@ -760,6 +776,39 @@ async function ensureMlxLmServerRunning() {
 }
 
 /**
+ * Inspector snapshot for an mlx-lm serve. mlx-lm has no llamaSettings; this is
+ * path / quant / pinned version / port / context from the weights' config.json.
+ *
+ * @param {string} modelPath
+ * @param {number} port
+ * @param {unknown} quantHint Client-supplied library quant, when present.
+ * @returns {Promise<MlxServeSettings>}
+ */
+async function readMlxLoadedWith(modelPath, port, quantHint) {
+  let contextLength = null;
+  let quant =
+    typeof quantHint === 'string' && quantHint.trim() ? quantHint.trim() : null;
+  try {
+    const raw = await fsp.readFile(path.join(modelPath, 'config.json'), 'utf8');
+    const config = JSON.parse(raw);
+    contextLength = contextLengthFromTransformersConfig(config) ?? null;
+    if (!quant && config && typeof config === 'object') {
+      const bits = Number(/** @type {{ quantization?: { bits?: unknown } }} */ (config).quantization?.bits);
+      if (Number.isFinite(bits) && bits > 0) quant = `mlx-${bits}bit`;
+    }
+  } catch {
+    // Best-effort: a missing config.json still shows path, version, and port.
+  }
+  return {
+    snapshotPath: modelPath,
+    quant,
+    mlxLmVersion: MLX_LM_VERSION,
+    port,
+    contextLength,
+  };
+}
+
+/**
  * mlx_lm loads weights on the first request, not at process start. Hold the
  * serve row at `starting` until a 1-token completion returns, bounded by the
  * same load timeout as llama.cpp. Tests inject the POST (Windows has no MLX).
@@ -917,6 +966,11 @@ export async function startServe(body) {
     const baseUrl = `http://127.0.0.1:${port}`;
     await upsertMlxLmProvider({ baseUrl, enabled: true });
 
+    // Parsed here because the llama libraryId block lives below this branch.
+    const mlxLibraryId = typeof body.libraryId === 'string' ? body.libraryId.trim() : '';
+    const mlxWeightsBytes = Number(body.weightsGb) > 0 ? Number(body.weightsGb) * 1024 ** 3 : 0;
+    const mlxSettings = await readMlxLoadedWith(modelPath, port, body.quant);
+
     // Process is up but weights are not loaded until the first completion.
     // Commit `starting` first so the UI does not lie `running` during warmup.
     const row = /** @type {ServeRecord} */ ({
@@ -929,24 +983,54 @@ export async function startServe(body) {
       providerId: MINNOW_LIBRARY_PROVIDER_ID,
       status: 'starting',
       startedAt: Date.now(),
+      mlxSettings,
     });
+    if (mlxLibraryId) row.libraryId = mlxLibraryId;
     servesCache.unshift(row);
     await commitServes('mlx-start');
     ensureMlxCrashWatch();
-    try {
-      await warmupMlxWeights(baseUrl, modelPath);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      row.status = 'error';
-      row.error = message;
-      row.stoppedAt = Date.now();
-      await commitServes('mlx-warmup-error');
-      throw new Error(message);
+
+    const settleMlx = async () => {
+      try {
+        await warmupMlxWeights(baseUrl, modelPath);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        row.status = 'error';
+        row.error = message;
+        row.stoppedAt = Date.now();
+        await commitServes('mlx-warmup-error');
+        throw new Error(message);
+      }
+      // Record the load prior before flipping to running so a client that polls
+      // status does not observe running with a stale lastLoadMs.
+      const loadMs = Math.max(0, Date.now() - row.startedAt);
+      if (mlxLibraryId) {
+        try {
+          await recordLaunchLoadPrior(mlxLibraryId, {
+            lastLoadMs: loadMs,
+            lastWeightsBytes: mlxWeightsBytes,
+          });
+        } catch (err) {
+          console.warn('[mlx-lm] launch load prior persist failed:', err);
+        }
+      }
+      row.status = 'running';
+      row.lastHealthyAt = Date.now();
+      await commitServes('mlx-running');
+      ensureServeHeartbeat();
+    };
+
+    // Async start returns while warmup is still in flight; callers poll
+    // GET /api/models/serve/:id. Sync (no async) waits so existing tests keep
+    // asserting `running` on the returned row.
+    if (body.async === true) {
+      void settleMlx().catch(() => {
+        /* row already carries status:'error' + error text */
+      });
+      return publicServe(row);
     }
-    row.status = 'running';
-    row.lastHealthyAt = Date.now();
-    await commitServes('mlx-running');
-    ensureServeHeartbeat();
+
+    await settleMlx();
     return publicServe(row);
   }
 

@@ -141,4 +141,10 @@ describe('serve activity chip labels', () => {
     };
     assert.deepEqual(serveActivityChipLabels(activity, overlay), ['0 PP 1.2k tok']);
   });
+
+  test('queued chip stays off when mlx synthesis does not set queued', () => {
+    const activity = { ...IDLE, queued: 0 };
+    assert.deepEqual(serveActivityChipLabels(activity), ['Ready']);
+    assert.equal(formatQueuedChipLabel(0), null);
+  });
 });

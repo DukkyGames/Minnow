@@ -61,6 +61,14 @@ export interface ServeFailure {
   exitCode?: number | null;
 }
 
+export interface MlxServeSettings {
+  snapshotPath: string;
+  quant: string | null;
+  mlxLmVersion: string;
+  port: number;
+  contextLength: number | null;
+}
+
 export interface ServeRecord {
   id: string;
   runtime: string;
@@ -76,6 +84,10 @@ export interface ServeRecord {
   startedAt: number;
   stoppedAt: number | null;
   llamaSettings?: Record<string, unknown> | null;
+  /** mlx-lm inspector snapshot; absent on llama.cpp rows. */
+  mlxSettings?: MlxServeSettings | null;
+  /** Library row id when the serve was started from My Models / picker. */
+  libraryId?: string | null;
   exitCode?: number | null;
   failure?: ServeFailure | null;
 }

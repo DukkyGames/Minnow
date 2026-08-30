@@ -387,3 +387,73 @@ describe('computeLoadProgress', () => {
     assert.ok(result.percent < 100);
   });
 });
+
+describe('mlx-lm load progress', () => {
+  const weightsBytes = 10 * GB;
+  const bytesPerMs = weightsBytes / 20_000;
+
+  it('does not scrape llama phase labels from an empty or unmatched log', () => {
+    const empty = computeLoadProgress({
+      logText: '',
+      elapsedMs: 4_000,
+      weightsBytes,
+      bytesPerMs,
+      runtime: 'mlx-lm',
+    });
+    assert.equal(empty.phaseKey, 'mlx-weights');
+    assert.equal(empty.label, 'Loading weights');
+    assert.ok(empty.percent > 0);
+    assert.ok(empty.percent < 100);
+
+    const llamaNoise = computeLoadProgress({
+      logText: 'srv llama_server: server is listening',
+      elapsedMs: 4_000,
+      weightsBytes,
+      bytesPerMs,
+      runtime: 'mlx-lm',
+    });
+    assert.equal(llamaNoise.phaseKey, 'mlx-weights');
+    assert.equal(llamaNoise.label, 'Loading weights');
+  });
+
+  it('climbs with a size+rate prior inside the 0–97 band', () => {
+    const early = computeLoadProgress({
+      logText: '',
+      elapsedMs: 5_000,
+      weightsBytes,
+      bytesPerMs,
+      runtime: 'mlx-lm',
+    });
+    const later = computeLoadProgress({
+      logText: '',
+      elapsedMs: 10_000,
+      weightsBytes,
+      bytesPerMs,
+      previousPercent: early.percent,
+      lastElapsedMs: 5_000,
+      runtime: 'mlx-lm',
+    });
+    assert.ok(later.percent > early.percent);
+    assert.ok(later.percent <= 97);
+  });
+
+  it('stops short of 100 until warmup (healthy) succeeds', () => {
+    const loading = computeLoadProgress({
+      logText: '',
+      elapsedMs: 60_000,
+      weightsBytes,
+      bytesPerMs,
+      runtime: 'mlx-lm',
+    });
+    assert.equal(loading.percent, 97);
+    assert.ok(loading.percent < 100);
+
+    const ready = computeLoadProgress({
+      elapsedMs: 60_000,
+      healthy: true,
+      runtime: 'mlx-lm',
+    });
+    assert.equal(ready.percent, 100);
+    assert.equal(ready.phaseKey, 'ready');
+  });
+});

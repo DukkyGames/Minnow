@@ -25,6 +25,7 @@ import {
   type LlamaServeSettings,
   type ServeRecord,
 } from '../../models/api-client';
+import { mlxLoadedWithRows } from '../../models/mlx-loaded-with';
 import { buildSamplerFieldInputs } from '../settings-sampler-fields';
 import {
   estimateServeMemory,
@@ -69,6 +70,7 @@ import {
   getInspectedServe,
   getModelsState,
   getSelectedModel,
+  libraryModelForServe,
   loadModel,
   selectModel,
   selectServe,
@@ -1187,13 +1189,44 @@ function appendLoadedWithBlock(
   body.appendChild(block);
 }
 
+/**
+ * mlx-lm has no llamaSettings. Empty llamaSettings must not read as a broken serve.
+ */
+function appendMlxLoadedWithBlock(
+  body: HTMLElement,
+  serve: ServeRecord,
+  model: LibraryModel | null | undefined,
+): void {
+  const block = el('section', 'models-inspector__block');
+  block.appendChild(el('h3', 'models-block__label', 'Loaded with'));
+  const rows = mlxLoadedWithRows(serve.mlxSettings, {
+    quant: model?.quant ?? null,
+    contextLength: model?.contextLength ?? null,
+  });
+  if (!rows.length) {
+    block.appendChild(
+      el('p', 'models-muted', 'Load the model to see the snapshot this serve is running.'),
+    );
+    body.appendChild(block);
+    return;
+  }
+  const list = el('dl', 'models-info-list');
+  for (const row of rows) list.appendChild(infoRow(row.label, row.value));
+  block.appendChild(list);
+  body.appendChild(block);
+}
+
 function renderInferenceTab(model: LibraryModel, body: HTMLElement): void {
   const serve = getInspectedServe() ?? serveForModel(model);
-  appendLoadedWithBlock(
-    body,
-    serve?.llamaSettings as LlamaServeSettings | null | undefined,
-    'Load the model to see the flags its process was started with.',
-  );
+  if (serve?.runtime === 'mlx-lm') {
+    appendMlxLoadedWithBlock(body, serve, model);
+  } else {
+    appendLoadedWithBlock(
+      body,
+      serve?.llamaSettings as LlamaServeSettings | null | undefined,
+      'Load the model to see the flags its process was started with.',
+    );
+  }
 
   const samplerBlock = el('section', 'models-inspector__block models-inspector__sampler');
   samplerBlock.append(
@@ -1426,11 +1459,15 @@ function renderServeOnlyInspector(host: HTMLElement, serve: ServeRecord): void {
 
   const body = el('div', 'models-inspector__body');
   body.setAttribute('role', 'tabpanel');
-  appendLoadedWithBlock(
-    body,
-    serve.llamaSettings as LlamaServeSettings | null | undefined,
-    'This serve has no stored launch flags.',
-  );
+  if (serve.runtime === 'mlx-lm') {
+    appendMlxLoadedWithBlock(body, serve, libraryModelForServe(serve) ?? null);
+  } else {
+    appendLoadedWithBlock(
+      body,
+      serve.llamaSettings as LlamaServeSettings | null | undefined,
+      'This serve has no stored launch flags.',
+    );
+  }
 
   const footer = el('footer', 'models-inspector__footer');
   footer.appendChild(
