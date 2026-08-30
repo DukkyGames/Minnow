@@ -1,8 +1,9 @@
 /**
- * Load V2 Builder/Tester system prompts (P2-F).
+ * Load V2 Builder/Tester/Final Tester system prompts (P2-E / P3-F).
  *
- * Files live under `prompts/{builder,tester}/`. The runner never imports them
- * — this module loads a file and P2-F passes the string as `systemPrompt`.
+ * Files live under `prompts/{builder,tester,final}/`. The runner never imports
+ * them — this module loads a file and the effector passes the string as
+ * `systemPrompt`.
  */
 
 import fs from 'node:fs/promises';
@@ -26,12 +27,12 @@ export function stripPromptFrontmatter(raw) {
 }
 
 /**
- * @param {'builder' | 'tester'} role
+ * @param {'builder' | 'tester' | 'final'} role
  * @param {'full' | 'lite'} [variant]
  * @returns {Promise<string>}
  */
 export async function loadRolePrompt(role, variant = 'full') {
-  if (role !== 'builder' && role !== 'tester') {
+  if (role !== 'builder' && role !== 'tester' && role !== 'final') {
     throw new Error(`loadRolePrompt: ${String(role)} is not an agent role`);
   }
   const file = variant === 'lite' ? 'agent.lite.md' : 'agent.full.md';

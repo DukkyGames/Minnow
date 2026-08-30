@@ -20,7 +20,7 @@ import { after, before, describe, it } from 'node:test';
 
 import { derive } from '../../server/orchestrator/core/derive.js';
 import { makeEvent } from '../../server/orchestrator/core/events.js';
-import { touchesOverlap } from '../../server/orchestrator/core/plan.js';
+import { footprintsClash } from '../../server/orchestrator/core/plan.js';
 import { createEngine } from '../../server/orchestrator/engine.js';
 import { createScriptedEffector } from '../../server/orchestrator/effector-scripted.js';
 import { createMemoryJournal } from '../../server/orchestrator/testing/memory-journal.js';
@@ -236,7 +236,7 @@ function checkInvariants(state, live, cap, wereLive = new Set()) {
     for (let j = i + 1; j < ids.length; j += 1) {
       const a = state.tasks.get(/** @type {string} */ (ids[i]));
       const b = state.tasks.get(/** @type {string} */ (ids[j]));
-      if (a && b && touchesOverlap(a.touches, b.touches)) {
+      if (a && b && footprintsClash(a, b)) {
         return `touches: ${ids[i]} and ${ids[j]} overlap`;
       }
     }

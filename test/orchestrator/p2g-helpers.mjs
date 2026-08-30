@@ -20,6 +20,7 @@ const PROJECT_ROOT = path.resolve(HERE, '..', '..');
 export const P2G_FIXTURE_DIR = path.join(PROJECT_ROOT, 'test', 'fixtures', 'orchestrator-v2-p2g');
 export const P2G_PLAN_PATH = path.join(P2G_FIXTURE_DIR, 'plan.md');
 export const P2G_RELIABILITY_PATH = path.join(HERE, 'p2g-reliability.json');
+export const P3E_RELIABILITY_PATH = path.join(HERE, 'p3e-reliability.json');
 
 export const P2G_PLAN = fs.readFileSync(P2G_PLAN_PATH, 'utf8');
 
@@ -280,6 +281,58 @@ export function reliabilityFromEvents(events) {
   ).length;
   const abandonments = events.filter((event) => event.type === 'task.abandoned').length;
   const merged = events.filter((event) => event.type === 'merge.succeeded').length;
+  const overflowEvents = events.filter((event) => event.type === 'touches.overflow').length;
   const finished = events.some((event) => event.type === 'run.finished');
-  return { retries, abandonments, merged, finished };
+  return { retries, abandonments, merged, overflowEvents, finished };
+}
+
+/**
+ * Builder attempt intervals on journal `seq`, never wall-clock `ts`.
+ * An open attempt has `endSeq: Infinity` until its ended line exists.
+ *
+ * @param {Array<Record<string, unknown>>} events
+ * @returns {Array<{ taskId: string, attemptId: string, startSeq: number, endSeq: number }>}
+ */
+export function builderWindowsBySeq(events) {
+  /** @type {Map<string, { taskId: string, attemptId: string, startSeq: number, endSeq: number }>} */
+  const windows = new Map();
+  for (const event of events) {
+    const seq = Number(event.seq);
+    if (!Number.isSafeInteger(seq)) continue;
+    if (event.type === 'task.attempt.started' && event.role === 'builder') {
+      windows.set(String(event.attemptId), {
+        taskId: String(event.taskId),
+        attemptId: String(event.attemptId),
+        startSeq: seq,
+        endSeq: Number.POSITIVE_INFINITY,
+      });
+    }
+    if (event.type === 'task.attempt.ended' && event.role === 'builder') {
+      const open = windows.get(String(event.attemptId));
+      if (open) open.endSeq = seq;
+    }
+  }
+  return [...windows.values()];
+}
+
+/**
+ * True when two builder attempts (usually two tasks) overlap in seq order.
+ * `startA < endB && startB < endA` — the same rule as interval overlap, using
+ * the journal's sequence instead of timestamps so replay stays the authority.
+ *
+ * @param {Array<Record<string, unknown>>} events
+ * @param {{ distinctTasks?: boolean }} [opts]
+ */
+export function buildersOverlapBySeq(events, opts = {}) {
+  const windows = builderWindowsBySeq(events);
+  const distinct = opts.distinctTasks !== false;
+  for (let i = 0; i < windows.length; i += 1) {
+    for (let j = i + 1; j < windows.length; j += 1) {
+      const a = windows[i];
+      const b = windows[j];
+      if (distinct && a.taskId === b.taskId) continue;
+      if (a.startSeq < b.endSeq && b.startSeq < a.endSeq) return true;
+    }
+  }
+  return false;
 }

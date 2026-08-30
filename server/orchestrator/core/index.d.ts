@@ -36,17 +36,48 @@ export {
   validateEvent,
 } from './events';
 
-export { attemptCount, deadEnded, derive, lastEndedAttempt, readyTasks } from './derive';
+export {
+  attemptCount,
+  deadEnded,
+  DEFAULT_BOARD_CONCURRENCY,
+  derive,
+  emptyState,
+  foldInto,
+  lastEndedAttempt,
+  readyTasks,
+} from './derive';
+export {
+  abandonmentEvidenceIsComplete,
+  attemptHistoryRecord,
+  bundleAbandonmentEvidence,
+  capDiffPayload,
+  capDiffText,
+  MAX_DIFF_CHARS,
+  queryAbandonments,
+} from './evidence';
 export type { Attempt, TouchesOverflow, FinalTestState, WaveRef, Evidence } from './types';
 
-export { decide, formatPolicyTable, POLICY_TABLE, wantsSameWorktree } from './policy';
+export {
+  decide,
+  formatPolicyTable,
+  POLICY_TABLE,
+  SAME_WORKTREE_SEED_KINDS,
+  wantsSameWorktree,
+} from './policy';
 export type { PolicyOutcome, PolicyRow, RetryAction, AdvanceAction, AbandonAction } from './types';
 
 export {
+  expandTouches,
+  expandedFilesOverlap,
+  footprintsClash,
   globsIntersect,
   isReadyForFinalTest,
+  manualStart,
   nextAction,
+  normalizeRepoPath,
   orderedTaskIds,
+  overflowPaths,
+  pathMatchesGlob,
   pendingAbandonments,
   pendingEnqueues,
   pendingSkips,
@@ -54,6 +85,12 @@ export {
   touchesOverlap,
 } from './plan';
 export type { NextAction } from './types';
+export { summarizeTouchesOverflow } from './overflow-report';
+export type {
+  OverflowFileRow,
+  OverflowTaskRow,
+  TouchesOverflowReport,
+} from './overflow-report';
 
 export { formatParseErrors, isParseErrors, parsePlan } from './parse-plan';
 
@@ -71,4 +108,3 @@ export {
   stateFromJSON,
   stateToJSON,
 } from './snapshot';
-export { emptyState, foldInto } from './derive';

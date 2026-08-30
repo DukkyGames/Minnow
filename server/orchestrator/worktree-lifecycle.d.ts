@@ -1,0 +1,79 @@
+import type { BoardState, Desired } from './core/types';
+
+export const INTEGRATION_SLOT: 'integration';
+export const WORKTREE_DISCARDED_TYPE: 'worktree.discarded';
+
+export function integrationBranch(boardId: string): string;
+export function attemptBranch(boardId: string, slotId: string): string;
+export function slotIdForAttempt(attemptId: string): string;
+export function parseWorktreePorcelain(porcelain: string): string[];
+export function pathsEqual(a: string, b: string): boolean;
+export function liveWorktreePaths(state: BoardState | null | undefined): Set<string>;
+export function previousWorktreeForTask(
+  state: BoardState | null | undefined,
+  taskId: string,
+): string | null;
+export function slotIdFromWorktreePath(boardId: string, worktreePath: string): string | null;
+export function shouldKeepWorktree(
+  state: BoardState,
+  desired: Desired,
+  outcome: string,
+): boolean;
+export function wantsReuse(desired: Desired): boolean;
+
+export function ensureBoardIntegration(boardId: string): Promise<{
+  ok: boolean;
+  path?: string;
+  branch?: string;
+  error?: string;
+  output?: string;
+}>;
+
+export function allocateAttemptWorktree(input: {
+  boardId: string;
+  taskId: string;
+  attemptId: string;
+  desired: Desired;
+  state: BoardState;
+}): Promise<{
+  ok: boolean;
+  path?: string;
+  slotId?: string;
+  created?: boolean;
+  discarded: Record<string, unknown>[];
+  error?: string;
+}>;
+
+export function commitAttemptWorktree(input: {
+  boardId: string;
+  slotId: string;
+  message?: string;
+}): Promise<{ ok: boolean; committed?: boolean; error?: string; output?: string }>;
+
+export function releaseWorktree(input: {
+  boardId: string;
+  slotId: string;
+  taskId?: string | null;
+  attemptId?: string;
+  worktree?: string;
+}): Promise<{
+  ok: boolean;
+  discarded: Record<string, unknown> | null;
+  error?: string;
+}>;
+
+export function reconcileOrphanWorktrees(input: {
+  boardId: string;
+  livePaths: Set<string> | Iterable<string>;
+}): Promise<{
+  removed: string[];
+  discarded: Record<string, unknown>[];
+}>;
+
+/** P3-C calls this after a real merge. P3-A only exports the hook. */
+export function refreshIntegrationDepsAfterMerge(input: {
+  boardId: string;
+  sinceSha?: string;
+}): Promise<{ ok: boolean; ran?: string[]; failed?: unknown; error?: string; output?: string }>;
+
+export function resetEnsuredBoards(): void;

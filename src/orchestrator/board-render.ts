@@ -230,7 +230,7 @@ function isStartable(state: BoardState, task: TaskState): { can: boolean; why: s
   if (state.finished) return { can: false, why: 'the run has finished' };
   if (task.phase === 'merged') return { can: false, why: 'already merged' };
   if (task.phase === 'abandoned') return { can: false, why: 'abandoned' };
-  if (task.phase === 'skipped') return { can: false, why: 'skipped' };
+  if (task.phase === 'skipped') return { can: false, why: 'waiting on something that failed' };
   if (task.attempts.some((a) => !a.ended)) return { can: false, why: 'already running' };
   const blocking = task.dependsOn.filter((dep) => state.tasks.get(dep)?.phase !== 'merged');
   if (blocking.length > 0) {
@@ -269,9 +269,16 @@ function renderTaskDetail(state: BoardState, task: TaskState): HTMLElement {
     detail.appendChild(reason);
   }
   if (task.skippedBy) {
+    // Skipped is not a failure of this task — it is waiting on something that failed.
     const reason = el('div', 'ov2-task__note ov2-task__note--warn');
     reason.appendChild(el('strong', undefined, 'Skipped'));
-    reason.appendChild(el('span', undefined, `blocked by ${task.skippedBy}`));
+    reason.appendChild(
+      el(
+        'span',
+        undefined,
+        `waiting on ${task.skippedBy}, which failed — this task did not fail`,
+      ),
+    );
     detail.appendChild(reason);
   }
   if (task.mergeConflicts && task.mergeConflicts.length > 0) {
@@ -281,9 +288,15 @@ function renderTaskDetail(state: BoardState, task: TaskState): HTMLElement {
     detail.appendChild(conflict);
   }
   for (const overflow of task.touchesOverflow) {
-    const note = el('div', 'ov2-task__note ov2-task__note--warn');
-    note.appendChild(el('strong', undefined, 'Reached outside its footprint'));
+    const note = el('div', 'ov2-task__note ov2-task__note--info');
+    note.appendChild(el('strong', undefined, 'Wrote outside its footprint'));
     note.appendChild(el('span', undefined, overflow.actual.join(', ')));
+    detail.appendChild(note);
+  }
+  if (task.emptyTouchesGlobs && task.emptyTouchesGlobs.length > 0) {
+    const note = el('div', 'ov2-task__note ov2-task__note--warn');
+    note.appendChild(el('strong', undefined, 'Glob matched no files'));
+    note.appendChild(el('span', undefined, task.emptyTouchesGlobs.join(', ')));
     detail.appendChild(note);
   }
 
@@ -372,6 +385,34 @@ export function renderTimeline(
     list.appendChild(item);
   }
   wrap.appendChild(list);
+  return wrap;
+}
+
+// ---------------------------------------------------------------------------
+// Finish report (P3-G)
+// ---------------------------------------------------------------------------
+
+/**
+ * The one report a set-and-forget run delivers. Data comes from the persisted
+ * artifact, not from BoardState, so this view cannot feed the engine.
+ *
+ * Markdown is shown as preformatted text: the writer is an LLM, and this
+ * surface must not interpret that string as HTML.
+ */
+export function renderFinishReport(markdown: string | null, loading: boolean): HTMLElement {
+  const wrap = el('section', 'ov2-finish');
+  wrap.appendChild(el('h3', 'ov2-finish__title', 'Run report'));
+  if (loading && !markdown) {
+    wrap.appendChild(el('p', 'ov2-finish__pending', 'Writing the end-of-run report…'));
+    return wrap;
+  }
+  if (!markdown) {
+    wrap.appendChild(empty('No report yet.'));
+    return wrap;
+  }
+  const body = el('pre', 'ov2-finish__body');
+  body.textContent = markdown;
+  wrap.appendChild(body);
   return wrap;
 }
 

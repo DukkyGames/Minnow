@@ -21,7 +21,7 @@
  * ## Scope
  *
  * This module validates glob *syntax* only. Matching declared globs against the
- * real repo needs I/O and belongs in P3-D.
+ * real repo is I/O and lives in P3-D (`expandTouches` + middleware).
  *
  * The preferred emit form is the one Plan / Super Plan / Planner prompts specify
  * (`- **Build:**` / `- **Test:**` / `- **Accept:**` / `- **Touches:**`). The

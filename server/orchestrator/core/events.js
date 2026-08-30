@@ -95,11 +95,13 @@ export const EVENT_SCHEMAS = /** @type {const} */ ({
   },
   'merge.succeeded': {
     required: { taskId: 'id', sha: 'id' },
-    optional: {},
+    // beforeSha: integration tip snapped before this merge (P3-C). Optional
+    // so older journals still fold; the merge queue writes it when it has one.
+    optional: { beforeSha: 'id' },
   },
   'merge.conflicted': {
     required: { taskId: 'id', files: 'str[]' },
-    optional: {},
+    optional: { beforeSha: 'id' },
   },
   'task.abandoned': {
     required: { taskId: 'id', reason: 'id' },

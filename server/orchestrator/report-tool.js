@@ -207,11 +207,12 @@ export function parseTesterReport(raw) {
 }
 
 /**
- * @param {'builder' | 'tester'} role
+ * @param {'builder' | 'tester' | 'final'} role
  * @returns {(raw: unknown) => import('./report-tool').ParseReportResult}
  */
 export function parseReportFor(role) {
-  return role === 'tester' ? parseTesterReport : parseBuilderReport;
+  if (role === 'tester' || role === 'final') return parseTesterReport;
+  return parseBuilderReport;
 }
 
 /**
@@ -287,9 +288,9 @@ export function testerReportTool() {
 }
 
 /**
- * @param {'builder' | 'tester'} role
+ * @param {'builder' | 'tester' | 'final'} role
  * @returns {import('../runner/run-turn').TurnToolDefinition}
  */
 export function reportToolFor(role) {
-  return role === 'tester' ? testerReportTool() : builderReportTool();
+  return role === 'tester' || role === 'final' ? testerReportTool() : builderReportTool();
 }

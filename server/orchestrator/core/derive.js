@@ -30,7 +30,19 @@
 import { validateEvent } from './events.js';
 
 /**
+ * Product default for the first `board.started` when the caller omits N.
+ *
+ * The fold stays at 1 until that event (a created board is not running yet).
+ * Reliability first — do not raise this because a benchmark looked faster.
+ */
+export const DEFAULT_BOARD_CONCURRENCY = 2;
+
+/**
  * The state of a board with no journal at all.
+ *
+ * `concurrency` is 1 here on purpose: that is the pre-start placeholder, not
+ * the product default. The first start journals `board.started` at
+ * {@link DEFAULT_BOARD_CONCURRENCY} unless the caller asked for something else.
  *
  * @returns {import('./types').BoardState}
  */
@@ -325,6 +337,14 @@ function newTask(id, declared) {
     wave: Number.isFinite(declared.wave) ? Number(declared.wave) : 1,
     dependsOn: Array.isArray(declared.dependsOn) ? declared.dependsOn.map(String) : [],
     touches: Array.isArray(declared.touches) ? declared.touches.map(String) : [],
+    // Frozen at board.created. Missing means a pre-P3-D journal — do not
+    // re-expand; `plan()` falls back to declared globs.
+    touchesExpanded: Array.isArray(declared.touchesExpanded)
+      ? [...new Set(declared.touchesExpanded.map(String))].sort()
+      : null,
+    emptyTouchesGlobs: Array.isArray(declared.emptyTouchesGlobs)
+      ? declared.emptyTouchesGlobs.map(String)
+      : [],
     buildSpec: declared.build == null ? null : String(declared.build),
     testSpec: declared.test == null ? null : String(declared.test),
     accept: declared.accept == null ? null : String(declared.accept),
@@ -421,28 +441,67 @@ export function readyTasks(state) {
 }
 
 /**
- * Tasks that can never run because something they depend on is abandoned,
- * skipped, or missing. Transitive.
+ * Walk an immediate broken dependency to the abandoned root (MIN-712).
+ *
+ * `task.skipped.blockedBy` names the task that actually failed, not the
+ * skipped parent in between — so a diamond DAG A→B, A→C, B→D, C→D with A
+ * abandoned reports B, C, and D all blocked by A.
+ *
+ * Sharing a wave is not a walk; only `dependsOn` / `skippedBy` edges count.
  *
  * @param {import('./types').BoardState} state
- * @returns {Map<string, string>} taskId -> the id that blocks it
+ * @param {string} startId
+ * @param {Map<string, string>} immediate
+ * @returns {string}
+ */
+function abandonedRootOf(state, startId, immediate) {
+  const seen = new Set();
+  let current = startId;
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    const task = state.tasks.get(current);
+    if (!task) return current;
+    if (task.phase === 'abandoned') return current;
+    if (task.phase === 'skipped' && task.skippedBy) {
+      current = task.skippedBy;
+      continue;
+    }
+    const next = immediate.get(current);
+    if (next && next !== current) {
+      current = next;
+      continue;
+    }
+    return current;
+  }
+  return current;
+}
+
+/**
+ * Tasks that can never run because something they depend on is abandoned,
+ * skipped, or missing. Transitive over `dependsOn` only.
+ *
+ * @param {import('./types').BoardState} state
+ * @returns {Map<string, string>} taskId -> the abandoned root that blocks it
  */
 export function deadEnded(state) {
   /** @type {Map<string, string>} */
-  const dead = new Map();
+  const immediate = new Map();
   let changed = true;
   while (changed) {
     changed = false;
     for (const id of state.taskOrder) {
       const task = state.tasks.get(id);
-      if (!task || dead.has(id)) continue;
+      if (!task || immediate.has(id)) continue;
       if (task.phase === 'abandoned' || task.phase === 'skipped') continue;
       for (const dep of task.dependsOn) {
         const upstream = state.tasks.get(dep);
         const broken =
-          !upstream || upstream.phase === 'abandoned' || upstream.phase === 'skipped' || dead.has(dep);
+          !upstream ||
+          upstream.phase === 'abandoned' ||
+          upstream.phase === 'skipped' ||
+          immediate.has(dep);
         if (broken) {
-          dead.set(id, dep);
+          immediate.set(id, dep);
           changed = true;
           break;
         }
@@ -456,8 +515,14 @@ export function deadEnded(state) {
   // the cycle waits forever, `plan()` returns nothing, and the board sits idle
   // with work outstanding. Naming them here turns a silent permanent stall into
   // a skip the run can report.
-  for (const id of cyclicTasks(state, dead)) {
-    if (!dead.has(id)) dead.set(id, id);
+  for (const id of cyclicTasks(state, immediate)) {
+    if (!immediate.has(id)) immediate.set(id, id);
+  }
+
+  /** @type {Map<string, string>} */
+  const dead = new Map();
+  for (const [id, blocker] of immediate) {
+    dead.set(id, abandonedRootOf(state, blocker, immediate));
   }
   return dead;
 }

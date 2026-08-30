@@ -22,20 +22,24 @@
  *
  * ## What it cannot do yet
  *
- * Merge and Final are still instant-pass (P3 owns a real merge queue). Live
- * agent output arrives as SSE `event: live` from P2-F; this view renders the
+ * Merge is the serialized rebase-then-merge queue (P3-C). Final is the static
+ * ladder (P3-F); the browser step waits for Phase 5. The end-of-run report is
+ * the persisted `report.md` artifact (P3-G), not a planner chat. Live agent
+ * output arrives as SSE `event: live` from P2-F; this view renders the
  * current tool name on the running task row.
  */
 
 import '../styles/orchestrator-boards.css';
 
 import type { BoardState } from '../../server/orchestrator/core/types';
+import { DEFAULT_BOARD_CONCURRENCY } from '../../server/orchestrator/core/derive.js';
 import {
   createBoardClient,
   createBoardFromPlan,
   createBoardListClient,
   PlanParseFailure,
   readJournal,
+  readBoardReport,
   type BoardClient,
   type BoardListClient,
   type BoardSummary,
@@ -45,6 +49,7 @@ import {
   renderMergeQueue,
   renderTaskList,
   renderTimeline,
+  renderFinishReport,
 } from './board-render';
 import { withSessionToken } from '../api/session-token';
 import {
@@ -90,6 +95,10 @@ let showTimeline = false;
 const pendingTasks = new Set<string>();
 /** The last thing that went wrong, shown until the next successful command. */
 let notice: { text: string; tone: 'warn' | 'bad' } | null = null;
+/** Persisted P3-G report, keyed by board. Presentation only — never folded. */
+const finishReportByBoard = new Map<string, string>();
+/** In-flight GET so a paint loop does not stampede the endpoint. */
+const finishReportLoads = new Set<string>();
 
 // ---------------------------------------------------------------------------
 // Mount
@@ -527,6 +536,7 @@ function paintBoard(): void {
     ),
   );
   pane.appendChild(renderMergeQueue(state));
+  pane.appendChild(renderFinishSection(state));
   pane.appendChild(renderTimelineSection());
   // Repainting from scratch is what keeps the view a pure function of the
   // state; restoring the scroll offset is what stops that being felt.
@@ -535,54 +545,154 @@ function paintBoard(): void {
 
 function renderControls(state: BoardState): HTMLElement {
   const bar = el('div', 'ov2-controls');
+  const finished = state.finished;
+  const running = state.status === 'running';
+  // Created boards are not ticking — that is Stopped in PRD §6's pair, even
+  // though the fold still says `created` until the first start.
+  const loopOn = running;
+
+  const status = el('div', 'ov2-controls__status');
+  status.setAttribute('role', 'group');
+  status.setAttribute('aria-label', 'Board loop');
+  status.appendChild(
+    button({
+      label: 'Running',
+      title: 'Start or keep the reconcile loop. Sequential is this at N=1; AFK is this with no interactive gates.',
+      variant: loopOn ? 'primary' : 'ghost',
+      disabled: finished || loopOn,
+      onClick: () => void commandStart(readConcurrencyInput()),
+    }),
+  );
+  status.appendChild(
+    button({
+      label: 'Stopped',
+      title: 'Stop the loop. Manual mode is this plus per-task Start on a card.',
+      variant: !loopOn ? 'primary' : 'ghost',
+      disabled: finished || !loopOn,
+      onClick: () => void commandStop(),
+    }),
+  );
+  bar.appendChild(status);
 
   const concurrency = el('input', 'ov2-controls__number');
   concurrency.type = 'number';
   concurrency.min = '1';
   concurrency.max = '64';
-  concurrency.value = String(state.concurrency);
+  // Pre-start fold is 1; the stepper shows the product default so the first
+  // start journals 2 unless the user changed it.
+  const shownN =
+    state.status === 'created' ? DEFAULT_BOARD_CONCURRENCY : state.concurrency;
+  concurrency.value = String(shownN);
   concurrency.setAttribute('aria-label', 'Concurrency');
-
-  const running = state.status === 'running';
-  bar.appendChild(
-    button({
-      label: running ? 'Restart at N' : 'Start',
-      title: 'Start the reconcile loop at this concurrency',
-      variant: 'primary',
-      disabled: state.finished,
-      onClick: () => void commandStart(Number(concurrency.value)),
-    }),
-  );
-  bar.appendChild(
-    button({
-      label: 'Stop',
-      title: 'Stop the loop and everything it is running',
-      variant: 'danger',
-      disabled: !running,
-      onClick: () => void commandStop(),
-    }),
-  );
+  concurrency.id = 'ov2-concurrency-input';
+  concurrency.addEventListener('input', () => {
+    const n = Number(concurrency.value);
+    paintResourceHint(bar, Number.isSafeInteger(n) && n >= 1 ? Math.min(64, n) : DEFAULT_BOARD_CONCURRENCY);
+  });
 
   const stepper = el('div', 'ov2-controls__stepper');
   stepper.appendChild(el('span', 'ov2-controls__label', 'Concurrency'));
+  stepper.appendChild(
+    button({
+      label: '−',
+      title: 'Lower N. In-flight attempts keep running; only new starts wait.',
+      disabled: finished,
+      onClick: () => {
+        concurrency.value = String(Math.max(1, readConcurrencyInput() - 1));
+        paintResourceHint(bar, readConcurrencyInput());
+      },
+    }),
+  );
   stepper.appendChild(concurrency);
   stepper.appendChild(
     button({
-      label: 'Apply',
-      title: 'Lowering this stops nothing already in flight — it stops new work being picked up',
-      disabled: !running,
-      onClick: () => void commandConcurrency(Number(concurrency.value)),
+      label: '+',
+      title: 'Raise N. The next tick may start more work; nothing already running is restarted.',
+      disabled: finished,
+      onClick: () => {
+        concurrency.value = String(Math.min(64, readConcurrencyInput() + 1));
+        paintResourceHint(bar, readConcurrencyInput());
+      },
     }),
   );
+  if (running) {
+    stepper.appendChild(
+      button({
+        label: 'Apply',
+        title: 'Takes effect on the next tick. Lowering stops nothing already in flight.',
+        onClick: () => void commandConcurrency(readConcurrencyInput()),
+      }),
+    );
+  }
   bar.appendChild(stepper);
 
-  if (!running && !state.finished) {
-    // PRD §6: Manual = Stopped, with the user starting individual tasks by hand.
+  const hint = el('p', 'ov2-controls__hint');
+  hint.dataset.role = 'resource-hint';
+  bar.appendChild(hint);
+  // The input is not in the pane yet; use the value we just put on it.
+  paintResourceHint(bar, shownN);
+
+  if (!loopOn && !finished) {
     bar.appendChild(
-      el('span', 'ov2-controls__mode', 'Stopped — start individual tasks by hand below.'),
+      el(
+        'span',
+        'ov2-controls__mode',
+        'Stopped — start individual tasks by hand below, or switch to Running.',
+      ),
+    );
+  } else if (loopOn && shownN === 1) {
+    bar.appendChild(el('span', 'ov2-controls__mode', 'Sequential: Running at N=1.'));
+  } else if (loopOn) {
+    bar.appendChild(
+      el('span', 'ov2-controls__mode', 'AFK: Running with no interactive gates.'),
     );
   }
   return bar;
+}
+
+function readConcurrencyInput(): number {
+  const input = surface?.boardPane.querySelector<HTMLInputElement>('#ov2-concurrency-input');
+  const n = Number(input?.value);
+  if (!Number.isSafeInteger(n) || n < 1) return DEFAULT_BOARD_CONCURRENCY;
+  return Math.min(64, n);
+}
+
+function paintResourceHint(bar: HTMLElement, n: number): void {
+  const hint = bar.querySelector<HTMLElement>('[data-role="resource-hint"]');
+  if (!hint) return;
+  // Surface the cost; do not enforce a host cap. Concurrent agents are
+  // concurrent model calls and concurrent worktrees — the user picks N.
+  hint.textContent =
+    `N=${n} means up to ${n} concurrent agents: ${n} model calls and ${n} worktrees. ` +
+    'There is no hard cap; pick what this machine can hold.';
+}
+
+/**
+ * The P3-G artifact. Loaded over GET, never from the fold, so a report cannot
+ * leak back into scheduling if this view is later mistaken for a store.
+ */
+function renderFinishSection(state: BoardState): HTMLElement {
+  const wantsReport = state.finished || (state.status === 'stopped' && state.stopReason === 'user');
+  if (!wantsReport || !selectedBoardId) {
+    return el('div', 'ov2-finish ov2-finish--idle');
+  }
+  const cached = finishReportByBoard.get(selectedBoardId) ?? null;
+  if (!cached) void loadFinishReport(selectedBoardId);
+  return renderFinishReport(cached, !cached);
+}
+
+async function loadFinishReport(boardId: string): Promise<void> {
+  if (finishReportLoads.has(boardId)) return;
+  finishReportLoads.add(boardId);
+  try {
+    const { markdown } = await readBoardReport(boardId);
+    finishReportByBoard.set(boardId, markdown);
+    if (selectedBoardId === boardId) paintBoard();
+  } catch {
+    // 404 while the writer is still running; the next SSE tick retries.
+  } finally {
+    finishReportLoads.delete(boardId);
+  }
 }
 
 function renderTimelineSection(): HTMLElement {

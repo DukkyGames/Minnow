@@ -7,10 +7,15 @@
  * requires the attempt to stay in `inspect()` until the `onEnd` handler
  * has resolved (see `engine.js` lines 99–120).
  *
- * Builder and Tester run through `runTurn`. Merge and Final are
- * engine-driven mechanical roles (P3); until then they complete as an
- * instant pass so a board is not stranded after tester — the same default
- * the scripted effector already uses.
+ * Builder and Tester run through `runTurn`. Merge is the P3-C queue
+ * (`merge-queue.js`) when worktrees are isolated. Final is the P3-F
+ * static ladder in the integration worktree (`final-test.js`), unless
+ * tests inject `runTurn` or `runFinalLadder`, or an explicit `cwd`
+ * sandbox is in play (P2-G / scripted stay instant-pass).
+ *
+ * P3-A: builder/tester attempts run in an isolated worktree allocated
+ * here and recorded only on `task.attempt.started`. The runner still
+ * receives `cwd` as an argument and does not know what a board is.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -33,6 +38,18 @@ import { resolveAttemptModel } from './model-binding.js';
 import { interpolatePrompt, loadRolePrompt } from './prompts.js';
 import { parseReportFor, reportToolFor, REPORT_TOOL_NAME } from './report-tool.js';
 import { buildSeed } from './seeds.js';
+import { runMerge } from './merge-queue.js';
+import { finalAttemptEnd, formatRunInstructions, runFinalLadder } from './final-test.js';
+import {
+  allocateAttemptWorktree,
+  commitAttemptWorktree,
+  INTEGRATION_SLOT,
+  previousWorktreeForTask,
+  releaseWorktree,
+  shouldKeepWorktree,
+  slotIdFromWorktreePath,
+} from './worktree-lifecycle.js';
+import { getWorktreeSlotPath } from '../worktree/paths.js';
 
 /**
  * Attempt ids currently visible to some runner effector's `inspect()`.
@@ -197,9 +214,11 @@ function errorMessage(err) {
  *   limits?: { maxTurns?: number, wallClockMs?: number },
  *   promptVariant?: 'full' | 'lite',
  *   runTurn?: typeof defaultRunTurn,
+ *   runFinalLadder?: typeof runFinalLadder,
  *   deps?: import('../runner/adapters').RunnerDeps,
  *   postChatCompletions?: import('../runner/adapters').PostChatCompletions,
  *   reapOrphans?: boolean,
+ *   worktrees?: boolean,
  * }} [options]
  */
 export function createRunnerEffector(options = {}) {
@@ -208,9 +227,16 @@ export function createRunnerEffector(options = {}) {
   const runTurnFn = options.runTurn ?? defaultRunTurn;
   const limits = attemptLimits(options.limits);
   const promptVariant = options.promptVariant === 'lite' ? 'lite' : 'full';
-  const cwd = typeof options.cwd === 'string' && options.cwd.trim()
+  // An explicit `cwd` is the P2-F test seam (sandbox / tmp). Production
+  // (`createRunnerEffector({ boardId })`) allocates a worktree per attempt.
+  const isolateWorktrees = options.worktrees ?? !(typeof options.cwd === 'string' && options.cwd.trim());
+  const fallbackCwd = typeof options.cwd === 'string' && options.cwd.trim()
     ? options.cwd.trim()
     : getWorkspaceRoot();
+  const ladderFn = typeof options.runFinalLadder === 'function' ? options.runFinalLadder : runFinalLadder;
+  // Tests inject `runTurn` to fake builders. That is the "fake path" that
+  // must not suddenly exec tsc against a throwaway repo at final.
+  const usingFakeTurn = typeof options.runTurn === 'function';
   const deps = options.deps ?? createServerRunnerDeps(
     options.postChatCompletions ?? postChatCompletionsInProcess,
   );
@@ -224,13 +250,16 @@ export function createRunnerEffector(options = {}) {
    * @property {string} attemptId
    * @property {AbortController} controller
    * @property {boolean} stopped
+   * @property {string} [worktree]
+   * @property {string} [slotId]
+   * @property {import('./core/types').Desired} [desired]
    */
 
   /** @type {Map<string, LiveAttempt>} */
   const running = new Map();
   /** @type {Array<(end: import('./engine.js').AttemptEnd) => Promise<void> | void>} */
   const listeners = [];
-  /** @type {Array<{ taskId: string | null, role: string, attemptId: string, seedKind?: string }>} */
+  /** @type {Array<{ taskId: string | null, role: string, attemptId: string, seedKind?: string, worktree?: string }>} */
   const startLog = [];
 
   /**
@@ -264,8 +293,9 @@ export function createRunnerEffector(options = {}) {
   }
 
   /**
-   * Merge and Final are not LLM roles. Instant pass matches the scripted
-   * default so a board can close the queue until P3 owns a real merge.
+   * Merge-without-worktrees (P2-G / explicit cwd) and Final under a fake
+   * `runTurn` / scripted path. Instant pass so those boards close without git
+   * or a typechecker.
    *
    * @param {import('./core/types').Desired} desired
    * @returns {Promise<{ attemptId: string }>}
@@ -305,30 +335,228 @@ export function createRunnerEffector(options = {}) {
   }
 
   /**
+   * P3-F: run the fixed ladder in the integration worktree. Mechanical —
+   * no model. Stays in `inspect()` until the AttemptEnd is delivered.
+   *
+   * @param {import('./core/types').Desired} desired
+   * @returns {Promise<{ attemptId: string, worktree?: string }>}
+   */
+  async function startFinal(desired) {
+    const attemptId = `r-${randomUUID()}`;
+    const integrationCwd = boardId
+      ? getWorktreeSlotPath(boardId, INTEGRATION_SLOT)
+      : fallbackCwd;
+    const entry = {
+      taskId: desired.taskId,
+      role: desired.role,
+      attemptId,
+      controller: new AbortController(),
+      stopped: false,
+      worktree: integrationCwd,
+    };
+    running.set(attemptId, entry);
+    liveAttemptIds.add(attemptId);
+    startLog.push({
+      taskId: desired.taskId,
+      role: desired.role,
+      attemptId,
+      seedKind: desired.seedKind,
+      worktree: integrationCwd,
+    });
+
+    void (async () => {
+      /** @type {import('./engine.js').AttemptEnd} */
+      let end;
+      try {
+        const state = await currentState();
+        const result = await ladderFn({
+          cwd: integrationCwd,
+          planPath: state.planPath || null,
+          signal: entry.controller.signal,
+        });
+        end = finalAttemptEnd(attemptId, result);
+      } catch (err) {
+        // A throw must not take the engine down. Journal the failure with
+        // a cwd the human can still open; do not reopen tasks from here.
+        end = {
+          attemptId,
+          taskId: null,
+          role: 'final',
+          outcome: 'fail',
+          summary: errorMessage(err),
+          runInstructions: formatRunInstructions({
+            command: '(ladder threw)',
+            cwd: integrationCwd,
+          }),
+          evidence: {
+            failedRung: null,
+            output: errorMessage(err),
+            cwd: integrationCwd,
+          },
+        };
+      }
+      if (entry.stopped) return;
+      await deliverEnd(entry, end);
+    })();
+
+    return { attemptId, worktree: integrationCwd };
+  }
+
+  /**
+   * P3-C: rebase-then-merge in the task worktree. Stays in `inspect()` until
+   * the AttemptEnd is delivered, same contract as a builder turn.
+   *
+   * @param {import('./core/types').Desired} desired
+   * @returns {Promise<{ attemptId: string }>}
+   */
+  async function startMerge(desired) {
+    const attemptId = `r-${randomUUID()}`;
+    const entry = {
+      taskId: desired.taskId,
+      role: desired.role,
+      attemptId,
+      controller: new AbortController(),
+      stopped: false,
+    };
+    running.set(attemptId, entry);
+    liveAttemptIds.add(attemptId);
+    startLog.push({
+      taskId: desired.taskId,
+      role: desired.role,
+      attemptId,
+      seedKind: desired.seedKind,
+    });
+
+    void (async () => {
+      /** @type {import('./engine.js').AttemptEnd} */
+      let end;
+      /** @type {string | null} */
+      let mergeWorktree = null;
+      /** @type {string | null} */
+      let mergeSlotId = null;
+      try {
+        const state = await currentState();
+        mergeWorktree = desired.taskId ? previousWorktreeForTask(state, desired.taskId) : null;
+        mergeSlotId =
+          mergeWorktree && boardId ? slotIdFromWorktreePath(boardId, mergeWorktree) : null;
+        end = await runMerge({
+          boardId: /** @type {string} */ (boardId),
+          taskId: desired.taskId,
+          attemptId,
+          state,
+        });
+      } catch (err) {
+        // A throw must not take the engine down. Conflict the owner so
+        // policy retries with a rebase seed rather than stalling the queue.
+        end = {
+          attemptId,
+          taskId: desired.taskId,
+          role: 'merge',
+          outcome: 'conflicted',
+          files: [],
+          summary: errorMessage(err),
+        };
+      }
+      // The tester kept this tree so rebase could see the committed work.
+      // Success is on integration — release. A conflict must not: policy
+      // retries the owning builder with a rebase seed in the same worktree
+      // (MIN-707). P3-B abort left the tree at shaBefore, so the unique
+      // commits are still checked out here for the owner to resolve.
+      if (boardId && mergeSlotId && end.outcome === 'pass') {
+        const released = await releaseWorktree({
+          boardId,
+          slotId: mergeSlotId,
+          taskId: desired.taskId,
+          worktree: mergeWorktree || undefined,
+        });
+        if (released.discarded && !end.discarded) end.discarded = released.discarded;
+      }
+      if (entry.stopped) return;
+      await deliverEnd(entry, end);
+    })();
+
+    return { attemptId };
+  }
+
+  /**
+   * Commit on pass (an uncommitted tree cannot merge) then release unless the
+   * next start will reuse this path. Dirty removals travel on `end.discarded`
+   * so the engine can journal them rather than dropping the work.
+   *
    * @param {LiveAttempt} entry
    * @param {import('./core/types').Desired} desired
    * @param {import('../runner/run-turn').TurnResult} result
    */
   async function finishAgent(entry, desired, result) {
-    await deliverEnd(entry, toAttemptEnd(entry.attemptId, desired, result));
+    if (entry.slotId && boardId && result.outcome === 'pass') {
+      try {
+        await commitAttemptWorktree({
+          boardId,
+          slotId: entry.slotId,
+          message: `${desired.role} ${desired.taskId} pass`,
+        });
+      } catch (err) {
+        console.warn(
+          `[orchestrator] ${boardId}: commitWorktree failed for ${entry.attemptId}:`,
+          errorMessage(err),
+        );
+      }
+    }
+
+    /** @type {Record<string, unknown> | null} */
+    let discarded = null;
+    if (entry.slotId && boardId) {
+      let keep = false;
+      try {
+        const state = await currentState();
+        keep = shouldKeepWorktree(state, desired, result.outcome);
+      } catch {
+        keep = false;
+      }
+      if (!keep) {
+        const released = await releaseWorktree({
+          boardId,
+          slotId: entry.slotId,
+          taskId: desired.taskId,
+          attemptId: entry.attemptId,
+          worktree: entry.worktree,
+        });
+        discarded = released.discarded;
+      }
+    }
+
+    const end = toAttemptEnd(entry.attemptId, desired, result);
+    if (discarded) end.discarded = discarded;
+    await deliverEnd(entry, end);
   }
 
   return {
     /** @returns {Array<{ taskId: string | null, role: string, attemptId: string }>} */
     inspect() {
-      return [...running.values()].map(({ taskId, role, attemptId }) => ({
+      return [...running.values()].map(({ taskId, role, attemptId, worktree }) => ({
         taskId,
         role,
         attemptId,
+        ...(worktree ? { worktree } : {}),
       }));
     },
 
     /**
      * @param {import('./core/types').Desired} desired
-     * @returns {Promise<{ attemptId: string }>}
+     * @returns {Promise<{ attemptId: string, worktree?: string, discarded?: Record<string, unknown>[] }>}
      */
     async start(desired) {
-      if (desired.role === 'merge' || desired.role === 'final') {
+      if (desired.role === 'final') {
+        const hasLadderHook = typeof options.runFinalLadder === 'function';
+        if (hasLadderHook || (isolateWorktrees && boardId && !usingFakeTurn)) {
+          return startFinal(desired);
+        }
+        return startEngineDriven(desired);
+      }
+      if (desired.role === 'merge') {
+        // Real merge when this board owns worktrees. Explicit `cwd` sandboxes
+        // (P2-G, P2-F) have nothing to rebase — keep the instant pass.
+        if (isolateWorktrees && boardId) return startMerge(desired);
         return startEngineDriven(desired);
       }
       if (desired.role !== 'builder' && desired.role !== 'tester') {
@@ -346,17 +574,44 @@ export function createRunnerEffector(options = {}) {
         taskId: desired.taskId,
       });
       const model = await resolveAttemptModel(options.model);
+
+      const attemptId = `r-${randomUUID()}`;
+      /** @type {string} */
+      let attemptCwd = fallbackCwd;
+      /** @type {string | undefined} */
+      let slotId;
+      /** @type {Record<string, unknown>[]} */
+      const discarded = [];
+
+      if (isolateWorktrees) {
+        if (!boardId) {
+          throw new Error('runner effector: boardId is required to allocate a worktree');
+        }
+        const allocated = await allocateAttemptWorktree({
+          boardId,
+          taskId: desired.taskId,
+          attemptId,
+          desired,
+          state,
+        });
+        if (!allocated.ok || !allocated.path || !allocated.slotId) {
+          throw new Error(`runner effector: worktree allocate failed: ${allocated.error || 'unknown'}`);
+        }
+        attemptCwd = allocated.path;
+        slotId = allocated.slotId;
+        discarded.push(...allocated.discarded);
+      }
+
       const prompt = interpolatePrompt(
         await loadRolePrompt(desired.role, promptVariant),
-        { cwd },
+        { cwd: attemptCwd },
       );
       const tools = [...headlessToolDefs(), reportToolFor(desired.role)];
       const dispatch = createInProcessToolDispatch({
-        cwd,
+        cwd: attemptCwd,
         allowedToolNames: DEFAULT_HEADLESS_TOOL_IDS,
       });
 
-      const attemptId = `r-${randomUUID()}`;
       const controller = new AbortController();
       const entry = {
         taskId: desired.taskId,
@@ -364,6 +619,9 @@ export function createRunnerEffector(options = {}) {
         attemptId,
         controller,
         stopped: false,
+        worktree: isolateWorktrees ? attemptCwd : undefined,
+        slotId,
+        desired,
       };
 
       // The process exists. Only now is `start()` allowed to resolve — that
@@ -375,6 +633,7 @@ export function createRunnerEffector(options = {}) {
         role: desired.role,
         attemptId,
         seedKind: desired.seedKind,
+        worktree: entry.worktree,
       });
 
       void (async () => {
@@ -386,7 +645,7 @@ export function createRunnerEffector(options = {}) {
             seed,
             tools,
             model,
-            cwd,
+            cwd: attemptCwd,
             signal: controller.signal,
             limits,
             deps: {
@@ -416,7 +675,11 @@ export function createRunnerEffector(options = {}) {
         await finishAgent(entry, desired, result);
       })();
 
-      return { attemptId };
+      return {
+        attemptId,
+        ...(entry.worktree ? { worktree: entry.worktree } : {}),
+        ...(discarded.length > 0 ? { discarded } : {}),
+      };
     },
 
     /**

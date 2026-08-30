@@ -30,22 +30,55 @@ export {
   validateEvent,
 } from './events.js';
 
-export { attemptCount, deadEnded, derive, lastEndedAttempt, readyTasks } from './derive.js';
-
-export { decide, formatPolicyTable, POLICY_TABLE, wantsSameWorktree } from './policy.js';
+export {
+  attemptCount,
+  deadEnded,
+  DEFAULT_BOARD_CONCURRENCY,
+  derive,
+  emptyState,
+  foldInto,
+  lastEndedAttempt,
+  readyTasks,
+} from './derive.js';
 
 export {
+  abandonmentEvidenceIsComplete,
+  attemptHistoryRecord,
+  bundleAbandonmentEvidence,
+  capDiffPayload,
+  capDiffText,
+  MAX_DIFF_CHARS,
+  queryAbandonments,
+} from './evidence.js';
+
+export {
+  decide,
+  formatPolicyTable,
+  POLICY_TABLE,
+  SAME_WORKTREE_SEED_KINDS,
+  wantsSameWorktree,
+} from './policy.js';
+
+export {
+  expandTouches,
+  expandedFilesOverlap,
+  footprintsClash,
   globsIntersect,
   isReadyForFinalTest,
   manualStart,
   nextAction,
+  normalizeRepoPath,
   orderedTaskIds,
+  overflowPaths,
+  pathMatchesGlob,
   pendingAbandonments,
   pendingEnqueues,
   pendingSkips,
   plan,
   touchesOverlap,
 } from './plan.js';
+
+export { summarizeTouchesOverflow } from './overflow-report.js';
 
 export { formatParseErrors, isParseErrors, parsePlan } from './parse-plan.js';
 
@@ -63,4 +96,3 @@ export {
   stateFromJSON,
   stateToJSON,
 } from './snapshot.js';
-export { emptyState, foldInto } from './derive.js';

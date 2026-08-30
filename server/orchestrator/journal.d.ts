@@ -43,6 +43,11 @@ export function refreshSnapshot(boardId: string): Promise<void>;
 /** The board's state. Always equal to `derive(readEvents(boardId))`. */
 export function loadState(boardId: string): Promise<BoardState>;
 
+/** Abandonments reconstructed from the journal alone (MIN-712). */
+export function loadAbandonments(
+  boardId: string,
+): Promise<Array<{ taskId: string; reason: unknown; evidence: import('./core/types').Evidence }>>;
+
 export function createBoard(boardId: string): Promise<void>;
 export function boardExists(boardId: string): Promise<boolean>;
 export function listBoards(): Promise<string[]>;

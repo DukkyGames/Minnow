@@ -45,6 +45,7 @@ the `.d.ts`, exactly the way `src/ui/terminal-panel.ts` imports
 | `derive.js` | `derive(events) -> BoardState`. The only way board state is produced. |
 | `plan.js` | `plan(state) -> Desired[]`. The scheduler. |
 | `policy.js` | `decide(role, outcome, attemptCount) -> Action`. One table. |
+| `evidence.js` | Abandonment bundle + `queryAbandonments(events)`. Pure; diffs are attached by the engine. |
 | `parse-plan.js` | `parsePlan(markdown) -> TaskGraph \| ParseError[]`. |
 | `snapshot.js` | Snapshot format + memoised fold. A snapshot is a cache, never a source. |
 
@@ -55,6 +56,9 @@ the `.d.ts`, exactly the way `src/ui/terminal-panel.ts` imports
 - **There are no retry counters.** Attempt counts are `events.filter(...)`.
   A counter is a second source of truth and will desynchronise.
 - **A snapshot is a cache.** Deleting every snapshot must change nothing but speed.
+- **Default start concurrency is 2** (`DEFAULT_BOARD_CONCURRENCY`). The fold
+  stays at 1 until the first `board.started` so a created board is not already
+  running at N=2.
 - **The concurrency cap gates starting, not continuing.** Lowering `N` mid-run
   stops nothing already in flight. So "at no tick do more than `N` attempts
   exist" is false in the product; the invariant is "no tick starts work that

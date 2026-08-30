@@ -103,7 +103,7 @@ export interface BoardClient {
   close(): void;
 
   // Commands. Each is a POST; none of them touches local state directly.
-  start(concurrency: number): Promise<void>;
+  start(concurrency?: number): Promise<void>;
   stop(): Promise<void>;
   setConcurrency(n: number): Promise<void>;
   startTask(taskId: string): Promise<boolean>;
@@ -186,6 +186,11 @@ function freezeTask(task: TaskState): TaskState {
     ...task,
     dependsOn: Object.freeze([...task.dependsOn]) as string[],
     touches: Object.freeze([...task.touches]) as string[],
+    touchesExpanded:
+      task.touchesExpanded === null || task.touchesExpanded === undefined
+        ? null
+        : (Object.freeze([...task.touchesExpanded]) as string[]),
+    emptyTouchesGlobs: Object.freeze([...(task.emptyTouchesGlobs ?? [])]) as string[],
     attempts: Object.freeze(
       task.attempts.map((a) => Object.freeze({ ...a }) as Attempt),
     ) as Attempt[],
@@ -261,6 +266,17 @@ export async function readJournal(
   const suffix = query.toString() ? `?${query}` : '';
   const body = await request(`/${encodeURIComponent(boardId)}/journal${suffix}`);
   return { events: body.events ?? [], truncated: Boolean(body.truncated) };
+}
+
+/**
+ * The persisted end-of-run report (P3-G). Separate from the fold so the
+ * markdown cannot become input to plan() / derive().
+ */
+export async function readBoardReport(
+  boardId: string,
+): Promise<{ markdown: string; path: string }> {
+  const body = await request(`/${encodeURIComponent(boardId)}/report`);
+  return { markdown: String(body.markdown ?? ''), path: String(body.path ?? 'report.md') };
 }
 
 // ---------------------------------------------------------------------------
@@ -570,9 +586,14 @@ export function createBoardClient(
     },
 
     async start(concurrency) {
+      // Omit the field so the server applies DEFAULT_BOARD_CONCURRENCY (2).
+      // Sending an explicit 1 here would pin sequential mode by accident.
       await request(`/${encodeURIComponent(boardId)}/start`, {
         method: 'POST',
-        body: JSON.stringify({ concurrency }),
+        body:
+          concurrency === undefined
+            ? JSON.stringify({})
+            : JSON.stringify({ concurrency }),
       });
     },
 

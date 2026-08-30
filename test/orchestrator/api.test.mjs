@@ -15,6 +15,7 @@ import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
 
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { derive } from '../../server/orchestrator/core/derive.js';
+import { DEFAULT_BOARD_CONCURRENCY } from '../../server/orchestrator/core/derive.js';
 import { stateFromJSON } from '../../server/orchestrator/core/snapshot.js';
 import { createScriptedEffector } from '../../server/orchestrator/effector-scripted.js';
 import { disposeEngines } from '../../server/orchestrator/engine.js';
@@ -306,6 +307,20 @@ describe('commands', () => {
     assert.equal(stateFromJSON(stopped.body.state).stopReason, 'user');
   });
 
+  it('defaults omitted start concurrency to 2; fold stays 1 until then', async () => {
+    const boardId = await createBoard();
+    const before = stateFromJSON((await call('GET', `/api/boards/${boardId}`)).body.state);
+    assert.equal(before.status, 'created');
+    assert.equal(before.concurrency, 1);
+
+    const started = await call('POST', `/api/boards/${boardId}/start`, {});
+    assert.equal(started.status, 200);
+    const after = stateFromJSON(started.body.state);
+    assert.equal(after.status, 'running');
+    assert.equal(after.concurrency, DEFAULT_BOARD_CONCURRENCY);
+    assert.equal(DEFAULT_BOARD_CONCURRENCY, 2);
+  });
+
   it('rejects a nonsense concurrency', async () => {
     const boardId = await createBoard();
     for (const concurrency of [0, -1, 1.5, 'two', null, 1000]) {
@@ -513,7 +528,7 @@ describe('SSE', () => {
 });
 
 describe('the surface itself', () => {
-  it('exposes exactly the nine documented routes', async () => {
+  it('exposes exactly the ten documented routes', async () => {
     assert.deepEqual(
       ROUTES.map((r) => `${r.method} ${r.name}`).sort(),
       [
@@ -521,6 +536,7 @@ describe('the surface itself', () => {
         'GET get',
         'GET journal',
         'GET list',
+        'GET report',
         'POST concurrency',
         'POST create',
         'POST start',
@@ -548,6 +564,7 @@ describe('the surface itself', () => {
     assert.equal(matchRoute('GET', '/api/boards')?.name, 'list');
     assert.equal(matchRoute('GET', '/api/boards/b1')?.name, 'get');
     assert.equal(matchRoute('GET', '/api/boards/b1/events')?.name, 'events');
+    assert.equal(matchRoute('GET', '/api/boards/b1/report')?.name, 'report');
     assert.deepEqual(matchRoute('POST', '/api/boards/b1/tasks/W1-A/start')?.params, ['b1', 'W1-A']);
     assert.equal(matchRoute('GET', '/api/boards/b1/nope'), null);
     assert.equal(matchRoute('POST', '/api/boards/b1'), null);

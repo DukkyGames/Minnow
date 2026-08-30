@@ -15,6 +15,7 @@ import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
 
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { makeEvent } from '../../server/orchestrator/core/events.js';
+import { abandonmentEvidenceIsComplete } from '../../server/orchestrator/core/evidence.js';
 import {
   createEngine,
   disposeEngines,
@@ -25,9 +26,11 @@ import { createScriptedEffector } from '../../server/orchestrator/effector-scrip
 import {
   appendEvent,
   createBoard,
+  loadAbandonments,
   readEvents,
   resetJournalCache,
 } from '../../server/orchestrator/journal.js';
+import { journalHasReport } from '../../server/orchestrator/report.js';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ENGINE_SOURCE = path.join(PROJECT_ROOT, 'server/orchestrator/engine.js');
@@ -59,10 +62,12 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  // Drain the report write against this test's home before the next
+  // beforeEach swaps MINNOW_HOME (an in-flight append would then ENOENT).
+  for (const engine of liveEngines) await drainReportWrite(engine);
   for (const engine of liveEngines) engine.dispose();
   liveEngines = [];
   disposeEngines();
-  // Let any append already in flight finish against the home it was started in.
   await settle();
 });
 
@@ -99,7 +104,10 @@ function fakeClock() {
       const due = [...timers.entries()].filter(([, t]) => t.at <= now);
       for (const [handle, timer] of due) {
         timers.delete(handle);
-        timer.fn();
+        // The engine's timer returns the in-flight tick (including the
+        // end-of-run report). Await it so observers do not see `finished`
+        // before `run.report.written` is on disk.
+        await timer.fn();
       }
       await settle();
     },
@@ -165,12 +173,41 @@ async function harness(setup = {}) {
   return { boardId, engine, effector, clock };
 }
 
-/** Run a board to completion, bounded so a stall fails instead of hanging. */
+/** True once the run is folded complete and `run.report.written` is on disk. */
+async function finishedWithReport(engine) {
+  return engine.getState().finished && journalHasReport(await engine.getEvents());
+}
+
+/**
+ * Wait for an in-flight end-of-run report so afterEach can dispose safely.
+ *
+ * User-stopped boards also write a report (`finished` stays false).
+ */
+async function drainReportWrite(engine) {
+  try {
+    const st = engine.getState();
+    if (!st.finished && st.stopReason !== 'user') return;
+    for (let i = 0; i < 80; i += 1) {
+      if (journalHasReport(await engine.getEvents())) return;
+      await settle();
+    }
+  } catch {
+    // Engine was never loaded.
+  }
+}
+
+/**
+ * Run a board to completion, bounded so a stall fails instead of hanging.
+ *
+ * `state.finished` flips when `run.finished` is journaled. The report line is
+ * appended after that in the same tick, so returning on `finished` alone races
+ * `run.report.written` (and can leave a write in flight across afterEach).
+ */
 async function runToCompletion(engine, clock, concurrency = 1, maxTicks = 400) {
   await engine.startBoard(concurrency);
   for (let i = 0; i < maxTicks; i += 1) {
     await settle();
-    if (engine.getState().finished) return i;
+    if (await finishedWithReport(engine)) return i;
     await engine.tick();
     if (clock.pending > 0) await clock.advance(10_000);
   }
@@ -203,6 +240,7 @@ describe('engine — the tick', () => {
       'final.test.ended',
       'run.finished',
       'board.stopped',
+      'run.report.written',
     ]);
   });
 
@@ -258,7 +296,7 @@ describe('engine — the tick', () => {
     await engine.startBoard(1);
 
     let peak = 0;
-    for (let i = 0; i < 200 && !engine.getState().finished; i += 1) {
+    for (let i = 0; i < 200 && !(await finishedWithReport(engine)); i += 1) {
       const live = effector.inspect().filter((r) => r.role !== 'merge').length;
       peak = Math.max(peak, live);
       await engine.tick();
@@ -543,6 +581,8 @@ describe('engine — the policy has one application point', () => {
     assert.equal(abandon.taskId, 'A');
     assert.equal(abandon.reason, 'builder-failed');
     assert.ok(abandon.evidence, 'the abandonment carries no evidence');
+    assert.ok(abandonmentEvidenceIsComplete(abandon.evidence));
+    assert.ok(abandon.evidence.attempts.length >= 3);
     // Three builder attempts before giving up, per the policy table.
     assert.equal(
       events.filter((e) => e.type === 'task.attempt.started' && e.taskId === 'A').length,
@@ -665,7 +705,7 @@ describe('engine — commands', () => {
     engine.subscribe((event) => seen.push(String(event.type)));
     await runToCompletion(engine, clock, 1);
     assert.deepEqual(seen.slice(0, 3), ['board.started', 'task.attempt.started', 'task.attempt.ended']);
-    assert.equal(seen.at(-1), 'board.stopped');
+    assert.equal(seen.at(-1), 'run.report.written');
   });
 
   it('keeps a hand-started attempt running on a stopped board', async () => {
@@ -880,6 +920,142 @@ describe('engine — the registry', () => {
     await assert.rejects(() => getEngine('broken', failOnce, { tickMs: 60_000 }));
     const engine = await getEngine('broken', failOnce, { tickMs: 60_000 });
     assert.equal(engine.getState().boardId, 'broken');
+  });
+});
+
+describe('engine — dead ends never stall the run (MIN-712)', () => {
+  it('skips a diamond DAG behind the abandoned root only', async () => {
+    const tasks = [
+      task('A'),
+      task('B', { wave: 2, dependsOn: ['A'], touches: ['src/b/**'] }),
+      task('C', { wave: 2, dependsOn: ['A'], touches: ['src/c/**'] }),
+      task('D', { wave: 3, dependsOn: ['B', 'C'], touches: ['src/d/**'] }),
+      task('E', { wave: 2, touches: ['src/e/**'] }),
+    ];
+    const { engine, clock, boardId } = await harness({
+      tasks,
+      script: [{ match: { taskId: 'A' }, emit: { outcome: 'fail' } }, { emit: { outcome: 'pass' } }],
+    });
+    await runToCompletion(engine, clock, 4);
+
+    const state = engine.getState();
+    assert.equal(state.tasks.get('A').phase, 'abandoned');
+    assert.equal(state.tasks.get('B').phase, 'skipped');
+    assert.equal(state.tasks.get('C').phase, 'skipped');
+    assert.equal(state.tasks.get('D').phase, 'skipped');
+    assert.equal(state.tasks.get('B').skippedBy, 'A');
+    assert.equal(state.tasks.get('C').skippedBy, 'A');
+    assert.equal(state.tasks.get('D').skippedBy, 'A');
+    assert.equal(state.tasks.get('E').phase, 'merged');
+    assert.equal(state.finished, true);
+
+    const skips = (await readEvents(boardId)).filter((e) => e.type === 'task.skipped');
+    assert.deepEqual(
+      skips.map((e) => ({ taskId: e.taskId, blockedBy: e.blockedBy })),
+      [
+        { taskId: 'B', blockedBy: 'A' },
+        { taskId: 'C', blockedBy: 'A' },
+        { taskId: 'D', blockedBy: 'A' },
+      ],
+    );
+  });
+
+  it('starts an unrelated task on the tick immediately after abandonment', async () => {
+    // Concurrency 1 so C cannot sneak in beside A's retries. After A is
+    // abandoned the next start must be C — not an idle stall.
+    const tasks = [
+      task('A'),
+      task('B', { dependsOn: ['A'], touches: ['src/b/**'] }),
+      task('C', { touches: ['src/c/**'] }),
+    ];
+    const { engine, clock, effector } = await harness({
+      tasks,
+      script: [{ match: { taskId: 'A' }, emit: { outcome: 'fail' } }, { emit: { outcome: 'pass' } }],
+    });
+    await engine.startBoard(1);
+    for (let i = 0; i < 80; i += 1) {
+      await settle();
+      const st = engine.getState();
+      if (st.finished) break;
+      const startedC = effector.started.some((s) => s.taskId === 'C');
+      if (st.tasks.get('A').phase === 'abandoned' && startedC) break;
+      await engine.tick();
+      if (clock.pending > 0) await clock.advance(10_000);
+    }
+    const startedIds = effector.started.map((s) => s.taskId);
+    const lastA = startedIds.lastIndexOf('A');
+    const firstC = startedIds.indexOf('C');
+    assert.ok(firstC > lastA, 'C must start after A was given up on');
+    assert.deepEqual(
+      startedIds.slice(lastA + 1, firstC),
+      [],
+      'the tick after abandonment started something other than C',
+    );
+    assert.equal(engine.getState().tasks.get('B').phase, 'skipped');
+
+    for (let i = 0; i < 80 && !(await finishedWithReport(engine)); i += 1) {
+      await settle();
+      await engine.tick();
+      if (clock.pending > 0) await clock.advance(10_000);
+    }
+    assert.equal(engine.getState().tasks.get('C').phase, 'merged');
+    assert.equal(engine.getState().finished, true);
+  });
+
+  it('reaches run.finished after abandoning the last runnable task', async () => {
+    const { engine, clock, boardId } = await harness({
+      tasks: [task('A')],
+      script: [{ emit: { outcome: 'fail' } }],
+    });
+    await runToCompletion(engine, clock, 1);
+    const state = engine.getState();
+    assert.equal(state.tasks.get('A').phase, 'abandoned');
+    assert.equal(state.finished, true);
+    const types = (await readEvents(boardId)).map((e) => e.type);
+    assert.ok(types.includes('task.abandoned'));
+    assert.ok(types.includes('run.finished'), 'V1 silent-stall: the board idled instead of finishing');
+  });
+
+  it('does not skip a task that only shares a wave', async () => {
+    const { engine, clock } = await harness({
+      tasks: [task('A', { wave: 1 }), task('B', { wave: 1, touches: ['src/b/**'] })],
+      script: [{ match: { taskId: 'A' }, emit: { outcome: 'fail' } }, { emit: { outcome: 'pass' } }],
+    });
+    await runToCompletion(engine, clock, 2);
+    assert.equal(engine.getState().tasks.get('A').phase, 'abandoned');
+    assert.equal(engine.getState().tasks.get('B').phase, 'merged');
+    assert.equal(engine.getState().finished, true);
+  });
+
+  it('journals complete evidence on every task.abandoned and reconstructs it from the journal', async () => {
+    const { engine, clock, boardId } = await harness({
+      tasks: [task('A'), task('B', { touches: ['src/b/**'] })],
+      script: [
+        {
+          match: { taskId: 'A' },
+          emit: {
+            outcome: 'fail',
+            summary: 'types still fail',
+            evidence: { testOutput: 'TS2339', blockers: ['src/a.ts'] },
+          },
+        },
+        { emit: { outcome: 'pass' } },
+      ],
+    });
+    await runToCompletion(engine, clock, 2);
+    const events = await readEvents(boardId);
+    const abandons = events.filter((e) => e.type === 'task.abandoned');
+    assert.equal(abandons.length, 1);
+    for (const event of abandons) {
+      assert.ok(Array.isArray(event.evidence.attempts) && event.evidence.attempts.length > 0);
+      assert.ok(abandonmentEvidenceIsComplete(event.evidence));
+    }
+    const queried = await loadAbandonments(boardId);
+    assert.equal(queried.length, 1);
+    assert.equal(queried[0].taskId, 'A');
+    assert.ok(queried[0].evidence.attempts.length >= 3);
+    assert.equal(queried[0].evidence.attempts[0].testOutput, 'TS2339');
+    assert.ok(abandonmentEvidenceIsComplete(queried[0].evidence));
   });
 });
 

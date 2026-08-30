@@ -1,9 +1,15 @@
 import type { Attempt, BoardState, Role, TaskState } from './types';
 
+/**
+ * First `board.started` when the caller omits N. The fold stays at 1 until
+ * that event — a created board is not yet running.
+ */
+export const DEFAULT_BOARD_CONCURRENCY: 2;
+
 /** Fold a journal into board state. Total: never throws, whatever the input. */
 export function derive(events: Iterable<unknown>): BoardState;
 
-/** The state of a board with no journal at all. */
+/** The state of a board with no journal at all. Pre-start concurrency is 1. */
 export function emptyState(): BoardState;
 
 /**
@@ -27,5 +33,8 @@ export function attemptCount(state: BoardState, taskId: string, role: Role): num
  */
 export function readyTasks(state: BoardState): string[];
 
-/** Tasks that can never run because an upstream task is abandoned or skipped. */
+/**
+ * Tasks that can never run because an upstream task is abandoned or skipped.
+ * Values are the abandoned root (MIN-712), not the immediate skipped parent.
+ */
 export function deadEnded(state: BoardState): Map<string, string>;

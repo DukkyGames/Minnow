@@ -38,7 +38,7 @@ Five things were verified in the codebase. Two materially de-risk Phase 2; one a
 
 **B. A zero-UI headless turn loop already exists.** `src/agents/sub-agent-runner.ts` (1,375 lines, *"isolated sub-agent completion + tool loop, no parent chat history"*) has **no `../ui/` imports and no `document.` / `window.` references** across its 46 import sources. It already handles SSE parsing, constrained tool calls, XML tool calls, inline/Harmony thinking routing, context-budget policy, vision gating, and structured outcomes. This — not `src/tools/loop.ts` (3,773 lines, heavily UI-coupled) — is the port target. Its one real coupling is `src/state/sessions.ts` (2,206 lines, 10 browser-global hits), which is broken behind an injected transcript store in P2-A.
 
-**C. There is no rebase operation.** `server/worktree/worktree-ops.js` has `ensureIntegration`, `createWorktree`, `mergeIntoIntegration`, `checkMerged`, `abortMerge`, `restoreIntegration`, `verifyIntegrationMerge` — but nothing that rebases. §5.6's *"rebase before merge"* is new code (P3-B).
+**C. There was no rebase operation.** `server/worktree/worktree-ops.js` had `ensureIntegration`, `createWorktree`, `mergeIntoIntegration`, `checkMerged`, `abortMerge`, `restoreIntegration`, `verifyIntegrationMerge` — but nothing that rebased. §5.6's *"rebase before merge"* is P3-B (`rebaseOntoIntegration`, MIN-706 — done).
 
 **D. The shared core must be `.js` + `.d.ts`, not `.ts`.** The server ships and runs as raw JavaScript (`npm start` → `node server.js`; no transpile step covers `server/**`). The existing TS bridge, `server/orchestrate/board-testing/ts-import.js`, lazily registers `tsx` and is explicitly dev-only — it cannot work in a packaged app. The repo already has the right pattern: `server/tools/output-cap.js` + `output-cap.d.ts`, imported from the renderer by `src/ui/terminal-panel.ts`. The V2 core follows it.
 
@@ -139,8 +139,8 @@ Orchestration started 2026-08-29 from branch `Orchestrator-V2` (Phase 0–1 Done
 
 Deferred into later phases (not fail):
 
-- Merge/final are still instant-pass (P3 owns the real merge queue).
-- No worktrees; attempts run in the sandbox workspace (P3-A).
+- Merge/final are still instant-pass (P3-C owns the real merge queue).
+- Worktrees are engine-owned (P3-A): allocated on start, journaled on `task.attempt.started`, reclaimed on boot.
 - `runTurn` gained `parseReport` and `systemPrompt` — Phase 6 findings.
 - Headless tool schemas are name-only stubs until a server-side definitions bridge exists.
 - V2 board live tool line was unit-tested; it was not exercised in Electron.
@@ -209,7 +209,7 @@ Deferred into later phases (not fail):
 - [x] Inspect-until-onEnd-resolved contract (engine.js comment)
 - [x] Model binding server-side (`model-binding.js`; `board-model-binding.ts` is the behaviour reference, no DOM)
 - [x] Seeds via `buildSeed`; V2 prompts injected as `runTurn({ systemPrompt })` (**Phase 6 finding**)
-- [x] `DEFAULT_HEADLESS_TOOL_IDS` + `report_outcome`; cwd is the workspace (worktrees are P3-A)
+- [x] `DEFAULT_HEADLESS_TOOL_IDS` + `report_outcome`; cwd is the attempt worktree (P3-A)
 - [x] `createInProcessToolDispatch` + `postChatCompletionsInProcess` + `runTurn`
 - [x] `TurnResult.outcome` mapped to engine `AttemptEnd`; `needs`/`blockers`/`evidence`/`testOutput` on `evidence`
 - [x] Limits in `attempt-limits.js` (`timeout` on wall-clock or max-turns)
@@ -237,6 +237,114 @@ Deferred into later phases (not fail):
 *Proves: multi-agent works.*
 
 **MIN-680** · MIN-705 P3-A Engine-owned worktree lifecycle · MIN-706 P3-B `rebaseOntoIntegration` · MIN-707 P3-C Serialized merge queue · MIN-708 P3-D `touches` gate + overflow journaling · MIN-709 P3-E Concurrency > 1 · MIN-710 P3-F Final Tester static ladder · MIN-711 P3-G End-of-run report writer · MIN-712 P3-H Dead-end handling + evidence capture
+
+#### Phase 3 status
+
+Orchestration started 2026-08-29 from branch `Orchestrator-V2` (Phases 0–2 Done) in worktree `orchestrator-v2-a7c3e91f`. Sequential inside the phase except where Linear `Depends on` allows overlap; one worktree, so implement → verify per sub-issue.
+
+**Phase 3 complete (verified in this worktree as of P3-G).** P3-A–H are done (worktrees, rebase, merge queue, `touches` gate, concurrency default 2 + Running/Stopped, Final Tester static ladder, dead-end evidence, end-of-run report).
+
+**Phase gate (met in tests):** a fixture board completes at concurrency 2 with isolated worktrees and the merge queue (P3-E); an induced merge conflict re-opens the owning task on the same worktree (P3-C); an induced unbuildable task is abandoned, genuine dependents skipped, everything else reaches `run.finished` (P3-H). Fake-host 10/10 at N=2 is the deterministic-host ceiling, not a live-LLM measurement.
+
+| Todo | Issue | Depends on | Status |
+| ---- | ----- | ---------- | ------ |
+| P3-A Engine-owned worktree lifecycle | MIN-705 | P2-F | done |
+| P3-B `rebaseOntoIntegration` | MIN-706 | — | done |
+| P3-C Serialized merge queue | MIN-707 | P3-A, P3-B | done |
+| P3-D `touches` gate + overflow journaling | MIN-708 | P0-F, P3-A | done |
+| P3-E Concurrency > 1 + autonomy model | MIN-709 | P3-C, P3-D | done |
+| P3-F Final Tester static ladder | MIN-710 | P3-C | done |
+| P3-G End-of-run report writer | MIN-711 | P3-F, P3-H | done |
+| P3-H Dead-end handling + evidence | MIN-712 | P0-E, P3-A | done |
+
+#### P3-A (MIN-705) — done
+
+- [x] `server/orchestrator/worktree-lifecycle.js` allocates via existing `worktree-ops.js` (`ensureIntegration` once per board, then `createWorktree`)
+- [x] `start()` returns `{ attemptId, worktree }` after the tree exists; engine journals it on `task.attempt.started`
+- [x] `runTurn` and `createInProcessToolDispatch` receive the worktree path as `cwd` — runner stays board-agnostic
+- [x] Pass commits via `commitWorktree`
+- [x] Same worktree for `repair`, `continue`, and `rebase`; fresh for `failure-aware` and `fix` (`wantsSameWorktree` / `SAME_WORKTREE_SEED_KINDS` next to the seed kinds)
+- [x] Engine `load()` reclaims `git worktree list` minus journal-live; never removes a live path; dirty removals journal opaque `worktree.discarded`
+- [x] `refreshIntegrationDepsAfterMerge` exported as the P3-C hook; merge is P3-C, final is P3-F
+- [x] Tests in `test/orchestrator/worktree-lifecycle.test.mjs` (isolation, reuse, live restart, orphan reclaim, dirty discard, no registry)
+
+#### P3-B (MIN-706) — done
+
+- [x] `rebaseOntoIntegration({ boardId, slotId })` on `server/worktree/worktree-ops.js` (JSDoc; no `.d.ts` — module style is JSDoc)
+- [x] Discriminated result `{ ok: true, sha }` or `{ ok: false, conflicts: string[] }` — conflict is not an exception; never thrown
+- [x] On conflict: capture `git diff --name-only --diff-filter=U` before abort; `git rebase --abort` verified by status / leftover dirs, not exit code
+- [x] Failure path never leaves `.git/rebase-merge` or `.git/rebase-apply` (worktree-aware via `git rev-parse --git-path`)
+- [x] Empty / already-up-to-date: `{ ok: true, sha }` with the unchanged sha; no-commits does not start a rebase
+- [x] Board-keyed in-process mutex shared with `mergeIntoIntegration` / `abortMerge` / `restoreIntegration` (not a second lock file; `mergeInProgress` remains a MERGE_HEAD probe plus lock-held)
+- [x] Exported for P3-C; tests in `test/server/worktree-ops.test.mjs` cover every MIN-706 bullet
+- [x] Control plane / this op: zero LLM calls
+
+#### P3-C (MIN-707) — done
+
+- [x] `server/orchestrator/merge-queue.js` + `.d.ts`: rebase → merge → verify; AttemptEnd only (engine still journals `merge.succeeded` / `merge.conflicted`)
+- [x] Snapshot `beforeSha` on the AttemptEnd and as an optional field on those events — no second event type
+- [x] Last builder/tester worktree from the journal (`task.attempt.started`); slot via `slotIdFromWorktreePath`
+- [x] Rebase conflict → AttemptEnd with `files`; no fixer; P3-B already aborted
+- [x] Verify failure → `restoreIntegration(beforeSha)`; treated as conflicted
+- [x] After success, `refreshIntegrationDepsAfterMerge({ boardId, sinceSha: beforeSha })`
+- [x] MERGE_HEAD on restart is aborted so journal and git agree (never half)
+- [x] Runner effector calls `runMerge` when `role === 'merge'` and worktrees are isolated; Final is P3-F; scripted stays instant-pass
+- [x] Zero LLM / generation / runner imports (static test)
+- [x] Tester pass keeps the worktree (`shouldKeepWorktree` advances to merge); the runner effector releases it only after a successful merge — a conflict keeps the tree for the rebase-seeded owner (MIN-707)
+- [x] Tests in `test/orchestrator/merge-queue.test.mjs`
+
+#### P3-D (MIN-708) — done
+
+- [x] Board creation expands declared globs against the workspace repo and journals `touchesExpanded` / `emptyTouchesGlobs` on `board.created` (middleware + [`touches.js`](../../server/orchestrator/touches.js)). Empty match is a warning, not a blocker.
+- [x] `plan()` / `manualStart()` use `footprintsClash`: declared glob overlap **or** frozen expanded file intersection. Replay does not re-walk the disk; a file created after board start cannot change past scheduling.
+- [x] Empty expansion overlaps nothing extra (same empty-list rule as `touchesOverlap`); overlapping declared globs still serialise.
+- [x] Engine journals `touches.overflow` after a passing builder whose worktree diff sits outside declared globs. Attempt still passes. One event path (engine append after `task.attempt.ended`).
+- [x] `summarizeTouchesOverflow(events)` aggregates frequency and hottest files (pure, for later “should this gate have teeth”).
+- [x] V2 board: overflow is informational (`--mn-accent-*`); unmatched globs stay a creation warning.
+- [x] Tests in `test/orchestrator/touches.test.mjs` plus expansions in `plan.test.mjs` / `derive.test.mjs`. Core stays I/O-free.
+
+#### P3-E (MIN-709) — done
+
+- [x] Default start concurrency is **2** (`DEFAULT_BOARD_CONCURRENCY`). Fold pre-start stays 1 until `board.started`. POST `/start` omitting `concurrency` uses 2. UI stepper shows 2 on a created board.
+- [x] Autonomy is Running/Stopped + integer N. Sequential = Running at N=1. AFK = Running, no `ask_question` in the headless allow-list. Manual = Stopped + `POST /tasks/:id/start`.
+- [x] Cap still gates *starting* only (`plan()` keeps in-flight desired above N). Engine stop-diff comment matches that. Lowering N does not kill in-flight attempts.
+- [x] V2 board UI: Running/Stopped pair, concurrency stepper, resource hint (N agents = N model calls + N worktrees, no hard cap). No V1 boolean toggles. V1 `orchestrate-board.ts` fields untouched (P4-F).
+- [x] Real fixture board completes at N=2 with two builders overlapping on journal `seq` windows **and isolated worktrees** (`buildersOverlapBySeq`; merge via `startMerge` / queue, not `cwd`-sandbox instant pass). Shared-cwd tests remain for seq/cap/AFK/reliability speed.
+- [x] Reliability: 10 runs at N=2 vs P2-G N=1 baseline → `test/orchestrator/p3e-reliability.json`. Fake host; 10/10 is not “agents never retry.”
+- [x] Tests: `p3e-e2e.test.mjs`, `board-state-schema.test.mjs`, `api.test.mjs`, existing `plan.test.mjs` / `engine.test.mjs` cap proofs.
+
+#### P3-H (MIN-712) — done
+
+- [x] `deadEnded` / `pendingSkips` name the **abandoned root** on `blockedBy`, not the immediate skipped parent. Genuine dependents only (`dependsOn` DAG). Wave-sharing and adjacent `touches` never skip.
+- [x] Diamond DAG (A→B, A→C, B→D, C→D): abandoning A skips B, C, and D — and nothing else. Independent work still desired on the next tick.
+- [x] Abandoning the last runnable task journals `run.finished` (V1 quarantine-last silent stall).
+- [x] `task.abandoned.evidence` carries full attempt history (never truncated as a list): outcomes, seeds, `testOutput`, `needs[]` / `blockers[]`, capped per-attempt diffs. Policy `decide()` stays last-attempt-only; `nextAction` attaches the bundle. Zero LLM in the control plane.
+- [x] Diff capture is I/O in [`touches.js`](../../server/orchestrator/touches.js) (`captureWorktreeDiff`); the engine attaches it to `task.attempt.ended` then the bundle copies it.
+- [x] `queryAbandonments(events)` / `loadAbandonments(boardId)` reconstruct history from the journal alone (thin pre-P3-H evidence still works).
+- [x] V2 board: skipped is `--warn` and copy says it is waiting on something that failed, not that this task failed.
+- [x] Tests: `plan.test.mjs`, `derive.test.mjs`, `evidence.test.mjs`, `engine.test.mjs`.
+
+#### P3-F (MIN-710) — done
+
+- [x] [`final-test.js`](../../server/orchestrator/final-test.js) + `.d.ts`: typecheck → lint → unit → build, each gating the next; stop at first failure
+- [x] Ladder runs in the **integration worktree** (`getWorktreeSlotPath(boardId, 'integration')`), never the workspace or a task tree
+- [x] `final.test.ended { outcome, runInstructions }` — `runInstructions` is `command:` + `cwd:` lines (reproducible, not a narrative)
+- [x] Failure does **not** re-open / retry / abandon tasks (`plan()` is empty once `finalTest` is set)
+- [x] Commands from the plan `## Verification Checklist` when present, else package.json scripts / repo defaults (`npx tsc --noEmit`, `npm run lint` if a lint script exists, `npm test`, `npm run build`)
+- [x] Known-failing suites: `documentation/plans/final-test-baseline.json` (or `.minnow/final-test-baseline.json`) records `expectedExitCode` + `failingPatterns` so a matching non-zero unit exit is not a regression. **Do not** point this ladder at Minnow's own `npm test` from unit tests
+- [x] Runner effector runs the mechanical ladder when worktrees are isolated and `runTurn` is not injected; `runFinalLadder` is the test hook; scripted / explicit-`cwd` / fake-`runTurn` stay instant-pass
+- [x] Final Tester prompt under `server/orchestrator/prompts/final/` (agent may run the same fixed commands via `execute_command`); tests drive the ladder with no model
+- [x] Merge queue stays LLM-free (does not import `final-test.js`)
+- [x] Tests in `test/orchestrator/final-test.test.mjs` plus `plan.test.mjs` / `prompts-v2.test.mjs`
+
+#### P3-G (MIN-711) — done
+
+- [x] [`report.js`](../../server/orchestrator/report.js) + `.d.ts`: one stateless `complete()` over journal + derived state
+- [x] Triggered from the engine only, after `run.finished` (and after a user stop); idempotent `run.report.written`
+- [x] Covers shipped, abandoned (evidence + next step), skipped, merge conflicts, `touches.overflow`, final test + `runInstructions`
+- [x] Artifact at `~/.minnow/boards/<id>/report.md`; GET `/api/boards/:id/report`; V2 finish view
+- [x] Report markdown never imported by plan / derive / policy / merge-queue
+- [x] Tests in [`test/orchestrator/report.test.mjs`](../../test/orchestrator/report.test.mjs); `complete` is injectable
 
 ### Phase 4 — Delete V1
 *Proves: there is one engine.*
@@ -316,7 +424,7 @@ Ordering note: **before Phase 4.** Phase 4 deletes `orchestrate-board.ts` and it
 - [x] The scheduler suite runs to completion with **zero model calls** (Phase 1 gate)
 - [x] Killing the server mid-run and restarting reproduces identical derived state (Phase 1 gate)
 - [x] A 3-task board completes at concurrency 1 with the UI closed, in-process tools, and typed exits (Phase 2 gate; fake host, 10/10)
-- [ ] A real multi-task board completes at concurrency 2 with worktrees and a merge queue (Phase 3 gate)
+- [x] A real multi-task board completes at concurrency 2 with worktrees and a merge queue (Phase 3 gate)
 - [ ] No file under `src/state/orchestrate-*` or `src/chat/orchestrate/` remains (Phase 4 gate)
 - [ ] `grep -r "board_init\|board_set_autonomy\|delegate_tasks" src server` returns nothing (Phase 4 gate)
 - [ ] An overnight AFK run finishes, reports once, and stalls on nothing (Phase 5 gate)
