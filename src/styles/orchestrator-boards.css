@@ -677,7 +677,16 @@
   color: var(--mn-fg-muted);
 }
 
+.ov2-create__field-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
 .ov2-create__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
   padding: 7px 9px;
   border: 1px solid var(--mn-border-strong);
   border-radius: 7px;
@@ -685,6 +694,22 @@
   color: var(--mn-fg);
   font: inherit;
   font-size: 12.5px;
+}
+
+select.ov2-create__input {
+  cursor: pointer;
+}
+
+.ov2-create__field-row .ov2-btn {
+  flex: 0 0 auto;
+}
+
+.ov2-create__field-row .ov2-create__input {
+  width: auto;
+}
+
+.ov2-create__hint.hidden {
+  display: none;
 }
 
 .ov2-create__actions {

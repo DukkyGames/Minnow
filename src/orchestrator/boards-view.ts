@@ -47,7 +47,22 @@ import {
   renderTimeline,
 } from './board-render';
 import { withSessionToken } from '../api/session-token';
+import {
+  discoverOrchestratePlans,
+  type DiscoverOrchestratePlansResult,
+} from '../chat/orchestrate/list-plans';
 import { button, el, empty, pill } from './dom';
+
+/** UI copy for discoverOrchestratePlans error codes (kept here so V2 does not import V1 picker UI). */
+const PLAN_LIST_HINTS: Record<string, string> = {
+  server_off: 'Open or restart Minnow to list plans.',
+  no_plans_dir: 'No documentation/plans folder in this workspace.',
+};
+
+/** Strip documentation/plans/ so the dropdown shows the basename, matching Orchestrate. */
+function shortPlanLabel(fullPath: string): string {
+  return fullPath.replace(/^documentation\/plans\//, '');
+}
 
 export const BOARDS_ROOT_ID = 'orchestratorBoardsRoot';
 const CHAT_AREA_CLASS = 'chat-area--orchestrator-boards';
@@ -267,15 +282,77 @@ function renderListItem(board: BoardSummary): HTMLElement {
 // ---------------------------------------------------------------------------
 
 /**
+ * Fill a plan <select> from the workspace list Orchestrate already uses.
+ *
+ * Exported so the create form can be tested without mounting the whole surface.
+ */
+export async function fillBoardsPlanSelect(
+  sel: HTMLSelectElement,
+  hintEl: HTMLElement,
+  options: {
+    discoverPlans?: () => Promise<DiscoverOrchestratePlansResult>;
+  } = {},
+): Promise<DiscoverOrchestratePlansResult> {
+  const discoverFn = options.discoverPlans ?? discoverOrchestratePlans;
+  const { plans, error } = await discoverFn();
+
+  sel.replaceChildren();
+  const emptyOpt = el('option');
+  emptyOpt.value = '';
+  emptyOpt.textContent = 'Select plan…';
+  sel.appendChild(emptyOpt);
+
+  for (const planPath of plans) {
+    const opt = el('option');
+    opt.value = planPath;
+    opt.textContent = shortPlanLabel(planPath);
+    sel.appendChild(opt);
+  }
+
+  // One plan in the workspace is the common Super Plan case — select it so
+  // Create is one click rather than a hunt through an otherwise empty control.
+  sel.value = !error && plans.length === 1 ? plans[0]! : '';
+
+  hintEl.textContent = '';
+  hintEl.classList.add('hidden');
+  if (error) {
+    hintEl.textContent = PLAN_LIST_HINTS[error] ?? 'Could not load plans.';
+    hintEl.classList.remove('hidden');
+  } else if (plans.length === 0) {
+    hintEl.textContent = 'No plans yet. Use Plan mode or add documentation/plans/.';
+    hintEl.classList.remove('hidden');
+  }
+
+  return { plans, error };
+}
+
+export interface CreateFormHandlers {
+  discoverPlans?: () => Promise<DiscoverOrchestratePlansResult>;
+  /** Defaults to POST /api/boards. Tests inject a stub that only needs the path. */
+  createBoard?: (
+    planPath: string,
+    options?: { boardId?: string; markdown?: string },
+  ) => Promise<{ boardId: string }>;
+  onCreated: (boardId: string) => void;
+  onCancel: () => void;
+}
+
+/**
  * The create form, with the parse errors shown where they belong.
+ *
+ * Plan intake is a dropdown of workspace plans, not a free-text path: the
+ * files already live under documentation/plans/, and typing a relative path
+ * was how the first cut missed both the list and the workspace-root read.
  *
  * `parsePlan` returns a line, a column, a message and a hint for every problem —
  * that detail is the entire point of PRD §5's move away from an LLM reading the
  * plan, and collapsing it into "board creation failed" would throw it away.
  */
-function openCreateForm(): void {
-  if (!surface) return;
-  const pane = surface.boardPane;
+export async function mountCreateForm(
+  pane: HTMLElement,
+  handlers: CreateFormHandlers,
+): Promise<void> {
+  const createBoard = handlers.createBoard ?? createBoardFromPlan;
   pane.replaceChildren();
 
   const form = el('form', 'ov2-create');
@@ -289,14 +366,26 @@ function openCreateForm(): void {
     ),
   );
 
-  const pathLabel = el('label', 'ov2-create__field');
-  pathLabel.appendChild(el('span', undefined, 'Plan file'));
-  const pathInput = el('input', 'ov2-create__input');
-  pathInput.type = 'text';
-  pathInput.placeholder = 'documentation/plans/my-plan.md';
-  pathInput.required = true;
-  pathLabel.appendChild(pathInput);
-  form.appendChild(pathLabel);
+  // Refresh sits beside the select, not inside a <label> — a label click would
+  // otherwise activate the dropdown as well as the button.
+  const pathField = el('div', 'ov2-create__field');
+  pathField.appendChild(el('span', undefined, 'Plan'));
+  const pathRow = el('div', 'ov2-create__field-row');
+  const pathSelect = el('select', 'ov2-create__input');
+  pathSelect.required = true;
+  pathSelect.setAttribute('aria-label', 'Plan');
+  const loadingOpt = el('option');
+  loadingOpt.value = '';
+  loadingOpt.textContent = 'Loading plans…';
+  pathSelect.appendChild(loadingOpt);
+  pathSelect.disabled = true;
+  pathRow.appendChild(pathSelect);
+  pathField.appendChild(pathRow);
+  form.appendChild(pathField);
+
+  const pathHint = el('p', 'ov2-create__hint hidden');
+  pathHint.setAttribute('role', 'status');
+  form.appendChild(pathHint);
 
   const idLabel = el('label', 'ov2-create__field');
   idLabel.appendChild(el('span', undefined, 'Board id (optional)'));
@@ -312,35 +401,71 @@ function openCreateForm(): void {
   const actions = el('div', 'ov2-create__actions');
   const submit = el('button', 'ov2-btn ov2-btn--primary', 'Create');
   submit.type = 'submit';
+  submit.disabled = true;
   actions.appendChild(submit);
-  actions.appendChild(
-    button({ label: 'Cancel', variant: 'ghost', onClick: () => paintBoard() }),
-  );
+  actions.appendChild(button({ label: 'Cancel', variant: 'ghost', onClick: handlers.onCancel }));
   form.appendChild(actions);
+
+  const syncSubmitEnabled = () => {
+    submit.disabled = !pathSelect.value.trim();
+  };
+
+  const loadPlans = async () => {
+    pathSelect.disabled = true;
+    await fillBoardsPlanSelect(pathSelect, pathHint, {
+      ...(handlers.discoverPlans ? { discoverPlans: handlers.discoverPlans } : {}),
+    });
+    pathSelect.disabled = false;
+    syncSubmitEnabled();
+  };
+
+  pathRow.appendChild(
+    button({
+      label: 'Refresh',
+      title: 'Reload plan list from the workspace',
+      variant: 'ghost',
+      onClick: () => void loadPlans(),
+    }),
+  );
+
+  pathSelect.addEventListener('change', syncSubmitEnabled);
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
+    const planPath = pathSelect.value.trim();
+    if (!planPath) return;
     errors.replaceChildren();
     submit.disabled = true;
     submit.textContent = 'Creating…';
-    void createBoardFromPlan(pathInput.value.trim(), {
+    void createBoard(planPath, {
       ...(idInput.value.trim() ? { boardId: idInput.value.trim() } : {}),
     })
       .then(({ boardId }) => {
-        void list?.refresh();
-        selectBoard(boardId);
+        handlers.onCreated(boardId);
       })
       .catch((err: unknown) => {
         errors.replaceChildren(renderCreateError(err));
       })
       .finally(() => {
-        submit.disabled = false;
         submit.textContent = 'Create';
+        syncSubmitEnabled();
       });
   });
 
   pane.appendChild(form);
-  pathInput.focus();
+  await loadPlans();
+  pathSelect.focus();
+}
+
+function openCreateForm(): void {
+  if (!surface) return;
+  void mountCreateForm(surface.boardPane, {
+    onCreated: (boardId) => {
+      void list?.refresh();
+      selectBoard(boardId);
+    },
+    onCancel: () => paintBoard(),
+  });
 }
 
 function renderCreateError(err: unknown): HTMLElement {

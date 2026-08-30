@@ -32,6 +32,7 @@ import { createScriptedEffector } from './effector-scripted.js';
 import { disposeEngines, getEngine, peekEngine } from './engine.js';
 import { appendEvent, boardExists, createBoard, listBoards, loadState, readEvents } from './journal.js';
 import { subscribeLive } from './live-events.js';
+import { resolveSafePath } from '../runtime/path-access.js';
 
 /** Heartbeat cadence. Intermediaries close idle streams without it. */
 const HEARTBEAT_MS = 15_000;
@@ -306,7 +307,14 @@ async function createFromPlan(req, res) {
   /** @type {string} */
   let markdown;
   try {
-    markdown = typeof body.markdown === 'string' ? body.markdown : await fs.readFile(planPath, 'utf8');
+    // Inline markdown is for tests and converters. Otherwise the path is
+    // workspace-relative — `fs.readFile(planPath)` against process.cwd() is
+    // why typing documentation/plans/… failed whenever the workspace was not
+    // the server's working directory.
+    markdown =
+      typeof body.markdown === 'string'
+        ? body.markdown
+        : await fs.readFile(resolveSafePath(planPath), 'utf8');
   } catch (err) {
     return json(res, 400, {
       ok: false,

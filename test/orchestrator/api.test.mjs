@@ -19,12 +19,8 @@ import { stateFromJSON } from '../../server/orchestrator/core/snapshot.js';
 import { createScriptedEffector } from '../../server/orchestrator/effector-scripted.js';
 import { disposeEngines } from '../../server/orchestrator/engine.js';
 import { resetJournalCache } from '../../server/orchestrator/journal.js';
-import {
-  createBoardsMiddleware,
-  matchRoute,
-  ROUTES,
-  setEffectorFactory,
-} from '../../server/orchestrator/middleware.js';
+import { createBoardsMiddleware, matchRoute, ROUTES, setEffectorFactory } from '../../server/orchestrator/middleware.js';
+import { getWorkspaceRoot } from '../../server/workspace/root.js';
 
 // ---------------------------------------------------------------------------
 
@@ -240,6 +236,29 @@ describe('POST /api/boards', () => {
     await createBoard();
     const again = await call('POST', '/api/boards', { planPath: 'demo.md', markdown: PLAN });
     assert.equal(again.status, 409);
+  });
+
+  it('reads the plan from the workspace when markdown is omitted', async () => {
+    const root = getWorkspaceRoot();
+    const rel = `documentation/plans/ov2-api-disk-${Date.now()}.md`;
+    const abs = path.join(root, ...rel.split('/'));
+    await fs.mkdir(path.dirname(abs), { recursive: true });
+    await fs.writeFile(abs, PLAN);
+    try {
+      const created = await call('POST', '/api/boards', { planPath: rel });
+      assert.equal(created.status, 201, JSON.stringify(created.body));
+      assert.equal(created.body.boardId, 'demo-board');
+    } finally {
+      await fs.unlink(abs).catch(() => {});
+    }
+  });
+
+  it('returns 400 when the workspace-relative plan file is missing', async () => {
+    const response = await call('POST', '/api/boards', {
+      planPath: 'documentation/plans/ov2-does-not-exist.md',
+    });
+    assert.equal(response.status, 400);
+    assert.match(String(response.body.error), /could not read plan/i);
   });
 });
 
