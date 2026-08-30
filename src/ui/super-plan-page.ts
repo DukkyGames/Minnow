@@ -331,6 +331,7 @@ class SuperPlanPage {
   private firstLedgerPaint = true;
   private ticker: ReturnType<typeof setInterval> | null = null;
   private railObserver: ResizeObserver | null = null;
+  private runPaneObserver: ResizeObserver | null = null;
   /** Drops Super Plan composer auto-resize listeners when the page unmounts. */
   private unbindComposerResize: (() => void) | null = null;
 
@@ -420,6 +421,28 @@ class SuperPlanPage {
     this.railObserver = observer;
   }
 
+  /**
+   * Publish the run pane's two live measurements so CSS can pin the pipeline
+   * column under the run header.
+   *
+   * Both are genuinely variable and neither can be a constant: .sp-runhead is
+   * sticky in the same scroller and its height changes when the prompt unfolds
+   * from two clamped lines, and the scroller's own height follows the window.
+   * A guessed offset would tuck the pipeline under an opaque header.
+   */
+  private observeRunPaneMetrics(head: HTMLElement, body: HTMLElement): void {
+    if (typeof ResizeObserver !== 'function') return;
+    const publish = (): void => {
+      body.style.setProperty('--sp-runhead-h', `${Math.round(head.offsetHeight)}px`);
+      body.style.setProperty('--sp-runbody-h', `${Math.round(body.clientHeight)}px`);
+    };
+    const observer = new ResizeObserver(publish);
+    observer.observe(head);
+    observer.observe(body);
+    publish();
+    this.runPaneObserver = observer;
+  }
+
   /** Narrow layouts overlay the rail, so picking a plan should get out of the way. */
   private collapseRailIfOverlaying(): void {
     if (this.root.clientWidth > 0 && this.root.clientWidth < 660) {
@@ -435,6 +458,8 @@ class SuperPlanPage {
     this.unbindComposerResize = null;
     this.railObserver?.disconnect();
     this.railObserver = null;
+    this.runPaneObserver?.disconnect();
+    this.runPaneObserver = null;
     this.collector?.stop();
     this.collector = null;
     this.unsubBuffer?.();
@@ -1134,7 +1159,9 @@ class SuperPlanPage {
     const pane = el('div', 'sp-pane sp-pane--run');
 
     const body = el('div', 'sp-runbody');
-    body.appendChild(this.buildRunHead());
+    const head = this.buildRunHead();
+    body.appendChild(head);
+    this.observeRunPaneMetrics(head, body);
 
     const inner = el('div', 'sp-body');
     const cols = el('div', 'sp-cols');

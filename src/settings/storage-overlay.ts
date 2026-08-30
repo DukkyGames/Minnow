@@ -121,10 +121,6 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
     refreshAreas: ['appearance'],
     writable: false,
   }),
-  'appearance.wallpaper': browser('wallpaper', 'string', {
-    refreshAreas: ['appearance'],
-    writable: false,
-  }),
   'appearance.fonts': section(['appearance']),
   'appearance.customColors': section(['appearance']),
 

@@ -798,24 +798,6 @@
     ]
   },
   {
-    "key": "appearance.wallpaper",
-    "label": "Desktop wallpaper",
-    "keywords": [
-      "background",
-      "desktop"
-    ],
-    "category": "appearance",
-    "area": "appearance",
-    "storage": "browser",
-    "path": "wallpaper",
-    "type": "string",
-    "sensitivity": "normal",
-    "writable": false,
-    "refreshAreas": [
-      "appearance"
-    ]
-  },
-  {
     "key": "appearance.fonts",
     "label": "Fonts",
     "keywords": [

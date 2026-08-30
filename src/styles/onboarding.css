@@ -765,10 +765,6 @@ html.onboarding-active .mn-os-shell {
   margin: 0 0 4px;
 }
 
-.mn-onboarding-step--theme .settings-appearance-wallpaper-grid {
-  margin-top: 8px;
-}
-
 /* Theme family cards reuse Settings styles; keep hover neutral and selection opaque */
 .mn-onboarding-step--theme .settings-theme-family:hover:not(.is-active) {
   border-color: var(--mn-border-strong);
@@ -780,7 +776,6 @@ html.onboarding-active .mn-os-shell {
   background: color-mix(in srgb, var(--mn-accent) 12%, var(--mn-surface-1));
 }
 
-.mn-onboarding-wallpaper-row,
 .mn-onboarding-chip-row {
   display: flex;
   flex-wrap: wrap;
