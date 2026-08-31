@@ -1,4 +1,8 @@
+import type { BrowserRungResult, runBrowserRung } from './browser-rung';
+
 export const LADDER_RUNG_IDS: readonly ['typecheck', 'lint', 'unit', 'build'];
+
+export const ALL_RUNG_IDS: readonly ['typecheck', 'lint', 'unit', 'build', 'browser'];
 
 export const DEFAULT_RUNG_COMMANDS: {
   typecheck: string;
@@ -23,16 +27,56 @@ export interface RungBaseline {
 
 export type FinalTestBaseline = Partial<Record<LadderRungId, RungBaseline>>;
 
+/** One rung's own verdict, carried on `final.test.ended`'s `evidence.rungs`. */
+export interface LadderRungResult {
+  id: 'typecheck' | 'lint' | 'unit' | 'build' | 'browser';
+  command: string;
+  exitCode: number;
+  outcome: 'pass' | 'fail' | 'blocked';
+  matchedBaseline?: boolean;
+  /** Present only on a blocked browser rung. */
+  reason?: string | null;
+}
+
+/**
+ * `evidence.browser` on `final.test.ended`. `null` when the browser rung never
+ * ran because a static rung failed first — the gate, not a blocked verdict.
+ */
+export interface BrowserRungEvidence {
+  status: 'pass' | 'fail' | 'blocked';
+  reason: string | null;
+  summary: string;
+  runInstructions: string;
+  url: string | null;
+  appCommand: string | null;
+  port: number | null;
+  assertions: BrowserRungResult['assertions'];
+  notObservable: BrowserRungResult['notObservable'];
+  screenshots: BrowserRungResult['screenshots'];
+}
+
+export interface LadderEvidence {
+  failedRung: string | null;
+  blockedRung: string | null;
+  ran: string[];
+  output: string;
+  cwd: string;
+  rungs: LadderRungResult[];
+  browser: BrowserRungEvidence | null;
+}
+
 export interface LadderResult {
   outcome: 'pass' | 'fail';
   runInstructions: string;
   summary: string;
-  evidence: Record<string, unknown>;
+  evidence: LadderEvidence & Record<string, unknown>;
 }
 
 export function formatRunInstructions(input: { command: string; cwd: string }): string;
 
-export function parseRunInstructions(text: string): { command: string; cwd: string } | null;
+export function parseRunInstructions(
+  text: string,
+): { command: string; cwd: string; url?: string; steps?: string[] } | null;
 
 export function capLadderOutput(text: string, max?: number): string;
 
@@ -72,6 +116,11 @@ export function runFinalLadder(input: {
   signal?: AbortSignal;
   execCommand?: typeof execLadderCommand;
   timeoutMs?: number;
+  /** `false` skips the browser rung entirely. Default: run it. */
+  browser?: boolean;
+  browserRung?: typeof runBrowserRung;
+  browserOptions?: Record<string, unknown>;
+  browserTimeoutMs?: number;
 }): Promise<LadderResult>;
 
 export function finalAttemptEnd(
@@ -84,5 +133,5 @@ export function finalAttemptEnd(
   outcome: 'pass' | 'fail';
   summary: string;
   runInstructions: string;
-  evidence: Record<string, unknown>;
+  evidence: LadderEvidence & Record<string, unknown>;
 };

@@ -422,6 +422,42 @@ dispatch with its guards intact. Four things P5-C needs to know:
 Not done here, and left to P5-C: the ladder rung itself, and any mention of the
 browser in `prompts/final/agent.full.md`.
 
+**P5-C is built.** `server/orchestrator/browser-rung.js` is the fifth rung, and
+`runFinalLadder` reaches it only after typecheck, lint, unit and build are all
+green — the gate is asserted by process count, not by comment. What P5-D needs
+to know:
+
+- **Assertions are compiled from the plan, never invented.** Each task's
+  `Accept:` sentence and each non-command `## Verification Checklist` bullet
+  goes through `compileAcceptCriterion()`, whose vocabulary is small and closed:
+  quoted visible text, absent text, document title, HTTP status, clean console.
+  A criterion it cannot read — "the helper rounds half to even" — is reported in
+  `notObservable` and asserts nothing. A guessed assertion that passes is worse
+  than no assertion, so nothing is guessed.
+- **`blocked` is a third outcome and it is load-bearing.** No browser, a driver
+  crash, a dev server that will not start, an occupied pinned port, or a plan
+  with nothing browser-observable all mean *the check could not run*. Those
+  journal as `evidence.browser.status = 'blocked'` with a `reason`, leave the
+  run's outcome at the static ladder's, and deliberately do **not** add
+  `browser` to `evidence.ran`. Only an assertion that executed and did not hold
+  is `fail`.
+- **The rung waits for its own port.** `stopDevServerById` kills the process
+  tree and returns without waiting for the socket to close, so on a pinned port
+  a stop races the next start: the new child fails to bind, the health probe is
+  answered by the *dying* predecessor, and the browser meets a connection error
+  partway through. This cost exactly one wrong verdict in the first ten-run
+  measurement. `waitForPortFree()` closes it, on both the start and the stop
+  side; the tell-tale signature, if it ever returns, is a positive text
+  assertion failing while an absence assertion on the same page passes.
+- **Ten consecutive runs give one verdict**, measured against real Chrome and a
+  real dev server, not asserted. That is the flakiness bar P5-D inherits.
+- Screenshots are captured as evidence for the human report and nothing asserts
+  on them. `runInstructions` gains `url:` and numbered `steps:` for the browser
+  rung; `command:` and `cwd:` keep their P3-F meaning so every existing reader
+  still works.
+- The Final Tester *agent* is told not to drive the browser itself. It shares
+  the `final` role, so it has the tools; the rung is mechanical and owns them.
+
 ### Phase 6 — Normal chat adopts the runner
 *Proves: one engine for all chat. Written now, scheduled after Phase 5.*
 

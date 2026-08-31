@@ -202,6 +202,44 @@ export function augmentDevServerCommand(command, port, network, options = {}) {
 }
 
 /**
+ * Pin the port hard: refuse to start rather than silently move.
+ *
+ * Vite's dev/preview server auto-increments when the requested port is busy,
+ * so `--port N` alone is a *preference*, not a pin — the app can end up on
+ * N+1 while everything downstream still looks for N. That is tolerable for a
+ * human, who can read the banner, and fatal for an unattended verification,
+ * which would either navigate to nothing or (worse) navigate to a stale server
+ * left on N by an earlier run and report on the wrong app.
+ *
+ * Opt-in, and only for commands that already carry `--port`, so the
+ * interactive dev-server surface is unaffected: this exists for P5-C's browser
+ * rung, which must know exactly which port it is verifying.
+ *
+ * @param {string} command
+ * @returns {string}
+ */
+export function withStrictPort(command) {
+  const trimmed = String(command ?? '').trim();
+  if (!trimmed) return trimmed;
+  if (/--strictPort\b/i.test(trimmed)) return trimmed;
+  if (!/--port(?:=|\s)/.test(trimmed)) return trimmed;
+
+  // A split stack carries the UI port inside a quoted `concurrently` child.
+  // Appending at the end would hand the flag to `concurrently` itself.
+  QUOTED_SEGMENT_RE.lastIndex = 0;
+  if (QUOTED_SEGMENT_RE.test(trimmed)) {
+    QUOTED_SEGMENT_RE.lastIndex = 0;
+    return trimmed.replace(QUOTED_SEGMENT_RE, (full, doubleQuoted, singleQuoted) => {
+      const inner = doubleQuoted ?? singleQuoted;
+      if (!/--port(?:=|\s)/.test(inner)) return full;
+      const quote = doubleQuoted !== undefined ? '"' : "'";
+      return `${quote}${inner} --strictPort${quote}`;
+    });
+  }
+  return `${trimmed} --strictPort`;
+}
+
+/**
  * Environment variables merged into the dev-server child process.
  * @param {number} port — UI port for split stacks; sole port otherwise
  * @param {DevServerNetwork} network

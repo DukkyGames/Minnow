@@ -109,10 +109,18 @@ describe('browser driver — launch/teardown cycles', { skip: skipReason }, () =
     assert.equal(pids.length, CYCLES);
     assert.equal(new Set(pids).size, CYCLES, 'each cycle should be its own process');
 
-    // Give Windows a beat to reap the trees before counting.
-    await new Promise((r) => setTimeout(r, 1_000));
-
-    const alive = pids.filter((pid) => isPidAlive(pid));
+    // Wait for Windows to reap the trees, rather than guessing how long that
+    // takes. A fixed grace period passes on an idle machine and fails when the
+    // rest of the suite is running beside it — measured: green standalone, one
+    // survivor under full parallel load. Poll to a deadline instead, so the
+    // test asserts "they all exit", not "they all exit within one second".
+    const reapDeadline = Date.now() + 30_000;
+    /** @type {number[]} */
+    let alive = pids.filter((pid) => isPidAlive(pid));
+    while (alive.length > 0 && Date.now() < reapDeadline) {
+      await new Promise((r) => setTimeout(r, 250));
+      alive = alive.filter((pid) => isPidAlive(pid));
+    }
     assert.deepEqual(alive, [], `orphaned browser processes: ${alive.join(', ')}`);
     assert.deepEqual(trackedBrowserPids(), [], 'the driver should track no live browsers');
 

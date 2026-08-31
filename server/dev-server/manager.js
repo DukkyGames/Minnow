@@ -21,6 +21,7 @@ import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import {
   buildDevServerSpawnEnv,
   resolveEffectiveGuide,
+  withStrictPort,
 } from './effective-guide.js';
 import { PRIMARY_DEV_SERVER_ID, getDevServerDefinition, readDevServers } from './registry.js';
 import { readDevServerSettings } from './settings.js';
@@ -602,7 +603,11 @@ export async function getDevServerStatus(workspaceRoot = getWorkspaceRoot()) {
 /**
  * @param {string} [workspaceRoot]
  * @param {string} [serverId]
- * @param {{ worktreeRoot?: string }} [options]
+ * @param {{ worktreeRoot?: string, strictPort?: boolean }} [options]
+ *   `strictPort` makes a Vite-family command fail rather than move to the next
+ *   free port. Opt-in, for callers that must know exactly which port they are
+ *   talking to — P5-C's browser rung. Off for the interactive surface, where
+ *   auto-incrementing is a convenience rather than a correctness hole.
  */
 export async function startDevServerById(
   workspaceRoot = getWorkspaceRoot(),
@@ -639,10 +644,14 @@ export async function startDevServerById(
     }
   }
 
-  const effective = effectiveFromDefinition(def, runStartup.guide, settings, runRoot);
-  if (!effective) {
+  const resolved = effectiveFromDefinition(def, runStartup.guide, settings, runRoot);
+  if (!resolved) {
     return { ok: false, error: 'No command configured for this server' };
   }
+  const effective =
+    options.strictPort === true
+      ? { ...resolved, command: withStrictPort(resolved.command) }
+      : resolved;
 
   let row = await getOrInitRow(registryRoot, serverId);
   row = await reconcileRow(row);

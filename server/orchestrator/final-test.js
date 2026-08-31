@@ -1,11 +1,25 @@
 /**
  * P3-F — Final Tester static ladder (MIN-710).
+ * P5-C — plus the browser rung (MIN-721).
  *
  * After the last merge, typecheck → lint → unit → build against the
- * **integration worktree**. Each rung gates the next. The first failure
- * stops the ladder and becomes `final.test.ended` with `runInstructions`
+ * **integration worktree**, and then — only if all four are green — start the
+ * app and verify it in a real browser. Each rung gates the next. The first
+ * failure stops the ladder and becomes `final.test.ended` with `runInstructions`
  * that are the failing command plus that cwd — not a narrative, and not
  * a guess at which task broke the build.
+ *
+ * The static rungs prove the code compiles; only the browser rung proves the
+ * feature works. The gate between them is not an optimisation: a browser
+ * launched against a build that does not compile produces failures that
+ * describe the wrong thing, and costs minutes per run to say nothing.
+ *
+ * The browser rung has a third status the static rungs do not: `blocked`. A
+ * missing browser, a driver crash, a dev server that will not start, or a plan
+ * with no browser-observable Accept criterion all mean *the check could not
+ * run*, which is a different fact from *the app is broken*. Blocked never fails
+ * the run; it is journalled as `evidence.browser.status = 'blocked'` with a
+ * reason. See `browser-rung.js` for why that distinction is load-bearing.
  *
  * This module is mechanical. It does not call a model, and it must not
  * live in `merge-queue.js`. The Final Tester *agent* (prompt under
@@ -24,11 +38,18 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 
 import { DEFAULT_MAX_OUTPUT_CHARS } from '../tools/output-cap.js';
+import {
+  DEFAULT_RUNG_TIMEOUT_MS as BROWSER_RUNG_TIMEOUT_MS,
+  runBrowserRung,
+} from './browser-rung.js';
 
 const execAsync = promisify(exec);
 
-/** Named rungs, in gate order. Browser is Phase 5 — not here. */
+/** Static rungs, in gate order. `browser` is the fifth and runs only after them. */
 export const LADDER_RUNG_IDS = /** @type {const} */ (['typecheck', 'lint', 'unit', 'build']);
+
+/** Every rung, including the browser. */
+export const ALL_RUNG_IDS = /** @type {const} */ ([...LADDER_RUNG_IDS, 'browser']);
 
 /** Repo defaults when the plan has no Verification Checklist mapping. */
 export const DEFAULT_RUNG_COMMANDS = {
@@ -86,17 +107,27 @@ export function formatRunInstructions(input) {
 }
 
 /**
- * Inverse of {@link formatRunInstructions}.
+ * Inverse of {@link formatRunInstructions}, and of the browser rung's longer
+ * form. `command` + `cwd` keep their P3-F meaning whichever rung produced the
+ * instructions, so every existing caller reads a browser failure unchanged;
+ * `url` and `steps` are present only for the browser rung.
  *
  * @param {string} text
- * @returns {{ command: string, cwd: string } | null}
+ * @returns {{ command: string, cwd: string, url?: string, steps?: string[] } | null}
  */
 export function parseRunInstructions(text) {
   const raw = String(text ?? '');
   const command = raw.match(/^command:\s*(.*)$/m)?.[1]?.trim();
   const cwd = raw.match(/^cwd:\s*(.*)$/m)?.[1]?.trim();
   if (!command || !cwd) return null;
-  return { command, cwd };
+  const url = raw.match(/^url:\s*(.*)$/m)?.[1]?.trim();
+  const steps = [...raw.matchAll(/^\s+\d+\.\s+(.*)$/gm)].map((m) => m[1].trim());
+  return {
+    command,
+    cwd,
+    ...(url ? { url } : {}),
+    ...(steps.length > 0 ? { steps } : {}),
+  };
 }
 
 /**
@@ -341,6 +372,68 @@ export async function execLadderCommand(command, opts) {
 }
 
 /**
+ * The browser rung, under a whole-rung ceiling.
+ *
+ * The ceiling is here rather than inside the rung because the engine's
+ * contract is with *this* function: a browser that wedges past every internal
+ * deadline must still return a `blocked` verdict rather than holding an
+ * attempt open forever. A timed-out rung is `blocked`, not `fail` — a stuck
+ * driver says nothing about the app.
+ *
+ * @param {{
+ *   cwd: string,
+ *   planMarkdown: string,
+ *   signal?: AbortSignal,
+ *   browserRung?: typeof runBrowserRung,
+ *   browserOptions?: Record<string, unknown>,
+ *   browserTimeoutMs?: number,
+ * }} input
+ * @returns {Promise<import('./browser-rung.js').BrowserRungResult>}
+ */
+async function runBrowserRungGuarded(input) {
+  const cwd = path.resolve(input.cwd);
+  const rung = input.browserRung ?? runBrowserRung;
+  const ceiling = input.browserTimeoutMs ?? BROWSER_RUNG_TIMEOUT_MS;
+  /** @type {NodeJS.Timeout | undefined} */
+  let timer;
+  /** @type {import('./browser-rung.js').BrowserRungResult} */
+  const timedOut = {
+    status: 'blocked',
+    reason: 'driver-error',
+    summary: `Browser rung blocked: it did not finish within ${ceiling}ms.`,
+    runInstructions: formatRunInstructions({ command: '(browser rung timed out)', cwd }),
+    url: null,
+    appCommand: null,
+    port: null,
+    assertions: [],
+    notObservable: [],
+    screenshots: [],
+  };
+  try {
+    const work = Promise.resolve(
+      rung({
+        cwd,
+        planMarkdown: input.planMarkdown,
+        signal: input.signal,
+        ...(input.browserOptions ?? {}),
+      }),
+    ).catch((err) => ({
+      ...timedOut,
+      summary: `Browser rung blocked: ${err instanceof Error ? err.message : String(err)}.`,
+    }));
+    const deadline = new Promise((resolve) => {
+      timer = setTimeout(() => resolve(timedOut), ceiling);
+      if (timer.unref) timer.unref();
+    });
+    return /** @type {import('./browser-rung.js').BrowserRungResult} */ (
+      await Promise.race([work, deadline])
+    );
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
  * Run the gated ladder in `cwd` (must be the integration worktree).
  *
  * @param {{
@@ -351,6 +444,10 @@ export async function execLadderCommand(command, opts) {
  *   signal?: AbortSignal,
  *   execCommand?: typeof execLadderCommand,
  *   timeoutMs?: number,
+ *   browser?: boolean,
+ *   browserRung?: typeof runBrowserRung,
+ *   browserOptions?: Record<string, unknown>,
+ *   browserTimeoutMs?: number,
  * }} input
  * @returns {Promise<LadderResult>}
  */
@@ -380,10 +477,12 @@ export async function runFinalLadder(input) {
         summary: `Final ladder aborted before ${rung.id}.`,
         evidence: {
           failedRung: rung.id,
+          blockedRung: null,
           ran,
           output: 'aborted',
           cwd,
           rungs: rungResults,
+          browser: null,
         },
       };
     }
@@ -399,6 +498,9 @@ export async function runFinalLadder(input) {
       id: rung.id,
       command: rung.command,
       exitCode: actual.exitCode,
+      // Per-rung outcome, so a reader of `final.test.ended` never has to infer
+      // one rung's verdict from another rung's exit code.
+      outcome: actual.exitCode === 0 || matchedBaseline ? 'pass' : 'fail',
       ...(matchedBaseline ? { matchedBaseline: true } : {}),
     });
 
@@ -410,30 +512,134 @@ export async function runFinalLadder(input) {
         summary: `Final ladder failed at ${rung.id}.`,
         evidence: {
           failedRung: rung.id,
+          blockedRung: null,
           ran,
           output: actual.output,
           cwd,
           rungs: rungResults,
+          // The gate. A build that does not compile never reaches a browser,
+          // so there is no browser verdict to report — not even a blocked one.
+          browser: null,
         },
       };
     }
   }
 
   const last = rungs[rungs.length - 1];
-  const runInstructions = formatRunInstructions({
+  const staticInstructions = formatRunInstructions({
     command: last ? last.command : DEFAULT_RUNG_COMMANDS.build,
     cwd,
   });
+  const staticSummary = `Final ladder passed ${ran.join(', ')}.`;
+
+  // ---------------------------------------------------------- rung 5: browser
+  //
+  // Reached only from here: every static rung above is green. `browser: false`
+  // opts out entirely (P2-G sandboxes, scripted effectors, and the unit tests
+  // that are only exercising the static ladder).
+  if (input.browser === false) {
+    return {
+      outcome: 'pass',
+      runInstructions: staticInstructions,
+      summary: staticSummary,
+      evidence: { failedRung: null, blockedRung: null, ran, output: '', cwd, rungs: rungResults, browser: null },
+    };
+  }
+
+  const browser = await runBrowserRungGuarded({
+    cwd,
+    planMarkdown,
+    signal: input.signal,
+    browserRung: input.browserRung,
+    browserOptions: input.browserOptions,
+    browserTimeoutMs: input.browserTimeoutMs,
+  });
+
+  const browserEvidence = {
+    status: browser.status,
+    reason: browser.reason,
+    summary: browser.summary,
+    runInstructions: browser.runInstructions,
+    url: browser.url,
+    appCommand: browser.appCommand,
+    port: browser.port,
+    assertions: browser.assertions,
+    notObservable: browser.notObservable,
+    // Report evidence for a human. Never an assertion — see browser-rung.js.
+    screenshots: browser.screenshots,
+  };
+
+  if (browser.status === 'fail') {
+    rungResults.push({
+      id: 'browser',
+      command: browser.appCommand ?? '(dev server)',
+      exitCode: 1,
+      outcome: 'fail',
+    });
+    ran.push('browser');
+    return {
+      outcome: 'fail',
+      runInstructions: browser.runInstructions,
+      summary: `Final ladder failed at browser. ${browser.summary}`,
+      evidence: {
+        failedRung: 'browser',
+        blockedRung: null,
+        ran,
+        output: capLadderOutput(browser.summary),
+        cwd,
+        rungs: rungResults,
+        browser: browserEvidence,
+      },
+    };
+  }
+
+  if (browser.status === 'blocked') {
+    // Not a failure and not a pass of the browser rung: the check did not run.
+    // `ran` deliberately does not gain `browser` — nothing ran — and the run's
+    // outcome stays the static ladder's, so a machine with no Chromium reports
+    // exactly what it verified and nothing more.
+    rungResults.push({
+      id: 'browser',
+      command: browser.appCommand ?? '(not started)',
+      exitCode: 0,
+      outcome: 'blocked',
+      reason: browser.reason,
+    });
+    return {
+      outcome: 'pass',
+      runInstructions: staticInstructions,
+      summary: `${staticSummary} ${browser.summary}`,
+      evidence: {
+        failedRung: null,
+        blockedRung: 'browser',
+        ran,
+        output: '',
+        cwd,
+        rungs: rungResults,
+        browser: browserEvidence,
+      },
+    };
+  }
+
+  rungResults.push({
+    id: 'browser',
+    command: browser.appCommand ?? '(dev server)',
+    exitCode: 0,
+    outcome: 'pass',
+  });
+  ran.push('browser');
   return {
     outcome: 'pass',
-    runInstructions,
-    summary: 'Final ladder passed typecheck, lint, unit, and build.',
+    runInstructions: browser.runInstructions,
+    summary: `${staticSummary} ${browser.summary}`,
     evidence: {
       failedRung: null,
+      blockedRung: null,
       ran,
       output: '',
       cwd,
       rungs: rungResults,
+      browser: browserEvidence,
     },
   };
 }
