@@ -369,6 +369,32 @@ Orchestration started 2026-08-29 from branch `Orchestrator-V2` (Phases 0–2 Don
 
 **MIN-682** · MIN-719 P5-A Server-side browser driver · MIN-720 P5-B Driver tool surface · MIN-721 P5-C Browser step in the Final Tester ladder · MIN-722 P5-D Unattended overnight run proof
 
+#### Phase 5 status
+
+**P5-A is built.** The reusability assessment MIN-719 required is
+[`orchestrator-v2-browser-driver-assessment.md`](./orchestrator-v2-browser-driver-assessment.md);
+it is the file to read before touching `server/browser-driver/`. Three things
+worth carrying forward:
+
+- **No new dependency was taken.** `ws` is already a runtime dependency and a
+  working CDP client already existed in this repo's history (`86cc513f^:server/cdp/client.js`,
+  dropped when browser tools moved to the Electron preview). Playwright was
+  rejected on packaging grounds, `puppeteer-core` because it does not solve
+  browser *discovery* — which has to be written either way. The driver finds an
+  installed Chrome/Edge/Brave/Chromium; it never ships one.
+- **`server/cdp/` was never a CDP client.** What lives there today is allowlist,
+  settings, and screenshot paths — all reused untouched. Everything in
+  `src/tools/browser-*.ts` is renderer-side and Electron-IPC-bound; none of it
+  was ported, and the interactive browser panel still uses it.
+- **The a11y snapshot had a tree-killing bug** in the code that was restored:
+  an `ignored` unnamed node returned `null`, and Chromium's `<html>` wrapper is
+  exactly that, so every snapshot came back as a lone `RootWebArea`. Ignored
+  nodes now hoist their children. There is a regression test.
+
+P5-B should wrap `server/browser-driver/index.js` as tools rather than reaching
+into the modules under it. Interaction (click/fill against snapshot uids) was
+deliberately left to P5-B, which owns the tool shape.
+
 ### Phase 6 — Normal chat adopts the runner
 *Proves: one engine for all chat. Written now, scheduled after Phase 5.*
 
