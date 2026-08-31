@@ -398,11 +398,24 @@ export async function listProviders() {
 }
 
 /**
+ * `minnow-library` is a picker id, not a registry row. Callers must remap to
+ * the live llama-cpp-local / mlx-lm-local serve first; a raw ENOENT here is a
+ * routing bug, not a missing file.
+ * @param {string} id
+ */
+function rejectSyntheticLibraryProvider(id) {
+  if (id === MINNOW_LIBRARY_PROVIDER_ID) {
+    throw new Error('synthetic My Models id — remap to the running serve first');
+  }
+}
+
+/**
  * @param {string} id
  */
 export async function getProvider(id) {
   await ensureProviderRegistry();
   validateProviderId(id);
+  rejectSyntheticLibraryProvider(id);
   const profile = await readProfile(id);
   const secrets = await readSecrets(id);
   return toProviderPublic(profile, secretsFlags(secrets));
@@ -592,6 +605,7 @@ export async function updateProviderSecrets(id, body) {
  * @returns {Promise<{ profile: object, secrets: object, headers: Record<string, string>, paths: object }>}
  */
 export async function getProviderRuntime(id) {
+  rejectSyntheticLibraryProvider(id);
   const profile = await readProfile(id);
   const secrets = await readSecrets(id);
   const paths = getDefaultPaths(profile.apiKind, profile);

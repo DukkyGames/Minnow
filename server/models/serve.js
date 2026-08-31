@@ -915,6 +915,7 @@ export async function startServe(body) {
 
     // Process is up but weights are not loaded until the first completion.
     // Commit `starting` first so the UI does not lie `running` during warmup.
+    const mlxLibraryId = typeof body.libraryId === 'string' ? body.libraryId.trim() : '';
     const row = /** @type {ServeRecord} */ ({
       id: serveId,
       runtime,
@@ -926,6 +927,9 @@ export async function startServe(body) {
       status: 'starting',
       startedAt: Date.now(),
     });
+    // Same picker id chat/V2 Start match on — without it, live MLX rows only
+    // match by snapshot path and a `mlx:repo` binding cannot find them.
+    if (mlxLibraryId) row.libraryId = mlxLibraryId;
     servesCache.unshift(row);
     await commitServes('mlx-start');
     ensureMlxCrashWatch();
@@ -1704,11 +1708,37 @@ async function tickServeHeartbeat() {
  * @returns {Promise<ServeRecord | null>}
  */
 export async function findLiveLlamaCppServeForModel(modelId) {
+  return findLiveServeForRuntime('llama-cpp', modelId);
+}
+
+/**
+ * Live MLX row whose libraryId / snapshot path / label matches `modelId`.
+ * When several match, the most recently used wins.
+ * @param {string} modelId
+ * @returns {Promise<ServeRecord | null>}
+ */
+export async function findLiveMlxServeForModel(modelId) {
+  return findLiveServeForRuntime('mlx-lm', modelId);
+}
+
+/**
+ * @param {'llama-cpp' | 'mlx-lm'} runtime
+ * @param {string} modelId
+ * @returns {Promise<ServeRecord | null>}
+ */
+async function findLiveServeForRuntime(runtime, modelId) {
   await loadServes();
   const live = servesCache.filter(
-    (row) => row.runtime === 'llama-cpp' && isLiveServeStatus(row.status),
+    (row) => row.runtime === runtime && isLiveServeStatus(row.status),
   );
-  const matches = live.filter((row) => serveMatchesModelId(row, modelId));
+  const id = String(modelId ?? '').trim();
+  const matches = live.filter((row) => {
+    if (serveMatchesModelId(row, id)) return true;
+    // MLX completions key on the absolute snapshot directory; a picker id
+    // `mlx:repo` will not match basename/stem, so also accept a path hit.
+    if (runtime === 'mlx-lm' && row.modelPath && row.modelPath === id) return true;
+    return false;
+  });
   if (matches.length === 0) return null;
   let best = matches[0];
   for (const row of matches) {

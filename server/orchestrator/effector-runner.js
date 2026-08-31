@@ -28,6 +28,7 @@ import {
   runTurn as defaultRunTurn,
 } from '../runner/node.js';
 import { cancel as cancelGeneration, listGenerationStates } from '../generations/store.js';
+import { resolveLibraryAttemptBinding } from '../models/library-binding.js';
 import { getProvider } from '../providers/store.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
 import { peekEngine } from './engine.js';
@@ -560,11 +561,16 @@ export function createRunnerEffector(options = {}) {
      * workspace fails on the Start button (400) instead of after parse.
      * Explicit `cwd` sandboxes stay git-free.
      *
+     * My Models picker ids (`minnow-library` + `gguf:`/`mlx:`) are remapped
+     * (and auto-loaded) here so a missing serve is a 400 on Start, not an
+     * ENOENT after `task.attempt.started`. Remapped ids are not journaled.
+     *
      * @returns {Promise<{ gitInitialized?: Record<string, unknown> } | void>}
      */
     async preflight() {
       const state = boardId || options.getState ? await currentState() : null;
-      await resolveAttemptModel(options.model ?? state?.model ?? null);
+      const model = await resolveAttemptModel(options.model ?? state?.model ?? null);
+      await resolveLibraryAttemptBinding(model);
       await loadRolePrompt('builder', promptVariant);
       await loadRolePrompt('tester', promptVariant);
       if (!isolateWorktrees) return;
@@ -608,8 +614,11 @@ export function createRunnerEffector(options = {}) {
         taskId: desired.taskId,
       });
       // P9-C: the board's own binding wins over Settings, and an explicit
-      // option (tests) wins over both.
-      const model = await resolveAttemptModel(options.model ?? state.model);
+      // option (tests) wins over both. My Models picker ids stay on the
+      // journal; remap (and auto-load) only for this attempt's completions.
+      const model = await resolveLibraryAttemptBinding(
+        await resolveAttemptModel(options.model ?? state.model),
+      );
       // P9-C: the board's reasoning control, the other half of binding a model
       // — a thinking model bound with thinking off is a different model in every
       // way that matters. Carried on the `TurnModel`, which is where `runTurn`

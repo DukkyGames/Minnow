@@ -19,7 +19,7 @@ export interface RunnerEffector {
     gitInitialized?: Record<string, unknown>;
   }>;
   stop(attemptId: string): Promise<void>;
-  /** Check the model binding, role prompts, and isolated-worktree git init. Throws when something is missing. */
+  /** Check the model binding (including My Models remap/auto-load), role prompts, and isolated-worktree git init. Throws when something is missing. */
   preflight(): Promise<{ gitInitialized?: Record<string, unknown> } | void>;
   onEnd(
     handler: (end: {

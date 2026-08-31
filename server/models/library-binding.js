@@ -1,0 +1,320 @@
+/**
+ * Send-time remap for the synthetic My Models picker id.
+ *
+ * `minnow-library` is not a registry provider — there is no
+ * `providers/minnow-library/profile.json`. Chat remaps in the renderer
+ * (`resolveLibrarySendBinding`). The V2 runner never goes through that path,
+ * so boards would call `getProvider('minnow-library')` and ENOENT. This module
+ * is the server twin: remap (and auto-load) *before* any completions call,
+ * without writing remapped ids back onto `board.model`.
+ */
+
+import path from 'node:path';
+
+import { listCachedModels } from './cached.js';
+import {
+  findLiveLlamaCppServeForModel,
+  findLiveMlxServeForModel,
+  getServe,
+  listServes,
+  startServe,
+} from './serve.js';
+import { MODEL_LOAD_TIMEOUT_MS } from './timeouts.js';
+import { MINNOW_LIBRARY_PROVIDER_ID } from '../providers/store.js';
+import { LLAMA_CPP_LOCAL_ID, MLX_LM_LOCAL_ID } from '../../src/models/runtime-ids.mjs';
+
+/** Same wording as the renderer request-binding path (`library-request-binding.ts`). */
+export const LIBRARY_MODEL_NOT_LOADED_MESSAGE =
+  'Model is not loaded — load it in Models, or send a chat message to start it.';
+
+const SERVE_POLL_MS = 400;
+
+/** @type {LibraryBindingDeps | null} */
+let testDeps = null;
+
+/**
+ * @typedef {object} LibraryBindingDeps
+ * @property {(id: string) => Promise<object | null>} [findLiveLlamaCppServe]
+ * @property {(id: string) => Promise<object | null>} [findLiveMlxServe]
+ * @property {() => Promise<object[]>} [listServes]
+ * @property {() => Promise<{ models?: object[] }>} [listCachedModels]
+ * @property {(body: object) => Promise<object>} [startServe]
+ * @property {(id: string) => Promise<object | null>} [getServe]
+ * @property {() => number} [now]
+ * @property {(ms: number) => Promise<void>} [sleep]
+ * @property {number} [loadTimeoutMs]
+ */
+
+/**
+ * Test seam so unit / effector tests can fake a live serve without spawning
+ * llama-server. Production callers omit this.
+ * @param {LibraryBindingDeps | null} [deps]
+ */
+export function setLibraryBindingDepsForTests(deps = null) {
+  testDeps = deps;
+}
+
+/**
+ * True when the pair is the picker id plus a library row (`gguf:` / `mlx:`).
+ * Cloud and direct llama-cpp-local / mlx-lm-local ids pass through unchanged.
+ * @param {string | undefined} providerId
+ * @param {string | undefined} modelId
+ */
+export function isLibraryModelBinding(providerId, modelId) {
+  const pid = providerId?.trim();
+  const mid = modelId?.trim();
+  if (!pid || !mid) return false;
+  return pid === MINNOW_LIBRARY_PROVIDER_ID && (mid.startsWith('gguf:') || mid.startsWith('mlx:'));
+}
+
+/**
+ * Remap a V2 attempt binding onto the completions provider.
+ *
+ * Pass-through when the pair is not `minnow-library` + `gguf:`/`mlx:`.
+ * When it is, look up a running serve and return `{ llama-cpp-local, modelLabel }`
+ * or `{ mlx-lm-local, snapshotPath }` — the same contract as
+ * `resolveLibrarySendBinding`. Missing serve auto-loads via `startServe`
+ * (libraryId so launch prefs apply). Load failure throws rather than returning
+ * the synthetic id.
+ *
+ * Does not mutate the input; callers must not persist the result onto `board.model`.
+ *
+ * @param {{ providerId?: string, id?: string } | null | undefined} binding
+ * @param {LibraryBindingDeps} [deps]
+ * @returns {Promise<{ providerId: string, id: string }>}
+ */
+export async function resolveLibraryAttemptBinding(binding, deps = {}) {
+  const providerId = typeof binding?.providerId === 'string' ? binding.providerId.trim() : '';
+  const id = typeof binding?.id === 'string' ? binding.id.trim() : '';
+  if (!providerId || !id) {
+    return /** @type {{ providerId: string, id: string }} */ (binding ?? { providerId, id });
+  }
+  if (!isLibraryModelBinding(providerId, id)) {
+    return { ...binding, providerId, id };
+  }
+
+  const resolved = mergeDeps(deps);
+  const serve = await findOrStartServe(id, resolved);
+  const remapped = remapFromServe(serve);
+  return { ...binding, providerId: remapped.providerId, id: remapped.id };
+}
+
+/**
+ * @param {LibraryBindingDeps} [explicit]
+ * @returns {Required<Pick<LibraryBindingDeps, 'findLiveLlamaCppServe' | 'findLiveMlxServe' | 'listServes' | 'listCachedModels' | 'startServe' | 'getServe' | 'now' | 'sleep' | 'loadTimeoutMs'>>}
+ */
+function mergeDeps(explicit = {}) {
+  const overlay = { ...(testDeps || {}), ...explicit };
+  return {
+    findLiveLlamaCppServe: overlay.findLiveLlamaCppServe ?? findLiveLlamaCppServeForModel,
+    findLiveMlxServe: overlay.findLiveMlxServe ?? findLiveMlxServeForModel,
+    listServes: overlay.listServes ?? listServes,
+    listCachedModels: overlay.listCachedModels ?? listCachedModels,
+    startServe: overlay.startServe ?? startServe,
+    getServe: overlay.getServe ?? getServe,
+    now: overlay.now ?? Date.now,
+    sleep: overlay.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
+    loadTimeoutMs: overlay.loadTimeoutMs ?? MODEL_LOAD_TIMEOUT_MS,
+  };
+}
+
+/**
+ * @param {string} libraryId
+ * @param {ReturnType<typeof mergeDeps>} deps
+ */
+async function findOrStartServe(libraryId, deps) {
+  const existing = await findMatchingLiveServe(libraryId, deps);
+  if (existing?.status === 'running') return existing;
+  if (existing && (existing.status === 'starting' || existing.status === 'unhealthy')) {
+    return waitUntilRunning(existing, deps);
+  }
+
+  const target = await resolveCachedTarget(libraryId, deps);
+  if (!target) {
+    throw new Error(LIBRARY_MODEL_NOT_LOADED_MESSAGE);
+  }
+
+  const started = await deps.startServe({
+    runtime: target.runtime,
+    modelPath: target.modelPath,
+    modelLabel: target.modelLabel,
+    libraryId: target.libraryId,
+    ...(target.quant ? { quant: target.quant } : {}),
+    ...(target.weightsGb ? { weightsGb: target.weightsGb } : {}),
+  });
+  if (started?.status === 'running') return started;
+  return waitUntilRunning(started, deps);
+}
+
+/**
+ * Running/starting serve for this picker id. Llama.cpp matches `--alias` /
+ * filename via `serveMatchesModelId`; MLX also matches snapshot path because
+ * `mlx_lm.server` keys requests by directory, not `mlx:repo`.
+ *
+ * @param {string} libraryId
+ * @param {ReturnType<typeof mergeDeps>} deps
+ */
+async function findMatchingLiveServe(libraryId, deps) {
+  const llama = await deps.findLiveLlamaCppServe(libraryId);
+  const mlx = await deps.findLiveMlxServe(libraryId);
+  const direct = pickPreferredServe(llama, mlx);
+  if (direct) return direct;
+
+  // Older MLX rows omit libraryId (startServe only recently stamps it). Fall
+  // back to the cached snapshot directory vs serve.modelPath, which is how
+  // chat's `activeServeFor` matches.
+  const target = await resolveCachedTarget(libraryId, deps).catch(() => null);
+  if (!target?.modelPath) return null;
+  const serves = await deps.listServes();
+  const byPath = (Array.isArray(serves) ? serves : []).find(
+    (row) =>
+      row &&
+      typeof row.modelPath === 'string' &&
+      row.modelPath === target.modelPath &&
+      (row.status === 'running' || row.status === 'starting' || row.status === 'unhealthy'),
+  );
+  return byPath ?? null;
+}
+
+/**
+ * @param {object | null | undefined} a
+ * @param {object | null | undefined} b
+ */
+function pickPreferredServe(a, b) {
+  const running = [a, b].find((row) => row?.status === 'running');
+  if (running) return running;
+  return a || b || null;
+}
+
+/**
+ * Completions ids once a serve is up — same contract as `resolveLibrarySendBinding`.
+ * @param {object} serve
+ * @returns {{ providerId: string, id: string }}
+ */
+function remapFromServe(serve) {
+  if (!serve) {
+    throw new Error(LIBRARY_MODEL_NOT_LOADED_MESSAGE);
+  }
+  if (serve.runtime === 'mlx-lm') {
+    const mlxModelId =
+      (typeof serve.modelPath === 'string' && serve.modelPath.trim()) ||
+      (typeof serve.modelLabel === 'string' && serve.modelLabel.trim()) ||
+      '';
+    if (!mlxModelId) throw new Error(LIBRARY_MODEL_NOT_LOADED_MESSAGE);
+    return { providerId: MLX_LM_LOCAL_ID, id: mlxModelId };
+  }
+  const label = typeof serve.modelLabel === 'string' ? serve.modelLabel.trim() : '';
+  if (!label) throw new Error(LIBRARY_MODEL_NOT_LOADED_MESSAGE);
+  return { providerId: LLAMA_CPP_LOCAL_ID, id: label };
+}
+
+/**
+ * Flatten a `gguf:repo:rel` / `mlx:repo` picker id onto a cached scan row.
+ * Mirrors `buildLibrary` ids without importing the TS library module.
+ *
+ * @param {string} libraryId
+ * @param {ReturnType<typeof mergeDeps>} deps
+ * @returns {Promise<{ runtime: string, modelPath: string, modelLabel: string, libraryId: string, quant?: string, weightsGb?: number } | null>}
+ */
+async function resolveCachedTarget(libraryId, deps) {
+  const parsed = parseLibraryId(libraryId);
+  if (!parsed) return null;
+  const payload = await deps.listCachedModels();
+  const models = Array.isArray(payload?.models) ? payload.models : [];
+  const row = models.find((m) => m && m.repo_id === parsed.repoId);
+  if (!row) return null;
+
+  if (parsed.kind === 'mlx') {
+    const snapshot = typeof row.mlx_root === 'string' ? row.mlx_root.trim() : '';
+    if (!snapshot) return null;
+    return {
+      runtime: 'mlx-lm',
+      modelPath: snapshot,
+      modelLabel: snapshot,
+      libraryId,
+    };
+  }
+
+  const files = Array.isArray(row.gguf_files) ? row.gguf_files : [];
+  const file = files.find((f) => f && f.rel_path === parsed.relPath);
+  if (!file) return null;
+  const modelPath = resolveGgufFilePath(row, parsed.relPath);
+  if (!modelPath) return null;
+  const fileName = typeof file.name === 'string' ? file.name : path.basename(modelPath);
+  const modelLabel = fileName.replace(/\.gguf$/i, '') || fileName;
+  const sizeBytes = Number(file.size_bytes);
+  return {
+    runtime: 'llama-cpp',
+    modelPath,
+    modelLabel,
+    libraryId,
+    ...(typeof file.quant === 'string' && file.quant ? { quant: file.quant } : {}),
+    ...(Number.isFinite(sizeBytes) && sizeBytes > 0
+      ? { weightsGb: sizeBytes / 1024 ** 3 }
+      : {}),
+  };
+}
+
+/**
+ * @param {string} libraryId
+ * @returns {{ kind: 'gguf', repoId: string, relPath: string } | { kind: 'mlx', repoId: string } | null}
+ */
+function parseLibraryId(libraryId) {
+  const id = libraryId.trim();
+  if (id.startsWith('mlx:')) {
+    const repoId = id.slice(4).trim();
+    return repoId ? { kind: 'mlx', repoId } : null;
+  }
+  if (!id.startsWith('gguf:')) return null;
+  const rest = id.slice(5);
+  const colon = rest.indexOf(':');
+  if (colon < 0) return null;
+  const repoId = rest.slice(0, colon).trim();
+  const relPath = rest.slice(colon + 1).trim();
+  if (!repoId || !relPath) return null;
+  return { kind: 'gguf', repoId, relPath };
+}
+
+/**
+ * Absolute GGUF path from a cached row. HF hub cache uses
+ * `<cache>/models--org--repo/snapshots/<rel>`; downloads and extra folders
+ * store `row.path` as the directory that already contains `rel_path`.
+ * @param {{ path?: string, repo_id?: string, is_local_dir?: boolean, status?: string }} row
+ * @param {string} relPath
+ */
+function resolveGgufFilePath(row, relPath) {
+  const root = typeof row.path === 'string' ? row.path.trim() : '';
+  if (!root || !relPath) return null;
+  const parts = relPath.split('/').filter(Boolean);
+  if (row.is_local_dir || row.status === 'downloaded') {
+    return path.join(root, ...parts);
+  }
+  const repoDir = `models--${String(row.repo_id || '').replace(/\//g, '--')}`;
+  return path.join(root, repoDir, 'snapshots', ...parts);
+}
+
+/**
+ * Poll until the serve is running, or throw on error / timeout.
+ * Chat's picker load uses the same timeout and a 400ms tick.
+ *
+ * @param {object} serve
+ * @param {ReturnType<typeof mergeDeps>} deps
+ */
+async function waitUntilRunning(serve, deps) {
+  if (serve?.status === 'running') return serve;
+  const serveId = typeof serve?.id === 'string' ? serve.id : '';
+  if (!serveId) throw new Error(LIBRARY_MODEL_NOT_LOADED_MESSAGE);
+
+  const started = deps.now();
+  while (deps.now() - started < deps.loadTimeoutMs) {
+    const next = await deps.getServe(serveId);
+    if (next?.status === 'running') return next;
+    if (next?.status === 'error' || next?.status === 'stopped' || next?.status === 'crashed') {
+      const message =
+        (typeof next.error === 'string' && next.error.trim()) || 'Model failed to load';
+      throw new Error(message);
+    }
+    await deps.sleep(SERVE_POLL_MS);
+  }
+  throw new Error('Timed out waiting for model to load');
+}
