@@ -13,6 +13,8 @@ import {
 
   filterUserFacingBranches,
 
+  filterUserFacingWorktrees,
+
   parseWorktreeListPorcelain,
 
   type ParsedWorktree,
@@ -1945,7 +1947,11 @@ async function refreshWorktreeDropdown(): Promise<void> {
 
 
 
-  knownWorktrees = parseWorktreeListPorcelain(listResult.output);
+  // Hide other-workspace Minnow slots so a stale list cannot leak after switch.
+  knownWorktrees = filterUserFacingWorktrees(
+    parseWorktreeListPorcelain(listResult.output),
+    ws,
+  );
 
   cwdWrap.hidden = knownWorktrees.length === 0;
 

@@ -51,6 +51,7 @@ export function emptyState() {
     boardId: '',
     name: '',
     planPath: '',
+    workspacePath: null,
     waves: [],
     status: 'created',
     concurrency: 1,
@@ -121,6 +122,10 @@ function apply(state, event) {
       state.boardId = event.boardId;
       state.planPath = event.planPath;
       if (typeof event.name === 'string') state.name = event.name;
+      // Additive: a later create may fill a missing stamp, never clear one.
+      if (typeof event.workspacePath === 'string' && event.workspacePath.trim()) {
+        state.workspacePath = event.workspacePath;
+      }
       state.waves = event.waves.map((w) => ({ n: Number(w.n), name: String(w.name ?? '') }));
       // Additive: a later board.created may append tasks, never rewrite the
       // history of one already in flight.

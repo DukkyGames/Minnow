@@ -114,6 +114,12 @@ export function isSourceControlCenterOpen(): boolean {
   return Boolean(document.getElementById(ROOT_ID));
 }
 
+/** Re-read git state after a workspace switch so worktree rows match the new repo. */
+export function refreshSourceControlCenter(): void {
+  if (!isSourceControlCenterOpen()) return;
+  void refreshAll();
+}
+
 function effectiveCwd(): string | undefined {
   return resolvePanelWorktreeCwd(panelCwd);
 }

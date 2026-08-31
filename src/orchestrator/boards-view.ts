@@ -169,6 +169,18 @@ export function isBoardsViewOpen(): boolean {
   return Boolean(document.getElementById(BOARDS_ROOT_ID));
 }
 
+/** Close the live V2 board pane without tearing down the Boards page (MIN-752). */
+export function deselectBoardForWorkspaceSwitch(): void {
+  if (!isBoardsViewOpen()) return;
+  selectBoard(null);
+}
+
+/** Re-fetch the workspace-filtered list after a workspace switch (MIN-752). */
+export function refreshBoardsViewAfterWorkspaceSwitch(): void {
+  if (!isBoardsViewOpen()) return;
+  void list?.refresh();
+}
+
 export async function openBoardsView(): Promise<void> {
   if (isBoardsViewOpen()) {
     void list?.refresh();

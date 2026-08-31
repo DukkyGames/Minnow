@@ -2,10 +2,12 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   filterUserFacingBranches,
+  filterUserFacingWorktrees,
   formatWorktreeOptionLabel,
   isMinnowBoardBranch,
   parseWorktreeListPorcelain,
 } from '../../src/lib/worktree-list-parse.ts';
+import { repoKeyFromWorkspacePath } from '../../src/lib/repo-key.mjs';
 
 describe('parseWorktreeListPorcelain', () => {
   it('parses multiple worktrees with branches', () => {
@@ -63,5 +65,39 @@ describe('formatWorktreeOptionLabel', () => {
       '/repo/main',
     );
     assert.match(task, /^minnow\/board\/x\/task\/y — task-1$/);
+  });
+});
+
+describe('filterUserFacingWorktrees', () => {
+  it('keeps the main checkout and this repoKey, drops other repoKeys', () => {
+    const workspace = '/repo/minnow';
+    const thisKey = repoKeyFromWorkspacePath(workspace);
+    const worktrees = [
+      { path: '/repo/minnow', head: 'abc', branch: 'main', detached: false },
+      {
+        path: `/home/.minnow/worktrees/${thisKey}/board-a/task-W1-A`,
+        head: 'def',
+        branch: 'minnow/board/a/task/W1-A',
+        detached: false,
+      },
+      {
+        path: '/home/.minnow/worktrees/other-deadbeef/board-b/task-W1-A',
+        head: 'ghi',
+        branch: 'minnow/board/b/task/W1-A',
+        detached: false,
+      },
+      {
+        path: '/tmp/user-worktree',
+        head: 'jkl',
+        branch: 'feature',
+        detached: false,
+      },
+    ];
+    const kept = filterUserFacingWorktrees(worktrees, workspace).map((wt) => wt.path);
+    assert.deepEqual(kept, [
+      '/repo/minnow',
+      `/home/.minnow/worktrees/${thisKey}/board-a/task-W1-A`,
+      '/tmp/user-worktree',
+    ]);
   });
 });

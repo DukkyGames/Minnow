@@ -22,7 +22,7 @@ import { createScriptedEffector } from '../../server/orchestrator/effector-scrip
 import { disposeEngines } from '../../server/orchestrator/engine.js';
 import { appendEvent, resetJournalCache } from '../../server/orchestrator/journal.js';
 import { createBoardsMiddleware, matchRoute, ROUTES, setEffectorFactory } from '../../server/orchestrator/middleware.js';
-import { getWorkspaceRoot } from '../../server/workspace/root.js';
+import { getWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
 
 // ---------------------------------------------------------------------------
 
@@ -611,5 +611,47 @@ describe('the surface itself', () => {
     const response = await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
     assert.equal(response.status, 409);
     assert.equal(response.body.error, 'the run has finished; rerun it instead');
+  });
+});
+
+describe('GET /api/boards — workspace scope (MIN-752)', () => {
+  it('lists only boards stamped for the live workspace and 409s start from another', async () => {
+    const originalRoot = getWorkspaceRoot();
+    const wsA = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-board-ws-a-'));
+    const wsB = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-board-ws-b-'));
+    try {
+      await setWorkspaceRoot(wsA);
+      const createdA = await call('POST', '/api/boards', {
+        planPath: 'demo.md',
+        markdown: PLAN,
+        boardId: 'ws-a-board',
+      });
+      assert.equal(createdA.status, 201, JSON.stringify(createdA.body));
+      assert.equal(createdA.body.state.workspacePath, path.resolve(wsA));
+
+      const listA = await call('GET', '/api/boards');
+      assert.deepEqual(listA.body.boards.map((b) => b.boardId), ['ws-a-board']);
+
+      await setWorkspaceRoot(wsB);
+      const listBEmpty = await call('GET', '/api/boards');
+      assert.deepEqual(listBEmpty.body.boards.map((b) => b.boardId), []);
+
+      const startFromB = await call('POST', '/api/boards/ws-a-board/start', { concurrency: 1 });
+      assert.equal(startFromB.status, 409);
+      assert.match(String(startFromB.body.error), /another workspace/i);
+
+      const createdB = await call('POST', '/api/boards', {
+        planPath: 'demo.md',
+        markdown: PLAN,
+        boardId: 'ws-b-board',
+      });
+      assert.equal(createdB.status, 201, JSON.stringify(createdB.body));
+      const listB = await call('GET', '/api/boards');
+      assert.deepEqual(listB.body.boards.map((b) => b.boardId), ['ws-b-board']);
+    } finally {
+      await setWorkspaceRoot(originalRoot);
+      await fs.rm(wsA, { recursive: true, force: true }).catch(() => {});
+      await fs.rm(wsB, { recursive: true, force: true }).catch(() => {});
+    }
   });
 });

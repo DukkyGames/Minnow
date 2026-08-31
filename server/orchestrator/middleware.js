@@ -56,10 +56,25 @@ import { subscribeErrors, subscribeLive } from './live-events.js';
 import { readTranscript } from './transcripts.js';
 import { readCommitFileDiff, readCommitFileStats } from './task-files.js';
 import { resolveSafePath } from '../runtime/path-access.js';
+import { getWorkspaceRoot } from '../workspace/root.js';
 import { attachTouchesExpansion, listRepoFiles } from './touches.js';
+import { boardBelongsToWorkspace } from './workspace-scope.js';
 
 /** Heartbeat cadence. Intermediaries close idle streams without it. */
 const HEARTBEAT_MS = 15_000;
+
+/** Commands that would run git/engine work against the live workspace root. */
+const MUTATING_ROUTES = new Set([
+  'start',
+  'stop',
+  'concurrency',
+  'startTask',
+  'abandonTask',
+  'rerun',
+  'model',
+  'rename',
+  'delete',
+]);
 
 /**
  * How a board's effector is built.
@@ -222,16 +237,34 @@ export async function handleBoardsRequest(req, res, pathname) {
 async function dispatch(route, req, res) {
   const [boardId, taskId] = route.params;
 
+  // MIN-752: a leaked id from another workspace must not start/stop against
+  // this root. Reads stay available so a stale view can still inspect state.
+  if (MUTATING_ROUTES.has(route.name) && boardId) {
+    if (!(await boardExists(boardId))) {
+      return json(res, 404, { ok: false, error: 'no such board' });
+    }
+    const live = peekEngine(boardId)?.getState() ?? (await loadState(boardId));
+    if (!(await boardBelongsToWorkspace(live))) {
+      return json(res, 409, {
+        ok: false,
+        error: 'this board belongs to another workspace',
+      });
+    }
+  }
+
   switch (route.name) {
     case 'list': {
       const ids = await listBoards();
+      const workspaceRoot = getWorkspaceRoot();
       const boards = [];
       for (const id of ids) {
         const state = await loadState(id);
+        if (!(await boardBelongsToWorkspace(state, workspaceRoot))) continue;
         boards.push({
           boardId: id,
           name: state.name,
           planPath: state.planPath,
+          workspacePath: state.workspacePath,
           status: state.status,
           concurrency: state.concurrency,
           taskCount: state.tasks.size,
@@ -573,6 +606,7 @@ async function createFromPlan(req, res) {
       name: parsed.name,
       tasks,
       waves: parsed.waves,
+      workspacePath: path.resolve(getWorkspaceRoot()),
     }),
   );
 

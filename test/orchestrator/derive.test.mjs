@@ -71,9 +71,28 @@ describe('derive — shape', () => {
     assert.deepEqual(state.waves, [{ n: 1, name: 'One' }, { n: 2, name: 'Two' }]);
     assert.equal(state.status, 'created');
     assert.equal(state.concurrency, 1, 'fold placeholder until board.started');
+    assert.equal(state.workspacePath, null);
     assert.equal(state.tasks.get('W2-C').dependsOn.join(','), 'W1-A,W1-B');
     assert.deepEqual(state.tasks.get('W1-A').touches, ['src/a/**']);
     assert.equal(state.tasks.get('W1-A').buildSpec, 'b');
+  });
+
+  it('folds optional workspacePath from board.created and keeps older journals valid', () => {
+    const stamped = derive(
+      journal(
+        makeEvent('board.created', {
+          boardId: 'b1',
+          planPath: 'plan.md',
+          name: 'demo',
+          tasks: TASKS,
+          waves: [],
+          workspacePath: '/repos/minnow',
+        }),
+      ),
+    );
+    assert.equal(stamped.workspacePath, '/repos/minnow');
+    const legacy = derive(journal(created()));
+    assert.equal(legacy.workspacePath, null);
   });
 
   it('tracks board status and concurrency', () => {

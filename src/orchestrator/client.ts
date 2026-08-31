@@ -46,6 +46,8 @@ export interface BoardSummary {
   boardId: string;
   name: string;
   planPath: string;
+  /** Stamped workspace; null/absent on journals written before MIN-752. */
+  workspacePath?: string | null;
   status: BoardState['status'];
   concurrency: number;
   taskCount: number;
@@ -199,6 +201,7 @@ function readOnlyState(state: BoardState): BoardState {
     boardId: state.boardId,
     name: state.name,
     planPath: state.planPath,
+    workspacePath: state.workspacePath ?? null,
     waves: Object.freeze(state.waves.map((w) => Object.freeze({ ...w }))) as BoardState['waves'],
     status: state.status,
     concurrency: state.concurrency,
@@ -404,6 +407,11 @@ export async function readTaskFileDiff(
  */
 export async function deleteBoard(boardId: string): Promise<void> {
   await request(`/${encodeURIComponent(boardId)}`, { method: 'DELETE' });
+}
+
+/** Stop a running board by id — used by workspace switch (MIN-752) without a live client. */
+export async function stopBoard(boardId: string): Promise<void> {
+  await request(`/${encodeURIComponent(boardId)}/stop`, { method: 'POST' });
 }
 
 /**

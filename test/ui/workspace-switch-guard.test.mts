@@ -17,6 +17,7 @@ import {
   getBlockingBoardsForWorkspace,
   isBoardBlockingWorkspaceSwitch,
   isWorkspaceSwitchBlockedByRunningBoard,
+  setV2WorkspaceSwitchDepsForTests,
 } from '../../src/ui/workspace-switch-guard.ts';
 
 const GROUP_ID = 'grp_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -24,6 +25,15 @@ const PLANNER_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const CURRENT_WS = '/tmp/minnow-current';
 const OTHER_WS = '/tmp/minnow-other';
 const PLAN_PATH = 'documentation/plans/test-plan.md';
+
+async function waitForDialogAction(action: 'confirm' | 'cancel'): Promise<HTMLButtonElement> {
+  for (let i = 0; i < 30; i++) {
+    const btn = document.querySelector<HTMLButtonElement>(`[data-dialog-action="${action}"]`);
+    if (btn) return btn;
+    await Promise.resolve();
+  }
+  throw new Error(`dialog ${action} button not found`);
+}
 
 function makePlanner(): Chat {
   return {
@@ -96,10 +106,14 @@ describe('workspace-switch-guard', () => {
       isDefault: false,
     });
     originalConfirm = window.confirm;
+    setV2WorkspaceSwitchDepsForTests({
+      listBoards: async () => [],
+    });
   });
 
   afterEach(() => {
     window.confirm = originalConfirm;
+    setV2WorkspaceSwitchDepsForTests(null);
     setSessionStateForTests(null);
     resetWorkspaceStateForTests();
     domWindow.close();
@@ -140,9 +154,7 @@ describe('workspace-switch-guard', () => {
   test('confirmAndStopBoardsForWorkspaceSwitch cancels without stopping', async () => {
     const { group } = seedRunningBoard();
     const allowedPromise = confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
-    await Promise.resolve();
-    const cancelBtn = document.querySelector<HTMLButtonElement>('[data-dialog-action="cancel"]');
-    assert.ok(cancelBtn);
+    const cancelBtn = await waitForDialogAction('cancel');
     cancelBtn.click();
     const allowed = await allowedPromise;
     assert.equal(allowed, false);
@@ -152,13 +164,61 @@ describe('workspace-switch-guard', () => {
   test('confirmAndStopBoardsForWorkspaceSwitch stops boards when confirmed', async () => {
     const { group } = seedRunningBoard();
     const allowedPromise = confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
-    await Promise.resolve();
-    const confirmBtn = document.querySelector<HTMLButtonElement>('[data-dialog-action="confirm"]');
-    assert.ok(confirmBtn);
+    const confirmBtn = await waitForDialogAction('confirm');
     confirmBtn.click();
     const allowed = await allowedPromise;
     assert.equal(allowed, true);
     assert.equal(isBoardRunning(group), false);
     assert.equal(group.orchestrateBoard?.userStopped, true);
+  });
+
+  test('running V2 board blocks switch until confirm, then stop is issued', async () => {
+    const stopped: string[] = [];
+    setV2WorkspaceSwitchDepsForTests({
+      listBoards: async () => [
+        {
+          boardId: 'v2-running',
+          name: 'V2 Ship',
+          planPath: PLAN_PATH,
+          status: 'running',
+          concurrency: 2,
+          taskCount: 1,
+          finished: false,
+        },
+      ],
+      stopBoard: async (id) => {
+        stopped.push(id);
+      },
+    });
+
+    const allowedPromise = confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
+    const confirmBtn = await waitForDialogAction('confirm');
+    confirmBtn.click();
+    const allowed = await allowedPromise;
+    assert.equal(allowed, true);
+    assert.deepEqual(stopped, ['v2-running']);
+  });
+
+  test('V1 path is unchanged when no V2 board is running', async () => {
+    const { group } = seedRunningBoard();
+    setV2WorkspaceSwitchDepsForTests({
+      listBoards: async () => [
+        {
+          boardId: 'v2-idle',
+          name: 'Idle',
+          planPath: PLAN_PATH,
+          status: 'created',
+          concurrency: 2,
+          taskCount: 1,
+          finished: false,
+        },
+      ],
+    });
+    const allowedPromise = confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
+    const confirmBtn = await waitForDialogAction('confirm');
+    confirmBtn.click();
+    const allowed = await allowedPromise;
+    assert.equal(allowed, true);
+    assert.equal(isBoardRunning(group), false);
   });
 });

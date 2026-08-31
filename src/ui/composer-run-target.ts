@@ -7,6 +7,7 @@ import { isActiveChatStreaming } from '../chat/streaming-state.ts';
 import {
   branchesLockedToOtherWorktrees,
   filterUserFacingBranches,
+  filterUserFacingWorktrees,
   parseWorktreeListPorcelain,
 } from '../lib/worktree-list-parse.ts';
 import {
@@ -405,7 +406,10 @@ async function rebuildRunTargetMenu(): Promise<void> {
       return;
     }
     const repoRoot = composerGitRepoRoot().replace(/\\/g, '/').replace(/\/+$/, '');
-    const entries = parseWorktreeListPorcelain(list.output).filter((wt) => {
+    const entries = filterUserFacingWorktrees(
+      parseWorktreeListPorcelain(list.output),
+      repoRoot,
+    ).filter((wt) => {
       const norm = wt.path.replace(/\\/g, '/').replace(/\/+$/, '');
       return norm !== repoRoot;
     });
@@ -469,7 +473,9 @@ async function rebuildBranchMenu(): Promise<void> {
 
   const repoRoot = composerGitRepoRoot();
   const worktrees =
-    list.ok && list.output ? parseWorktreeListPorcelain(list.output) : [];
+    list.ok && list.output
+      ? filterUserFacingWorktrees(parseWorktreeListPorcelain(list.output), repoRoot)
+      : [];
   const locked = branchesLockedToOtherWorktrees(worktrees, repoRoot);
   const current = res.current?.trim();
   const names = filterUserFacingBranches(res.local ?? [], locked);

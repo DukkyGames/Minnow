@@ -24,6 +24,7 @@ import { getWorkspacePath } from '../state/workspace';
 import { listWorktrees } from '../state/worktree-service';
 import {
   filterUserFacingBranches,
+  filterUserFacingWorktrees,
   parseWorktreeListPorcelain,
   type ParsedWorktree,
 } from '../lib/worktree-list-parse';
@@ -545,7 +546,7 @@ export function createWorktreesView(
     if (destroyed) return;
 
     const worktrees: ParsedWorktree[] = result.ok && result.output
-      ? parseWorktreeListPorcelain(result.output)
+      ? filterUserFacingWorktrees(parseWorktreeListPorcelain(result.output), workspace)
       : workspace
         ? [{ path: workspace, head: '', branch: undefined, detached: false }]
         : [];

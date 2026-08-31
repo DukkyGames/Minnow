@@ -119,6 +119,8 @@ export type BoardCreatedEvent = EventEnvelope & {
   tasks: PlanTask[];
   waves: WaveRef[];
   name?: string;
+  /** Code workspace that owned this board at create time. Older journals omit it. */
+  workspacePath?: string;
 };
 export type BoardStartedEvent = EventEnvelope & { type: 'board.started'; concurrency: number };
 export type BoardStoppedEvent = EventEnvelope & { type: 'board.stopped'; reason: StopReason };
@@ -414,6 +416,11 @@ export interface BoardState {
   boardId: string;
   name: string;
   planPath: string;
+  /**
+   * Workspace stamped on `board.created`. `null` on journals written before
+   * MIN-752 — list/start infer membership instead of rewriting the journal.
+   */
+  workspacePath: string | null;
   waves: WaveRef[];
   status: BoardStatus;
   concurrency: number;

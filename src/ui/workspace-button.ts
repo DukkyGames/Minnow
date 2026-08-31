@@ -97,6 +97,32 @@ export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
   if (isSuperPlanPageMounted()) {
     refreshSuperPlanLibrary();
   }
+
+  // Git/SCC worktree chrome is per-workspace. skipFileTreeSync used to leave
+  // the previous repo's slots in the dropdown, including other-repo V2 trees.
+  const { clearPanelCwdUserOverride, refreshGitPanel } = await import('./git-panel');
+  clearPanelCwdUserOverride();
+  const { resetRegisteredWorktreePathCache } = await import('../lib/worktree-allowlist-client');
+  resetRegisteredWorktreePathCache();
+  void refreshGitPanel();
+  const { isSourceControlCenterOpen, refreshSourceControlCenter } = await import(
+    './source-control-center'
+  );
+  if (isSourceControlCenterOpen()) {
+    refreshSourceControlCenter();
+  }
+  const { isBoardsViewOpen, refreshBoardsViewAfterWorkspaceSwitch } = await import(
+    '../orchestrator/boards-view'
+  );
+  if (isBoardsViewOpen()) {
+    refreshBoardsViewAfterWorkspaceSwitch();
+  }
+  const { isDevServerScreenOpen, refreshDevServerWorktreesAfterWorkspaceSwitch } = await import(
+    './dev-server-screen'
+  );
+  if (isDevServerScreenOpen()) {
+    refreshDevServerWorktreesAfterWorkspaceSwitch();
+  }
 }
 
 /** Load workspace from server and refresh top bar + file tree. */

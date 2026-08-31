@@ -225,6 +225,18 @@ describe('validateEvent — envelope', () => {
     assert.equal(validateEvent({ ...sample('merge.conflicted'), beforeSha: 'abc123' }).ok, true);
     assert.equal(validateEvent({ ...sample('merge.succeeded'), beforeSha: '' }).ok, false);
   });
+
+  it('accepts optional workspacePath on board.created (MIN-752)', () => {
+    assert.equal(validateEvent(sample('board.created')).ok, true);
+    assert.equal(
+      validateEvent({ ...sample('board.created'), workspacePath: '/repos/minnow' }).ok,
+      true,
+    );
+    assert.equal(
+      validateEvent({ ...sample('board.created'), workspacePath: 12 }).ok,
+      false,
+    );
+  });
 });
 
 describe('validateEvent — tolerance', () => {

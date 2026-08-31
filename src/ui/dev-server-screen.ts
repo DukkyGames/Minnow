@@ -48,7 +48,7 @@ import {
 } from './dev-server-screen-view';
 import { subAgentLiveStatusLine } from './sub-agent-live-status';
 import { notifyCodeStageViewChanged, stripMainColumnOverlayClasses } from './main-column-overlay';
-import { formatWorktreeOptionLabel, parseWorktreeListPorcelain } from '../lib/worktree-list-parse';
+import { filterUserFacingWorktrees, formatWorktreeOptionLabel, parseWorktreeListPorcelain } from '../lib/worktree-list-parse';
 import { listWorktrees } from '../state/worktree-service';
 import { getWorkspacePath } from '../state/workspace';
 import type { ParsedWorktree } from '../lib/worktree-list-parse';
@@ -186,6 +186,12 @@ function clearDetectAgentState(): void {
 
 export function isDevServerScreenOpen(): boolean {
   return Boolean(document.getElementById(ROOT_ID));
+}
+
+/** Refresh spawn worktree options after a workspace switch (MIN-752). */
+export function refreshDevServerWorktreesAfterWorkspaceSwitch(): void {
+  if (!isDevServerScreenOpen()) return;
+  void refreshWorktreeOptions();
 }
 
 export function dismissDevServerScreenForNavigation(): boolean {
@@ -356,7 +362,7 @@ async function refreshWorktreeOptions(): Promise<void> {
   }
   const list = await listWorktrees();
   if (list.ok && list.output) {
-    knownWorktrees = parseWorktreeListPorcelain(list.output);
+    knownWorktrees = filterUserFacingWorktrees(parseWorktreeListPorcelain(list.output), ws);
     return;
   }
   knownWorktrees = [{ path: ws, head: '', detached: false }];

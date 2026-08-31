@@ -66,7 +66,9 @@ export const STOP_REASONS = /** @type {const} */ (['user', 'complete', 'terminal
 export const EVENT_SCHEMAS = /** @type {const} */ ({
   'board.created': {
     required: { boardId: 'id', planPath: 'str', tasks: 'obj[]', waves: 'obj[]' },
-    optional: { name: 'str' },
+    // workspacePath: the Code workspace at create time (MIN-752). Optional so
+    // older journals still validate; the list filter infers those at read time.
+    optional: { name: 'str', workspacePath: 'str' },
   },
   'board.started': {
     required: { concurrency: 'posint' },
