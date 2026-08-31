@@ -18,7 +18,6 @@ import { sessionState } from '../state/sessions';
 import { getWorkspacePath } from '../state/workspace';
 import type { ChatGroup } from '../types';
 
-<<<<<<< HEAD
 /** Injected in tests so V2 list/stop do not need a live `/api/boards` server. */
 let listV2Boards: () => Promise<BoardSummary[]> = listBoards;
 let stopV2Board: (boardId: string) => Promise<void> = stopBoard;
@@ -35,9 +34,6 @@ export function setV2WorkspaceSwitchDepsForTests(
 }
 
 /** True when a board still has active orchestration work that must not be orphaned. */
-=======
-/** True when leftover V1 session flags still look like in-flight board work. */
->>>>>>> 68ce2feb (tmp: worktree apply snapshot)
 export function isBoardBlockingWorkspaceSwitch(group: ChatGroup): boolean {
   if (isLeftoverBoardRunning(group)) return true;
   const board = group.orchestrateBoard;
@@ -141,13 +137,7 @@ export async function confirmAndStopBoardsForWorkspaceSwitch(
     return false;
   }
 
-<<<<<<< HEAD
   for (const group of v1) {
-    const planner = getPlannerChatForGroup(group);
-    if (!planner) continue;
-    stopBoardAutoRun(group, planner);
-=======
-  for (const group of blockers) {
     // Mark leftover folders Stopped so the rail does not keep treating them as live.
     if (group.orchestrateBoard) group.orchestrateBoard.status = 'stopped';
     const { stopGeneration } = await import('../chat/stop-generation');
@@ -157,7 +147,6 @@ export async function confirmAndStopBoardsForWorkspaceSwitch(
     }
     const plannerId = group.plannerChatId?.trim();
     if (plannerId) stopGeneration(plannerId, 'user');
->>>>>>> 68ce2feb (tmp: worktree apply snapshot)
   }
   for (const board of v2) {
     try {

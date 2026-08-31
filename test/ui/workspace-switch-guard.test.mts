@@ -220,6 +220,6 @@ describe('workspace-switch-guard', () => {
     confirmBtn.click();
     const allowed = await allowedPromise;
     assert.equal(allowed, true);
-    assert.equal(isBoardRunning(group), false);
+    assert.equal(isLeftoverBoardRunning(group), false);
   });
 });
