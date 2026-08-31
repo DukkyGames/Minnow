@@ -11,13 +11,27 @@ import type { TranscriptStore } from './transcript-store';
  * `AttemptResult` is re-exported as an alias of this object union so PRD §9
  * call sites can use the spec name without importing the core.
  */
+/**
+ * Tokens a turn spent, summed across every completion it made — the tool loop
+ * and any finalization included. Absent when the provider reported no usage.
+ *
+ * Present on every outcome, deliberately: a crashed or timed-out attempt is
+ * exactly the kind worth costing.
+ */
+export interface TurnUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  [key: string]: number | undefined;
+}
+
 export type TurnResult =
-  | { outcome: 'pass'; summary: string; evidence: string[] }
-  | { outcome: 'fail'; summary: string; blockers: string[] }
-  | { outcome: 'blocked'; summary: string; needs: string[] }
-  | { outcome: 'no_report' }
-  | { outcome: 'crashed'; error: string }
-  | { outcome: 'timeout' };
+  | { outcome: 'pass'; summary: string; evidence: string[]; usage?: TurnUsage }
+  | { outcome: 'fail'; summary: string; blockers: string[]; usage?: TurnUsage }
+  | { outcome: 'blocked'; summary: string; needs: string[]; usage?: TurnUsage }
+  | { outcome: 'no_report'; usage?: TurnUsage }
+  | { outcome: 'crashed'; error: string; usage?: TurnUsage }
+  | { outcome: 'timeout'; usage?: TurnUsage };
 
 /** PRD name for {@link TurnResult}. Distinct from the core string `AttemptResult`. */
 export type AttemptResult = TurnResult;

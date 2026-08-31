@@ -167,6 +167,7 @@ function isAgentRole(role) {
  * @property {string} [beforeSha]  merge only — integration tip before this merge
  * @property {string} [runInstructions]  final only
  * @property {Record<string, unknown>} [discarded]  dirty worktree released on this end
+ * @property {Record<string, number>} [usage]  tokens this attempt spent, if the provider reported any
  */
 
 /**
@@ -603,6 +604,10 @@ export function createEngine(options) {
           outcome: end.outcome,
           ...(end.summary === undefined ? {} : { summary: end.summary }),
           ...(evidence === undefined ? {} : { evidence }),
+          // The attempt's token cost, on the journal beside its outcome so a
+          // run's price is derivable from replay alone rather than from a live
+          // observer that has to be attached before the run starts.
+          ...(end.usage === undefined ? {} : { usage: end.usage }),
         }),
       );
       // Overflow is evidence, not a failure. Journal it beside the pass so

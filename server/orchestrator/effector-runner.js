@@ -202,6 +202,17 @@ function toAttemptEnd(attemptId, desired, result) {
     end.summary = result.error;
   }
   if (Object.keys(evidence).length > 0) end.evidence = evidence;
+  // What this attempt cost. Carried on every outcome, including `crashed` and
+  // `timeout` — an attempt that burned tokens and produced nothing is the one
+  // most worth costing. P5-D sums these across a run; without them "what did
+  // the run cost in tokens" has no answer.
+  if (result.usage && typeof result.usage === 'object') {
+    const usage = {};
+    for (const [key, value] of Object.entries(result.usage)) {
+      if (typeof value === 'number' && Number.isFinite(value)) usage[key] = value;
+    }
+    if (Object.keys(usage).length > 0) end.usage = usage;
+  }
   return end;
 }
 

@@ -17,6 +17,7 @@
  * is not `no_report`.
  */
 
+import { sumUsageSegments } from './stats-math.js';
 import { createSubAgentRunner } from './sub-agent-runner.js';
 
 /** Default injected report tool. Generic on purpose — P2-E owns real schemas. */
@@ -441,8 +442,41 @@ export async function runTurn(options) {
 
   const runner = createSubAgentRunner(wrappedDeps);
 
+  /**
+   * Token usage for this turn: every completion the inner runner made,
+   * including the tool loop and any finalization.
+   *
+   * Collected through `onUsage` rather than from `runner.run()`'s return,
+   * because the return is the path this wrapper takes least. A successful
+   * attempt ends when `report_outcome` throws to unwind the loop, and a
+   * timed-out or aborted one throws too — in all three cases the runner's own
+   * total never comes back. Segments as they land is the only accounting that
+   * survives every exit.
+   *
+   * Without this there is no answer to "what did the run cost", which P5-D must
+   * report and which is the only way to weigh a correctness gain against price.
+   *
+   * @type {Array<Record<string, number>>}
+   */
+  const usageSegments = [];
+  /** @type {Record<string, number> | undefined} */
+  let usage;
+
+  /**
+   * Attach the turn's usage to whatever outcome the turn produced. Every return
+   * path goes through here so a crashed or timed-out attempt still reports the
+   * tokens it burned — those are exactly the attempts worth costing.
+   *
+   * @param {import('./run-turn').TurnResult} result
+   * @returns {import('./run-turn').TurnResult}
+   */
+  const withUsage = (result) => {
+    if (!usage && usageSegments.length > 0) usage = sumUsageSegments(usageSegments);
+    return usage ? { ...result, usage } : result;
+  };
+
   try {
-    await runner.run({
+    const ran = await runner.run({
       runId: chatId,
       type: 'turn',
       task: seed,
@@ -475,6 +509,9 @@ export async function runTurn(options) {
         lastDelta = text;
         emit(onEvent, { type: 'delta', text });
       },
+      onUsage: (segment) => {
+        if (segment && typeof segment === 'object') usageSegments.push(segment);
+      },
       onLiveActivity: (activity) => {
         const thinking = activity?.partialReasoning;
         if (typeof thinking === 'string' && thinking && thinking !== lastThinking) {
@@ -483,23 +520,26 @@ export async function runTurn(options) {
         }
       },
     });
+    // Prefer the runner's own sum when the turn returned normally; the
+    // segments are the fallback for every path that throws.
+    if (ran?.usage) usage = ran.usage;
   } catch (err) {
-    if (captured) return captured;
-    if (err?.[TURN_REPORTED]) return err[TURN_REPORTED];
+    if (captured) return withUsage(captured);
+    if (err?.[TURN_REPORTED]) return withUsage(err[TURN_REPORTED]);
     if (err?.[TURN_TIMEOUT] || timeoutCtrl.signal.aborted) {
-      return { outcome: 'timeout' };
+      return withUsage({ outcome: 'timeout' });
     }
     if (options.signal?.aborted && isAbortError(err)) {
-      return { outcome: 'crashed', error: 'aborted' };
+      return withUsage({ outcome: 'crashed', error: 'aborted' });
     }
-    return { outcome: 'crashed', error: errorMessage(err) };
+    return withUsage({ outcome: 'crashed', error: errorMessage(err) });
   } finally {
     if (wallTimer) clearTimeout(wallTimer);
   }
 
-  if (captured) return captured;
-  if (timeoutCtrl.signal.aborted) return { outcome: 'timeout' };
+  if (captured) return withUsage(captured);
+  if (timeoutCtrl.signal.aborted) return withUsage({ outcome: 'timeout' });
   // Inner loop may have parsed assistant JSON. That path is a different product
   // (normal sub-agents). This wrapper does not read it.
-  return { outcome: 'no_report' };
+  return withUsage({ outcome: 'no_report' });
 }

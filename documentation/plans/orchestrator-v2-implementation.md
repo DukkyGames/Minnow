@@ -458,6 +458,45 @@ to know:
 - The Final Tester *agent* is told not to drive the browser itself. It shares
   the `final` role, so it has the tools; the rung is mechanical and owns them.
 
+**P5-D is built, and the runs are outstanding.** This is the one task in Phase 5
+whose acceptance cannot be reached by writing code: it is three multi-hour runs
+on a real machine with a real provider, one of them allowed to sleep. The
+procedure, and the honest statement of what is and is not done, is
+`documentation/plans/orchestrator-v2-p5d-overnight-proof.md`.
+
+Built and tested:
+
+- **The plan**, `test/fixtures/orchestrator-v2-p5d/plan.md` — 18 tasks, 5 waves,
+  10 files touched by more than one task, so the merge queue contends instead of
+  fast-forwarding. It is the *subject* of the run, not its implementation.
+- **Token accounting**, which did not exist. `TurnResult` now carries `usage`,
+  and `task.attempt.ended` carries it onto the journal. The collection point is
+  an `onUsage` callback on the inner runner rather than its return value,
+  because a successful attempt ends when `report_outcome` throws to unwind the
+  loop — the return is the path taken *least*. Without this, "what did the run
+  cost" had no answer, and the Co-Coder trade of +60% cost for +3.2% correctness
+  could not be checked.
+- **`server/orchestrator/p5d-instrument.js`** — journal size, fold duration,
+  attempt distribution (tail, not mean), token cost (including the tokens spent
+  on attempts that produced nothing), orphan census, and the report count. All
+  derived from the journal, so an induced server kill does not take the first
+  two hours of measurement with it.
+- **`scripts/p5d-overnight.mjs`** — the harness: runs the board, samples it,
+  induces the scheduled failures (`--induce kill-server@2h`), compares against
+  the P2-G and P3-E baselines, and writes the record and the human report.
+
+Two defects were found by writing a realistic plan and running the criterion
+rather than asserting it, both fixed here:
+
+- **The browser rung fabricated assertions on non-UI plans.** A quoted
+  identifier — `the barrel exports "journalSize"` — compiled into "the page at
+  `/` shows this string". Eight false assertions on the 18-task plan, every one
+  of which would have failed against a working app. `compileAcceptCriterion`
+  now requires an anchor: a route, or a UI noun. A plan with no UI reports
+  `blocked` / `no-observable-criteria` and asserts nothing.
+- **The 20-cycle orphan check** allowed a fixed second for Windows to reap
+  process trees — enough idle, not enough under suite load. It polls now.
+
 ### Phase 6 — Normal chat adopts the runner
 *Proves: one engine for all chat. Written now, scheduled after Phase 5.*
 

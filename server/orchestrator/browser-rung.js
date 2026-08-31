@@ -149,6 +149,31 @@ const ERRORS_RE = /\berrors?\b/i;
 /** "the title is …", "document title reads …". */
 const TITLE_RE = /\btitle\b/i;
 
+/**
+ * Words that say a criterion is about something on a screen.
+ *
+ * A quoted span alone is *not* evidence of a browser-observable outcome. Most
+ * plans are not about UI, and their Accept criteria quote identifiers:
+ * `the barrel exports "journalSize"`, `tokenCost separates "total_tokens"`.
+ * Compiling those into "the page at / shows this string" produces assertions
+ * that are not merely useless but actively wrong — they fail against a working
+ * app and turn a good run into a fictional regression. Measured on a realistic
+ * 18-task non-UI plan: eight false assertions, every one of which would fail.
+ *
+ * So a text or title assertion needs an anchor: either an explicit route in the
+ * sentence, or one of these nouns. Deliberately absent from the list:
+ *
+ * - `browser`, because `entries ending in "browser"` is a plain string check.
+ * - `section` and `report`, which are as often documents as they are screens.
+ * - `render`, which loses to identifiers like `renderRunReport` on a word
+ *   boundary and would otherwise let any function named render-something in.
+ */
+const UI_SURFACE_RE =
+  /\b(?:page|screen|route|dialog|modal|banner|header|footer|sidebar|button|link|form|toast|tooltip|menu|tab|ui|on[\s-]screen|visible|displays?|displayed|renders|rendered)\b/i;
+
+/** "document title", "page title" — a title claim that is about a browser. */
+const DOCUMENT_TITLE_RE = /\b(?:document|page|tab)\s+title\b|\btitle\s+of\s+the\s+page\b/i;
+
 /** Negation immediately governing the quoted span. */
 const NEGATION_RE =
   /\b(?:no\s+longer|not|never|without|doesn't|does\s+not|isn't|is\s+not|aren't|are\s+not|hidden|removed|gone|absent|disappears?|disappeared)\b/i;
@@ -243,14 +268,22 @@ export function compileAcceptCriterion(text) {
   const quoted = firstQuoted(raw);
   if (!quoted) return null;
 
-  // 3. Document title.
+  // 3. Document title. A bare "title" is not enough — plenty of non-UI criteria
+  //    are about a title field. It needs a route, or "document title".
   if (TITLE_RE.test(raw.slice(0, quoted.index))) {
+    if (!located && !DOCUMENT_TITLE_RE.test(raw)) return null;
     return { kind: 'title', path: at, absoluteUrl, expected: quoted.value };
   }
 
-  // 4. Visible text, positive or negative. The negation window is the clause
-  //    leading up to the quote, not the whole sentence: "shows 'Saved'" in a
-  //    task titled "no longer crashes" must not be read as an absence check.
+  // 4. Visible text, positive or negative — but only when the sentence is
+  //    actually about a screen. See UI_SURFACE_RE: a quoted identifier in a
+  //    criterion about a module export is not a page assertion, and compiling
+  //    it as one fails against a perfectly good app.
+  if (!located && !UI_SURFACE_RE.test(raw)) return null;
+
+  //    The negation window is the clause leading up to the quote, not the whole
+  //    sentence: "shows 'Saved'" in a task titled "no longer crashes" must not
+  //    be read as an absence check.
   const lead = raw.slice(0, quoted.index);
   const clause = lead.slice(Math.max(0, lead.length - 60));
   const kind = NEGATION_RE.test(clause) ? 'absent-text' : 'text';

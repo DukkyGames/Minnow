@@ -604,6 +604,83 @@ describe('P5-C the pinned port is not shared with a dying predecessor', () => {
   });
 });
 
+describe('P5-C a quoted identifier is not a page assertion', () => {
+  // The failure this guards against is not a missed assertion, which is
+  // harmless — it is a *fabricated* one, which fails against a working app and
+  // reports a regression that does not exist. Found by deriving assertions from
+  // a realistic 18-task non-UI plan: eight quoted identifiers, eight false
+  // assertions, all of which would have failed.
+  const NON_UI = [
+    'the observe catalogue module exports "JOURNAL_EVENT_TYPES" and it is sorted.',
+    'renderRunReport output contains a "What did not ship" section.',
+    'LADDER_RUNGS has five entries ending in "browser".',
+    'journalSize returns "bytes" and "events" as finite numbers.',
+    'takeSample returns a record with "elapsedMs", "journal", "memory" and "browsers".',
+    'the observe barrel exports "journalSize", "memoryCensus" and "JOURNAL_EVENT_TYPES".',
+    'memoryCensus reports a positive "rss".',
+    'tokenCost separates "total_tokens" from "attemptsWithoutUsage".',
+  ];
+
+  for (const criterion of NON_UI) {
+    test(`not browser-observable: ${criterion.slice(0, 48)}…`, () => {
+      assert.equal(compileAcceptCriterion(criterion), null);
+    });
+  }
+
+  test('a route is anchor enough on its own', () => {
+    assert.equal(compileAcceptCriterion('/settings shows "Profile"')?.kind, 'text');
+  });
+
+  test('a UI noun is anchor enough without a route', () => {
+    const compiled = compileAcceptCriterion('the header displays "Weekly totals"');
+    assert.equal(compiled?.kind, 'text');
+    assert.equal(compiled?.path, '/', 'with no route named, the app entry point is the page');
+  });
+
+  test('"browser" alone is not a UI noun', () => {
+    assert.equal(compileAcceptCriterion('the list ends with "browser"'), null);
+  });
+
+  test('a bare title field is not a document title', () => {
+    assert.equal(compileAcceptCriterion('the config title is "Minnow"'), null);
+    assert.equal(compileAcceptCriterion('the document title is "Minnow"')?.kind, 'title');
+    assert.equal(compileAcceptCriterion('/x title is "Minnow"')?.kind, 'title');
+  });
+
+  test('the whole P5-D plan yields no browser assertions, and says so', async () => {
+    const planPath = path.join(
+      process.cwd(),
+      'test',
+      'fixtures',
+      'orchestrator-v2-p5d',
+      'plan.md',
+    );
+    const markdown = await fsp.readFile(planPath, 'utf8');
+    const derived = deriveBrowserAssertions(markdown);
+    assert.deepEqual(derived.assertions, [], 'a plan with no UI must assert nothing in a browser');
+    assert.ok(derived.notObservable.length >= 18, 'and every criterion must be reported, not dropped');
+  });
+
+  test('a non-UI plan blocks the rung rather than failing it', async () => {
+    const planPath = path.join(
+      process.cwd(),
+      'test',
+      'fixtures',
+      'orchestrator-v2-p5d',
+      'plan.md',
+    );
+    const result = await runBrowserRung({
+      cwd: process.cwd(),
+      planMarkdown: await fsp.readFile(planPath, 'utf8'),
+      app: null,
+      callTool: async () => assert.fail('no browser may be launched for a plan with nothing to check'),
+      closeBrowser: async () => {},
+    });
+    assert.equal(result.status, 'blocked');
+    assert.equal(result.reason, 'no-observable-criteria');
+  });
+});
+
 describe('P5-C the static ladder gates the browser rung', () => {
   /**
    * @param {string} dir

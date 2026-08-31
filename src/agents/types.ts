@@ -301,5 +301,12 @@ export interface SubAgentRunner {
     onMessagesChange?: (messages: ApiMessage[]) => void;
     /** Called when stream phase or partial reasoning/tool name changes. */
     onLiveActivity?: (activity: SubAgentLiveActivity) => void;
+    /**
+     * One turn's token usage, reported as it lands rather than only in the
+     * return value. A run that unwinds by throwing — a reported outcome, a
+     * timeout, an abort — never reaches the return, so this is the only
+     * accounting that survives every exit path.
+     */
+    onUsage?: (usage: Record<string, number>) => void;
   }): Promise<SubAgentRunnerOutput>;
 }

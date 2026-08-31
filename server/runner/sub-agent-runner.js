@@ -477,6 +477,18 @@ function createSubAgentRunner(deps) {
       let forcedPartialAssistant;
       const usageSegments = [];
       const statsSegments = [];
+      // Report each segment as it lands, not only in the return value. A turn
+      // that unwinds by throwing — which is how `run-turn`'s report tool ends a
+      // successful attempt — never reaches the return, and its tokens would
+      // otherwise be uncountable.
+      const noteUsage = (segment) => {
+        if (typeof input.onUsage !== "function") return;
+        try {
+          input.onUsage(segment);
+        } catch {
+          /* accounting must never break a run */
+        }
+      };
       const budgetEvents = [];
       const summarySchema = input.summarySchema;
       const flushForcedEmit = () => {
@@ -659,7 +671,10 @@ function createSubAgentRunner(deps) {
         await ledgerSubAgentTurn(input, turnResult);
         const turnUsage = turnResult.streamMeta.usage ?? {};
         const turnStats = turnResult.streamMeta.stats ?? {};
-        if (Object.keys(turnUsage).length > 0) usageSegments.push(turnUsage);
+        if (Object.keys(turnUsage).length > 0) {
+          usageSegments.push(turnUsage);
+          noteUsage(turnUsage);
+        }
         if (Object.keys(turnStats).length > 0 || Object.keys(turnUsage).length > 0) {
           statsSegments.push({ stats: turnStats, usage: turnUsage });
         }
@@ -920,6 +935,7 @@ function createSubAgentRunner(deps) {
         const turnStats = turnResult.streamMeta.stats ?? {};
         if (Object.keys(turnUsage).length > 0) {
           usageSegments.push(turnUsage);
+          noteUsage(turnUsage);
         }
         if (Object.keys(turnStats).length > 0 || Object.keys(turnUsage).length > 0) {
           statsSegments.push({ stats: turnStats, usage: turnUsage });

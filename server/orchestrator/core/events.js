@@ -89,7 +89,9 @@ export const EVENT_SCHEMAS = /** @type {const} */ ({
       role: { enum: ROLES },
       outcome: { enum: ATTEMPT_OUTCOMES },
     },
-    optional: { summary: 'str', evidence: 'obj' },
+    // `usage`: tokens this attempt spent. Optional, because a provider may
+    // report none and because every journal written before P5-D has none.
+    optional: { summary: 'str', evidence: 'obj', usage: 'obj' },
   },
   'merge.enqueued': {
     required: { taskId: 'id' },

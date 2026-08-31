@@ -74,6 +74,24 @@ function functionCallChunks(name, args, toolCallId = 'call_report') {
   ];
 }
 
+/**
+ * The same tool-call stream, but with the provider reporting usage on the
+ * finish chunk — which is where OpenAI-v1 puts it.
+ *
+ * @param {string} name
+ * @param {unknown} args
+ * @param {Record<string, number>} usage
+ */
+function functionCallChunksWithUsage(name, args, usage) {
+  const chunks = functionCallChunks(name, args);
+  const finish = JSON.stringify({
+    choices: [{ delta: {}, finish_reason: 'tool_calls' }],
+    usage,
+  });
+  // Replace the finish chunk; keep the delta and the end event around it.
+  return [chunks[0], `data: ${finish}\n\n`, chunks[2]];
+}
+
 /** P2-D will replace this. Tests that need execute to run inject it. */
 async function passthroughBatch(options) {
   const toolCalls = options.toolCalls ?? [];
@@ -455,6 +473,55 @@ describe('runTurn tools and opaque chatId', () => {
       const row = transcript.load(CHAT_UUID);
       assert.ok(row, 'transcript is keyed by the opaque chatId');
       assert.equal(transcript.load('not-a-real-board'), null);
+    });
+  });
+});
+
+describe('P5-D the turn reports what it cost (MIN-722)', () => {
+  const payload = { outcome: 'pass', summary: 'Did the work.', evidence: ['ok'] };
+
+  test('usage reaches the caller on the path a successful attempt actually takes', async () => {
+    // That path is a throw: `report_outcome` unwinds the loop, so the inner
+    // runner's return — and the usage it would have carried — never arrives.
+    // Collecting segments as they land is the only accounting that survives it,
+    // and this is the test that would fail if that were quietly reverted.
+    await withFake(
+      [
+        {
+          emit: functionCallChunksWithUsage(DEFAULT_REPORT_TOOL_NAME, payload, {
+            prompt_tokens: 1234,
+            completion_tokens: 56,
+            total_tokens: 1290,
+          }),
+        },
+      ],
+      async (baseUrl) => {
+        const result = await runTurn({
+          chatId: CHAT_UUID,
+          seed: 'Do the work, then report.',
+          tools: [],
+          model: { providerId: 'local-fake', id: 'fake-model' },
+          deps: stubDeps(baseUrl),
+        });
+        assert.equal(result.outcome, 'pass');
+        assert.equal(result.usage?.prompt_tokens, 1234);
+        assert.equal(result.usage?.completion_tokens, 56);
+        assert.equal(result.usage?.total_tokens, 1290);
+      },
+    );
+  });
+
+  test('a provider that reports no usage yields no usage field, not zeros', async () => {
+    await withFake([{ emit: functionCallChunks(DEFAULT_REPORT_TOOL_NAME, payload) }], async (baseUrl) => {
+      const result = await runTurn({
+        chatId: CHAT_UUID,
+        seed: 'Do the work, then report.',
+        tools: [],
+        model: { providerId: 'local-fake', id: 'fake-model' },
+        deps: stubDeps(baseUrl),
+      });
+      // Zeros would be a lie that sums cleanly and reads as a free attempt.
+      assert.equal('usage' in result, false);
     });
   });
 });
