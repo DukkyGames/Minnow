@@ -34,10 +34,11 @@
  *
  * Merge is the serialized rebase-then-merge queue (P3-C). Final is the static
  * ladder (P3-F); the browser step waits for Phase 5. The end-of-run report is
- * the persisted `report.md` artifact (P3-G), not a planner chat, and P9-G
- * renders it above the derived ledger. Live agent output arrives as SSE
- * `event: live` from P2-F; this view renders the current tool name on the
- * running task card.
+ * the persisted `report.md` artifact (P3-G). When the run is finished or
+ * user-stopped, the report pane replaces the kanban; a session-local Board /
+ * Report toggle flips back. Retry POSTs `/rerun` (`board.reopened`).
+ * Live agent output arrives as SSE `event: live` from P2-F; this view renders
+ * the current tool name on the running task card.
  */
 
 import '../styles/orchestrator-boards.css';
@@ -64,15 +65,17 @@ import {
   renderBoardHeader,
   renderBoardSkeleton,
   renderEngineErrors,
-  renderFinishReport,
   renderMergeQueue,
   renderTaskList,
   renderTimeline,
-  renderRunLedger,
   type FileDiffView,
   type TaskFilesView,
   type TranscriptView,
 } from './board-render';
+import {
+  renderBoardReport,
+  wantsReportScreen,
+} from './board-report';
 import {
   renderTaskDetail,
   resetTaskDetailLogUi,
@@ -155,6 +158,8 @@ let renamingBoardId: string | null = null;
 const finishReportByBoard = new Map<string, string>();
 /** In-flight GET so a paint loop does not stampede the endpoint. */
 const finishReportLoads = new Set<string>();
+/** Session-local: user chose the kanban over the report. Not journaled. */
+const reportDismissed = new Set<string>();
 
 // ---------------------------------------------------------------------------
 // Mount
@@ -739,9 +744,31 @@ function paintBoard(): void {
     pane.appendChild(line);
   }
 
+  const showReport = showingReport(state);
+  if (showReport) {
+    const cached = selectedBoardId ? (finishReportByBoard.get(selectedBoardId) ?? null) : null;
+    if (!cached && selectedBoardId) void loadFinishReport(selectedBoardId);
+    pane.appendChild(
+      renderBoardReport(state, cached, Boolean(selectedBoardId) && !cached, {
+        dismiss: () => {
+          if (selectedBoardId) reportDismissed.add(selectedBoardId);
+          paintBoard();
+        },
+        reopen: () => void commandRerun(),
+        fixFinal: () => void commandRerun(),
+      }),
+    );
+    pane.scrollTop = scrollTop;
+    surface.root.classList.remove('is-detail-open');
+    surface.root.querySelector('.ov2-detail-overlay')?.remove();
+    restoreFocus(focused);
+    return;
+  }
+
   const actions = {
     startTask: (taskId: string) => void commandStartTask(taskId),
     abandonTask: (taskId: string) => void commandAbandonTask(taskId),
+    rerun: (taskIds?: string[]) => void commandRerun(taskIds),
     select: (taskId: string | null) => selectTaskDetail(taskId),
     openTranscript: (attemptId: string) => void toggleTranscript(attemptId),
     toggleFileDiff: (path: string) => void toggleFileDiff(path),
@@ -757,14 +784,6 @@ function paintBoard(): void {
   };
 
   pane.appendChild(renderTaskList(state, actions, options));
-
-  // P9-G. The narrative artifact first, then the derived ledger beneath it: the
-  // report writer can be late, absent, or wrong, and the ledger is a fold over
-  // the journal and is none of those.
-  pane.appendChild(renderFinishSection(state));
-  const ledger = renderRunLedger(state);
-  if (ledger) pane.appendChild(ledger);
-
   pane.appendChild(renderMergeQueue(state));
   if (showTimeline) {
     pane.appendChild(renderTimelineSection());
@@ -1033,31 +1052,59 @@ function renderControls(state: BoardState): HTMLElement {
   settings.appendChild(renderConcurrencyControl(state, finished, running));
   controls.appendChild(settings);
 
-  const runBtn = el('button', running ? 'board-header__run-btn board-header__run-btn--stop' : 'board-header__run-btn');
+  const rerunInstead = finished;
+  const runBtn = el(
+    'button',
+    running ? 'board-header__run-btn board-header__run-btn--stop' : 'board-header__run-btn',
+  );
   runBtn.type = 'button';
-  runBtn.disabled = finished;
-  runBtn.textContent = running ? 'Stop' : 'Start';
-  runBtn.setAttribute('aria-label', running ? 'Stop board' : 'Start board');
+  runBtn.disabled = false;
+  runBtn.textContent = running ? 'Stop' : rerunInstead ? 'Rerun' : 'Start';
+  runBtn.setAttribute(
+    'aria-label',
+    running ? 'Stop board' : rerunInstead ? 'Rerun failed work' : 'Start board',
+  );
   runBtn.title = running
     ? 'Stop the loop. In-flight attempts keep running until they finish; nothing new starts.'
-    : 'Start the reconcile loop. N=1 is sequential; higher N runs that many agents at once.';
+    : rerunInstead
+      ? 'Reopen failed tasks (or add a fix task) and start the board again. N comes from the run field.'
+      : 'Start the reconcile loop. N=1 is sequential; higher N runs that many agents at once.';
   runBtn.addEventListener('click', () => {
     if (running) void commandStop();
+    else if (rerunInstead) void commandRerun();
     else void commandStart(readConcurrencyInput());
   });
   controls.appendChild(runBtn);
 
-  const timelineBtn = el('button', 'board-btn board-btn--compact board-timeline-btn');
-  timelineBtn.type = 'button';
-  timelineBtn.textContent = 'Timeline';
-  timelineBtn.title = showTimeline ? 'Hide the journal' : 'Show the journal';
-  timelineBtn.setAttribute('aria-pressed', showTimeline ? 'true' : 'false');
-  timelineBtn.addEventListener('click', () => {
-    showTimeline = !showTimeline;
-    paintBoard();
-    if (showTimeline) void loadTimeline();
-  });
-  controls.appendChild(timelineBtn);
+  if (wantsReportScreen(state)) {
+    const onReport = showingReport(state);
+    const toggle = el('button', 'board-btn board-btn--compact board-header__dashboard-toggle');
+    toggle.type = 'button';
+    toggle.textContent = onReport ? 'Board' : 'Report';
+    toggle.title = onReport ? 'Return to the kanban board' : 'Open the run report';
+    toggle.setAttribute('aria-label', onReport ? 'Back to board' : 'Open run report');
+    toggle.addEventListener('click', () => {
+      if (!selectedBoardId) return;
+      if (onReport) reportDismissed.add(selectedBoardId);
+      else reportDismissed.delete(selectedBoardId);
+      paintBoard();
+    });
+    controls.appendChild(toggle);
+  }
+
+  if (!showingReport(state)) {
+    const timelineBtn = el('button', 'board-btn board-btn--compact board-timeline-btn');
+    timelineBtn.type = 'button';
+    timelineBtn.textContent = 'Timeline';
+    timelineBtn.title = showTimeline ? 'Hide the journal' : 'Show the journal';
+    timelineBtn.setAttribute('aria-pressed', showTimeline ? 'true' : 'false');
+    timelineBtn.addEventListener('click', () => {
+      showTimeline = !showTimeline;
+      paintBoard();
+      if (showTimeline) void loadTimeline();
+    });
+    controls.appendChild(timelineBtn);
+  }
 
   controls.appendChild(renderRenameControl(state));
   return controls;
@@ -1088,7 +1135,7 @@ function renderConcurrencyControl(
   input.setAttribute('aria-label', 'Tasks running at once');
   input.id = 'ov2-concurrency-input';
   input.dataset.focusKey = 'board-concurrency';
-  input.disabled = finished;
+  input.disabled = false;
   input.addEventListener('change', () => {
     if (!running || finished) return;
     void commandConcurrency(readConcurrencyInput());
@@ -1159,14 +1206,8 @@ function readConcurrencyInput(): number {
  * The P3-G artifact. Loaded over GET, never from the fold, so a report cannot
  * leak back into scheduling if this view is later mistaken for a store.
  */
-function renderFinishSection(state: BoardState): HTMLElement {
-  const wantsReport = state.finished || (state.status === 'stopped' && state.stopReason === 'user');
-  if (!wantsReport || !selectedBoardId) {
-    return el('div', 'ov2-finish ov2-finish--idle');
-  }
-  const cached = finishReportByBoard.get(selectedBoardId) ?? null;
-  if (!cached) void loadFinishReport(selectedBoardId);
-  return renderFinishReport(cached, !cached);
+function showingReport(state: BoardState): boolean {
+  return Boolean(selectedBoardId) && wantsReportScreen(state) && !reportDismissed.has(selectedBoardId!);
 }
 
 async function loadFinishReport(boardId: string): Promise<void> {
@@ -1325,4 +1366,18 @@ async function commandStartTask(taskId: string): Promise<void> {
     pendingTasks.delete(taskId);
     paintBoard();
   }
+}
+
+async function commandRerun(taskIds?: string[]): Promise<void> {
+  if (!client || !selectedBoardId) return;
+  return run('Rerun', async () => {
+    const result = await client!.rerun(taskIds, readConcurrencyInput());
+    if (!result.ok) {
+      notice = { text: 'Nothing to rerun.', tone: 'warn' };
+      return;
+    }
+    finishReportByBoard.delete(selectedBoardId!);
+    reportDismissed.delete(selectedBoardId!);
+    void list?.refresh();
+  });
 }

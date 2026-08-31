@@ -3,7 +3,7 @@
  *
  * The journal *is* the state, so this schema is load-bearing rather than
  * diagnostic. V1 had 35 log event types capped at 100 entries and used only for
- * debugging; V2 has thirteen, and every one of them is folded.
+ * debugging; V2 has a closed known vocabulary, and every one of them is folded.
  *
  * ## The invariant
  *
@@ -130,6 +130,16 @@ export const EVENT_SCHEMAS = /** @type {const} */ ({
   'board.renamed': {
     required: { name: 'str' },
     optional: {},
+  },
+  // Human override after a finished run. Same family as
+  // `task.abandoned { reason: 'user' }`: a completed side effect, not an intent.
+  'board.reopened': {
+    required: { taskIds: 'str[]', reason: 'str' },
+    optional: {},
+  },
+  'task.added': {
+    required: { task: 'obj' },
+    optional: { wave: 'obj' },
   },
 });
 

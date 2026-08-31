@@ -32,6 +32,7 @@
  */
 
 import {
+  buildIntegrationFixTask,
   isReadyForFinalTest,
   isRunComplete,
   manualStart,
@@ -39,9 +40,10 @@ import {
   pendingEnqueues,
   pendingSkips,
   plan,
+  reopenTargets,
 } from './core/plan.js';
 import { makeEvent } from './core/events.js';
-import { foldInto } from './core/derive.js';
+import { DEFAULT_BOARD_CONCURRENCY, foldInto } from './core/derive.js';
 import * as diskJournal from './journal.js';
 import { emitError } from './live-events.js';
 import {
@@ -355,9 +357,15 @@ export function createEngine(options) {
     }
 
     if (state.status === 'running' && isRunComplete(state)) {
+      let merged = 0;
+      for (const task of state.tasks.values()) {
+        if (task.phase === 'merged') merged += 1;
+      }
+      const reason =
+        state.finalTest?.outcome === 'fail' || merged === 0 ? 'terminal' : 'complete';
       await append([
         makeEvent('run.finished', { summary: runSummary(state) }),
-        makeEvent('board.stopped', { reason: 'complete' }),
+        makeEvent('board.stopped', { reason }),
       ]);
       stopTimer();
       // The report is terminal output. It is written after the last merge and
@@ -915,9 +923,12 @@ export function createEngine(options) {
      * @returns {Promise<void>}
      */
     async startBoard(concurrency) {
+      if (!state) throw new Error('engine not loaded');
+      if (state.finished) return false;
       await append([makeEvent('board.started', { concurrency })]);
       startTimer();
       await tick();
+      return true;
     },
 
     /**
@@ -985,6 +996,51 @@ export function createEngine(options) {
       startTimer();
       await tick();
       return true;
+    },
+
+    /**
+     * Reopen failed work after a finished (or abandoned) run.
+     *
+     * Journals `task.added` when nothing failed but the final test did, then
+     * `board.reopened` (which retires ended attempts and clears `finished` /
+     * `finalTest`) and `board.started` so the loop picks the work up. Merged
+     * work is never reverted.
+     *
+     * @param {{ taskIds?: string[], concurrency?: number }} [opts]
+     * @param {string} [reason]
+     * @returns {Promise<{ ok: boolean, taskIds: string[], reason?: string }>}
+     */
+    async reopen(opts = {}, reason = 'user') {
+      if (!state) throw new Error('engine not loaded');
+      const targets = [...reopenTargets(state, opts.taskIds)];
+      const events = [];
+      if (targets.length === 0) {
+        if (state.finalTest?.outcome !== 'fail') {
+          return { ok: false, taskIds: [], reason: 'nothing-to-rerun' };
+        }
+        const fix = buildIntegrationFixTask(state);
+        events.push(
+          makeEvent('task.added', {
+            task: fix.task,
+            ...(fix.wave ? { wave: fix.wave } : {}),
+          }),
+        );
+        targets.push(fix.task.id);
+      }
+      const concurrency =
+        Number.isSafeInteger(opts.concurrency) && opts.concurrency >= 1
+          ? opts.concurrency
+          : Number.isSafeInteger(state.concurrency) && state.concurrency >= 1
+            ? state.concurrency
+            : DEFAULT_BOARD_CONCURRENCY;
+      events.push(
+        makeEvent('board.reopened', { taskIds: targets, reason: String(reason ?? 'user') }),
+        makeEvent('board.started', { concurrency }),
+      );
+      await append(events);
+      startTimer();
+      await tick();
+      return { ok: true, taskIds: targets };
     },
 
     tick,

@@ -439,6 +439,76 @@ describe('derive — tolerance and totality', () => {
   });
 });
 
+describe('derive — reopen after a finished run', () => {
+  it('board.reopened clears finished, retires ended attempts, and never un-merges', () => {
+    const state = derive(
+      journal(
+        created(),
+        ...throughMerge('W1-A', 1, 'sha-a'),
+        started('W1-B', 'b1', 'builder'),
+        ended('W1-B', 'b1', 'builder', 'fail'),
+        started('W1-B', 'b2', 'builder'),
+        ended('W1-B', 'b2', 'builder', 'fail'),
+        makeEvent('task.abandoned', { taskId: 'W1-B', reason: 'builder-failed-twice' }),
+        makeEvent('final.test.ended', { outcome: 'fail', runInstructions: 'command: tsc\ncwd: /tmp' }),
+        makeEvent('run.finished', { summary: '1 merged, 1 abandoned' }),
+        makeEvent('board.reopened', { taskIds: ['W1-A', 'W1-B', 'NOPE'], reason: 'user' }),
+      ),
+    );
+    assert.equal(state.finished, false);
+    assert.equal(state.finalTest, null);
+    assert.equal(state.runSummary, null);
+    assert.equal(state.rerun?.n, 1);
+    assert.deepEqual(state.rerun?.taskIds, ['W1-A', 'W1-B', 'NOPE']);
+    assert.equal(state.tasks.get('W1-A').mergedSha, 'sha-a');
+    assert.equal(state.tasks.get('W1-A').phase, 'merged');
+    const reopened = state.tasks.get('W1-B');
+    assert.equal(reopened.phase, 'idle');
+    assert.equal(reopened.abandonedReason, null);
+    assert.equal(reopened.reopened?.n, 1);
+    assert.equal(reopened.reopened?.from, 'builder-failed-twice');
+    assert.equal(reopened.attempts.filter((a) => a.ended && a.retired).length, 2);
+    assert.equal(attemptCount(state, 'W1-B', 'builder'), 0);
+  });
+
+  it('an unknown task id on board.reopened is a no-op for that id', () => {
+    const state = derive(
+      journal(
+        created(),
+        makeEvent('run.finished', { summary: 'done' }),
+        makeEvent('board.reopened', { taskIds: ['NOPE'], reason: 'user' }),
+      ),
+    );
+    assert.equal(state.finished, false);
+    assert.equal(state.tasks.get('W1-A').reopened, null);
+  });
+
+  it('task.added appends a new wave and a ready task, and is idempotent', () => {
+    const added = makeEvent('task.added', {
+      task: {
+        id: 'FIX-1',
+        title: 'Fix',
+        wave: 3,
+        dependsOn: ['W1-A'],
+        touches: ['**/*'],
+        build: 'fix it',
+        test: 'retest',
+        accept: 'pass',
+        line: 0,
+      },
+      wave: { n: 3, name: 'Integration fix' },
+    });
+    const state = derive(
+      journal(created(), ...throughMerge('W1-A', 1, 'sha-a'), added, added),
+    );
+    assert.equal(state.tasks.has('FIX-1'), true);
+    assert.deepEqual(state.taskOrder.slice(-1), ['FIX-1']);
+    assert.equal(state.waves.some((w) => w.n === 3 && w.name === 'Integration fix'), true);
+    assert.equal(state.tasks.get('FIX-1').phase, 'idle');
+    assert.deepEqual(readyTasks(state), ['W1-B', 'FIX-1']);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Generated journals
 // ---------------------------------------------------------------------------

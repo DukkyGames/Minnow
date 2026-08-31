@@ -161,6 +161,10 @@ describe('snapshot — the equivalence property', () => {
 // ---------------------------------------------------------------------------
 
 describe('snapshot — a cache, never a source', () => {
+  it('is snapshot format version 3', () => {
+    assert.equal(SNAPSHOT_VERSION, 3);
+  });
+
   it('changes nothing when deleted', () => {
     assert.deepEqual(deriveFrom(null, JOURNAL), derive(JOURNAL));
     assert.deepEqual(deriveFrom(undefined, JOURNAL), derive(JOURNAL));

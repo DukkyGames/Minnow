@@ -7,7 +7,8 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { ATTEMPT_OUTCOMES, ROLES } from '../../server/orchestrator/core/events.js';
+import { ATTEMPT_OUTCOMES, ROLES, makeEvent } from '../../server/orchestrator/core/events.js';
+import { attemptCount, derive } from '../../server/orchestrator/core/derive.js';
 import {
   decide,
   formatPolicyTable,
@@ -370,6 +371,7 @@ describe('wantsSameWorktree — MIN-705 / MIN-707 mapping', () => {
     assert.equal(wantsSameWorktree('failure-aware'), false);
     assert.equal(wantsSameWorktree('fix'), false);
     assert.equal(wantsSameWorktree('initial'), false);
+    assert.equal(wantsSameWorktree('integration-fix'), false);
   });
 
   it('matches every retry row so the table cannot drift from the seed mapping', () => {
@@ -381,5 +383,38 @@ describe('wantsSameWorktree — MIN-705 / MIN-707 mapping', () => {
         `${row.role}/${row.outcome} seed ${row.action.seedKind}`,
       );
     }
+  });
+});
+
+describe('retired attempts restore the budget', () => {
+  it('does not count retired attempts, so a twice-failed builder gets a full budget after reopen', () => {
+    const events = [
+      makeEvent('board.created', {
+        boardId: 'b',
+        planPath: 'p.md',
+        tasks: [{ id: 'A', title: 'A', wave: 1, dependsOn: [], touches: ['a.ts'] }],
+        waves: [],
+      }),
+      makeEvent('task.attempt.started', { taskId: 'A', attemptId: 'a1', role: 'builder' }),
+      makeEvent('task.attempt.ended', {
+        taskId: 'A',
+        attemptId: 'a1',
+        role: 'builder',
+        outcome: 'fail',
+      }),
+      makeEvent('task.attempt.started', { taskId: 'A', attemptId: 'a2', role: 'builder' }),
+      makeEvent('task.attempt.ended', {
+        taskId: 'A',
+        attemptId: 'a2',
+        role: 'builder',
+        outcome: 'fail',
+      }),
+      makeEvent('task.abandoned', { taskId: 'A', reason: 'builder-failed-twice' }),
+      makeEvent('board.reopened', { taskIds: ['A'], reason: 'user' }),
+    ].map((event, i) => ({ ...event, seq: i + 1, ts: i + 1 }));
+    const state = derive(events);
+    assert.equal(attemptCount(state, 'A', 'builder'), 0);
+    assert.equal(decide({ role: 'builder', outcome: 'fail', attemptCount: 0 }).kind, 'retry');
+    assert.equal(decide({ role: 'builder', outcome: 'fail', attemptCount: 2 }).kind, 'abandon');
   });
 });

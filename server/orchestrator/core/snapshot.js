@@ -33,8 +33,12 @@ import { derive, emptyState, foldInto } from './derive.js';
  * still wants. A v1 snapshot restores attempts without it, so an open
  * hand-started attempt would come back looking automatic and be stopped on the
  * next tick. Cheaper to re-fold once than to carry that.
+ *
+ * 3 — `Attempt.retired` and `TaskState.reopened`. A v2 snapshot restores
+ * attempts without `retired`, so a reopened task would re-abandon on its
+ * first tick for the same exhausted history.
  */
-export const SNAPSHOT_VERSION = 2;
+export const SNAPSHOT_VERSION = 3;
 
 /** Write a snapshot every this many events. Read by P1-A's journal store. */
 export const SNAPSHOT_INTERVAL = 200;

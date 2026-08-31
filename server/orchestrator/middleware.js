@@ -17,6 +17,7 @@
  * | POST   | `/api/boards/:id/concurrency`       | `{ n }`                                   |
  * | POST   | `/api/boards/:id/tasks/:taskId/start` | Manual single-task start                |
  * | POST   | `/api/boards/:id/tasks/:taskId/abandon` | Manual abandon (P9-H)                 |
+ * | POST   | `/api/boards/:id/rerun`               | `{ taskIds? }` reopen failed work        |
  * | POST   | `/api/boards/:id/model`             | `{ providerId, id, reasoning? }` (P9-C)   |
  * | GET    | `/api/boards/:id/attempts/:attemptId` | One attempt's transcript (P9-D)         |
  * | GET    | `/api/boards/:id/tasks/:taskId/files` | Diffstat at the merge commit; `?path=` for one file's diff |
@@ -149,6 +150,7 @@ export const ROUTES = [
     pattern: /^\/api\/boards\/([^/]+)\/tasks\/([^/]+)\/abandon$/,
     name: 'abandonTask',
   },
+  { method: 'POST', pattern: /^\/api\/boards\/([^/]+)\/rerun$/, name: 'rerun' },
   { method: 'POST', pattern: /^\/api\/boards\/([^/]+)\/model$/, name: 'model' },
   {
     method: 'GET',
@@ -293,6 +295,13 @@ async function dispatch(route, req, res) {
         return json(res, 400, { ok: false, error: 'concurrency must be an integer >= 1' });
       }
       const engine = await getEngine(boardId, () => makeEffector(boardId));
+      if (engine.getState()?.finished) {
+        return json(res, 409, {
+          ok: false,
+          error: 'the run has finished; rerun it instead',
+          state: serialiseState(engine.getState()),
+        });
+      }
       // P9-A. Refuse *before* answering. A missing model binding used to present
       // as "Start does nothing": the board went to `running`, every tick's
       // `effector.start()` rejected into a console.warn, and the only evidence
@@ -449,6 +458,39 @@ async function dispatch(route, req, res) {
       return json(res, started ? 200 : 409, {
         ok: started,
         ...(started ? {} : { error: 'task is not startable right now' }),
+        state: serialiseState(engine.getState()),
+      });
+    }
+
+    case 'rerun': {
+      if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
+      const body = await readJsonBody(req);
+      const taskIds = Array.isArray(body.taskIds)
+        ? body.taskIds.filter((id) => typeof id === 'string' && id.trim()).map((id) => id.trim())
+        : undefined;
+      const concurrency =
+        body.concurrency === undefined ? undefined : normaliseConcurrency(body.concurrency);
+      if (body.concurrency !== undefined && concurrency === null) {
+        return json(res, 400, { ok: false, error: 'concurrency must be an integer >= 1' });
+      }
+      const engine = await getEngine(boardId, () => makeEffector(boardId));
+      try {
+        await engine.preflight();
+      } catch (err) {
+        return json(res, 400, {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+          state: serialiseState(engine.getState()),
+        });
+      }
+      const result = await engine.reopen({
+        ...(taskIds && taskIds.length > 0 ? { taskIds } : {}),
+        ...(concurrency !== undefined ? { concurrency } : {}),
+      });
+      return json(res, result.ok ? 200 : 409, {
+        ok: result.ok,
+        taskIds: result.taskIds,
+        ...(result.ok ? {} : { error: 'nothing to rerun' }),
         state: serialiseState(engine.getState()),
       });
     }

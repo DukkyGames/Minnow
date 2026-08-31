@@ -11,6 +11,10 @@ export function reportPath(boardId: string): string;
 
 export function journalHasReport(events: Iterable<{ type?: unknown }>): boolean;
 
+export function eventsSinceReopen(
+  events: Iterable<{ type?: unknown }>,
+): Array<{ type?: unknown }>;
+
 export function suggestedNextStep(abandonment: {
   taskId?: unknown;
   reason?: unknown;

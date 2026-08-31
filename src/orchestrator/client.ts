@@ -138,6 +138,8 @@ export interface BoardClient {
   setModel(model: { providerId: string; id: string; reasoning?: string | null }): Promise<void>;
   /** P9-E — journal a rename. */
   rename(name: string): Promise<void>;
+  /** Reopen failed work after a finish. 409 is an answer, not a throw. */
+  rerun(taskIds?: string[], concurrency?: number): Promise<{ ok: boolean; taskIds: string[] }>;
 }
 
 /** Thrown by `createBoardFromPlan` when the plan does not parse. */
@@ -209,6 +211,17 @@ function readOnlyState(state: BoardState): BoardState {
     finished: state.finished,
     stopReason: state.stopReason,
     runSummary: state.runSummary,
+    rerun:
+      state.rerun === null || state.rerun === undefined
+        ? null
+        : Object.freeze({
+            ...state.rerun,
+            taskIds: Object.freeze([...state.rerun.taskIds]) as string[],
+            previousFinalTest:
+              state.rerun.previousFinalTest === null
+                ? null
+                : Object.freeze({ ...state.rerun.previousFinalTest }),
+          }),
   };
   return Object.freeze(copy);
 }
@@ -801,6 +814,28 @@ export function createBoardClient(
         method: 'PATCH',
         body: JSON.stringify({ name }),
       });
+    },
+
+    async rerun(taskIds, concurrency) {
+      const response = await fetch(`/api/boards/${encodeURIComponent(boardId)}/rerun`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(taskIds && taskIds.length > 0 ? { taskIds } : {}),
+          ...(concurrency !== undefined ? { concurrency } : {}),
+        }),
+      });
+      let body: { ok?: boolean; taskIds?: string[]; error?: string } = {};
+      try {
+        body = (await response.json()) as typeof body;
+      } catch {
+        body = {};
+      }
+      if (response.status === 409) return { ok: false, taskIds: body.taskIds ?? [] };
+      if (!response.ok) {
+        throw new Error(body.error ?? `${response.status} from /api/boards/${boardId}/rerun`);
+      }
+      return { ok: true, taskIds: body.taskIds ?? [] };
     },
 
     async startTask(taskId) {

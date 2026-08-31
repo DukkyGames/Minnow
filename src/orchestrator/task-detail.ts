@@ -36,6 +36,7 @@ import { COLUMNS, columnOf, type ColumnId } from './board-columns';
 import {
   OUTCOME_TONE,
   PHASE_TONE,
+  isStartable,
   phaseLabel,
   renderSkeleton,
   type BoardActions,
@@ -163,6 +164,22 @@ function renderHead(
   close.addEventListener('click', () => actions.select(null));
   top.appendChild(close);
   head.appendChild(top);
+
+  const startable = isStartable(state, task);
+  if (startable.can) {
+    const retry = el(
+      'button',
+      startable.mode === 'rerun' ? 'ov2-btn ov2-btn--primary' : 'ov2-btn ov2-btn--ghost',
+      startable.mode === 'rerun' || task.attempts.some((a) => a.ended) ? 'Retry' : 'Start',
+    );
+    retry.type = 'button';
+    retry.title = startable.mode === 'rerun' ? `Rerun ${task.id}` : `Start ${task.id} now`;
+    retry.addEventListener('click', () => {
+      if (startable.mode === 'rerun') actions.rerun([task.id]);
+      else actions.startTask(task.id);
+    });
+    head.appendChild(retry);
+  }
 
   head.appendChild(renderFacts(state, task));
   return head;

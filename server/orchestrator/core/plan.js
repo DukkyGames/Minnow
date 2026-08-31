@@ -71,7 +71,10 @@ export function nextAction(state, taskId) {
   if (task.attempts.some((a) => !a.ended)) return { kind: 'none' };
 
   const last = lastEndedAttempt(task);
-  if (!last) return { kind: 'start', role: 'builder', seedKind: 'initial', sameWorktree: false };
+  if (!last) {
+    const seedKind = task.reopened ? 'integration-fix' : 'initial';
+    return { kind: 'start', role: 'builder', seedKind, sameWorktree: false };
+  }
 
   const action = decide({
     role: last.role,
@@ -351,6 +354,121 @@ export function isRunComplete(state) {
   // Something merged, so the integrated result still needs verifying.
   if (merged > 0 && state.finalTest === null) return false;
   return true;
+}
+
+/**
+ * Task ids a rerun should reopen, in `orderedTaskIds` order.
+ *
+ * `requested` defaults to every abandoned or skipped task. The set then closes
+ * over skipped tasks that depend on anything already in it: reopening A without
+ * B/C/D would leave those skipped forever, because `pendingSkips` will not
+ * re-skip an already-skipped task.
+ *
+ * Merged tasks are never included. Unknown ids are ignored.
+ *
+ * @param {import('./types').BoardState} state
+ * @param {readonly string[]} [requested]
+ * @returns {string[]}
+ */
+export function reopenTargets(state, requested) {
+  if (!state) return [];
+  const seed = Array.isArray(requested) && requested.length > 0
+    ? requested.map(String)
+    : [...state.tasks.values()]
+        .filter((task) => task.phase === 'abandoned' || task.phase === 'skipped')
+        .map((task) => task.id);
+
+  const set = new Set();
+  for (const id of seed) {
+    const task = state.tasks.get(id);
+    if (!task || task.mergedSha !== null) continue;
+    if (task.phase === 'abandoned' || task.phase === 'skipped') set.add(id);
+  }
+
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const task of state.tasks.values()) {
+      if (set.has(task.id) || task.phase !== 'skipped' || task.mergedSha !== null) continue;
+      if (task.dependsOn.some((dep) => set.has(dep))) {
+        set.add(task.id);
+        grew = true;
+      }
+    }
+  }
+  return orderedTaskIds(state).filter((id) => set.has(id));
+}
+
+/**
+ * Synthetic integration-fix task, derived entirely from state so replay reads
+ * back an identical record.
+ *
+ * Called before `board.reopened` is folded, so the failing ladder is still on
+ * `state.finalTest`. After a reopen, `state.rerun.previousFinalTest` is the
+ * same evidence. Either source is enough.
+ *
+ * @param {import('./types').BoardState} state
+ * @returns {{ task: import('./types').PlanTask, wave: import('./types').WaveRef }}
+ */
+export function buildIntegrationFixTask(state) {
+  const n = (state.rerun?.n ?? 0) + 1;
+  const nextWave = state.waves.reduce((max, wave) => (wave.n > max ? wave.n : max), 0) + 1;
+  const failed =
+    state.finalTest?.outcome === 'fail'
+      ? state.finalTest
+      : state.rerun?.previousFinalTest?.outcome === 'fail'
+        ? state.rerun.previousFinalTest
+        : null;
+  const evidence = failed?.evidence && typeof failed.evidence === 'object' ? failed.evidence : {};
+  const failedRung =
+    typeof evidence.failedRung === 'string' && evidence.failedRung.trim()
+      ? evidence.failedRung.trim()
+      : '';
+  const output =
+    typeof evidence.output === 'string' && evidence.output.trim() ? evidence.output.trim() : '';
+  const parsed = parseCommandCwd(failed?.runInstructions ?? '');
+  const commandLine = parsed?.command ? `Command: ${parsed.command}` : '';
+  const cwdLine = parsed?.cwd ? `cwd: ${parsed.cwd}` : '';
+  const build = [
+    failedRung
+      ? `Fix the failing integration ${failedRung} rung.`
+      : 'Fix the failure recorded by the final integration test.',
+    commandLine,
+    cwdLine,
+    output ? `Output:\n${output}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  return {
+    task: {
+      id: `FIX-${n}`,
+      title: 'Fix final integration test failure',
+      wave: nextWave,
+      dependsOn: [],
+      touches: ['**/*'],
+      build,
+      test: 'Re-run the final integration test and confirm the failure is gone.',
+      accept: 'The final integration test passes.',
+      line: 0,
+    },
+    wave: { n: nextWave, name: 'Integration fix' },
+  };
+}
+
+/**
+ * Same shape as `parseRunInstructions` in final-test.js, inlined so this
+ * module stays inside `core/` (no I/O, no import outside the folder).
+ *
+ * @param {string} text
+ * @returns {{ command: string, cwd: string } | null}
+ */
+function parseCommandCwd(text) {
+  const raw = String(text ?? '');
+  const command = raw.match(/^command:\s*(.*)$/m)?.[1]?.trim();
+  const cwd = raw.match(/^cwd:\s*(.*)$/m)?.[1]?.trim();
+  if (!command || !cwd) return null;
+  return { command, cwd };
 }
 
 /**

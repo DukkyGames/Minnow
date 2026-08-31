@@ -47,10 +47,25 @@ export function reportPath(boardId) {
  * @returns {boolean}
  */
 export function journalHasReport(events) {
-  for (const event of events ?? []) {
-    if (event?.type === REPORT_EVENT_TYPE) return true;
+  return eventsSinceReopen(events).some((event) => event?.type === REPORT_EVENT_TYPE);
+}
+
+/**
+ * The slice of the journal after the last `board.reopened`.
+ *
+ * A second run must be able to write its own report; writes from the previous
+ * finish live before that line and must not block it.
+ *
+ * @param {Iterable<{ type?: unknown }>} events
+ * @returns {Array<{ type?: unknown }>}
+ */
+export function eventsSinceReopen(events) {
+  const list = [...(events ?? [])];
+  let last = -1;
+  for (let i = 0; i < list.length; i += 1) {
+    if (list[i]?.type === 'board.reopened') last = i;
   }
-  return false;
+  return last === -1 ? list : list.slice(last + 1);
 }
 
 /**

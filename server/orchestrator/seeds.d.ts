@@ -1,6 +1,6 @@
 import type { BoardState, SeedKind } from './core/types';
 
-/** The six kinds, in the order the policy table names them. */
+/** The kinds, in the order the policy table names them, then the rerun seed. */
 export const SEED_KINDS: readonly SeedKind[];
 
 /**

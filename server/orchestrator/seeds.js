@@ -1,5 +1,5 @@
 /**
- * P2-E — six seed builders (MIN-702 / P0-E `SeedKind`).
+ * P2-E — seed builders (MIN-702 / P0-E `SeedKind`).
  *
  * Seeds are **pure functions of derived task state**. No model call builds a
  * seed, and this file does no I/O — the same inputs always produce the same
@@ -12,11 +12,12 @@
  * Every retry in the policy table targets the builder. Tester's first attempt
  * also uses `initial` — the *system* prompt is what distinguishes the roles;
  * the seed is the task spec plus whatever history that kind needs.
+ * `integration-fix` is the scheduler seed for a reopened task, not a policy-table cell.
  */
 
 import { lastEndedAttempt } from './core/derive.js';
 
-/** The six kinds, in the order the policy table names them. */
+/** The kinds, in the order the policy table names them, then the rerun seed. */
 export const SEED_KINDS = /** @type {const} */ ([
   'initial',
   'failure-aware',
@@ -24,6 +25,7 @@ export const SEED_KINDS = /** @type {const} */ ([
   'continue',
   'fix',
   'rebase',
+  'integration-fix',
 ]);
 
 /**
@@ -248,6 +250,92 @@ function rebaseSeed(task, integrationTip) {
 }
 
 /**
+ * Seed for a task that is running again after `board.reopened`.
+ *
+ * Quotes the integration tip, the ladder failure captured on `state.rerun`,
+ * and this task's retired attempts. Fresh worktree: the integration tip has moved.
+ *
+ * @param {import('./core/types').TaskState} task
+ * @param {import('./core/types').BoardState} state
+ * @returns {string}
+ */
+function integrationFixSeed(task, state) {
+  const why =
+    task.reopened?.from ||
+    'The previous run did not finish this task. Fix the integration failure and the task itself.';
+  const merged = [...state.tasks.values()]
+    .filter((item) => item.mergedSha)
+    .map((item) => `${item.id}: ${item.mergedSha.slice(0, 12)}`);
+  const prev = state.rerun?.previousFinalTest ?? null;
+  const evidence = prev?.evidence && typeof prev.evidence === 'object' ? prev.evidence : {};
+  const failedRung =
+    typeof evidence.failedRung === 'string' && evidence.failedRung.trim()
+      ? evidence.failedRung.trim()
+      : '(not recorded)';
+  const ran = Array.isArray(evidence.ran)
+    ? evidence.ran.filter((item) => typeof item === 'string')
+    : [];
+  const output =
+    typeof evidence.output === 'string' && evidence.output
+      ? capSeedOutput(evidence.output)
+      : '(none recorded)';
+  const parsed = parseSeedCommandCwd(prev?.runInstructions ?? '');
+  const commandLines = parsed
+    ? [`command: ${parsed.command}`, `cwd: ${parsed.cwd}`]
+    : prev?.runInstructions
+      ? [prev.runInstructions]
+      : ['(not recorded)'];
+  const prior = alreadyDone(task);
+
+  return [
+    specBlock(task),
+    '',
+    '## Why this is running again',
+    why,
+    '',
+    '## Integration',
+    state.integrationSha
+      ? `Tip: ${state.integrationSha}`
+      : 'No integration commit yet.',
+    '',
+    'Merged tasks:',
+    bullets(merged),
+    '',
+    '## What the final test found',
+    `Failed rung: ${failedRung}`,
+    ran.length > 0 ? `Ran: ${ran.join(', ')}` : 'Ran: (none recorded)',
+    ...commandLines,
+    '',
+    output,
+    '',
+    '## What this task did before',
+    bullets(prior),
+  ].join('\n');
+}
+
+/**
+ * @param {string} text
+ * @returns {string}
+ */
+function capSeedOutput(text) {
+  const max = 4000;
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 14)}\n…[truncated]`;
+}
+
+/**
+ * @param {string} text
+ * @returns {{ command: string, cwd: string } | null}
+ */
+function parseSeedCommandCwd(text) {
+  const raw = String(text ?? '');
+  const command = raw.match(/^command:\s*(.*)$/m)?.[1]?.trim();
+  const cwd = raw.match(/^cwd:\s*(.*)$/m)?.[1]?.trim();
+  if (!command || !cwd) return null;
+  return { command, cwd };
+}
+
+/**
  * Build the user-message seed for one attempt.
  *
  * @param {import('./core/types').SeedKind} kind
@@ -272,6 +360,7 @@ export function buildSeed(kind, input) {
   if (kind === 'continue') return finish(continueSeed(task));
   if (kind === 'fix') return finish(fixSeed(task));
   if (kind === 'rebase') return finish(rebaseSeed(task, input.state.integrationSha));
+  if (kind === 'integration-fix') return finish(integrationFixSeed(task, input.state));
 
   throw new Error(`buildSeed: unknown seed kind ${String(kind)}`);
 }

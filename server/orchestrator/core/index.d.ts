@@ -82,6 +82,8 @@ export {
   pendingEnqueues,
   pendingSkips,
   plan,
+  reopenTargets,
+  buildIntegrationFixTask,
   touchesOverlap,
 } from './plan';
 export type { NextAction } from './types';

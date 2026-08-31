@@ -98,9 +98,11 @@ Every board writes a diagnostic log of status changes, verdicts, merges, retries
 
 When every task is complete, a **final integration test** runs across the whole board. It is the check that the parts work together, which per-task tests cannot tell you.
 
-Then the **finish dashboard** replaces the kanban with: elapsed time, tokens spent, files and lines changed, a written summary of what was done and what to do next, and unresolved issues with suggested steps.
+Then the **finish dashboard** replaces the kanban with a written summary of what was done and what to do next, unresolved issues with suggested steps, and git files/lines changed.
 
 Its primary action commits the integration work into your branch, and — depending on what your repository supports — pushes it and opens a pull request. There is a caret for **Commit only** or **Commit + push**. A separate **Clear worktrees** action removes the git worktrees the board created.
+
+If the run failed, **Retry** reopens abandoned and skipped tasks (merged work stays merged) and starts the board again. When every task merged but the final test failed, Retry adds a fix task and re-runs the ladder. Retry is always something you press; the board does not loop on its own.
 
 Toggle back to the kanban at any time from the header.
 

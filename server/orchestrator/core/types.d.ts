@@ -40,7 +40,8 @@ export type SeedKind =
   | 'repair'
   | 'continue'
   | 'fix'
-  | 'rebase';
+  | 'rebase'
+  | 'integration-fix';
 
 /** Derived task phase. Never stored — always computed by `derive()`. */
 export type TaskPhase =
@@ -62,7 +63,7 @@ export type StopReason = 'user' | 'complete' | 'terminal';
 // Journal events — P0-B
 // ---------------------------------------------------------------------------
 
-/** The thirteen types the fold understands. Anything else is opaque, not invalid. */
+/** The known types the fold understands. Anything else is opaque, not invalid. */
 export type KnownEventType =
   | 'board.created'
   | 'board.started'
@@ -78,7 +79,9 @@ export type KnownEventType =
   | 'final.test.ended'
   | 'run.finished'
   | 'board.model.set'
-  | 'board.renamed';
+  | 'board.renamed'
+  | 'board.reopened'
+  | 'task.added';
 
 /** Discriminant of a journal event. Widened, because unknown types are tolerated. */
 export type JournalEventType = KnownEventType | (string & {});
@@ -183,6 +186,16 @@ export type BoardModelSetEvent = EventEnvelope & {
   reasoning?: string;
 };
 export type BoardRenamedEvent = EventEnvelope & { type: 'board.renamed'; name: string };
+export type BoardReopenedEvent = EventEnvelope & {
+  type: 'board.reopened';
+  taskIds: string[];
+  reason: string;
+};
+export type TaskAddedEvent = EventEnvelope & {
+  type: 'task.added';
+  task: PlanTask;
+  wave?: WaveRef;
+};
 
 /** An event the fold understands. */
 export type KnownEvent =
@@ -200,7 +213,9 @@ export type KnownEvent =
   | FinalTestEndedEvent
   | RunFinishedEvent
   | BoardModelSetEvent
-  | BoardRenamedEvent;
+  | BoardRenamedEvent
+  | BoardReopenedEvent
+  | TaskAddedEvent;
 
 /** Anything else on the journal: readable, ignorable, never an error. */
 export type OpaqueEvent = EventEnvelope & Record<string, unknown>;
@@ -304,6 +319,12 @@ export interface Attempt {
    * still open, because stopping stops work of every kind.
    */
   manual: boolean;
+  /**
+   * Ended attempts from a previous run. `attemptCount` and `lastEndedAttempt`
+   * skip these so a reopened task gets a fresh policy budget. History stays on
+   * the task for the ledger and the report; this is a filter, not a counter.
+   */
+  retired: boolean;
 }
 
 /** A Builder diff that reached outside what the task declared. Journaled, not failed. */
@@ -350,6 +371,12 @@ export interface TaskState {
   mergedSha: string | null;
   mergeConflicts: string[] | null;
   touchesOverflow: TouchesOverflow[];
+  /**
+   * Set by `board.reopened`. Stays set so the first `nextAction` after a reopen
+   * can pick the `integration-fix` seed; later attempts use the policy table
+   * because `lastEndedAttempt` sees the new work.
+   */
+  reopened: { n: number; from: string | null } | null;
 }
 
 /**
@@ -402,6 +429,16 @@ export interface BoardState {
   finished: boolean;
   stopReason: StopReason | null;
   runSummary: string | null;
+  /**
+   * The most recent `board.reopened`. Captures the final-test result the fold
+   * is about to clear, so the rerun seed can quote the failure it is fixing.
+   */
+  rerun: {
+    n: number;
+    reason: string;
+    taskIds: string[];
+    previousFinalTest: FinalTestState | null;
+  } | null;
 }
 
 // ---------------------------------------------------------------------------

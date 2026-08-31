@@ -404,6 +404,24 @@ describe('journalHasReport / persist', () => {
     assert.equal(journalHasReport([{ type: REPORT_EVENT_TYPE }]), true);
   });
 
+  it('ignores a report from a previous run after board.reopened', () => {
+    assert.equal(
+      journalHasReport([
+        { type: REPORT_EVENT_TYPE },
+        { type: 'board.reopened' },
+      ]),
+      false,
+    );
+    assert.equal(
+      journalHasReport([
+        { type: REPORT_EVENT_TYPE },
+        { type: 'board.reopened' },
+        { type: REPORT_EVENT_TYPE },
+      ]),
+      true,
+    );
+  });
+
   it('persistReport writes next to the journal', async () => {
     await createBoard('persist-me');
     const written = await persistReport('persist-me', '# hi\n');

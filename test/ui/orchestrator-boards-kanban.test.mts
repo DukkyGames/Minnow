@@ -54,6 +54,7 @@ afterEach(() => {
 const NO_ACTIONS: BoardActions = {
   startTask: () => {},
   abandonTask: () => {},
+  rerun: () => {},
   select: () => {},
   openTranscript: () => {},
   toggleFileDiff: () => {},
@@ -224,6 +225,41 @@ describe('renderTaskList', () => {
     const card = node.querySelector('[data-task-id="W1-B"]')!;
     const labels = [...card.querySelectorAll('button')].map((b) => b.textContent);
     assert.ok(labels.includes('Retry'), `expected Retry, got ${labels.join(', ')}`);
+  });
+
+  test('an abandoned task on a finished board offers enabled Retry', () => {
+    setupDom();
+    const state = derive([
+      {
+        v: 1,
+        seq: 1,
+        type: 'board.created',
+        boardId: 'b1',
+        planPath: 'p.md',
+        name: 'Example',
+        waves: [{ n: 1, name: 'One' }],
+        tasks: [
+          { id: 'W1-A', title: 'A', wave: 1, dependsOn: [], touches: ['a.ts'] },
+          { id: 'W1-B', title: 'B', wave: 1, dependsOn: [], touches: ['b.ts'] },
+        ],
+      },
+      { v: 1, seq: 2, type: 'merge.succeeded', taskId: 'W1-A', sha: 'abc123abc123' },
+      { v: 1, seq: 3, type: 'task.abandoned', taskId: 'W1-B', reason: 'builder-failed-twice' },
+      { v: 1, seq: 4, type: 'final.test.ended', outcome: 'fail' },
+      { v: 1, seq: 5, type: 'run.finished', summary: 'blocked' },
+      { v: 1, seq: 6, type: 'board.stopped', reason: 'terminal' },
+    ]);
+    const calls: string[][] = [];
+    const actions: BoardActions = {
+      ...NO_ACTIONS,
+      rerun: (ids) => calls.push(ids ?? []),
+    };
+    const node = renderTaskList(state, actions, OPTIONS);
+    const btn = node.querySelector<HTMLButtonElement>('[data-focus-key="start:W1-B"]')!;
+    assert.equal(btn.disabled, false);
+    assert.equal(btn.textContent, 'Retry');
+    btn.click();
+    assert.deepEqual(calls, [['W1-B']]);
   });
 
   test('Abandon is offered on live work and refused on finished work', () => {
@@ -656,5 +692,28 @@ describe('renderBoardHeader', () => {
     const node = renderBoardHeader(board(), true, controls);
     assert.equal(node.querySelector('.board-header__toolbar .board-header__run-btn'), start);
     assert.equal(node.querySelectorAll('.board-header__controls').length, 1);
+  });
+
+  test('a failed board renders Failed, not Complete', () => {
+    setupDom();
+    const state = derive([
+      {
+        v: 1,
+        seq: 1,
+        type: 'board.created',
+        boardId: 'b1',
+        planPath: 'p.md',
+        name: 'Example',
+        waves: [{ n: 1, name: 'One' }],
+        tasks: [{ id: 'W1-A', title: 'A', wave: 1, dependsOn: [], touches: ['a.ts'] }],
+      },
+      { v: 1, seq: 2, type: 'task.abandoned', taskId: 'W1-A', reason: 'builder-failed-twice' },
+      { v: 1, seq: 3, type: 'final.test.ended', outcome: 'fail', runInstructions: 'command: tsc\ncwd: /tmp' },
+      { v: 1, seq: 4, type: 'run.finished', summary: 'failed' },
+      { v: 1, seq: 5, type: 'board.stopped', reason: 'terminal' },
+    ]);
+    const node = renderBoardHeader(state, true);
+    assert.equal(node.querySelector('.board-header__badge-label')?.textContent, 'Failed');
+    assert.ok(node.querySelector('.board-header__badge--failed'));
   });
 });

@@ -30,6 +30,24 @@ export function pendingSkips(state: BoardState): Array<{ taskId: string; blocked
 /** Has the board finished everything it can, with final verification outstanding? */
 export function isReadyForFinalTest(state: BoardState): boolean;
 
+/** Has the run finished everything it is ever going to do? */
+export function isRunComplete(state: BoardState): boolean;
+
+/**
+ * Task ids a rerun should reopen, in declared (wave, then insertion) order.
+ * Closes over skipped dependents of the requested set.
+ */
+export function reopenTargets(state: BoardState, requested?: readonly string[]): string[];
+
+/**
+ * Synthetic integration-fix task derived from the current (or previous) failed
+ * final test. Idempotent in shape: same state, same record.
+ */
+export function buildIntegrationFixTask(state: BoardState): {
+  task: import('./types').PlanTask;
+  wave: import('./types').WaveRef;
+};
+
 /** Tasks the policy table has given up on, with the evidence for each. */
 export function pendingAbandonments(
   state: BoardState,

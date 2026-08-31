@@ -75,6 +75,8 @@ export {
   pendingEnqueues,
   pendingSkips,
   plan,
+  reopenTargets,
+  buildIntegrationFixTask,
   touchesOverlap,
 } from './plan.js';
 

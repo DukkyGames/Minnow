@@ -51,14 +51,28 @@ const SAMPLES = {
   'run.finished': { summary: '3 merged, 1 abandoned' },
   'board.model.set': { providerId: 'anthropic', id: 'claude-opus-5' },
   'board.renamed': { name: 'Phase 9' },
+  'board.reopened': { taskIds: ['W1-A', 'W1-B'], reason: 'user' },
+  'task.added': {
+    task: {
+      id: 'FIX-1',
+      title: 'Fix',
+      wave: 2,
+      dependsOn: [],
+      touches: ['**/*'],
+      build: 'b',
+      test: 't',
+      accept: 'x',
+      line: 0,
+    },
+  },
 };
 
 /** @param {string} type */
 const sample = (type) => makeEvent(type, { ...SAMPLES[type] });
 
 describe('event vocabulary', () => {
-  it('declares exactly the fifteen types', () => {
-    assert.equal(EVENT_TYPES.length, 15);
+  it('declares exactly the seventeen types', () => {
+    assert.equal(EVENT_TYPES.length, 17);
     assert.deepEqual(EVENT_TYPES, Object.keys(SAMPLES));
   });
 

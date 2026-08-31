@@ -1,5 +1,5 @@
 /**
- * P2-E — six seed builders (MIN-702).
+ * P2-E — seven seed builders (MIN-702).
  *
  * Pure functions of derived task state. Golden-filed so prompt drift is
  * visible in review. No model call. No I/O inside `seeds.js`.
@@ -141,11 +141,43 @@ function stateFor(kind) {
       ),
     );
   }
+  if (kind === 'integration-fix') {
+    return derive(
+      journal(
+        ...base,
+        started('T0-A', 'p1', 'builder'),
+        ended('T0-A', 'p1', 'builder', 'pass', { summary: 'Scaffolded routes.' }),
+        started('T0-A', 'p2', 'tester'),
+        ended('T0-A', 'p2', 'tester', 'pass'),
+        makeEvent('merge.enqueued', { taskId: 'T0-A' }),
+        makeEvent('merge.succeeded', {
+          taskId: 'T0-A',
+          sha: 'c0ffee0123456789abcdef0123456789abcdef01',
+        }),
+        started('T1-A', 'a1', 'builder'),
+        ended('T1-A', 'a1', 'builder', 'fail', { summary: 'Typecheck failed on the first try.' }),
+        started('T1-A', 'a2', 'builder'),
+        ended('T1-A', 'a2', 'builder', 'fail', { summary: 'Typecheck failed again.' }),
+        makeEvent('task.abandoned', { taskId: 'T1-A', reason: 'builder-failed-twice' }),
+        makeEvent('final.test.ended', {
+          outcome: 'fail',
+          runInstructions: 'command: npx tsc --noEmit\ncwd: /tmp/integration',
+          evidence: {
+            failedRung: 'typecheck',
+            ran: ['typecheck'],
+            output: 'error TS2322: Type number is not assignable to type string.',
+          },
+        }),
+        makeEvent('run.finished', { summary: '1 merged, 1 abandoned, final test fail' }),
+        makeEvent('board.reopened', { taskIds: ['T1-A'], reason: 'user' }),
+      ),
+    );
+  }
   throw new Error(`unknown kind ${kind}`);
 }
 
 describe('SEED_KINDS', () => {
-  it('is the six kinds in policy-table order', () => {
+  it('is the seven kinds in policy-table order, plus integration-fix', () => {
     assert.deepEqual([...SEED_KINDS], [
       'initial',
       'failure-aware',
@@ -153,6 +185,7 @@ describe('SEED_KINDS', () => {
       'continue',
       'fix',
       'rebase',
+      'integration-fix',
     ]);
   });
 });

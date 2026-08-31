@@ -30,7 +30,7 @@ import {
   readEvents,
   resetJournalCache,
 } from '../../server/orchestrator/journal.js';
-import { journalHasReport } from '../../server/orchestrator/report.js';
+import { journalHasReport, REPORT_EVENT_TYPE } from '../../server/orchestrator/report.js';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ENGINE_SOURCE = path.join(PROJECT_ROOT, 'server/orchestrator/engine.js');
@@ -705,6 +705,7 @@ describe('engine — commands', () => {
     engine.subscribe((event) => seen.push(String(event.type)));
     await runToCompletion(engine, clock, 1);
     assert.deepEqual(seen.slice(0, 3), ['board.started', 'task.attempt.started', 'task.attempt.ended']);
+    assert.ok(seen.includes('board.stopped'), 'end-of-run must journal board.stopped');
     assert.equal(seen.at(-1), 'run.report.written');
   });
 
@@ -1097,5 +1098,119 @@ describe('engine — what must not be in it', () => {
     for (const banned of ['buildAttempts', 'testAttempts', 'fixerAttempts', 'envFixAttempts']) {
       assert.equal(source.includes(banned), false, `engine.js contains ${banned}`);
     }
+  });
+});
+
+describe('engine — reopen after finish', { concurrency: 1 }, () => {
+  const slowPass = [{ emit: { outcome: 'pass', delayMs: 9999 } }];
+
+  it('reopen puts an abandoned task back on the board', async () => {
+    const { engine, clock } = await harness({
+      boardId: 'reopen-abandoned',
+      script: slowPass,
+    });
+    await engine.startBoard(1);
+    await settle();
+    const abandoned = await engine.abandonTask('A');
+    assert.equal(abandoned, true);
+    for (let i = 0; i < 40; i += 1) {
+      await settle();
+      if (engine.getState().finished || engine.getState().stopReason === 'user') break;
+      await engine.tick();
+      if (clock.pending > 0) await clock.advance(10_000);
+    }
+    await drainReportWrite(engine);
+    assert.equal(engine.getState().tasks.get('A').phase, 'abandoned');
+    assert.equal(engine.getState().stopReason, 'terminal');
+
+    const result = await engine.reopen();
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.taskIds, ['A']);
+    const state = engine.getState();
+    assert.equal(state.finished, false);
+    assert.equal(state.status, 'running');
+    assert.equal(state.tasks.get('A').abandonedReason, null);
+    assert.equal(['idle', 'building'].includes(state.tasks.get('A').phase), true);
+  });
+
+  it('reopen writes a second report after the next run.finished', async () => {
+    const { engine, clock } = await harness({
+      boardId: 'reopen-report',
+      script: slowPass,
+    });
+    await engine.startBoard(1);
+    await settle();
+    assert.equal(await engine.abandonTask('A'), true);
+    for (let i = 0; i < 40; i += 1) {
+      await settle();
+      if (engine.getState().finished) break;
+      await engine.tick();
+      if (clock.pending > 0) await clock.advance(10_000);
+    }
+    await drainReportWrite(engine);
+    assert.equal(journalHasReport(await engine.getEvents()), true);
+
+    const result = await engine.reopen();
+    assert.equal(result.ok, true);
+    assert.equal(journalHasReport(await engine.getEvents()), false);
+
+    for (let i = 0; i < 80; i += 1) {
+      await settle();
+      if (await finishedWithReport(engine)) break;
+      await engine.tick();
+      if (clock.pending > 0) await clock.advance(10_000);
+    }
+    assert.equal(engine.getState().finished, true);
+    assert.equal(journalHasReport(await engine.getEvents()), true);
+    const types = (await engine.getEvents()).map((event) => event.type);
+    assert.equal(types.filter((type) => type === 'run.finished').length, 2);
+    assert.equal(types.filter((type) => type === REPORT_EVENT_TYPE).length, 2);
+  });
+
+  it('reopen on an all-merged failed ladder adds FIX-1', async () => {
+    const { engine, boardId, clock } = await harness({ boardId: 'reopen-fix' });
+    await runToCompletion(engine, clock);
+    await appendEvent(
+      boardId,
+      makeEvent('final.test.ended', { outcome: 'fail', runInstructions: 'command: npx tsc --noEmit\ncwd: /tmp' }),
+      { now: clock.now },
+    );
+    await engine.reload();
+    assert.equal(engine.getState().finalTest?.outcome, 'fail');
+
+    const result = await engine.reopen();
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.taskIds, ['FIX-1']);
+    const state = engine.getState();
+    assert.equal(state.finished, false);
+    assert.equal(state.tasks.has('FIX-1'), true);
+    assert.equal(state.tasks.get('FIX-1').title, 'Fix final integration test failure');
+  });
+
+  it('startBoard refuses a finished board', async () => {
+    const { engine, clock } = await harness({ boardId: 'reopen-start-guard' });
+    await runToCompletion(engine, clock);
+    assert.equal(engine.getState().finished, true);
+    assert.equal(await engine.startBoard(1), false);
+    assert.equal(engine.getState().finished, true);
+  });
+
+  it('a failed ladder journals board.stopped { reason: terminal }', async () => {
+    const { engine, clock } = await harness({
+      boardId: 'reopen-terminal',
+      script: slowPass,
+    });
+    await engine.startBoard(1);
+    await settle();
+    assert.equal(await engine.abandonTask('A'), true);
+    for (let i = 0; i < 40; i += 1) {
+      await settle();
+      if (engine.getState().finished) break;
+      await engine.tick();
+      if (clock.pending > 0) await clock.advance(10_000);
+    }
+    await drainReportWrite(engine);
+    assert.equal(engine.getState().finished, true);
+    assert.equal(engine.getState().stopReason, 'terminal');
   });
 });

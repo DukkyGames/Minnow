@@ -16,10 +16,11 @@ import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { derive } from '../../server/orchestrator/core/derive.js';
 import { DEFAULT_BOARD_CONCURRENCY } from '../../server/orchestrator/core/derive.js';
+import { makeEvent } from '../../server/orchestrator/core/events.js';
 import { stateFromJSON } from '../../server/orchestrator/core/snapshot.js';
 import { createScriptedEffector } from '../../server/orchestrator/effector-scripted.js';
 import { disposeEngines } from '../../server/orchestrator/engine.js';
-import { resetJournalCache } from '../../server/orchestrator/journal.js';
+import { appendEvent, resetJournalCache } from '../../server/orchestrator/journal.js';
 import { createBoardsMiddleware, matchRoute, ROUTES, setEffectorFactory } from '../../server/orchestrator/middleware.js';
 import { getWorkspaceRoot } from '../../server/workspace/root.js';
 
@@ -545,6 +546,7 @@ describe('the surface itself', () => {
         'POST concurrency',
         'POST create',
         'POST model',
+        'POST rerun',
         'POST start',
         'POST startTask',
         'POST stop',
@@ -582,6 +584,7 @@ describe('the surface itself', () => {
     assert.equal(matchRoute('GET', '/api/boards/b1')?.name, 'get');
     assert.equal(matchRoute('GET', '/api/boards/b1/events')?.name, 'events');
     assert.equal(matchRoute('GET', '/api/boards/b1/report')?.name, 'report');
+    assert.equal(matchRoute('POST', '/api/boards/b1/rerun')?.name, 'rerun');
     assert.deepEqual(matchRoute('POST', '/api/boards/b1/tasks/W1-A/start')?.params, ['b1', 'W1-A']);
     assert.equal(matchRoute('GET', '/api/boards/b1/nope'), null);
     assert.equal(matchRoute('POST', '/api/boards/b1'), null);
@@ -592,5 +595,21 @@ describe('the surface itself', () => {
     const response = await fetch(`${base}/api/something-else`);
     assert.equal(response.status, 404);
     assert.equal(await response.text(), 'not found');
+  });
+
+  it('409s rerun when nothing failed', async () => {
+    const boardId = await createBoard();
+    const response = await call('POST', `/api/boards/${boardId}/rerun`, {});
+    assert.equal(response.status, 409);
+    assert.equal(response.body.error, 'nothing to rerun');
+  });
+
+  it('409s start on a finished board', async () => {
+    const boardId = await createBoard();
+    await appendEvent(boardId, makeEvent('run.finished', { summary: 'done' }));
+    disposeEngines();
+    const response = await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
+    assert.equal(response.status, 409);
+    assert.equal(response.body.error, 'the run has finished; rerun it instead');
   });
 });

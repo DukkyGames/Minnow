@@ -13,7 +13,7 @@ import {
   abandonmentEvidenceIsComplete,
 } from '../../server/orchestrator/core/evidence.js';
 import {
-  globsIntersect,
+  isReadyForFinalTest,
   manualStart,
   nextAction,
   orderedTaskIds,
@@ -21,7 +21,10 @@ import {
   pendingEnqueues,
   pendingSkips,
   plan,
+  reopenTargets,
+  buildIntegrationFixTask,
   footprintsClash,
+  globsIntersect,
   touchesOverlap,
 } from '../../server/orchestrator/core/plan.js';
 
@@ -940,5 +943,99 @@ describe('manualStart — outside the cap, and nothing else', () => {
     const state = boardOf({ tasks: [task('A')], running: false }, ...merged('A', 'sha-a'));
     assert.deepEqual(manualStart(state, 'A', []), { kind: 'none' });
     assert.deepEqual(manualStart(state, 'nope', []), { kind: 'none' });
+  });
+});
+
+describe('plan — reopen', () => {
+  it('reopenTargets closes over skipped dependents', () => {
+    const state = boardOf(
+      {
+        tasks: [
+          task('A'),
+          task('B', { dependsOn: ['A'] }),
+          task('C', { dependsOn: ['B'] }),
+          task('D'),
+        ],
+      },
+      makeEvent('task.abandoned', { taskId: 'A', reason: 'builder-failed-twice' }),
+      makeEvent('task.skipped', { taskId: 'B', blockedBy: 'A' }),
+      makeEvent('task.skipped', { taskId: 'C', blockedBy: 'A' }),
+    );
+    assert.deepEqual(reopenTargets(state, ['A']), ['A', 'B', 'C']);
+    assert.deepEqual(reopenTargets(state), ['A', 'B', 'C']);
+  });
+
+  it('a reopened task\'s first nextAction is integration-fix', () => {
+    const state = boardOf(
+      { tasks: [task('A')] },
+      started('A', 'a1', 'builder'),
+      ended('A', 'a1', 'builder', 'fail'),
+      started('A', 'a2', 'builder'),
+      ended('A', 'a2', 'builder', 'fail'),
+      makeEvent('task.abandoned', { taskId: 'A', reason: 'builder-failed-twice' }),
+      makeEvent('board.reopened', { taskIds: ['A'], reason: 'user' }),
+    );
+    assert.deepEqual(nextAction(state, 'A'), {
+      kind: 'start',
+      role: 'builder',
+      seedKind: 'integration-fix',
+      sameWorktree: false,
+    });
+  });
+
+  it('isReadyForFinalTest is true again after a reopen on an all-merged board', () => {
+    const state = boardOf(
+      { tasks: [task('A')] },
+      ...merged('A', 'sha-a'),
+      makeEvent('final.test.ended', {
+        outcome: 'fail',
+        runInstructions: 'command: tsc\ncwd: /tmp',
+      }),
+      makeEvent('run.finished', { summary: 'fail' }),
+      makeEvent('board.reopened', { taskIds: [], reason: 'user' }),
+    );
+    assert.equal(state.finalTest, null);
+    assert.equal(isReadyForFinalTest(state), true);
+  });
+
+  it('buildIntegrationFixTask is derived from the failing rung', () => {
+    const state = boardOf(
+      { tasks: [task('A')] },
+      ...merged('A', 'sha-a'),
+      makeEvent('final.test.ended', {
+        outcome: 'fail',
+        runInstructions: 'command: npx tsc --noEmit\ncwd: /tmp/int',
+        evidence: { failedRung: 'typecheck', output: 'TS2322' },
+      }),
+    );
+    const fix = buildIntegrationFixTask(state);
+    assert.equal(fix.task.id, 'FIX-1');
+    assert.equal(fix.wave.n, 1);
+    assert.equal(fix.task.dependsOn.length, 0);
+    assert.deepEqual(fix.task.touches, ['**/*']);
+    assert.match(fix.task.build, /typecheck/);
+    assert.match(fix.task.build, /npx tsc --noEmit/);
+  });
+
+  it('reopened tasks are desired in DAG order', () => {
+    const state = boardOf(
+      {
+        tasks: [task('A'), task('B', { dependsOn: ['A'] })],
+        concurrency: 2,
+      },
+      started('A', 'a1', 'builder'),
+      ended('A', 'a1', 'builder', 'fail'),
+      started('A', 'a2', 'builder'),
+      ended('A', 'a2', 'builder', 'fail'),
+      makeEvent('task.abandoned', { taskId: 'A', reason: 'builder-failed-twice' }),
+      makeEvent('task.skipped', { taskId: 'B', blockedBy: 'A' }),
+      makeEvent('board.reopened', { taskIds: ['A', 'B'], reason: 'user' }),
+    );
+    const desired = plan(state);
+    assert.deepEqual(
+      desired.map((d) => d.taskId),
+      ['A'],
+    );
+    assert.equal(desired[0].seedKind, 'integration-fix');
   });
 });

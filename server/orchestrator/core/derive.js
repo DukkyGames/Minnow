@@ -64,6 +64,7 @@ export function emptyState() {
     finished: false,
     stopReason: null,
     runSummary: null,
+    rerun: null,
   };
 }
 
@@ -171,6 +172,7 @@ function apply(state, event) {
         // hand — there is no other way for one to exist. Read from the status
         // the fold has already reached, so replay reproduces it.
         manual: state.status !== 'running',
+        retired: false,
       });
       return;
     }
@@ -193,6 +195,7 @@ function apply(state, event) {
           summary: null,
           evidence: null,
           manual: false,
+          retired: false,
         };
         task.attempts.push(attempt);
       }
@@ -301,6 +304,56 @@ function apply(state, event) {
       return;
     }
 
+    case 'task.added': {
+      const declared = event.task && typeof event.task === 'object' ? event.task : null;
+      const id = declared ? String(declared.id ?? '') : '';
+      if (!id || state.tasks.has(id)) return;
+      state.tasks.set(id, newTask(id, declared));
+      state.taskOrder.push(id);
+      const wave = event.wave;
+      if (wave && typeof wave === 'object') {
+        const n = Number(wave.n);
+        if (Number.isFinite(n) && !state.waves.some((w) => w.n === n)) {
+          state.waves = [...state.waves, { n, name: String(wave.name ?? '') }];
+        }
+      }
+      return;
+    }
+
+    case 'board.reopened': {
+      const n = (state.rerun?.n ?? 0) + 1;
+      const taskIds = Array.isArray(event.taskIds) ? event.taskIds.map(String) : [];
+      // Captured from the fold, not journaled: the seed needs the failure it is
+      // fixing, and `finalTest` is about to be cleared so the ladder re-runs.
+      state.rerun = {
+        n,
+        reason: String(event.reason ?? ''),
+        taskIds: [...taskIds],
+        previousFinalTest: state.finalTest,
+      };
+      state.finalTest = null;
+      state.finished = false;
+      state.runSummary = null;
+      for (const id of taskIds) {
+        const task = state.tasks.get(id);
+        if (!task || task.mergedSha !== null) continue;
+        task.reopened = {
+          n,
+          from:
+            task.abandonedReason ??
+            (task.skippedBy ? `stranded by ${task.skippedBy}` : null),
+        };
+        task.abandonedReason = null;
+        task.abandonedEvidence = null;
+        task.skippedBy = null;
+        task.mergeConflicts = null;
+        for (const attempt of task.attempts) {
+          if (attempt.ended) attempt.retired = true;
+        }
+      }
+      return;
+    }
+
     // No default. An unrecognised type never reaches here — `derive` filters on
     // `known` — and adding a default that mutates would break P0-B's tolerance
     // requirement.
@@ -327,6 +380,7 @@ function mergeAttempt(task) {
     evidence: null,
     // Merges are engine-driven and only ever run on a running board.
     manual: false,
+    retired: false,
   };
 }
 
@@ -379,6 +433,7 @@ function newTask(id, declared) {
     mergedSha: null,
     mergeConflicts: null,
     touchesOverflow: [],
+    reopened: null,
   };
 }
 
@@ -413,7 +468,8 @@ function phaseOf(state, task) {
  */
 export function lastEndedAttempt(task) {
   for (let i = task.attempts.length - 1; i >= 0; i -= 1) {
-    if (task.attempts[i].ended) return task.attempts[i];
+    const attempt = task.attempts[i];
+    if (attempt.ended && !attempt.retired) return attempt;
   }
   return undefined;
 }
@@ -434,7 +490,7 @@ export function attemptCount(state, taskId, role) {
   if (!task) return 0;
   let n = 0;
   for (const attempt of task.attempts) {
-    if (attempt.ended && attempt.role === role) n += 1;
+    if (attempt.ended && !attempt.retired && attempt.role === role) n += 1;
   }
   return n;
 }

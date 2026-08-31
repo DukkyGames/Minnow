@@ -24,6 +24,7 @@
  */
 
 import type { BoardState, TaskState } from '../../server/orchestrator/core/types';
+import { reopenTargets } from '../../server/orchestrator/core/plan.js';
 import type { DiffLine } from '../chat/prompts/text-diff';
 import type { EngineError, TaskFileStat } from './client';
 import {
@@ -41,6 +42,8 @@ export interface BoardActions {
   startTask: (taskId: string) => void;
   /** P9-H — journals `task.abandoned { reason: 'user' }`. Never a local write. */
   abandonTask: (taskId: string) => void;
+  /** Reopen failed work. Omit ids to reopen every abandoned/skipped task (or add a fix task). */
+  rerun: (taskIds?: string[]) => void;
   /** null when no task is selected. */
   select: (taskId: string | null) => void;
   /** Load one attempt's transcript into the detail panel. */
@@ -201,13 +204,13 @@ function headerStatus(
   if (!connected && state.status === 'running') {
     return { variant: 'stalled', label: 'Reconnecting' };
   }
+  if (state.stopReason === 'terminal' || state.finalTest?.outcome === 'fail') {
+    return { variant: 'failed', label: 'Failed' };
+  }
   if (state.finished || state.stopReason === 'complete') {
     return { variant: 'complete', label: 'Complete' };
   }
   if (state.status === 'running') return { variant: 'running', label: 'Running' };
-  if (state.status === 'stopped' && state.stopReason === 'terminal') {
-    return { variant: 'failed', label: 'Failed' };
-  }
   if (state.status === 'stopped') return { variant: 'stopped', label: 'Stopped' };
   return { variant: 'ready', label: 'Ready' };
 }
@@ -302,7 +305,7 @@ function countWavesComplete(state: BoardState): number {
   return n;
 }
 
-function countPhase(state: BoardState, phase: TaskState['phase']): number {
+export function countPhase(state: BoardState, phase: TaskState['phase']): number {
   let n = 0;
   for (const task of state.tasks.values()) if (task.phase === phase) n += 1;
   return n;
@@ -527,15 +530,20 @@ function renderCardControls(
   const startable = isStartable(state, task);
   const pending = options.pendingTaskIds.has(task.id);
 
-  const start = el('button', 'ov2-btn ov2-btn--ghost', pending ? 'Starting…' : startLabel(task));
+  const start = el('button', 'ov2-btn ov2-btn--ghost', pending ? 'Starting…' : startLabel(task, startable));
   start.type = 'button';
   start.tabIndex = -1;
   start.disabled = pending || !startable.can;
   start.dataset.focusKey = `start:${task.id}`;
   start.title = startable.can
-    ? `Start ${task.id} now, outside the concurrency cap`
+    ? startable.mode === 'rerun'
+      ? `Rerun ${task.id} after this failed run`
+      : `Start ${task.id} now, outside the concurrency cap`
     : startable.why;
-  start.addEventListener('click', () => actions.startTask(task.id));
+  start.addEventListener('click', () => {
+    if (startable.can && startable.mode === 'rerun') actions.rerun([task.id]);
+    else actions.startTask(task.id);
+  });
   controls.appendChild(start);
 
   // P9-H. A journaled command, not a local write — see `engine.abandonTask`.
@@ -562,7 +570,11 @@ function renderCardControls(
  * starting: `nextAction()` reads the journal and picks the seed, so a task that
  * has failed twice gets the repair seed and the button does not have to know.
  */
-function startLabel(task: TaskState): string {
+function startLabel(
+  task: TaskState,
+  startable: { can: boolean; mode?: 'start' | 'rerun' },
+): string {
+  if (startable.mode === 'rerun') return 'Retry';
   return task.attempts.some((a) => a.ended) ? 'Retry' : 'Start';
 }
 
@@ -574,17 +586,21 @@ function startLabel(task: TaskState): string {
  * a 409 comes back as a message — this only saves the round trip and explains
  * the reason in place.
  */
-function isStartable(state: BoardState, task: TaskState): { can: boolean; why: string } {
-  if (state.finished) return { can: false, why: 'the run has finished' };
+export function isStartable(
+  state: BoardState,
+  task: TaskState,
+): { can: true; mode: 'start' | 'rerun'; why: string } | { can: false; why: string } {
   if (task.phase === 'merged') return { can: false, why: 'already merged' };
-  if (task.phase === 'abandoned') return { can: false, why: 'abandoned' };
-  if (task.phase === 'skipped') return { can: false, why: 'waiting on something that failed' };
   if (task.attempts.some((a) => !a.ended)) return { can: false, why: 'already running' };
+  if (task.phase === 'abandoned' || task.phase === 'skipped') {
+    return { can: true, mode: 'rerun', why: '' };
+  }
+  if (state.finished) return { can: true, mode: 'rerun', why: '' };
   const blocking = task.dependsOn.filter((dep) => state.tasks.get(dep)?.phase !== 'merged');
   if (blocking.length > 0) {
     return { can: false, why: `waiting on ${blocking.join(', ')}` };
   }
-  return { can: true, why: '' };
+  return { can: true, mode: 'start', why: '' };
 }
 
 // ---------------------------------------------------------------------------
@@ -668,7 +684,10 @@ function attachKeyboardGrid(list: HTMLElement): void {
  * so the question "what actually happened" always has an answer on screen even
  * when the report writer never ran.
  */
-export function renderRunLedger(state: BoardState): HTMLElement | null {
+export function renderRunLedger(
+  state: BoardState,
+  actions?: Pick<BoardActions, 'rerun'>,
+): HTMLElement | null {
   if (!state.finished && !state.runSummary && !state.finalTest) return null;
 
   const wrap = el('section', 'ov2-report ob-sec');
@@ -689,18 +708,7 @@ export function renderRunLedger(state: BoardState): HTMLElement | null {
   wrap.appendChild(stats);
 
   if (state.finalTest) {
-    const final = el('div', 'ov2-report__final');
-    final.appendChild(
-      pill(
-        `final test ${state.finalTest.outcome}`,
-        state.finalTest.outcome === 'pass' ? 'good' : 'bad',
-      ),
-    );
-    if (state.finalTest.runInstructions) {
-      final.appendChild(el('span', 'ov2-report__run-label', 'Run it yourself:'));
-      final.appendChild(el('code', 'ov2-report__run', state.finalTest.runInstructions));
-    }
-    wrap.appendChild(final);
+    wrap.appendChild(renderFinalTest(state, actions));
   }
 
   const table = el('ul', 'ov2-report__tasks');
@@ -721,6 +729,52 @@ export function renderRunLedger(state: BoardState): HTMLElement | null {
   }
   wrap.appendChild(table);
   return wrap;
+}
+
+/** Ladder result plus Retry, so a failed final test is not a green pill and a shrug. */
+function renderFinalTest(
+  state: BoardState,
+  actions?: Pick<BoardActions, 'rerun'>,
+): HTMLElement {
+  const final = el('div', 'ov2-report__final');
+  const test = state.finalTest!;
+  final.appendChild(
+    pill(`final test ${test.outcome}`, test.outcome === 'pass' ? 'good' : 'bad'),
+  );
+  if (test.runInstructions) {
+    final.appendChild(el('span', 'ov2-report__run-label', 'Run it yourself:'));
+    final.appendChild(el('code', 'ov2-report__run', test.runInstructions));
+  }
+  if (test.outcome === 'fail') {
+    const evidence = test.evidence && typeof test.evidence === 'object' ? test.evidence : {};
+    const failedRung =
+      typeof evidence.failedRung === 'string' && evidence.failedRung.trim()
+        ? evidence.failedRung.trim()
+        : '';
+    const output = typeof evidence.output === 'string' ? evidence.output : '';
+    if (failedRung) {
+      final.appendChild(el('p', 'ov2-report__rung', `Failed rung: ${failedRung}`));
+    }
+    if (output.trim()) {
+      const pre = el('pre', 'ov2-report__ladder-out');
+      pre.textContent = output.length > 8000 ? `${output.slice(0, 7986)}\n…[truncated]` : output;
+      final.appendChild(pre);
+    }
+    if (actions?.rerun) {
+      const n = reopenTargets(state).length;
+      const retry = el(
+        'button',
+        'ov2-btn ov2-btn--primary ov2-report__retry',
+        n > 0
+          ? `Rerun ${n} failed task${n === 1 ? '' : 's'}`
+          : 'Add a fix task and re-verify',
+      );
+      retry.type = 'button';
+      retry.addEventListener('click', () => actions.rerun());
+      final.appendChild(retry);
+    }
+  }
+  return final;
 }
 
 function totalAttempts(state: BoardState): number {
