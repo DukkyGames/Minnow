@@ -41,6 +41,12 @@ export function ensureBoardIntegration(boardId: string): Promise<{
   branch?: string;
   error?: string;
   output?: string;
+  deps?: {
+    ok: boolean;
+    linked?: string[];
+    repaired?: string[];
+    failed?: Array<{ dir: string; reason: string }>;
+  };
   gitInitialized?: Record<string, unknown>;
 }>;
 

@@ -33,6 +33,7 @@ import {
   wantsReuse,
 } from '../../server/orchestrator/worktree-lifecycle.js';
 import { createWorktree, ensureIntegration } from '../../server/worktree/worktree-ops.js';
+import { inspectDepDir } from '../../server/worktree/dep-symlinks.js';
 import { getBoardWorktreesDir, getWorktreeSlotPath } from '../../server/worktree/paths.js';
 import { setWorkspaceRoot } from '../../server/workspace/root.js';
 import { wantsSameWorktree } from '../../server/orchestrator/core/policy.js';
@@ -497,6 +498,55 @@ describe('P3-A worktree lifecycle', { concurrency: false }, () => {
     );
     assert.equal(previousWorktreeForTask(state, 'A'), '/tmp/wt-a1');
     assert.equal(liveWorktreePaths(state).size, 0);
+  });
+
+  test('second allocate still starts when the cached integration node_modules is broken', async () => {
+    const boardId = 'p3a-dep-stall';
+    const linkType = process.platform === 'win32' ? 'junction' : 'dir';
+
+    await fs.writeFile(path.join(repoDir, 'package.json'), '{"name":"p3a-dep-stall"}\n', 'utf8');
+    await fs.mkdir(path.join(repoDir, 'node_modules'), { recursive: true });
+    await fs.writeFile(path.join(repoDir, 'node_modules', 'pkg.txt'), 'installed\n', 'utf8');
+    await execFileAsync('git', ['add', 'package.json'], { cwd: repoDir, windowsHide: true });
+    await execFileAsync('git', ['commit', '-m', 'add package.json'], {
+      cwd: repoDir,
+      windowsHide: true,
+    });
+
+    resetEnsuredBoards();
+    const state = boardState(['DepA', 'DepB']);
+    const first = await allocateAttemptWorktree({
+      boardId,
+      taskId: 'DepA',
+      attemptId: 'r-dep-a',
+      desired: { taskId: 'DepA', role: 'builder', seedKind: 'initial', sameWorktree: false },
+      state,
+    });
+    assert.equal(first.ok, true, first.error);
+
+    const intNm = path.join(getWorktreeSlotPath(boardId, INTEGRATION_SLOT), 'node_modules');
+    const cycle = `${intNm}.cycle`;
+    await fs.rm(intNm, { force: true });
+    await fs.rm(cycle, { recursive: true, force: true });
+    await fs.mkdir(cycle);
+    await fs.symlink(cycle, intNm, linkType);
+    await fs.rm(cycle, { recursive: true, force: true });
+    await fs.symlink(intNm, cycle, linkType);
+    assert.equal(await inspectDepDir(intNm), 'broken');
+
+    // Leave ensuredBoards populated — that is the production allocate path
+    // after the first task. The next task must still start.
+    const second = await allocateAttemptWorktree({
+      boardId,
+      taskId: 'DepB',
+      attemptId: 'r-dep-b',
+      desired: { taskId: 'DepB', role: 'builder', seedKind: 'initial', sameWorktree: false },
+      state,
+    });
+    assert.equal(second.ok, true, second.error);
+    const wtNm = path.join(second.path, 'node_modules');
+    assert.equal(await inspectDepDir(wtNm), 'link-ok');
+    assert.equal(await fs.readFile(path.join(wtNm, 'pkg.txt'), 'utf8'), 'installed\n');
   });
 
   test('slotIdFromWorktreePath round-trips through getWorktreeSlotPath', () => {

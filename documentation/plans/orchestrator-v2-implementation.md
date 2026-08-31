@@ -259,7 +259,7 @@ Orchestration started 2026-08-29 from branch `Orchestrator-V2` (Phases 0–2 Don
 
 #### P3-A (MIN-705) — done
 
-- [x] `server/orchestrator/worktree-lifecycle.js` allocates via existing `worktree-ops.js` (`ensureIntegration` once per board, then `createWorktree`)
+- [x] `server/orchestrator/worktree-lifecycle.js` allocates via existing `worktree-ops.js` (`ensureIntegration` once per board for the git round-trip, then `createWorktree`). Later allocates still re-run `ensureDependencyDirs` on integration; `createWorktree` falls back to the main workspace if that source is a dangling/looping link (see `plans/worktree-dep-source-stall.md`).
 - [x] `start()` returns `{ attemptId, worktree }` after the tree exists; engine journals it on `task.attempt.started`
 - [x] `runTurn` and `createInProcessToolDispatch` receive the worktree path as `cwd` — runner stays board-agnostic
 - [x] Pass commits via `commitWorktree`

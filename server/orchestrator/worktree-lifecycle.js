@@ -16,6 +16,8 @@ import path from 'node:path';
 import { attemptCount } from './core/derive.js';
 import { decide, wantsSameWorktree } from './core/policy.js';
 import { getBoardWorktreesDir, getWorktreeSlotPath } from '../worktree/paths.js';
+import { ensureDependencyDirs } from '../worktree/dep-symlinks.js';
+import { getWorkspaceRoot } from '../workspace/root.js';
 import {
   checkWorktreeDirty,
   commitWorktree,
@@ -50,8 +52,10 @@ export const BOARD_GIT_INITIALIZED_TYPE = 'board.git.initialized';
 /**
  * Boards that have had `ensureIntegration` succeed this process.
  *
- * The op is already idempotent; this only skips a git round-trip. It is not an
- * ownership registry — crash recovery re-runs `ensureIntegration`.
+ * The op is already idempotent; this only skips a git round-trip. Dep links
+ * are still re-validated on every allocate — a broken integration
+ * `node_modules` must not stall the next task. It is not an ownership
+ * registry — crash recovery re-runs `ensureIntegration`.
  *
  * @type {Set<string>}
  */
@@ -262,6 +266,7 @@ export async function ensureBoardWorkspaceGit() {
  *   branch?: string,
  *   error?: string,
  *   output?: string,
+ *   deps?: { ok: boolean, linked?: string[], repaired?: string[], failed?: Array<{ dir: string, reason: string }> },
  *   gitInitialized?: Record<string, unknown>,
  * }>}
  */
@@ -276,10 +281,15 @@ export async function ensureBoardIntegration(boardId) {
     const intPath = getWorktreeSlotPath(boardId, INTEGRATION_SLOT);
     try {
       await fs.access(intPath);
+      // The cache skips the git round-trip, not dep repair. Task worktrees
+      // chain their node_modules off integration; a link that broke after the
+      // first allocate must be healed before the next task starts.
+      const deps = await ensureDependencyDirs(getWorkspaceRoot(), intPath);
       return {
         ok: true,
         path: intPath,
         branch: integrationBranch(boardId),
+        deps,
         ...(git.event ? { gitInitialized: git.event } : {}),
       };
     } catch {

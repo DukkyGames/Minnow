@@ -193,9 +193,18 @@ export async function ensureDependencyDirs(sourceRoot, wtPath) {
       // link. A source that exists but does not resolve is: linking from it would
       // silently leave the worktree with no deps at all.
       const sourceState = await inspectDepDir(sourceDir);
-      if (sourceState === 'missing') continue;
-      if (sourceState === 'broken') {
-        failed.push({ dir, reason: `dependency source ${sourceDir} does not resolve` });
+      if (sourceState === 'missing' || sourceState === 'broken') {
+        const targetState = await inspectDepDir(targetLink);
+        // Drop a leftover looping/dangling target even when there is nothing
+        // healthy to copy from. Leaving it behind is the spawn-ELOOP class.
+        if (targetState === 'broken' && !(await removeDepLink(targetLink))) {
+          failed.push({
+            dir,
+            reason: `existing ${dir} link could not be removed (${targetLink})`,
+          });
+        } else if (sourceState === 'broken') {
+          failed.push({ dir, reason: `dependency source ${sourceDir} does not resolve` });
+        }
         continue;
       }
 
@@ -274,6 +283,25 @@ export async function ensureDependencyDirs(sourceRoot, wtPath) {
   }
 
   return { ok: failed.length === 0, linked, repaired, failed };
+}
+
+/**
+ * True when any known dependency dir under `root` is a dangling, looping, or
+ * otherwise unresolvable link. Used by worktree allocate to fail closed only
+ * on the ELOOP class — not on "the source had nothing to copy".
+ * @param {string} root
+ * @returns {Promise<boolean>}
+ */
+export async function hasBrokenDepDir(root) {
+  const seen = new Set();
+  for (const entry of ECOSYSTEM_ENTRIES) {
+    for (const dir of entry.dirs) {
+      if (seen.has(dir)) continue;
+      seen.add(dir);
+      if ((await inspectDepDir(path.join(root, dir))) === 'broken') return true;
+    }
+  }
+  return false;
 }
 
 /**

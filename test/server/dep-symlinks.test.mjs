@@ -305,6 +305,57 @@ describe('dep-symlinks', () => {
     assert.equal(await fs.readFile(path.join(wtNm, 'pkg.txt'), 'utf8'), 'installed\n');
   });
 
+  test('ensureDependencyDirs removes a broken target when the source is also broken', async () => {
+    const srcDir = await makeWorkDir('broken-src');
+    await fs.writeFile(path.join(srcDir, 'package.json'), '{"name":"broken-src"}\n', 'utf8');
+    const srcNm = path.join(srcDir, 'node_modules');
+    await makeBrokenCycle(srcNm);
+
+    const wtDir = await makeWorkDir('broken-src-wt');
+    const wtNm = path.join(wtDir, 'node_modules');
+    await makeBrokenCycle(wtNm);
+    assert.equal(await inspectDepDir(wtNm), 'broken');
+
+    const res = await ensureDependencyDirs(srcDir, wtDir);
+
+    assert.equal(res.ok, false);
+    assert.match(res.failed.find((f) => f.dir === 'node_modules')?.reason ?? '', /does not resolve/);
+    // Target ELOOP is gone even though there was nothing healthy to copy.
+    assert.equal(await inspectDepDir(wtNm), 'missing');
+
+    await fs.rm(srcDir, { recursive: true, force: true });
+    await fs.rm(wtDir, { recursive: true, force: true });
+  });
+
+  test('createWorktree falls back to the workspace when integration node_modules is broken', async () => {
+    const boardId = 'dep-symlink-board-77777777';
+    const integrationBranch = `minnow/board/${boardId}/integration`;
+    const taskBranch = `minnow/board/${boardId}/task/W5-A`;
+
+    assert.equal((await ensureIntegration({ boardId, branch: integrationBranch })).ok, true);
+
+    const intNm = path.join(getWorktreeSlotPath(boardId, 'integration'), 'node_modules');
+    await makeBrokenCycle(intNm);
+    assert.equal(await inspectDepDir(intNm), 'broken');
+
+    // Do not re-run ensureIntegration — that is the V2 allocate cache hole.
+    const created = await createWorktree({
+      boardId,
+      slotId: 'task-W5-A',
+      branch: taskBranch,
+      baseRef: integrationBranch,
+    });
+    assert.equal(created.ok, true, created.output);
+
+    const wtNm = path.join(getWorktreeSlotPath(boardId, 'task-W5-A'), 'node_modules');
+    assert.equal(await inspectDepDir(wtNm), 'link-ok');
+    assert.equal(
+      await fs.realpath(wtNm),
+      await fs.realpath(path.join(repoDir, 'node_modules')),
+    );
+    assert.equal(await fs.readFile(path.join(wtNm, 'pkg.txt'), 'utf8'), 'installed\n');
+  });
+
   test('createWorktree repairs a broken link in a reused slot', async () => {
     const boardId = 'dep-symlink-board-66666666';
     const integrationBranch = `minnow/board/${boardId}/integration`;
