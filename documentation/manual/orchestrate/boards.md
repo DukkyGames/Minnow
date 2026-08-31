@@ -48,18 +48,15 @@ Keyboard: **Tab** moves between cards and header controls, **arrow keys** move a
 
 The most important control on the board. Four stops, least to most autonomous:
 
-| Mode | Behaviour |
-|------|-----------|
-| **Manual** | You start each task yourself |
-| **Sequential** | The orchestrator runs one task at a time |
-| **Auto** | The orchestrator runs tasks concurrently |
-| **AFK** | Fully hands-off until you press Stop or the board finishes |
+| Control | Behaviour |
+|---------|-----------|
+| **Running** | The board starts eligible work up to the concurrency cap, unattended |
+| **Stopped** | Nothing new starts unless you start a task by hand (Manual) |
+| **Concurrency** | How many tasks may start at once. Set to 1 for sequential |
 
-AFK asks for confirmation, because it means what it says: it will not prompt you again. Anything set to **Ask** in your tool permissions will stall a task with nobody there to approve it, so check that before you walk away.
+Running at concurrency 1 is sequential. Running at a higher N is parallel. Stopped plus per-task start is Manual.
 
-Sequential pins concurrency to one task. Auto and AFK use your concurrency setting — three by default.
-
-**Stop** freezes the board and its timer immediately. A board paused by a shutdown or a memory-recovery event is treated as a system pause, not as failure, and resumes rather than quarantining work.
+**Stop** freezes the board immediately. A board paused by a shutdown or a memory-recovery event stays Stopped until you press Start.
 
 ## Worktree isolation
 
@@ -67,14 +64,14 @@ Parallel agents editing one checkout is a recipe for a mess. Isolation gives eac
 
 | Setting | Behaviour |
 |---------|-----------|
-| **Auto** | Derived from execution mode: off for Manual and Sequential, per-task for Auto and AFK |
+| **Auto** | Derived from concurrency: off at 1, per-task above it |
 | **Off** | Everyone shares the workspace |
 | **Per-task** | Every task gets its own worktree |
 | **Per-wave** | One worktree per wave |
 
 With isolation on, Minnow mints an **integration branch** and merges task branches into it as they complete. While board view is active, the file explorer, terminal and source-control panel follow the **integration** worktree, not any one task's — so you are looking at the assembled result. Open a task chat and you see its own checkout.
 
-Leave this on Auto unless you have a reason. Running Auto mode without isolation means several agents writing to the same files at once. For unattended AFK runs, worktree isolation and the shell sandbox (when available) solve different problems — use both when you care about both.
+Leave this on Auto unless you have a reason. Running several tasks without isolation means several agents writing to the same files at once. Worktree isolation and the shell sandbox (when available) solve different problems — use both when you care about both.
 
 ## Model and concurrency
 
@@ -108,7 +105,7 @@ Toggle back to the kanban at any time from the header.
 
 ## Global defaults
 
-**Settings → Agents → Autopilot** sets the defaults every new board starts with: execution mode, isolation, maximum concurrency, planner model, retries, heartbeat, self-heal rounds, infrastructure provisioning, auto-restart of stalled tasks, and a guard against agents changing directory outside their worktree. Isolation means git worktrees for parallel tasks — not OS host containment.
+**Settings → Agents → Autopilot** sets the defaults every new board starts with: Running or Stopped, isolation, maximum concurrency, planner model, retries, heartbeat, self-heal rounds, infrastructure provisioning, auto-restart of stalled tasks, and a guard against agents changing directory outside their worktree. Isolation means git worktrees for parallel tasks — not OS host containment.
 
 **Settings → Agents → Watchdog** sets the streaming limits — idle timeout and maximum duration — that stop a hung model from stalling a board indefinitely.
 
@@ -120,7 +117,7 @@ Planner and member chats hide the mode selector, and mode changes on them are re
 
 **The plan is the product.** A board executes what the plan says. Vague tasks produce vague work, and no amount of autonomy fixes it. Use [Super Plan](super-plan.md) when the idea is not yet sharp.
 
-**Start Manual.** Run one task, read what the agent did, and see whether the plan means what you thought. Then move up to Sequential or Auto.
+**Start Stopped.** Run one task, read what the agent did, and see whether the plan means what you thought. Then press Start, or set concurrency to 1 for sequential.
 
 **Commit before you start.** The board works on branches, but a clean starting point makes everything easier to unwind.
 

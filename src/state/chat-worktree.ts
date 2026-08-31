@@ -1,16 +1,62 @@
 /**
  * Per-chat worktree helpers (MIN-276) — attach/detach, labels, managed-slot detection.
+ *
+ * Chat-scoped workspace resolution used to live in the V1 board engine's
+ * `worktree-isolation.ts`. That file is gone; these helpers stay because they
+ * are about a chat's own worktree / sandbox, not a board slot.
  */
 
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path.ts';
+import { sanitizePathSegment } from '../lib/sanitize-path-segment.mjs';
+import { isMinnowSandboxWorkspacePath } from '../lib/workspace-sandbox.ts';
 import { gitBranches } from './git-api.ts';
-import { sanitizeRefFragment } from './worktree-isolation.ts';
 import { getWorkspacePath } from './workspace.ts';
 import {
   createChatWorktree,
   removeChatWorktree,
 } from './worktree-service.ts';
-import type { Chat } from '../types.ts';
+import type { Chat, ChatGroup } from '../types.ts';
+
+/**
+ * Sanitize an id fragment into a safe git ref / path segment.
+ * Same rules as the server worktree path helper.
+ */
+export function sanitizeRefFragment(raw: string | number): string {
+  return sanitizePathSegment(raw);
+}
+
+/**
+ * Tool workspace root for a chat: isolated worktree when present, otherwise the
+ * chat's bound sandbox (~/.minnow/workspace or ~/.minnow/chats) or leftover
+ * board-folder workspace. Plain Code chats without a worktree return undefined
+ * so callers fall back to the live top-bar workspace.
+ *
+ * Does not look up V1 board-task `worktreePath` — that engine is gone. Chats
+ * that still have `worktreeRoot` stamped keep using it.
+ */
+export function resolveChatToolWorkspaceRoot(
+  chat: Pick<Chat, 'worktreeRoot' | 'boardGroupId' | 'workspacePath'>,
+  _groups?: ChatGroup[],
+): string | undefined {
+  const direct = chat.worktreeRoot?.trim();
+  if (direct) return direct;
+
+  const ws = chat.workspacePath?.trim();
+  if (!ws) return undefined;
+  const normalized = normalizeWorkspacePath(ws);
+
+  if (chat.boardGroupId?.trim()) return normalized;
+  if (isMinnowSandboxWorkspacePath(normalized)) return normalized;
+  return undefined;
+}
+
+/** Direct chat worktree path (no leftover board-task fallback). */
+export function resolveChatWorktreeRoot(
+  chat: Pick<Chat, 'worktreeRoot'>,
+  _groups?: ChatGroup[],
+): string | undefined {
+  return chat.worktreeRoot?.trim() || undefined;
+}
 
 /** True when the chat runs tools inside an isolated git worktree. */
 export function isChatWorktreeMode(chat: Pick<Chat, 'worktreeRoot'>): boolean {

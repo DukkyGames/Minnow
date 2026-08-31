@@ -16,12 +16,8 @@ import {
 } from '../os/router';
 import { fetchSchedulerJobs } from '../scheduler/client';
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
-import { getGroupsForWorkspace, isBoardOwnedChat, openBoardGroup } from '../state/chat-groups';
+import { getGroupsForWorkspace, isBoardOwnedChat, openBoardGroup, isLeftoverBoardRunning, leftoverBoardProgressPercent } from '../state/chat-groups';
 import { gitStatus } from '../state/git-api';
-import {
-  getBoardProgressPercent,
-  isBoardRunning,
-} from '../state/orchestrate-board-store';
 import { getChatsForWorkspace, getChatLastMessageAt, getSidebarListedChatsForWorkspace } from '../state/session-workspace-scope';
 import { sessionState } from '../state/sessions';
 import { isLocalServerAvailable } from '../tools/config';
@@ -373,7 +369,7 @@ async function refreshPulseBand(): Promise<void> {
   const workspacePath = getWorkspacePath();
   const groups = sessionState ? getGroupsForWorkspace(workspacePath) : [];
   const boardGroups = groups.filter((g) => g.orchestrateBoard);
-  const boardsActive = boardGroups.filter((g) => isBoardRunning(g)).length;
+  const boardsActive = boardGroups.filter((g) => isLeftoverBoardRunning(g)).length;
 
   let agentCount = 0;
   try {
@@ -464,7 +460,7 @@ function renderBoardRow(group: ChatGroup): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'code-overview__row is-entering';
-  const running = isBoardRunning(group);
+  const running = isLeftoverBoardRunning(group);
   const dot = document.createElement('span');
   dot.className = `code-overview__status-dot ${running ? 'ok' : 'idle'}`;
   dot.setAttribute('aria-hidden', 'true');
@@ -483,7 +479,7 @@ function renderBoardRow(group: ChatGroup): HTMLButtonElement {
   const aside = document.createElement('div');
   aside.className = 'code-overview__row-aside';
   if (board && taskCount > 0) {
-    const pct = getBoardProgressPercent(board);
+    const pct = leftoverBoardProgressPercent(group);
     const track = document.createElement('div');
     track.className = 'code-overview__progress';
     track.setAttribute('aria-hidden', 'true');
@@ -569,7 +565,7 @@ async function refreshRunningPanel(): Promise<void> {
   for (const record of records.slice(0, 12)) {
     rows.push(renderRunRow(record));
   }
-  for (const group of boardGroups.filter((g) => isBoardRunning(g)).slice(0, 6)) {
+  for (const group of boardGroups.filter((g) => isLeftoverBoardRunning(g)).slice(0, 6)) {
     rows.push(renderBoardRow(group));
   }
 

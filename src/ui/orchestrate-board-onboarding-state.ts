@@ -2,13 +2,13 @@
  * Transient UI flags for orchestrate board onboarding (git preflight + kickoff).
  */
 
-/** True while /git-setup skill turn runs before board_init. */
+/** True while /git-setup skill turn runs before leftover board create. */
 let boardOnboardingGitSetupActive = false;
 
 /** True while kickoff preflight (git prompt / git setup) is in flight. */
 let boardKickoffInProgress = false;
 
-/** True from board_init kickoff send until stream ends or board store appears (reduces picker flicker). */
+/** True from leftover kickoff send until stream ends or a store appears (reduces picker flicker). */
 let boardOnboardingAwaitingInit = false;
 
 /** AbortController for the active kickoff sequence (git prompt, git skill, pre-send). */

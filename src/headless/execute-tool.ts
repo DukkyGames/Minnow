@@ -42,11 +42,6 @@ const BROWSER_ONLY_TOOLS = new Set([
   'cancel_sub_agent',
   'list_sub_agents',
   'get_sub_agent_status',
-  'board_init',
-  'board_update_task',
-  'board_get_state',
-  'board_report',
-  'delegate_tasks',
   'request_browser_origin_access',
 ]);
 

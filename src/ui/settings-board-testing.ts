@@ -7,7 +7,7 @@ import '../styles/settings-about.css';
 import { PLACEHOLDER_CHAT_NAME } from '../constants';
 import { detectConfigServer } from '../config/storage-mode';
 import { fetchWorkspace } from '../config/workspace-api';
-import { TEST_BOARD_GROUP_ID } from '../dev/test-board-seed';
+import { TEST_BOARD_GROUP_ID } from '../../server/orchestrate/board-testing/constants.js';
 import {
   ensureResearchWorkspaceOption,
   populateResearchWorkspaceSelect,
@@ -350,12 +350,12 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
   presetSelect.id = 'boardTestingPreset';
   seedGroup.appendChild(presetRow);
 
-  const { row: modeRow, select: modeSelect } = createSettingsSelectRow('Execution mode', {
+  const { row: modeRow, select: modeSelect } = createSettingsSelectRow('Seed status', {
     options: [
-      { value: 'manual', label: 'Manual' },
-      { value: 'afk', label: 'AFK' },
-      { value: 'auto', label: 'Auto' },
-      { value: 'sequential', label: 'Sequential' },
+      { value: 'manual', label: 'Stopped (manual start)' },
+      { value: 'afk', label: 'Running (unattended)' },
+      { value: 'auto', label: 'Running' },
+      { value: 'sequential', label: 'Running at N = 1' },
     ],
     value: mode,
     searchKey: 'advanced.boardTesting.seed.mode',
@@ -369,7 +369,7 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
 
   const { row: autoStartRow } = createSettingsToggleRow('Auto-start board', {
     checked: autoStart,
-    description: 'Set board.autoRunning (use with AFK or auto execution mode).',
+    description: 'Start the leftover seed as Running after it is written.',
     searchKey: 'advanced.boardTesting.seed.autoStart',
     onChange: (next) => {
       autoStart = next;

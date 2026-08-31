@@ -16,7 +16,6 @@ import { httpRequest, rmTestHome, setTestHome } from '../config/test-helpers.js'
 process.env.MINNOW_TEST = '1';
 
 const GROUP_ID = 'grp_a0000000-0000-4000-8000-000000000001';
-const TEST_BOARD_PLANNER_ID = 'a0000000-0000-4000-8000-000000000001';
 
 function createBoardTestingTestServer() {
   return http.createServer((req, res) => {
@@ -157,41 +156,15 @@ describe('orchestrate board-testing API', () => {
     });
   });
 
-  test('seed upserts test board sessions', async () => {
+  test('V1 session seed is retired (MIN-716)', async () => {
     const seed = await httpRequest(baseUrl, 'POST', '/api/orchestrate/board-testing/seed', {
       workspacePath: homeDir,
       preset: 'quick',
       mode: 'manual',
       stableIds: true,
     });
-    assert.equal(seed.status, 200);
-    assert.equal(seed.json?.groupId, GROUP_ID);
-    assert.equal(seed.json?.plannerId, TEST_BOARD_PLANNER_ID);
-    assert.equal(seed.json?.taskCount, 3);
-
-    const status = await httpRequest(baseUrl, 'GET', '/api/orchestrate/board-testing/status');
-    assert.equal(status.json?.seededBoard?.present, true);
-    assert.equal(status.json?.seededBoard?.count, 1);
-    assert.equal(status.json?.seededBoard?.stableTestBoardPresent, true);
-  });
-
-  test('seed without stable ids creates a new board each time', async () => {
-    const first = await httpRequest(baseUrl, 'POST', '/api/orchestrate/board-testing/seed', {
-      workspacePath: homeDir,
-      preset: 'quick',
-      mode: 'manual',
-    });
-    const second = await httpRequest(baseUrl, 'POST', '/api/orchestrate/board-testing/seed', {
-      workspacePath: homeDir,
-      preset: 'quick',
-      mode: 'manual',
-    });
-    assert.equal(first.status, 200);
-    assert.equal(second.status, 200);
-    assert.notEqual(first.json?.groupId, second.json?.groupId);
-
-    const status = await httpRequest(baseUrl, 'GET', '/api/orchestrate/board-testing/status');
-    assert.ok((status.json?.seededBoard?.count ?? 0) >= 2);
+    assert.equal(seed.status, 410);
+    assert.match(String(seed.json?.error ?? ''), /POST \/api\/boards/);
   });
 
   test('check-log validates fixture JSONL', async () => {

@@ -84,7 +84,7 @@ const PHASE_STATUS_POOL: Record<Exclude<BoardOnboardingBusyPhase, 'idle' | 'git-
     'Reading your plan file…',
     'Parsing waves and tasks…',
     'Building Kanban columns…',
-    'Calling board_init…',
+    'Creating the board…',
   ],
 };
 
@@ -115,13 +115,13 @@ function parseToolArgs(raw: string): Record<string, unknown> {
   }
 }
 
-/** Derive a human status line from the planner chat history during board_init. */
+/** Derive a human status line from leftover planner chat history during board create. */
 export function deriveBoardInitStatusMessage(chat: Chat): string | null {
   for (let i = chat.history.length - 1; i >= 0; i -= 1) {
     const msg = chat.history[i];
     if (msg.role === 'tool') {
       const content = typeof msg.content === 'string' ? msg.content : '';
-      if (content.includes('board_init')) {
+      if (/creating the board|initialized/i.test(content)) {
         return 'Creating board tasks and waves…';
       }
       continue;
@@ -134,7 +134,6 @@ export function deriveBoardInitStatusMessage(chat: Chat): string | null {
       const args = parseToolArgs(tc.function.arguments ?? '{}');
       const label = describeToolInvocation(name, args).title;
       if (name === 'read_file') return 'Reading your plan file…';
-      if (name === 'board_init') return 'Building Kanban from parsed tasks…';
       return `${label}…`;
     }
   }
@@ -386,7 +385,16 @@ export function syncBoardOnboardingBusyUI(
   startStatusRotation(wrap, phase, chat);
 }
 
-/** Stop kickoff / board_init and return onboarding to the plan picker. */
+/** Re-sync onboarding chrome if a `.board-onboarding` panel is still in the DOM. */
+export function refreshBoardOnboardingIfMounted(): void {
+  const wrap = document.querySelector('.board-onboarding') as HTMLElement | null;
+  if (!wrap) return;
+  const chat = getActiveChat();
+  const phase = resolveBoardOnboardingBusyPhase(false, Boolean(chat.orchestratePlanPath?.trim()));
+  syncBoardOnboardingBusyUI(wrap, phase, chat);
+}
+
+/** Stop leftover kickoff and return onboarding to the plan picker. */
 export function cancelBoardOnboardingSetup(chatId?: string): void {
   const id = chatId?.trim() || getActiveChat().id;
   resolveBoardGitSetupPrompt(false);
@@ -398,7 +406,7 @@ export function cancelBoardOnboardingSetup(chatId?: string): void {
     delete wrap.dataset.boardOnboardingBoundPlan;
     delete wrap.dataset.boardOnboardingPlanPath;
   }
-  void import('./orchestrate-board').then((m) => m.refreshBoardOnboardingIfMounted());
+  void refreshBoardOnboardingIfMounted();
 }
 
 /** Wire git prompt buttons, cancel, and jump-to-chat once per mounted panel. */
@@ -417,7 +425,7 @@ export function wireBoardOnboardingInteractions(
   chatBtn?.addEventListener('click', onJumpToChat);
 
   const refreshOnboarding = (): void => {
-    void import('./orchestrate-board').then((m) => m.refreshBoardOnboardingIfMounted());
+    refreshBoardOnboardingIfMounted();
     void import('./orchestrate-board-setup-banner').then((m) =>
       m.syncBoardSetupReturnBanner(),
     );

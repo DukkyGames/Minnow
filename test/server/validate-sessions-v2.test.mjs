@@ -109,7 +109,7 @@ describe('validateSessionState workspace schema', () => {
             planPath: 'documentation/plans/p.md',
             startedAt: 1,
             lastUpdatedAt: 1,
-            executionMode: 'auto',
+            status: 'running',
             isolationMode: 'per-task',
             integrationBranch: 'minnow/board/grp-1/integration',
             waves: [{ id: 'W5', status: 'in_progress' }],

@@ -14,23 +14,31 @@ import {
   abortChatTitleGeneration,
   listTitleJobInflightChatIds,
 } from './titles/inflight';
-import { getPlannerChatForGroup } from '../state/chat-groups';
+import { getPlannerChatForGroup, isLeftoverBoardRunning } from '../state/chat-groups';
 import { buildAgentActivitySnapshot } from '../state/agent-activity-registry';
-import { countRunningTaskChats, stopBoardAutoRun } from '../state/orchestrate-board-actions';
-import { isBoardRunning } from '../state/orchestrate-board-store';
 import { sessionState } from '../state/sessions';
 import {
   cancelResearchRunForShell,
   isResearchRunningForShell,
 } from '../research/panel';
+import type { ChatGroup, LeftoverBoardTask } from '../types';
 import { forceCloseAskQuestionModal } from '../ui/question-cards-modal';
+
+function leftoverBoardHasLiveWork(group: ChatGroup): boolean {
+  if (isLeftoverBoardRunning(group)) return true;
+  const board = group.orchestrateBoard;
+  if (!board) return false;
+  return board.tasks.some(
+    (t: LeftoverBoardTask) =>
+      Boolean(t.chatId?.trim()) &&
+      (t.status === 'in_progress' || t.status === 'testing' || t.status === 'merging'),
+  );
+}
 
 function hasRunningBoardWork(): boolean {
   if (!sessionState) return false;
   for (const group of sessionState.groups ?? []) {
-    const board = group.orchestrateBoard;
-    if (!board) continue;
-    if (isBoardRunning(group) || countRunningTaskChats(board) > 0) return true;
+    if (leftoverBoardHasLiveWork(group)) return true;
   }
   return false;
 }
@@ -105,15 +113,17 @@ export function stopAllAgentActivity(): void {
 
   if (sessionState) {
     for (const group of sessionState.groups ?? []) {
-      const board = group.orchestrateBoard;
-      if (!board) continue;
-      if (!isBoardRunning(group) && countRunningTaskChats(board) === 0) continue;
+      if (!leftoverBoardHasLiveWork(group)) continue;
       const planner = getPlannerChatForGroup(group);
-      if (!planner) continue;
-      stopBoardAutoRun(group, planner, { reason: 'user' });
-      handledChatIds.add(planner.id);
-      for (const task of board.tasks) {
-        if (task.chatId?.trim()) handledChatIds.add(task.chatId.trim());
+      if (planner) {
+        stopGeneration(planner.id, 'user');
+        handledChatIds.add(planner.id);
+      }
+      for (const task of group.orchestrateBoard?.tasks ?? []) {
+        const chatId = task.chatId?.trim();
+        if (!chatId) continue;
+        stopGeneration(chatId, 'user');
+        handledChatIds.add(chatId);
       }
     }
 

@@ -434,239 +434,69 @@ export interface PersistedSubAgentRun {
   boardTaskId?: string | null;
 }
 
-/** Orchestrate board task lifecycle. */
-export type BoardTaskStatus =
-  | 'planned'
-  | 'in_progress'
-  | 'testing'
-  | 'merging'
-  | 'complete'
-  | 'failed'
-  | 'blocked'
-  | 'quarantined';
-
 /** Sub-agent category for board agent grid styling. */
 export type BoardCategory = 'build' | 'fix' | 'test' | 'research';
 
-/** Structured agent→board report (board_report tool). */
-export interface BoardReport {
-  outcome: 'pass' | 'fail' | 'env_blocked';
-  summary: string;
-  blockers?: string[];
-}
-
-/** One task on the Orchestrate Kanban board. */
-export interface BoardTask {
-  id: string;
-  title: string;
-  wave: number | string;
-  category: BoardCategory;
-  status: BoardTaskStatus;
-  assignedRunId?: string;
-  /** Latest settled sub-agent run (kept after assignedRunId is cleared). */
-  lastRunId?: string;
-  /** All sub-agent run ids spawned for this task (newest last). */
-  runHistory?: string[];
-  startedAt?: number;
-  endedAt?: number;
-  /** Set when the forced build-pass Brain synthesis has already run for this task. */
-  synthesizedBuildAt?: number;
-  /** Set when the forced post-merge Brain synthesis has already run for this task. */
-  synthesizedTestAt?: number;
-  filesChanged?: number;
-  notes?: string;
-  error?: string;
-  /** Linked task chat session id. */
-  chatId?: string;
-  /** Build spec from plan parse (display + task-chat seed). */
-  buildSpec?: string;
-  /** Test spec from plan parse (display + task-chat seed). */
-  testSpec?: string;
-  /** Task ids that must reach 'complete' before this task is ready; omit when none. */
-  dependsOn?: string[];
-  /** Linked Tester chat session id (per-task testing). */
-  testChatId?: string;
-  /**
-   * Linked fixer chat. Two flavours, discriminated by {@link fixerKind}:
-   *  - 'merge' (default) — merge-conflict fixer, runs in the integration worktree.
-   *  - 'env'  — environment/setup fixer, runs in the task's own worktree to
-   *             repair infra failures (missing deps, unstarted services) so AFK
-   *             can self-heal instead of dead-ending at quarantine.
-   */
-  fixerChatId?: string;
-  /** Which kind of fixer {@link fixerChatId} is. Absent ⇒ legacy merge fixer. */
-  fixerKind?: 'merge' | 'env';
-  /** Env-fixer attempts (0 = first try). Bounds the infra self-heal loop. */
-  envFixAttempts?: number;
-  /** Phase to re-run after an env-fixer finishes ('build' or 'test'). */
-  envFixPhase?: 'build' | 'test';
-  /** Build↔test retry count (incremented on each test failure). */
-  testAttempts?: number;
-  /** Build-failure retry count (incremented on each failed build chat in auto/afk). */
-  buildAttempts?: number;
-  /** Merge-conflict fixer attempts (0 = first try, 1 = one retry used). */
-  fixerAttempts?: number;
-  /** Bounded retry counter when a build chat ends stopped (timeout/system). */
-  stopRetries?: number;
-  /** Pre-merge integration tip SHA for restore on fixer failure. */
-  mergePreSha?: string;
-  /** Unified structured report from board_report (stream-end routing). */
-  boardReport?: BoardReport;
-  /** Structured verdict from board_report_test_result (stream-end routing). */
-  testVerdict?: 'pass' | 'fail';
-  /** Human summary from the Tester (shown on fail / blocked). */
-  testSummary?: string;
-  /** Snapshot of the last cleared failure, for the collapsed "previous failure" link. */
-  prevFailure?: {
-    error?: string;
-    testSummary?: string;
-    testVerdict?: 'pass' | 'fail';
-    at: number;
-  };
-  /** Quarantine payload — set when task is moved to `quarantined`. */
-  quarantine?: {
-    category: 'infra' | 'code' | 'merge' | 'stall' | 'unknown';
-    summary: string;
-    resolutionSteps: string[];
-    at: number;
-    logRef?: string;
-  };
-  /** Phase-2 placeholder: self-heal iteration counter. */
-  selfHealRound?: number;
-  /** Monotonic lifecycle counter bumped on requeue so completion reports dedupe per run. */
-  lifecycleRun?: number;
-  /** Phase-2 placeholder: category of the last self-heal attempt. */
-  lastHealCategory?: string;
-  /** Phase-2 placeholder: outcome of the last build attempt. */
-  buildOutcome?: 'success' | 'failure' | 'skipped' | string;
-  /** Phase-2: structured blockers reported by board_report_build_result. */
-  buildBlockers?: string[];
-  /**
-   * Pending Builder seed (failure-aware retry/reopen prompt) to use on the next
-   * build start instead of the default task seed. Persisted on the task so it
-   * survives being queued for a concurrency slot; consumed and cleared by
-   * startTask when the build actually launches.
-   */
-  pendingBuildSeed?: string;
-  /**
-   * Absolute path to this task's git worktree when board isolation is active
-   * (MIN-275). Unset when isolation is `off` or the worktree has been cleaned up.
-   */
-  worktreePath?: string;
-  /** Git branch backing {@link worktreePath} (per-task, or the shared per-wave branch). */
-  worktreeBranch?: string;
-  /** Vite client port allocated to this task's isolated worktree (avoids port collisions). */
-  devPort?: number;
-  /** Express/API server port paired with {@link devPort} for fullstack scaffolds. */
-  apiPort?: number;
-}
-
-/** Wave rollup row (status derived from tasks). */
-export interface BoardWave {
-  id: number | string;
-  status: BoardTaskStatus;
-  taskCount?: number;
-  completeCount?: number;
-  /** When true, the wave's kanban lanes are hidden in board view. */
-  collapsed?: boolean;
-}
-
-/** A task that could not be resolved by the self-heal loop — feeds the MIN-208 finish dashboard. */
-export interface UnresolvedIssue {
-  taskId: string;
-  title: string;
-  category: 'infra' | 'code' | 'merge' | 'stall';
-  summary: string;
-  resolutionSteps: string[];
-  logRef?: string;
-  createdAt: number;
-  attempts?: number;
-}
-
-/** Structured Orchestrate plan execution state (persisted on chat). */
+/**
+ * Leftover V1 board blob persisted on {@link ChatGroup}.
+ * The V1 engine is gone; V2 boards live in `server/orchestrator/` and do not
+ * write this. Kept so old sessions still hydrate. Autonomy is the V2 pair
+ * (MIN-718): {@link OrchestrateBoardState.status} plus {@link OrchestrateBoardState.maxConcurrentTasks}.
+ */
 export interface OrchestrateBoardState {
   planPath: string;
-  tasks: BoardTask[];
-  waves: BoardWave[];
+  tasks: Array<{
+    id: string;
+    title: string;
+    wave: number | string;
+    category: BoardCategory;
+    status: string;
+    chatId?: string;
+    testChatId?: string;
+    fixerChatId?: string;
+    fixerKind?: 'merge' | 'env';
+    worktreePath?: string;
+    error?: string;
+    dependsOn?: string[];
+    buildSpec?: string;
+    testSpec?: string;
+  }>;
+  waves: Array<{
+    id: number | string;
+    status?: string;
+    taskCount?: number;
+    completeCount?: number;
+    collapsed?: boolean;
+  }>;
   startedAt: number;
   lastUpdatedAt: number;
-  /** Ms accumulated while orchestration is actively running (pauses when idle/stopped). */
   timerAccumulatedMs?: number;
-  /** Epoch ms when the current run segment started; unset while the timer is paused. */
   timerSegmentStartedAt?: number;
-  /** Parent turn id for Stop orchestrator (minted in tool loop). */
   activeParentTurnId?: string;
-  /** Max concurrent task chats (default 3). */
+  /** Leftover concurrency integer. Sequential hydrates as 1. */
   maxConcurrentTasks?: number;
-  /** Provider for board orchestration (planner + task chats). */
+  /**
+   * Leftover Running / Stopped. AFK and auto-run hydrate as running;
+   * Manual and an explicit user stop hydrate as stopped.
+   */
+  status?: 'running' | 'stopped';
   modelProviderId?: string;
-  /** Model for board orchestration (planner + task chats). */
   modelId?: string;
-  /** Per-board reasoning effort (planner + linked task chats). */
   reasoningEffort?: ReasoningEffortOption;
-  /** Per-board thinking override for off/on-only models (planner + linked task chats). */
   thinkingMode?: ThinkingTriState;
-  /**
-   * @deprecated Replaced by {@link maxConcurrentTasks} + {@link handsOff}. Kept only
-   * so legacy sessions can hydrate and migrate; never written by new code. Read the
-   * derived value via `getBoardExecutionMode`.
-   */
-  executionMode?: 'manual' | 'auto' | 'sequential' | 'afk';
-  /** Fully autonomous: never prompt the user until Stop or board finish. */
-  handsOff?: boolean;
-  /**
-   * Frozen, human-readable directory segment for this board's worktrees
-   * (`~/.minnow/worktrees/<repo>-<hash>/<worktreeSlug>/…`). Minted once from the
-   * board title so renaming the board never orphans a worktree.
-   */
   worktreeSlug?: string;
-  /** When true, skip per-task Tester; only final integration test runs verification. */
   skipPerTaskTesting?: boolean;
-  /** True when the user has pressed Start in auto/sequential mode. */
-  autoRunning?: boolean;
-  /** Orchestrator requested AFK via board_set_autonomy; awaits user confirmation. */
-  pendingAfk?: boolean;
-  /**
-   * True when the user pressed Stop on the board. Freezes the header timer
-   * immediately and surfaces the Stopped status regardless of lagging task
-   * statuses. Cleared when the user starts execution again.
-   */
-  userStopped?: boolean;
-  /**
-   * True when auto-run was paused by shutdown or OOM recovery (not user Stop).
-   * Stream-end finalization treats this as a system stop (planned + stopRetries),
-   * not quarantine. Cleared when the user starts execution again.
-   */
-  systemPaused?: boolean;
-  /**
-   * Filesystem/process isolation for parallel tasks (MIN-275). When unset it is
-   * resolved from concurrency (1 → per-board, >1 → per-task).
-   */
   isolationMode?: 'off' | 'per-task' | 'per-wave' | 'per-board';
-  /**
-   * Agent shell sandbox for this board (MIN-553). When unset, inherits Autopilot
-   * default (`require`). Complementary to {@link isolationMode} (git worktrees).
-   */
   shellSandboxMode?: 'off' | 'prefer' | 'require';
-  /** Board integration branch that task/wave branches merge into; minted at first isolated start. */
   integrationBranch?: string;
-  /** Base branch/commit the integration branch was created from (cleanup/reset reference). */
   isolationBaseRef?: string;
-  /** Epoch ms when plan-complete UI was shown (dedupe). */
   completionShownAt?: number;
-  /** True when every task is quarantined and none completed (terminal blocked state). */
   terminalBlocked?: boolean;
-  /** Plan-complete wrap-up turn deferred until planner stream ends. */
   wrapUpPending?: boolean;
-  /** User dismissed the finish dashboard to view the kanban again. */
   dashboardDismissed?: boolean;
-  /** Epoch ms when integration was merged into the workspace and committed (finish dashboard). */
   integrationLandedAt?: number;
-  /** Epoch ms when the user cleared all board git worktrees from the finish dashboard. */
   worktreesClearedAt?: number;
-  /** Cached markdown finish report (summary, next steps, how-to-run). */
   finishReport?: string;
-  /** Full-board integration test after all tasks complete. */
   finalTest?: {
     status: 'pending' | 'in_progress' | 'passed' | 'failed';
     chatId?: string;
@@ -674,22 +504,12 @@ export interface OrchestrateBoardState {
     recordedVerdict?: 'pass' | 'fail';
     failingTaskIds?: string[];
     summary?: string;
-    /**
-     * Commands the final tester **actually ran and verified**, reported via
-     * `board_report`. The finish report prints these instead of guessing; when
-     * absent it falls back to manifest detection and labels it unverified.
-     */
     runInstructions?: BoardRunInstructions;
   };
-  /** Chronological diagnostic log, capped ring buffer (oldest dropped). */
-  log?: BoardLogEvent[];
-  /** Phase-2 placeholder: provisioning lifecycle for AFK workspace setup. */
-  provisionState?: 'idle' | 'provisioning' | 'ready' | 'failed';
-  /** Phase-2 placeholder: content-hash signatures of provisioned artefacts. */
-  provisionedSignatures?: string[];
-  /** Structured per-task unresolved issues — data source for the MIN-208 finish dashboard. */
-  unresolvedIssues?: UnresolvedIssue[];
 }
+
+/** One leftover V1 task row on {@link OrchestrateBoardState} (session hydrate only). */
+export type LeftoverBoardTask = OrchestrateBoardState['tasks'][number];
 
 /** Verified project commands reported by the final integration tester. */
 export interface BoardRunInstructions {
@@ -697,112 +517,6 @@ export interface BoardRunInstructions {
   start?: string;
   test?: string;
   notes?: string;
-}
-
-export type BoardLogLevel = 'info' | 'warn' | 'error';
-
-export type BoardLogEventType =
-  | 'board_init'
-  | 'mode_change'
-  | 'auto_start'
-  | 'auto_stop'
-  | 'task_status'
-  | 'task_started'
-  | 'build_verdict'
-  | 'test_verdict'
-  | 'merge_result'
-  | 'worktree_allocated'
-  | 'worktree_released'
-  | 'task_retry'
-  | 'nudge'
-  | 'task_error'
-  | 'task_quarantined'
-  | 'tool_call'
-  | 'terminal_run'
-  | 'sandbox'
-  | 'dev_server'
-  | 'phase_start'
-  | 'phase_end'
-  | 'slot_acquire'
-  | 'slot_release'
-  | 'hold_acquire'
-  | 'hold_release'
-  | 'hold_expiry'
-  | 'concurrency_observation'
-  | 'lifecycle_owner_set'
-  | 'lifecycle_owner_clear'
-  | 'board_terminal'
-  | 'planner_report'
-  | 'completion_notification'
-  | 'interaction_required'
-  | 'final_test_started'
-  | 'final_test_verdict';
-
-export type BoardExecutionPhase =
-  | 'build'
-  | 'test'
-  | 'fixer'
-  | 'merge'
-  | 'final_test'
-  | 'planner';
-
-export interface BoardLogEvent {
-  id: string;
-  ts: number;
-  type: BoardLogEventType;
-  level: BoardLogLevel;
-  taskId?: string;
-  message: string;
-  detail?: BoardLogDetail;
-}
-
-export interface BoardLogDetail {
-  from?: BoardTaskStatus;
-  to?: BoardTaskStatus;
-  verdict?: 'pass' | 'fail';
-  attempt?: number;
-  attemptKind?: 'build' | 'test' | 'fixer' | 'nudge';
-  cause?: 'root' | 'dependency';
-  category?: NonNullable<BoardTask['quarantine']>['category'];
-  mode?: 'manual' | 'auto' | 'sequential' | 'afk';
-  outcome?: 'merged' | 'conflict' | 'error' | 'skipped';
-  branch?: string;
-  devPort?: number;
-  apiPort?: number;
-  toolName?: string;
-  argsPreview?: string;
-  resultPreview?: string;
-  command?: string;
-  exitCode?: number;
-  runId?: string;
-  chatId?: string;
-  error?: string;
-  summary?: string;
-  failingTaskIds?: string[];
-  /** Wave a `board_add_tasks` append landed in. */
-  waveId?: string;
-  /** Task ids appended to a running board. */
-  taskIds?: string[];
-  /** Durable correlation id for one phase invocation. */
-  phaseId?: string;
-  phase?: BoardExecutionPhase;
-  /** Monotonic task lifecycle generation; prevents stale owners finalizing a requeue. */
-  lifecycleRun?: number;
-  slotId?: string;
-  holdId?: string;
-  holdKind?: 'merge' | 'fixer' | 'handoff' | 'phase_rerun' | 'other';
-  ownerId?: string;
-  ownerKind?: 'chat' | 'run' | 'hold' | 'planner' | 'system';
-  activeSlots?: number;
-  activeHolds?: number;
-  activeTotal?: number;
-  concurrencyCap?: number;
-  durationMs?: number;
-  reason?: string;
-  terminalOutcome?: 'passed' | 'blocked' | 'stopped' | 'failed';
-  reportId?: string;
-  notificationId?: string;
-  interactionKind?: 'question' | 'approval' | 'confirmation' | 'mode_switch' | 'other';
 }
 
 /** Collapsible sidebar folder for chats in a workspace. */
@@ -820,7 +534,7 @@ export interface ChatGroup {
   orchestratePlanPath?: string;
   /** Main-column chat vs board rendering for this folder. */
   viewMode?: 'chat' | 'board';
-  /** Orchestrate planner chat that parsed the plan / runs board_init. */
+  /** Leftover V1 planner chat id (hydrate only — V2 boards have no planner chat). */
   plannerChatId?: string;
 }
 

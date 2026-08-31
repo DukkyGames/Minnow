@@ -103,7 +103,7 @@ Scoped suites (each delegates to `node test/run-all.mjs --suite <name>`):
 | `npm run test:terminal-pty` | Terminal PTY session (live server) |
 | `npm run test:ui-designer` | UI Designer agent |
 | `npm run test:settings` | Settings registry |
-| `npm run test:board` | Orchestrate board suite — see [orchestrate-board-testing.md](orchestrate-board-testing.md) |
+| `npm run test:orchestrator` / `test:board` | Orchestrator V2 journal suite — see [orchestrate-board-testing.md](orchestrate-board-testing.md) |
 | `npm run test:check-coverage` | Orphan test detection (also in CI) |
 
 Most TS/UI suites run under `tsx` with `--import ./test/test-loader.mjs` (stubs `.css` + xterm); some use `--experimental-test-module-mocks`.
@@ -125,10 +125,10 @@ Most TS/UI suites run under `tsx` with `--import ./test/test-loader.mjs` (stubs 
 
 | Command | Description |
 |---------|-------------|
-| `npm run test:board` | Orchestrate Kanban test suite only. See [orchestrate-board-testing.md](orchestrate-board-testing.md). |
+| `npm run test:orchestrator` / `test:board` | V2 journal suite (`test/orchestrator/` + scenario catalog). See [orchestrate-board-testing.md](orchestrate-board-testing.md). |
+| `npm run board:scenario-contract` | Validate the Settings board-testing catalog (PR gate). |
 | `npm run fake-model` | Local OpenAI-v1 stub for manual board runs. `npm run fake-model -- --register` adds provider `fake-board`. |
-| `npm run seed:test-board` | Pre-initialized test board in `~/.minnow/sessions` (skips onboarding + `board_init`). |
-| `npm run check:board-log -- <groupId>` | Validate orchestrate JSONL log invariants. |
+| `npm run check:board-log -- <path>` | Validate leftover V1 JSONL logs. V2 history is the journal under `~/.minnow/boards/`. |
 
 ## Smoke scripts
 

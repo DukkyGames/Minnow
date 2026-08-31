@@ -2,7 +2,7 @@
 
 Terms Minnow uses, in the sense Minnow means them.
 
-**AFK mode** — The most autonomous orchestrate board setting. Runs hands-off until you press Stop or the board finishes, and will not prompt you.
+**Running** — The board is ticking: eligible work starts up to the concurrency cap until you press Stop or the board finishes.
 
 **Board** — A kanban of tasks generated from a plan document, worked by agents. See [Orchestrate boards](../orchestrate/boards.md).
 
@@ -14,7 +14,7 @@ Terms Minnow uses, in the sense Minnow means them.
 
 **Context ring** — The dial beside Send showing how much of the model's window this conversation uses.
 
-**Execution mode** — How autonomously a board runs: Manual, Sequential, Auto or AFK.
+**Concurrency** — How many board tasks may start at once. Sequential is Running at 1.
 
 **Fixer** — The board role that repairs a task after its tests fail.
 

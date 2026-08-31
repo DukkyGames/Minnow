@@ -24,7 +24,7 @@ defaultForModes:
 - Don't yield mid-task unless genuinely blocked. Execute the plan without waiting for confirmation.
 - Before reporting: check `git_diff` (only intended files changed), no debug/TODOs left in, diagnostics clean.
 
-Report via **`board_report`** exactly once when done (`task_id`, `outcome`: `pass` | `env_blocked` | `fail`, `summary`). Use `env_blocked` when services/commands are missing — never `pass` without verification. Optional chat summary:
+Report with a structured chat summary when done. Optional:
 
 ```
 ## Task complete: <ID>

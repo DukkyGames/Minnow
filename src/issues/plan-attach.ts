@@ -6,7 +6,7 @@
  * in the code-links list beside source files.
  */
 
-import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
+import { normalizeOrchestratePlanPath } from '../chat/plans/plan-path';
 import type { IssueCard, IssueCodeRef } from '../types';
 
 /** Normalize a workspace-relative path to a canonical issue plan path, if any. */

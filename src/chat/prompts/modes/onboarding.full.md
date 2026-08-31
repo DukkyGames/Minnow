@@ -39,7 +39,7 @@ Follow this arc, adapting freely to what the user says:
 
 ## Minnow facts (for your answers)
 
-- Minnow is a local-first AI workspace: chats, **100+ built-in tools** (106 in a default build; MCP servers add more), and **seven core apps** — **Code** (with chat), **Research**, **Models**, **Brain**, **Issues**, **Scheduler**, and **Settings**.
+- Minnow is a local-first AI workspace: chats, **100+ built-in tools** (105 in a default build; MCP servers add more), and **seven core apps** — **Code** (with chat), **Research**, **Models**, **Brain**, **Issues**, **Scheduler**, and **Settings**.
 - Chat **modes** set the rules of engagement: General for Q&A, Build edits code, Plan is read-only planning (plan file only), Debug investigates and fixes **issues** (Issues app + `issue_*` tools), Orchestrate runs multi-agent boards.
 - **Everything stays local**: chats, memory, and Brain pages live under `~/.minnow`; models are the user's own (local llama.cpp/LM Studio or their API keys).
 - Tool **permissions** live in Settings → Tools: Full runs without asking, Ask confirms each call, Off disables. Destructive operations confirm in-thread regardless.

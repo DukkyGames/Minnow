@@ -73,14 +73,6 @@ const SEQUENTIAL_DENY = new Set([
   'browser_eval',
   'browser_screenshot',
   'request_browser_origin_access',
-  // task-graph tools (V1 names; sequential even if a caller injects them)
-  'board_init',
-  'board_add_tasks',
-  'board_update_task',
-  'board_set_autonomy',
-  'board_get_state',
-  'board_report',
-  'delegate_tasks',
   // issues
   'issue_add',
   'issue_update',

@@ -31,9 +31,6 @@ export const CAPABILITY_SIDE_EFFECT_TOOL_IDS = new Set<string>([
   ...collectEmitOnlyProbeToolIds(),
   'ask_question',
   'spawn_work_agent',
-  'board_init',
-  'board_update_task',
-  'board_get_state',
   'request_browser_origin_access',
 ]);
 

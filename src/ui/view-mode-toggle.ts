@@ -9,9 +9,6 @@ import { isChatStreaming } from '../chat/streaming-state';
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import { emitChatSidebarChanged } from './layout-events';
 import {
-  isBoardSetupIncomplete,
-} from '../chat/orchestrate/board-setup';
-import {
   closeBoardGroupView,
   getActiveBoardGroup,
   getBoardGroupForChat,
@@ -127,12 +124,6 @@ function boardToggleLabels(
     return {
       ariaLabel: 'Switch to board view',
       title: 'Board view (select a plan in chat view for full board)',
-    };
-  }
-  if (group && isBoardSetupIncomplete(group)) {
-    return {
-      ariaLabel: 'Return to board setup',
-      title: 'Board setup in progress — return to finish',
     };
   }
   if (boardActive) {

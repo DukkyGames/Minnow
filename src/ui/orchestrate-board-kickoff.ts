@@ -1,6 +1,7 @@
 /**
- * Orchestrate board kickoff: git preflight (programmatic init, optional /git-setup
- * for GitHub remote), then board_init message.
+ * Orchestrate board kickoff leftovers: git preflight (programmatic init, optional
+ * /git-setup for GitHub remote). V2 boards parse the plan on POST /api/boards —
+ * this path no longer asks a model to initialize the board (MIN-715).
  */
 
 import { GIT_SETUP_SKILL_ID } from '../skills/git-setup-client';
@@ -20,11 +21,12 @@ import {
   setBoardOnboardingAwaitingInit,
   setBoardOnboardingGitSetupActive,
 } from './orchestrate-board-onboarding-state';
+import { refreshBoardOnboardingIfMounted } from './orchestrate-board-onboarding-ui';
 import { setStatus } from './status';
 
-/** First user turn from Board onboarding before the model runs board_init (MIN-5). */
+/** First user turn from leftover Board onboarding (historical transcripts / init-split). */
 export const BOARD_ONBOARDING_KICKOFF_MESSAGE =
-  'Parse the selected plan and call board_init with each task\'s build and test spec and category. Do not start any tasks.';
+  'Parse the selected plan and initialize the board with each task\'s build and test spec and category. Do not start any tasks.';
 
 /** Legacy alias for onboarding kickoff (historical transcripts / init-split detection). */
 export const BOARD_BUILD_KICKOFF_MESSAGE = BOARD_ONBOARDING_KICKOFF_MESSAGE;
@@ -62,10 +64,10 @@ function kickoffAborted(): boolean {
 
 /**
  * Init / .gitignore / first commit without the /git-setup LLM skill (MIN-615).
- * Returns false when init fails so kickoff can stop before board_init.
+ * Returns false when init fails so kickoff can stop before the leftover send.
  */
 async function runProgrammaticGitInit(): Promise<boolean> {
-  const { refreshBoardOnboardingIfMounted } = await import('./orchestrate-board');
+  const { refreshBoardOnboardingIfMounted } = await import('./orchestrate-board-onboarding-ui');
   setBoardOnboardingGitSetupActive(true);
   refreshBoardOnboardingIfMounted();
   try {
@@ -86,7 +88,7 @@ async function runProgrammaticGitInit(): Promise<boolean> {
 async function runGitSetupRemoteSkillTurn(
   chat: ReturnType<typeof getActiveChat>,
 ): Promise<void> {
-  const { refreshBoardOnboardingIfMounted } = await import('./orchestrate-board');
+  const { refreshBoardOnboardingIfMounted } = await import('./orchestrate-board-onboarding-ui');
   setBoardOnboardingGitSetupActive(true);
   refreshBoardOnboardingIfMounted();
   try {
@@ -123,13 +125,13 @@ async function ensureToolServerForGitSetup(): Promise<boolean> {
 }
 
 /**
- * Git preflight → programmatic init (MIN-615) → optional remote skill → board_init.
+ * Git preflight → programmatic init (MIN-615) → optional remote skill → leftover send.
  * Entry points: hub Open board, onboarding Start, plan screen Open board.
  */
 export async function kickoffOrchestrateBoardBuild(): Promise<void> {
   if (setBoardKickoffInProgress(true)) return;
 
-  const { refreshBoardOnboardingIfMounted } = await import('./orchestrate-board');
+  const { refreshBoardOnboardingIfMounted } = await import('./orchestrate-board-onboarding-ui');
 
   try {
     const chat = getActiveChat();

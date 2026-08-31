@@ -1,13 +1,13 @@
 /**
- * Orchestrate task category badge derivation.
+ * Task category badge derivation (presentation; MIN-714 moved out of orchestrate/).
  */
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { deriveTaskCategoryBadge } from '../../../src/chat/orchestrate/task-category-badge.ts';
-import type { BoardTask } from '../../../src/types.ts';
+import { deriveTaskCategoryBadge } from '../../../src/orchestrator/task-category-badge.ts';
+import type { LeftoverBoardTask } from '../../../src/types.ts';
 
-function baseTask(overrides: Partial<BoardTask> = {}): BoardTask {
+function baseTask(overrides: Partial<LeftoverBoardTask> = {}): LeftoverBoardTask {
   return {
     id: 'W1-A',
     title: 'Task A',
@@ -19,30 +19,16 @@ function baseTask(overrides: Partial<BoardTask> = {}): BoardTask {
 }
 
 describe('deriveTaskCategoryBadge', () => {
-  test('build task in Run with no test failures shows build', () => {
+  test('uses the plan-authored category for the chip', () => {
     const badge = deriveTaskCategoryBadge(
-      baseTask({ status: 'in_progress', testAttempts: 0 }),
+      baseTask({ status: 'in_progress' }),
     );
     assert.deepEqual(badge, { label: 'build', cssVariant: 'build' });
   });
 
-  test('build task in Run after failed testing shows fix', () => {
+  test('does not rewrite category after failed testing (V1 fix-chip is gone)', () => {
     const badge = deriveTaskCategoryBadge(
-      baseTask({ status: 'in_progress', testAttempts: 1 }),
-    );
-    assert.deepEqual(badge, { label: 'fix', cssVariant: 'fix' });
-  });
-
-  test('build task in Testing after failed attempt keeps build', () => {
-    const badge = deriveTaskCategoryBadge(
-      baseTask({ status: 'testing', testAttempts: 1 }),
-    );
-    assert.deepEqual(badge, { label: 'build', cssVariant: 'build' });
-  });
-
-  test('build task complete after retries keeps build', () => {
-    const badge = deriveTaskCategoryBadge(
-      baseTask({ status: 'complete', testAttempts: 2 }),
+      baseTask({ status: 'in_progress' }),
     );
     assert.deepEqual(badge, { label: 'build', cssVariant: 'build' });
   });

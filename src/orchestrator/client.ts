@@ -6,9 +6,8 @@
  * that could — the only writes available are the commands the engine chose to
  * expose.
  *
- * That is not a style preference. The renderer *being* the engine is the entire
- * reason `board-display-wake.ts`, `board-boot-resume.ts`, and `oom-recovery.ts`
- * exist in V1: a sleeping display was a correctness problem. Here a sleeping
+ * That is not a style preference. The renderer *being* the engine is why V1
+ * repaired board state after the UI slept or reloaded. Here a sleeping
  * display is a stale view, and the fix is a reconnect.
  *
  * ## Deriving, not receiving

@@ -319,7 +319,7 @@ Smoke one skill from each “family”:
 
 ## 9. Orchestrate
 
-**Fast path (no live LLM):** follow [Orchestrate board testing](orchestrate-board-testing.md) — fake model + `npm run seed:test-board`.
+**Fast path (no live LLM):** follow [Orchestrate board testing](../contributor/orchestrate-board-testing.md) — fake model + `POST /api/boards`.
 
 **Release-realistic path:**
 
@@ -456,7 +456,7 @@ minnow run --prompt "Reply with exactly: E2E_OK" --start-server
 | `npm test` | Full unit/integration suite |
 | `npm run test:check-coverage` | No orphan test files |
 | `npm run test:board` | Orchestrate regressions |
-| `npm run board:electron-smoke` | Packaged/Electron orchestrate smoke (release workflow) |
+| `npm run board:scenario-contract` | Catalog + adapter contract (PR + release workflow) |
 | `npm run package` | Production build succeeds |
 
 ---
@@ -494,7 +494,7 @@ Only when `releaseState` is flipped to `released` in `src/os/app-registry.ts`:
 | Rerun onboarding | Settings → General → Run setup again |
 | Fresh `~/.minnow` | Quit Minnow; rename/delete profile folder |
 | Reset sessions only | Backup then remove `sessions/sessions.db` (destructive) |
-| Orchestrate seed board | `npm run seed:test-board` ([board testing guide](orchestrate-board-testing.md)) |
+| Orchestrate test board | `POST /api/boards` ([board testing guide](../contributor/orchestrate-board-testing.md)) |
 
 ---
 

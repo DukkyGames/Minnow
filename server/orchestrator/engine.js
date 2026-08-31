@@ -387,8 +387,8 @@ export function createEngine(options) {
     if (disposed || !state) return;
     const events = await journal.readEvents(boardId);
     if (journalHasReport(events)) return;
-    const userStopped = state.stopReason === 'user';
-    if (!state.finished && !userStopped) return;
+    const stoppedByUser = state.stopReason === 'user';
+    if (!state.finished && !stoppedByUser) return;
     try {
       const result = await writeEndOfRunReport({
         boardId,

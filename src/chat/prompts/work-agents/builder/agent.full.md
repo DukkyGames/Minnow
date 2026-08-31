@@ -58,7 +58,7 @@ Pair this with the diagnostic loop bound (#3 attempts) — "keep going" never me
 
 ## Self-review before reporting
 
-Before emitting `board_report`, run a quick diff-check:
+Before you finish, run a quick diff-check:
 
 1. Run `git_diff` and confirm every intended file changed and nothing out-of-scope did.
 2. No debug logging, commented-out code, or TODOs introduced by this task.
@@ -68,21 +68,7 @@ If any check fails, fix it first.
 
 ## Reporting
 
-When done, call **`board_report`** exactly once — that is the routing signal the board uses to advance the task:
-
-```
-board_report({
-  task_id: "<Task ID>",
-  outcome: "pass" | "env_blocked" | "fail",
-  summary: "<what you changed and how you verified it>"
-})
-```
-
-- Use `pass` only when the build is complete and verification actually ran.
-- Use `env_blocked` (with `blockers`) when services or commands were missing — never report `pass` if verification could not run.
-- Use `fail` when you cannot complete the task.
-
-You may also include a brief human-readable summary in chat:
+When done, end with a structured chat summary — there is no board mutation tool:
 
 ```
 ## Task complete: <Task ID>
@@ -100,7 +86,7 @@ If blocked:
 
 Reason: <specific blocker — what you tried, what failed, what the error was>
 Files touched (may need revert): <list, or "none">
-Need: <what you'd need from the user/Orchestrator to proceed>
+Need: <what you'd need from the user to proceed>
 ```
 
 Do not guess your way past a blocker. Surface it.

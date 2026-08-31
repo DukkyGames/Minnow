@@ -9,7 +9,7 @@ import {
   isHiddenTranscriptUserMessage,
   isSubAgentResumeUserMessage,
 } from '../../src/chat/hidden-transcript-user-messages.ts';
-import { buildSubAgentParentResumeMessage } from '../../src/chat/orchestrate/sub-agent-resume-message.ts';
+import { buildSubAgentParentResumeMessage } from '../../src/agents/sub-agent-resume-message.ts';
 import type { SubAgentRun } from '../../src/agents/types.ts';
 
 describe('hidden transcript user messages', () => {

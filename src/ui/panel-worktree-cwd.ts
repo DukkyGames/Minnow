@@ -2,13 +2,9 @@
  * Shared git-panel / file-tree worktree cwd resolution (avoids circular imports).
  */
 
-import {
-  resolveBoardIntegrationWorktreePath,
-  resolveChatWorktreeRoot,
-} from '../state/worktree-isolation';
+import { resolveChatWorktreeRoot } from '../state/chat-worktree';
 import { getWorkspacePath } from '../state/workspace';
 import type { Chat, ChatGroup } from '../types';
-import { isBoardChatEmbedOpenForChat } from './orchestrate-board-chat-state';
 
 /** Normalize path separators and trailing slashes for panel comparisons. */
 export function normalizePanelPath(p: string): string {
@@ -72,19 +68,8 @@ export function resolvePanelBrowseCwd(input: {
   activeBoardGroup?: ChatGroup;
   chats?: Chat[];
 }): string {
-  const { chat, groups, activeBoardGroup, chats } = input;
-  let worktreeRoot: string | undefined;
-
-  const boardViewActive = activeBoardGroup?.viewMode === 'board';
-  const boardChatEmbedForActiveChat = isBoardChatEmbedOpenForChat(chat.id);
-
-  if (boardViewActive && !boardChatEmbedForActiveChat) {
-    worktreeRoot = resolveBoardIntegrationWorktreePath(activeBoardGroup, chats);
-  }
-
-  if (!worktreeRoot) {
-    worktreeRoot = resolveChatWorktreeRoot(chat, groups);
-  }
+  const { chat, groups } = input;
+  const worktreeRoot = resolveChatWorktreeRoot(chat, groups);
 
   if (worktreeRoot) return worktreeRoot;
   return getWorkspacePath().trim() || '.';

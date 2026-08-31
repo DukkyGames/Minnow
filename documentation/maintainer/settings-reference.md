@@ -397,7 +397,7 @@ Preview panel automation for `browser_*` tools (Electron desktop shell only).
 | **Skills** | Load Impeccable context, Run Impeccable |
 | **Calendar/Email** *(hidden)* | Manage calendar, List mail, Search mail, Get thread, Draft reply, Summarize inbox, Generate reply variants, Email action |
 
-> Catalog entries carrying an `appId` are filtered out of both the model's tool list and this page while that app is release-gated or user-disabled (MIN-472). The eight calendar/email tools are hidden in a default build (114 total, 106 exposed).
+> Catalog entries carrying an `appId` are filtered out of both the model's tool list and this page while that app is release-gated or user-disabled (MIN-472). The eight calendar/email tools are hidden in a default build (113 total, 105 exposed).
 
 ### Skills (`skills.json`)
 

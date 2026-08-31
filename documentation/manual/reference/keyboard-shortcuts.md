@@ -84,7 +84,6 @@ With the tree focused and the editor not:
 | **Tab** | Move between task cards and header controls |
 | **Arrow keys** | Move around the kanban grid |
 | **Enter** / **Space** | Open a task chat or the plan panel |
-| **Arrow keys** | Change execution mode when the mode control is focused |
 
 ## Issues
 

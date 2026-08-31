@@ -448,16 +448,14 @@ export async function runIssueSendToBoard(
     await new Promise((r) => setTimeout(r, 0));
 
     const { launchBoardFromPlan } = await import('../../ui/orchestrate-launch.ts');
-    const launched = launchBoardFromPlan(planPath);
+    const launched = await launchBoardFromPlan(planPath);
 
-    // The launch reports its own chat; `activeId` may still be the user's (MIN-637).
-    const boardChatId = launched?.chat.id;
+    // V2 boards have no planner chat (MIN-715). Leftover boardChatId stays unset.
     updateIssue(issueId, {
       status: requireIssueStatusForRole('in_progress'),
-      ...(boardChatId ? { boardChatId } : {}),
     });
 
-    return { ok: true, ...(boardChatId ? { boardChatId } : {}) };
+    return { ok: Boolean(launched) };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, error: message };

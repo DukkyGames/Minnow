@@ -1,8 +1,9 @@
 /**
- * P3-E — V2 BoardState is a status enum plus a concurrency integer.
+ * P4-F — V2 BoardState autonomy is a status enum plus a concurrency integer.
  *
- * PRD §6 deleted six V1 flags that could contradict each other. Those names
- * must not appear on the derived state. V1 struct field removal is P4-F.
+ * PRD §6 deleted the leftover multi-flag blob. Those names must not appear on
+ * the derived state. This test lists the live BoardState keys so a third
+ * autonomy field cannot sneak in.
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -18,36 +19,50 @@ import { stateToJSON } from '../../server/orchestrator/core/snapshot.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-const V1_AUTONOMY_FIELDS = [
-  'executionMode',
-  'handsOff',
-  'pendingAfk',
-  'autoRunning',
-  'systemPaused',
-  'userStopped',
+const BOARD_STATE_KEYS = [
+  'boardId',
+  'name',
+  'planPath',
+  'waves',
+  'status',
+  'concurrency',
+  'tasks',
+  'taskOrder',
+  'mergeQueue',
+  'integrationSha',
+  'model',
+  'finalTest',
+  'finished',
+  'stopReason',
+  'runSummary',
+  'rerun',
 ];
 
+const AUTONOMY_KEYS = ['status', 'concurrency'];
+
 describe('V2 BoardState autonomy shape', () => {
-  it('is status + concurrency, never the V1 flag set', () => {
+  it('is status + concurrency, and those are the only autonomy fields', () => {
     const state = emptyState();
     assert.equal(state.status, 'created');
     assert.equal(typeof state.concurrency, 'number');
     assert.equal(state.concurrency, 1);
     assert.equal(DEFAULT_BOARD_CONCURRENCY, 2);
 
-    for (const key of V1_AUTONOMY_FIELDS) {
-      assert.equal(Object.hasOwn(state, key), false, key);
-    }
+    const keys = Object.keys(state).sort();
+    assert.deepEqual(keys, [...BOARD_STATE_KEYS].sort());
+    assert.deepEqual(
+      keys.filter((key) => AUTONOMY_KEYS.includes(key)),
+      [...AUTONOMY_KEYS].sort(),
+    );
 
     const json = /** @type {Record<string, unknown>} */ (stateToJSON(state));
-    for (const key of V1_AUTONOMY_FIELDS) {
-      assert.equal(Object.hasOwn(json, key), false, `json.${key}`);
-    }
     assert.ok(['created', 'running', 'stopped'].includes(String(json.status)));
     assert.equal(typeof json.concurrency, 'number');
+    assert.equal(Object.hasOwn(json, 'status'), true);
+    assert.equal(Object.hasOwn(json, 'concurrency'), true);
   });
 
-  it('does not declare the V1 flags on BoardState in types.d.ts', () => {
+  it('declares status and concurrency on BoardState in types.d.ts', () => {
     const src = fs.readFileSync(
       path.join(ROOT, 'server', 'orchestrator', 'core', 'types.d.ts'),
       'utf8',
@@ -56,24 +71,23 @@ describe('V2 BoardState autonomy shape', () => {
     assert.ok(start >= 0);
     const next = src.indexOf('export interface', start + 'export interface BoardState'.length);
     const body = src.slice(start, next === -1 ? undefined : next).replace(/\/\*\*[\s\S]*?\*\//g, '');
-    for (const key of V1_AUTONOMY_FIELDS) {
-      assert.equal(new RegExp(`\\b${key}\\s*:`).test(body), false, `BoardState still declares ${key}`);
-    }
     assert.match(body, /status:\s*BoardStatus/);
     assert.match(body, /concurrency:\s*number/);
+    const fieldNames = [...body.matchAll(/^\s{2}(\w+)\??:/gm)].map((m) => m[1]);
+    const autonomy = fieldNames.filter((name) => AUTONOMY_KEYS.includes(name));
+    assert.deepEqual(autonomy, AUTONOMY_KEYS);
   });
 
-  it('V2 board UI has no V1 autonomy toggles', () => {
-    const src = fs.readFileSync(path.join(ROOT, 'src', 'orchestrator', 'boards-view.ts'), 'utf8');
-    // The file header names the deleted fields on purpose. Live controls must not.
-    const withoutHeader = src.replace(/\/\*\*[\s\S]*?\*\//, '');
-    assert.equal(withoutHeader.includes('handsOff'), false);
-    assert.equal(withoutHeader.includes('pendingAfk'), false);
-    assert.equal(withoutHeader.includes('autoRunning'), false);
-    assert.equal(withoutHeader.includes('systemPaused'), false);
-    assert.equal(withoutHeader.includes('userStopped'), false);
-    assert.equal(withoutHeader.includes('executionMode'), false);
-    assert.match(src, /Running/);
-    assert.match(src, /Stopped/);
+  it('V2 board UI has Running / Stopped controls', () => {
+    // Labels live on the status chip, not the boards-view header comment.
+    const render = fs.readFileSync(
+      path.join(ROOT, 'src', 'orchestrator', 'board-render.ts'),
+      'utf8',
+    );
+    assert.match(render, /label: 'Running'/);
+    assert.match(render, /label: 'Stopped'/);
+    const view = fs.readFileSync(path.join(ROOT, 'src', 'orchestrator', 'boards-view.ts'), 'utf8');
+    assert.match(view, /textContent = running \? 'Stop'/);
+    assert.match(view, /renderConcurrencyControl/);
   });
 });

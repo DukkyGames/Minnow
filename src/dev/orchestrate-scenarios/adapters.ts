@@ -1,4 +1,3 @@
-import { getTestBoardPreset } from '../test-board-seed.ts';
 import {
   validateScenarioGraph,
   type BoardScenario,
@@ -6,6 +5,29 @@ import {
   type ScenarioGraph,
   type ScenarioResponse,
 } from './schema.ts';
+
+/** Quick/smoke graphs copied from the deleted V1 test-board seed (engine-free). */
+const SCENARIO_PRESET_GRAPHS: Record<'quick' | 'smoke', ScenarioGraph> = {
+  quick: {
+    waves: [{ id: 'W1' }],
+    tasks: [
+      { id: 'W1-A', title: 'Greet util', wave: 'W1' },
+      { id: 'W1-B', title: 'Add util', wave: 'W1' },
+      { id: 'W1-C', title: 'Index barrel', wave: 'W1' },
+    ],
+  },
+  smoke: {
+    waves: [{ id: 'W1' }, { id: 'W2' }, { id: 'W3' }],
+    tasks: [
+      { id: 'W1-A', title: 'Create greet util', wave: 'W1' },
+      { id: 'W1-B', title: 'Create add util', wave: 'W1' },
+      { id: 'W1-C', title: 'Survey sandbox', wave: 'W1' },
+      { id: 'W2-A', title: 'Wire index', wave: 'W2', dependsOn: ['W1-A', 'W1-B'] },
+      { id: 'W2-B', title: 'Unit test', wave: 'W2', dependsOn: ['W2-A'] },
+      { id: 'W3-A', title: 'Header comment', wave: 'W3', dependsOn: ['W2-A'] },
+    ],
+  },
+};
 
 export interface FakeModelScenarioMatch {
   role?: 'planner' | 'builder' | 'tester' | 'fixer' | 'final' | 'system';
@@ -30,7 +52,7 @@ export interface ScenarioValidationPlan {
   scenarioId: string;
   seed: string;
   preset: BoardScenario['preset'];
-  executionMode: BoardScenario['executionMode'];
+  concurrency: number;
   graph: ScenarioGraph;
   boardLog: {
     tasks: Array<{ id: string; wave: string; dependsOn?: string[] }>;
@@ -57,11 +79,13 @@ function proseChunks(text: string): string[] {
   ];
 }
 
-function boardReportChunks(taskId: string, toolCallId: string): string[] {
+function reportOutcomeChunks(taskId: string, toolCallId: string): string[] {
   const args = JSON.stringify({
-    task_id: taskId,
     outcome: 'pass',
-    summary: `Scenario adapter: board_report pass for ${taskId}`,
+    summary: `Scenario adapter: report_outcome pass for ${taskId}`,
+    evidence: [],
+    blockers: [],
+    needs: [],
   });
   const delta = JSON.stringify({
     choices: [
@@ -72,7 +96,7 @@ function boardReportChunks(taskId: string, toolCallId: string): string[] {
               index: 0,
               id: toolCallId,
               type: 'function',
-              function: { name: 'board_report', arguments: args },
+              function: { name: 'report_outcome', arguments: args },
             },
           ],
         },
@@ -107,10 +131,10 @@ function responseChunks(
     if (!taskId) {
       throw new Error('builder_report_pass requires a fault target taskId');
     }
-    return boardReportChunks(taskId, `call_scenario_${safeId(taskId)}_pass`);
+    return reportOutcomeChunks(taskId, `call_scenario_${safeId(taskId)}_pass`);
   }
   if (response === 'final_report_pass') {
-    return boardReportChunks('FULL_BOARD', 'call_scenario_final_pass');
+    return reportOutcomeChunks('FULL_BOARD', 'call_scenario_final_pass');
   }
   if (response === 'generation_error') {
     const payload = JSON.stringify({
@@ -130,7 +154,7 @@ function graphForScenario(scenario: BoardScenario): ScenarioGraph {
   if (scenario.preset === 'generated') {
     return validateScenarioGraph(scenario.graph, 'scenario.graph');
   }
-  const preset = getTestBoardPreset(scenario.preset);
+  const preset = SCENARIO_PRESET_GRAPHS[scenario.preset === 'smoke' ? 'smoke' : 'quick'];
   return validateScenarioGraph({
     waves: preset.waves,
     tasks: preset.tasks.map((task) => ({
@@ -182,7 +206,7 @@ function baselineSteps(graph: ScenarioGraph): FakeModelScenarioStep[] {
     steps.push(
       {
         match: { role: 'builder', taskId: task.id, nth: 0 },
-        emit: boardReportChunks(task.id, `call_build_${safeId(task.id)}`),
+        emit: reportOutcomeChunks(task.id, `call_build_${safeId(task.id)}`),
       },
       {
         match: { role: 'builder', taskId: task.id, nth: 1 },
@@ -197,7 +221,7 @@ function baselineSteps(graph: ScenarioGraph): FakeModelScenarioStep[] {
   steps.push(
     {
       match: { role: 'final', nth: 0 },
-      emit: boardReportChunks('FULL_BOARD', 'call_fake_final_report'),
+      emit: reportOutcomeChunks('FULL_BOARD', 'call_fake_final_report'),
     },
     {
       match: { role: 'final', nth: 1 },
@@ -220,7 +244,7 @@ function recoverySteps(scenario: BoardScenario): FakeModelScenarioStep[] {
       steps.push(
         {
           match: { role: 'builder', taskId, nth: reportNth },
-          emit: boardReportChunks(taskId, `call_build_nudge_${safeId(taskId)}`),
+          emit: reportOutcomeChunks(taskId, `call_build_nudge_${safeId(taskId)}`),
         },
         {
           match: { role: 'builder', taskId, nth: reportNth + 1 },
@@ -235,7 +259,7 @@ function recoverySteps(scenario: BoardScenario): FakeModelScenarioStep[] {
       steps.push(
         {
           match: { role: 'builder', taskId, nth: 2 },
-          emit: boardReportChunks(taskId, `call_build_retry_${safeId(taskId)}`),
+          emit: reportOutcomeChunks(taskId, `call_build_retry_${safeId(taskId)}`),
         },
         {
           match: { role: 'builder', taskId, nth: 3 },
@@ -278,7 +302,7 @@ export function toScenarioValidationPlan(scenario: BoardScenario): ScenarioValid
     scenarioId: scenario.id,
     seed: scenario.seed,
     preset: scenario.preset,
-    executionMode: scenario.executionMode,
+    concurrency: scenario.concurrency,
     graph,
     boardLog: {
       tasks: graph.tasks.map((task) => ({

@@ -6,6 +6,11 @@ import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 import { installHappyDomGlobals } from '../os/dom-helpers.mts';
 import { fillBoardsPlanSelect, mountCreateForm } from '../../src/orchestrator/boards-view.ts';
+import {
+  createEmptyChatObject,
+  sessionState,
+  setSessionStateForTests,
+} from '../../src/state/sessions.ts';
 
 let activeWindow: Window | undefined;
 
@@ -23,6 +28,7 @@ afterEach(() => {
   document.body.innerHTML = '';
   activeWindow?.close();
   activeWindow = undefined;
+  setSessionStateForTests(null);
 });
 
 describe('fillBoardsPlanSelect', () => {
@@ -122,5 +128,40 @@ describe('mountCreateForm', () => {
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.deepEqual(posted, ['documentation/plans/beta.md']);
+  });
+
+  test('Create does not add a chat row to the session', async () => {
+    const pane = setupDom();
+    const existing = createEmptyChatObject('m1');
+    existing.modeId = 'build';
+    setSessionStateForTests({
+      version: 5,
+      activeId: existing.id,
+      sidebarCollapsed: false,
+      groups: [],
+      chats: [existing],
+    });
+    const chatsBefore = sessionState?.chats.length ?? 0;
+    assert.ok(chatsBefore > 0, 'fixture chat must be in session before Create');
+
+    await mountCreateForm(pane, {
+      discoverPlans: async () => ({
+        plans: ['documentation/plans/alpha.md'],
+      }),
+      createBoard: async () => ({ boardId: 'alpha' }),
+      onCreated: () => {},
+      onCancel: () => {},
+    });
+
+    const form = pane.querySelector('form.ov2-create');
+    const select = pane.querySelector<HTMLSelectElement>('select.ov2-create__input');
+    assert.ok(form && select);
+    select.value = 'documentation/plans/alpha.md';
+    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(sessionState?.chats.length, chatsBefore);
+    setSessionStateForTests(null);
   });
 });

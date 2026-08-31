@@ -39,7 +39,7 @@ function basePayload(log) {
         orchestratePlanPath: PLAN_PATH,
         orchestrateBoard: {
           planPath: PLAN_PATH,
-          executionMode: 'manual',
+          status: 'stopped',
           startedAt: 1,
           lastUpdatedAt: 2,
           tasks: [

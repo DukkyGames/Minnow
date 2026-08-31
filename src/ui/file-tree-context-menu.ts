@@ -6,7 +6,7 @@ import { isFileTreeServerAvailable } from './file-tree-server';
 import { getFileTreeClipboard } from './file-tree-clipboard';
 import { pasteTargetDirForPath } from './file-tree-path';
 import { isMarkdownFilePath } from './file-markdown-path';
-import { isExecutableOrchestratePlan } from '../chat/orchestrate/plan-path';
+import { isExecutableOrchestratePlan } from '../chat/plans/plan-path';
 import * as fileTreeOps from './file-tree-ops';
 import { revealPathInSystemExplorer } from './reveal-in-system-explorer';
 import { CAPTURE_MENU_KINDS, legacyCaptureMenuItems } from './issue-capture';

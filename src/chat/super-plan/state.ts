@@ -2,7 +2,7 @@
  * Super Plan state persistence helpers — read/write {@link Chat.superPlan}.
  */
 
-import { normalizeOrchestratePlanPath } from '../orchestrate/plan-path';
+import { normalizeOrchestratePlanPath } from '../plans/plan-path';
 import { findGroupById } from '../../state/chat-groups';
 import { findChatById, scheduleSaveSessions, touchChat } from '../../state/sessions';
 import type { Chat } from '../../types';

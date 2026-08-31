@@ -6,14 +6,14 @@ import { appAlert, appConfirm, appPrompt } from './app-dialog';
 
 import '../styles/orchestrate-plan-screen.css';
 
-import { findLastPlanSavePath } from '../chat/orchestrate/plan-from-history';
+import { findLastPlanSavePath } from '../chat/plans/plan-from-history';
 import {
   mountPlanPreviewContent,
   readPlanArtifactMarkdown,
-} from '../chat/orchestrate/plan-preview';
+} from '../chat/plans/plan-preview';
 import {
   isExecutableOrchestratePlan,
-} from '../chat/orchestrate/plan-path';
+} from '../chat/plans/plan-path';
 import { normalizeModeId } from '../chat/modes/types';
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import {
@@ -918,7 +918,7 @@ async function startPlanningFromPrompt(
 function openBoardWithPlan(planPath: string): void {
   teardownOrchestratePlanScreen();
   teardownOrchestrateHub();
-  launchBoardFromPlan(planPath);
+  void launchBoardFromPlan(planPath);
 }
 
 function suspendToViewChat(chat: Chat): void {

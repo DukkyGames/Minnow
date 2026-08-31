@@ -8,18 +8,18 @@ import '../styles/ob-page.css';
 import {
   mountPlanPreviewContent,
   readPlanArtifactMarkdown,
-} from '../chat/orchestrate/plan-preview';
+} from '../chat/plans/plan-preview';
 import {
   isExecutableOrchestratePlan,
-} from '../chat/orchestrate/plan-path';
+} from '../chat/plans/plan-path';
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import { normalizeModeId } from '../chat/modes/types';
 import {
   getGroupsForWorkspace,
   getLastBoardGroup,
   openBoardGroup,
+  isLeftoverBoardRunning,
 } from '../state/chat-groups';
-import { isBoardRunning } from '../state/orchestrate-board-store';
 import { getActiveChat, sessionState } from '../state/sessions';
 import type { Chat, ChatGroup } from '../types';
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
@@ -179,7 +179,7 @@ function startBoardFromHub(planSelect: HTMLSelectElement): void {
   const path = planSelect.value.trim();
   if (!path || !isExecutableOrchestratePlan(path)) return;
   teardownOrchestrateHub();
-  launchBoardFromPlan(path);
+  void launchBoardFromPlan(path);
 }
 
 /** Re-render board rail when session groups change (e.g. planner chat deleted). */
@@ -439,7 +439,7 @@ export function resolveOrchestrateLandingTarget(): ChatGroup | null {
 
   const workspace = getWorkspacePath();
   const running = listWorkspaceOrchestrateBoardGroups(workspace).filter(
-    (group) => Boolean(group.orchestrateBoard) && isBoardRunning(group),
+    (group) => isLeftoverBoardRunning(group),
   );
   // The list is already newest-first by board activity.
   return running[0] ?? null;
@@ -454,19 +454,15 @@ export interface RenderOrchestrateHubOptions {
 }
 
 /**
- * Enter Orchestrator, resuming the last board when there is one.
- * Falls through to the hub when nothing is resumable.
+ * Enter Orchestrate: open the V2 Boards surface. No planner chat.
  */
-export function openOrchestrateLanding(options?: RenderOrchestrateHubOptions): void {
-  if (!options?.preferNew) {
-    const target = resolveOrchestrateLandingTarget();
-    if (target) {
-      teardownOrchestrateHub();
-      openBoardGroup(target.id);
-      return;
-    }
-  }
-  renderOrchestrateHub();
+export function openOrchestrateLanding(_options?: RenderOrchestrateHubOptions): void {
+  teardownOrchestrateHub();
+  void import('../orchestrator/boards-view').then(async (m) => {
+    await m.openBoardsView();
+    const { navigateToCodeBoards } = await import('../os/router');
+    navigateToCodeBoards();
+  });
 }
 
 export function renderOrchestrateHub(): void {
@@ -523,13 +519,19 @@ export function closeOrchestrateHub(): void {
   void import('../os/router').then((m) => m.navigateToCodeChatIfCurrentSection('orchestrate'));
 }
 
-/** Toggle orchestrate hub from the top bar. */
+/** Toggle the V2 Boards surface from the Orchestrate top-bar button. */
 export function toggleOrchestrateHubFromTopbar(): void {
-  if (isOrchestrateHubMounted()) {
-    closeOrchestrateHub();
-    return;
-  }
-  renderOrchestrateHub();
+  void import('../orchestrator/boards-view').then(async (m) => {
+    if (m.isBoardsViewOpen()) {
+      await m.closeBoardsView();
+      const { navigateToCodeChat } = await import('../os/router');
+      navigateToCodeChat();
+      return;
+    }
+    await m.openBoardsView();
+    const { navigateToCodeBoards } = await import('../os/router');
+    navigateToCodeBoards();
+  });
 }
 
 /** Wire top-bar button (idempotent). */

@@ -1,5 +1,5 @@
 /**
- * Auto-pilot orchestrator reports — task lifecycle messages to the planner chat (MIN-140 Phase 4).
+ * Leftover orchestrator reports — task lifecycle messages to the planner chat (MIN-140 Phase 4).
  * Reports append silently to planner history (no LLM turn); plan-complete fires one wrap-up turn.
  */
 
@@ -10,8 +10,7 @@ import {
 } from '../../chat/streaming-state';
 import { reportBackgroundError } from '../../boot/report-background-error.ts';
 import { isDomAvailable } from '../../lib/dom-available.ts';
-import { getPlannerChatForGroup } from '../../state/chat-groups';
-import { isBoardAutoMode, isBoardRunning } from '../../state/orchestrate-board-store';
+import { getPlannerChatForGroup, isLeftoverBoardRunning } from '../../state/chat-groups';
 import {
   ensureChatHistoryLoaded,
   findChatById,
@@ -20,7 +19,7 @@ import {
   sessionState,
   touchChat,
 } from '../../state/sessions';
-import type { BoardTask, BoardTaskStatus, Chat, ChatGroup } from '../../types';
+import type { Chat, ChatGroup, LeftoverBoardTask } from '../../types';
 
 export type OrchestratorTaskReportKind = 'completed' | 'failed' | 'stalled' | 'quarantined';
 
@@ -81,11 +80,11 @@ function isBoardLinkedChat(group: ChatGroup, chatId: string): boolean {
   return board.finalTest?.chatId === chatId;
 }
 
-function summarizeTaskChat(task: BoardTask): string {
+function summarizeTaskChat(task: LeftoverBoardTask): string {
   const chatId = task.chatId?.trim();
-  if (!chatId) return task.notes?.trim() || '(no task chat yet)';
+  if (!chatId) return '(no task chat yet)';
   const chat = findChatById(chatId);
-  if (!chat) return task.notes?.trim() || '(task chat missing)';
+  if (!chat) return '(task chat missing)';
   const lastAssistant = [...chat.history]
     .reverse()
     .find((m) => m.role === 'assistant');
@@ -95,14 +94,14 @@ function summarizeTaskChat(task: BoardTask): string {
       return text.length > 600 ? `${text.slice(0, 600)}…` : text;
     }
   }
-  return task.notes?.trim() || task.error?.trim() || '(no summary)';
+  return task.error?.trim() || '(no summary)';
 }
 
 /** Build planner-facing report copy for a board task lifecycle event. */
 export function buildOrchestratorTaskReportMessage(
-  task: BoardTask,
+  task: LeftoverBoardTask,
   kind: OrchestratorTaskReportKind,
-  lifecycle?: RunLifecycle | BoardTaskStatus,
+  lifecycle?: RunLifecycle | string,
 ): string {
   const summary = summarizeTaskChat(task);
   const lifecycleLabel = lifecycle ?? task.status;
@@ -127,13 +126,6 @@ export function buildOrchestratorTaskReportMessage(
     lines.push('', 'Error:', task.error.trim());
   }
   if (kind === 'quarantined') {
-    const q = task.quarantine;
-    if (q) {
-      lines.push('', `Quarantine category: ${q.category}`, `Reason: ${q.summary}`);
-      if (q.resolutionSteps.length > 0) {
-        lines.push('', 'Resolution steps:', ...q.resolutionSteps.map((s) => `  - ${s}`));
-      }
-    }
     lines.push(
       '',
       'Self-heal is exhausted for this task; its transitive dependents are also quarantined.',
@@ -144,7 +136,7 @@ export function buildOrchestratorTaskReportMessage(
     lines.push(
       '',
       'This task is blocked after exhausting its automatic retries.',
-      'The auto-pilot already retried programmatically (and, for env failures, ran an env-fixer).',
+      'The loop already retried programmatically (and, for env failures, ran an env-fixer).',
       'Auto-pilot continues starting other ready tasks where possible.',
     );
   } else {
@@ -233,7 +225,7 @@ function flushPendingPlannerReports(plannerId: string): void {
 }
 
 function mapStatusToReportKind(
-  status: BoardTaskStatus,
+  status: string,
 ): OrchestratorTaskReportKind | null {
   if (status === 'complete') return 'completed';
   if (status === 'failed') return 'failed';
@@ -242,34 +234,24 @@ function mapStatusToReportKind(
   return null;
 }
 
-/** Deliver a task lifecycle report to the planner when auto-pilot is on and running. */
+/** Deliver a leftover V1 task lifecycle report. Planner-chat append is gone (MIN-715). */
 export async function deliverOrchestratorTaskReport(
-  group: ChatGroup,
-  plannerChat: Chat,
-  task: BoardTask,
-  status: BoardTaskStatus,
+  _group: ChatGroup,
+  _plannerChat: Chat,
+  _task: LeftoverBoardTask,
+  _status: string,
 ): Promise<void> {
-  if (!isBoardRunning(group)) return;
-  const kind = mapStatusToReportKind(status);
-  if (!kind) return;
-
-  const key = reportKey(task.id, kind, task.lifecycleRun ?? 0);
-  const message = buildOrchestratorTaskReportMessage(task, kind, status);
-  await deliverReport(group, plannerChat, message, key);
-
-  // Re-drive on every settled outcome, even when the message copy was already deduped.
-  // autoDelegateNext is idempotent — no-op when nothing is ready.
-  const { autoDelegateNext } = await import('../../state/orchestrate-board-actions');
-  await autoDelegateNext(group, plannerChat);
+  return;
 }
 
 function resolveBoardContextFromTaskChat(
   endedChatId: string,
-): { group: ChatGroup; planner: Chat; task: BoardTask } | null {
+): { group: ChatGroup; planner: Chat; task: LeftoverBoardTask } | null {
   if (!sessionState) return null;
   for (const group of sessionState.groups ?? []) {
     const board = group.orchestrateBoard;
-    if (!board || !isBoardAutoMode(group)) continue;
+    if (!board) continue;
+    if (board.status !== 'running') continue;
     const task = board.tasks.find((t) => t.chatId === endedChatId);
     if (!task) continue;
     const planner = getPlannerChatForGroup(group);
@@ -306,9 +288,9 @@ export function initOrchestratorAutoReports(): void {
     if (ctx) {
       const { group, planner, task } = ctx;
       const kind = mapStatusToReportKind(task.status);
-      const key = kind ? reportKey(task.id, kind, task.lifecycleRun ?? 0) : null;
+      const key = kind ? reportKey(task.id, kind, 0) : null;
       if (
-        isBoardRunning(group) &&
+        isLeftoverBoardRunning(group) &&
         kind &&
         key &&
         !deliveredReportKeys.has(key) &&

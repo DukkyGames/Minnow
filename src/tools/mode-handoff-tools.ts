@@ -6,7 +6,7 @@ import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import { listModes } from '../chat/modes/registry';
 import { enqueuePendingMode } from '../chat/pending-mode';
 import { isActiveChatStreaming } from '../chat/streaming-state';
-import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
+import { normalizeOrchestratePlanPath } from '../chat/plans/plan-path';
 import { getActiveChat } from '../state/sessions';
 import { launchBoardFromPlan } from '../ui/orchestrate-launch';
 import { createChatWithMode } from '../ui/sidebar';
@@ -50,8 +50,8 @@ function buildProposeModeSwitchQuestions(
           options: [
             {
               id: 'orchestrate_new',
-              label: 'New Orchestrate chat',
-              description: 'Open the orchestrator board for this plan (same as Open in orchestrator).',
+              label: 'Open on Boards',
+              description: 'Create a V2 board from this plan. Opens Boards, not a chat.',
             },
             {
               id: 'stay_plan',
@@ -184,7 +184,7 @@ function applyPlanCompleteOrchestrateHandoff(
   if (!parsed || parsed.status !== 'answered') return;
   if (!isPlanCompleteOrchestrateNewChoice(parsed.answers)) return;
 
-  launchBoardFromPlan(normalizedPlan);
+  void launchBoardFromPlan(normalizedPlan);
 }
 
 /** Create a new chat with a given mode and optional plan path (browser). */
@@ -210,16 +210,23 @@ export function executeCreateChatWithMode(args: Record<string, unknown>): string
         ? args.initialUserMessage.trim()
         : '';
 
-  // Orchestrate + plan uses the shared board launch path (hub, file tree, plan screen).
-  if (modeId === 'orchestrate' && normalizedPlan) {
-    launchBoardFromPlan(normalizedPlan);
-    const chat = getActiveChat();
+  // Orchestrate opens the V2 Boards surface — never a planner chat (MIN-715).
+  if (modeId === 'orchestrate') {
+    if (normalizedPlan) {
+      void launchBoardFromPlan(normalizedPlan);
+    } else {
+      void import('../orchestrator/boards-view').then(async (m) => {
+        await m.openBoardsView();
+        const { navigateToCodeBoards } = await import('../os/router');
+        navigateToCodeBoards();
+      });
+    }
     return JSON.stringify({
       ok: true,
-      chatId: chat.id,
       modeId: 'orchestrate',
-      orchestratePlanPath: normalizedPlan,
+      ...(normalizedPlan ? { orchestratePlanPath: normalizedPlan } : {}),
       boardLaunched: true,
+      chatCreated: false,
     });
   }
 

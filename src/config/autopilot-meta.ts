@@ -1,6 +1,7 @@
 /**
  * Global orchestrator autopilot defaults in ~/.minnow/config.json (`autopilot` block).
- * Per-board overrides live on {@link OrchestrateBoardState}; resolution is
+ * Per-board overrides for leftover session blobs live on {@link OrchestrateBoardState};
+ * live V2 boards use journaled status + concurrency. Resolution is
  * per-board ?? global ?? hard-coded fallback.
  */
 
@@ -9,14 +10,10 @@ import {
   clampHeartbeatIntervalMs,
   clampProgressStallMs,
 } from '../agents/sub-agent-config';
+import {
+  foldAutopilotDefaultStatus,
+} from '../lib/leftover-autonomy.mjs';
 import { detectConfigServer } from './storage-mode';
-
-/**
- * @deprecated Boards derive this from concurrency + hands-off
- * (src/state/board-execution-mode.ts). The alias survives only for the tool filter
- * and permission gate signatures that still speak the legacy vocabulary.
- */
-export type AutopilotExecutionMode = 'manual' | 'sequential' | 'auto' | 'afk';
 
 /** Stored isolation sentinel `auto` means derive from board concurrency at resolve time. */
 export type AutopilotIsolationMode = 'auto' | 'off' | 'per-task' | 'per-wave' | 'per-board';
@@ -28,8 +25,8 @@ export type AutopilotContinueSmartRoute = 'off' | 'conservative' | 'aggressive';
 
 /** Persisted global autopilot defaults for orchestrate boards. */
 export interface AutopilotMeta {
-  /** New boards start fully hands-off (never prompt the user). */
-  defaultHandsOff: boolean;
+  /** New boards' Start default. Folded from the old Autopilot autonomy flags. */
+  defaultStatus: 'running' | 'stopped';
   maxConcurrentTasks: number;
   isolationMode: AutopilotIsolationMode;
 /** @deprecated Boards use toolSecurity.shellSandbox; kept for legacy config.json reads. */
@@ -67,7 +64,7 @@ const FALLBACK_MAX_BUILD_ATTEMPTS = 2;
 const FALLBACK_MAX_FINAL_TEST_ATTEMPTS = 3;
 
 export const DEFAULT_AUTOPILOT_META: AutopilotMeta = {
-  defaultHandsOff: false,
+  defaultStatus: 'stopped',
   maxConcurrentTasks: FALLBACK_MAX_CONCURRENT,
   isolationMode: 'auto',
   shellSandbox: 'off',
@@ -172,7 +169,7 @@ export function parseAutopilotMeta(raw: unknown): AutopilotMeta {
   }
   const block = raw as Record<string, unknown>;
   return {
-    defaultHandsOff: parseBool(block.defaultHandsOff, DEFAULT_AUTOPILOT_META.defaultHandsOff),
+    defaultStatus: foldAutopilotDefaultStatus(block),
     maxConcurrentTasks: clampConcurrency(
       block.maxConcurrentTasks,
       DEFAULT_AUTOPILOT_META.maxConcurrentTasks,

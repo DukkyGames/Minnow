@@ -2,7 +2,7 @@
  * Workspace-relative Super Plan artifact paths (shared by state + slug helpers).
  */
 
-import { ORCHESTRATE_PLANS_PREFIX } from '../orchestrate/plan-path';
+import { ORCHESTRATE_PLANS_PREFIX } from '../plans/plan-path';
 
 const REFERENCES_PREFIX = `${ORCHESTRATE_PLANS_PREFIX}references/`;
 

@@ -25,6 +25,10 @@ import {
   normalizeSessionScalars,
   normalizeWorkspacePath,
 } from '../../src/state/session-schema.mjs';
+import {
+  foldAutopilotDefaultStatus,
+  stripStaleAutopilotKeys,
+} from '../../src/lib/leftover-autonomy.mjs';
 
 export {
   SESSION_SCHEMA_VERSION,
@@ -1514,7 +1518,7 @@ export function mergeConfigMeta(existing, patch) {
     };
     const parseBool = (value, fallback) => (typeof value === 'boolean' ? value : fallback);
     const AUTOPILOT_DEFAULTS = {
-      defaultHandsOff: false,
+      defaultStatus: 'stopped',
       maxConcurrentTasks: 3,
       isolationMode: 'auto',
       shellSandbox: 'off',
@@ -1542,9 +1546,25 @@ export function mergeConfigMeta(existing, patch) {
           ? { .../** @type {Record<string, unknown>} */ (base.autopilot) }
           : { ...AUTOPILOT_DEFAULTS };
       const a = /** @type {Record<string, unknown>} */ (p.autopilot);
-      if (typeof a.defaultHandsOff === 'boolean') {
-        existingAutopilot.defaultHandsOff = a.defaultHandsOff;
+      if (typeof a.defaultStatus === 'string') {
+        const status = a.defaultStatus.trim();
+        if (status === 'running' || status === 'stopped') {
+          existingAutopilot.defaultStatus = status;
+        }
       }
+      // Only fold recognised inbound autonomy keys so a junk patch cannot
+      // clobber a stored Running default.
+      existingAutopilot.defaultStatus = foldAutopilotDefaultStatus({
+        ...existingAutopilot,
+        ...(typeof a.defaultHandsOff === 'boolean' ? { defaultHandsOff: a.defaultHandsOff } : {}),
+        ...(typeof a.defaultExecutionMode === 'string'
+          ? { defaultExecutionMode: a.defaultExecutionMode }
+          : {}),
+        ...(a.defaultStatus === 'running' || a.defaultStatus === 'stopped'
+          ? { defaultStatus: a.defaultStatus }
+          : {}),
+      });
+      stripStaleAutopilotKeys(existingAutopilot);
       if (a.maxConcurrentTasks !== undefined) {
         existingAutopilot.maxConcurrentTasks = clampAutopilotConcurrency(
           a.maxConcurrentTasks,

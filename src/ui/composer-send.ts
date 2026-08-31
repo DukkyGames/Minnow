@@ -12,7 +12,6 @@ import { getActiveComposerSurface } from './composer-surface';
 import { getForegroundAppId } from '../os/instances';
 import { isChatAppForeground, shouldPaintDesktopChatSurface } from './chat-mount';
 import { setStatus } from './status';
-import { refreshActiveBoardIfMounted } from './orchestrate-board';
 import { syncBackgroundStreamHint } from './composer-stream-hint';
 import { syncGoalActiveHint } from './goal-active-hint';
 import { syncLoopActiveHint } from './loop-active-hint';
@@ -157,7 +156,6 @@ export function syncComposerFromStreamingState(): void {
   syncGoalActiveHint();
   syncLoopActiveHint();
   syncTodoPanel();
-  refreshActiveBoardIfMounted();
   void import('./composer-run-target').then((m) => m.refreshComposerRunTargetDisabled());
   void import('./composer-undo').then((m) => m.refreshComposerUndoDisabled());
 }

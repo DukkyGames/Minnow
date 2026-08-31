@@ -122,7 +122,7 @@ After the plan exists:
 
 > Orchestrate `documentation/plans/bench-flip-match.md` on this workspace. AFK mode. Each builder owns only its task's files. Final integration: all tests pass + browser smoke.
 
-This aligns with the quick (3 parallel W1) and smoke (3 waves, dependencies) presets in [`src/dev/test-board-seed.ts`](../../src/dev/test-board-seed.ts).
+This aligns with the quick (3 parallel W1) and smoke (3 waves, dependencies) presets in [`src/dev/orchestrate-scenarios/`](../../src/dev/orchestrate-scenarios/).
 
 ---
 

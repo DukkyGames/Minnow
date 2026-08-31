@@ -151,7 +151,7 @@ export interface SubAgentRun {
   modelId?: string;
   /** Board category chip (Orchestrate board agent grid). */
   category?: BoardCategory;
-  /** Linked board task id when spawned from board_init tasks. */
+  /** Linked leftover board task id. */
   boardTaskId?: string | null;
   /** Token usage accumulated across sub-agent LLM turns (Orchestrate stats rollup). */
   usage?: Usage;
@@ -191,7 +191,7 @@ export interface SpawnSubAgentInput {
   modelId?: string;
   /** Board category for Orchestrate board UI. */
   category?: BoardCategory;
-  /** Board task id (board_update_task / spawn hook). */
+  /** Leftover board task id (spawn hook). */
   boardTaskId?: string | null;
   /** Per-spawn wall-clock timeout override (ms); wins over type/global defaults. */
   timeoutMs?: number;

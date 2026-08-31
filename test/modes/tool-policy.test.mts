@@ -134,7 +134,6 @@ describe('filterToolsByMode', () => {
     for (const id of [
       'execute_command',
       'git_commit',
-      'board_init',
       'spawn_sub_agent',
       'update_settings',
       'launch_minnow_app',
@@ -255,12 +254,18 @@ describe('cross-mode policy invariants', () => {
     }
   });
 
-  test('board tools only in orchestrate mode', () => {
-    for (const modeId of MODE_IDS) {
-      for (const toolId of TOOL_GROUP_IDS.board) {
-        const allowed = isToolAllowedForMode(modeId, toolId);
-        assert.equal(allowed, modeId === 'orchestrate', `${toolId} in ${modeId}`);
-      }
+  test('deleted V1 board tools are not in the catalog (MIN-715)', () => {
+    const ids = new Set(BUILT_IN_TOOLS.map((t) => t.id));
+    for (const toolId of [
+      'board_init',
+      'board_add_tasks',
+      'board_update_task',
+      'board_set_autonomy',
+      'board_get_state',
+      'board_report',
+      'delegate_tasks',
+    ]) {
+      assert.equal(ids.has(toolId), false, `${toolId} should be gone`);
     }
   });
 });

@@ -166,7 +166,8 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'agents.agentPacks': section(['agent-packs']),
   'agents.subAgents': section(['agent-center']),
   'agents.autopilot': section(['autopilot']),
-  'agents.autopilot.handsOff': meta('autopilot.defaultHandsOff', 'boolean', {
+  'agents.autopilot.defaultStatus': meta('autopilot.defaultStatus', 'enum', {
+    allowedValues: ['running', 'stopped'],
     refreshAreas: ['autopilot'],
   }),
   'agents.autopilot.isolation': meta('autopilot.defaultIsolationMode', 'enum', {

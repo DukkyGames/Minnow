@@ -62,7 +62,7 @@ See [Orchestrate boards](boards.md).
 
 ## Autopilot
 
-**Settings → Agents → Autopilot** holds the global defaults for board execution: execution mode, isolation, maximum concurrency, planner model, retries, heartbeat, self-heal rounds, infrastructure provisioning, auto-restart of stalled tasks, and a guard that stops agents changing directory outside their worktree. Isolation here means git worktrees for parallel tasks — it does not sandbox agent shells against the rest of the host (see [Privacy and security](../reference/privacy-and-security.md)).
+**Settings → Agents → Autopilot** holds the global defaults for board execution: Running or Stopped start, isolation, maximum concurrency, planner model, retries, heartbeat, self-heal rounds, infrastructure provisioning, auto-restart of stalled tasks, and a guard that stops agents changing directory outside their worktree. Isolation here means git worktrees for parallel tasks — it does not sandbox agent shells against the rest of the host (see [Privacy and security](../reference/privacy-and-security.md)).
 
 There is also a **Continue** policy for what happens when a task chat grows too large: always nudge the existing chat, hand off to a fresh chat when a chat is derailed or very large (conservative), or hand off sooner (aggressive).
 

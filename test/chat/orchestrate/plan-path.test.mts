@@ -5,12 +5,13 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import {
+  isExecutableOrchestratePlan,
   isOrchestratePlanPickerEntry,
   isSuperPlanReferenceArtifactBasename,
   isTopLevelOrchestratePlan,
+  normalizeOrchestratePlanPath,
   resolveEffectiveOrchestratePlanPath,
-} from '../../../src/chat/orchestrate/plan-path.ts';
-import { resolveEffectiveOrchestratePlanPathWithSync } from '../../../src/chat/orchestrate/plan-path-sync.ts';
+} from '../../../src/chat/plans/plan-path.ts';
 import {
   createEmptyChatObject,
   flushScheduledSessionSaveForTests,
@@ -46,34 +47,54 @@ describe('resolveEffectiveOrchestratePlanPath', () => {
     } as ChatGroup;
     assert.equal(resolveEffectiveOrchestratePlanPath(chat, group), PLAN);
   });
+});
 
-  test('sync copies group path onto chat when chat is empty', () => {
-    const chat = createEmptyChatObject('');
-    chat.id = '11111111-1111-1111-1111-111111111111';
-    const group = {
-      id: 'grp_2',
-      name: 'Board',
-      workspacePath: '',
-      orchestratePlanPath: PLAN,
-    } as ChatGroup;
-    setSessionStateForTests({
-      version: 5,
-      activeId: chat.id,
-      sidebarCollapsed: false,
-      groups: [group],
-      chats: [chat],
-    });
+describe('executable orchestrate plans', () => {
+  test('accepts markdown under documentation/plans root', () => {
+    assert.equal(isExecutableOrchestratePlan('documentation/plans/feature-foo.md'), true);
     assert.equal(
-      resolveEffectiveOrchestratePlanPathWithSync(chat, group, { sync: true }),
-      PLAN,
+      normalizeOrchestratePlanPath('documentation/plans/feature-foo.md'),
+      'documentation/plans/feature-foo.md',
     );
-    assert.equal(chat.orchestratePlanPath, PLAN);
+  });
+
+  test('accepts nested dirs outside references and verification', () => {
+    assert.equal(isExecutableOrchestratePlan('documentation/plans/Build out/step-01.md'), true);
+  });
+
+  test('rejects references subtree', () => {
+    assert.equal(
+      isExecutableOrchestratePlan('documentation/plans/references/mode-sources.md'),
+      false,
+    );
+    assert.equal(
+      normalizeOrchestratePlanPath('documentation/plans/references/mode-sources.md'),
+      undefined,
+    );
+  });
+
+  test('rejects verification subtree', () => {
+    assert.equal(
+      isExecutableOrchestratePlan('documentation/plans/verification/step-05.md'),
+      false,
+    );
+  });
+
+  test('rejects paths outside documentation/plans', () => {
+    assert.equal(isExecutableOrchestratePlan('src/main.ts'), false);
+    assert.equal(isExecutableOrchestratePlan('plans/foo.md'), false);
   });
 });
 
 describe('orchestrate plan picker entries', () => {
   test('top-level executable plans are listed', () => {
     assert.equal(isOrchestratePlanPickerEntry(PLAN), true);
+    assert.equal(isOrchestratePlanPickerEntry('documentation/plans/run.md'), true);
+  });
+
+  test('nested dirs and Super Plan research artifacts are not picker rows', () => {
+    assert.equal(isOrchestratePlanPickerEntry('documentation/plans/waves/foo.md'), false);
+    assert.equal(isOrchestratePlanPickerEntry('documentation/plans/run-research.md'), false);
   });
 
   test('nested executable paths are not default picker rows', () => {

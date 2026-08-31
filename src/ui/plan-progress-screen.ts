@@ -2,7 +2,7 @@
  * Plan / Super Plan animated progress stepper — modeled on ResearchProgressPanel.
  */
 
-import { findLastPlanSavePath } from '../chat/orchestrate/plan-from-history';
+import { findLastPlanSavePath } from '../chat/plans/plan-from-history';
 import {
   SUPER_PLAN_STAGE_LABELS,
   SUPER_PLAN_STAGE_ORDER,

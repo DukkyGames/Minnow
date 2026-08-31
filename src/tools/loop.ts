@@ -128,7 +128,7 @@ import {
 import { tagApiMessageHistoryIndex } from '../chat/api-message-origin';
 import { buildTurnSnapshot, resolveForkHistoryIndex } from '../chat/turn-snapshot';
 import { createStreamingStatsPublisher } from '../chat/streaming-stats';
-import { aggregateTurnMetaSegments } from '../chat/orchestrate/stats-math';
+import { aggregateTurnMetaSegments } from '../chat/plans/stats-math';
 import type { ForkOverrides } from '../chat/fork-from-run';
 import {
   createRun,
@@ -190,8 +190,7 @@ import { refreshComposerReasoningEffortDisabled } from '../ui/composer-reasoning
 import { refreshOrchestratePlanSelectorDisabled } from '../ui/orchestrate-plan-selector';
 import {
   refreshBoardOnboardingIfMounted,
-  renderBoardView,
-} from '../ui/orchestrate-board';
+} from '../ui/orchestrate-board-onboarding-ui';
 import {
   isOrchestrateBoardInitSplitActive,
   isOrchestrateInitSplitChromeActive,
@@ -281,11 +280,6 @@ import {
   loadToolCallsMeta,
 } from '../config/tool-calls-meta';
 import { setStatus } from '../ui/status';
-import { applyOrchestrateAggregatedStatsToChat } from '../chat/orchestrate/stats-aggregate';
-import {
-  refreshMetricsStripForChat,
-  shouldUseBoardAggregateStats,
-} from '../chat/orchestrate/board-stats-aggregate';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import { resolveOutboundSystemMessages } from '../chat/prompts/compose-context';
 import {
@@ -330,11 +324,6 @@ import {
 } from '../chat/tool-image-follow-up';
 import { pushOutboundSystemMessages } from './api-system-messages';
 import { normalizeModeId } from '../chat/modes/types';
-import {
-  orchestrateRequiresPlanBlock,
-  resolveOrchestrateSlashInput,
-} from '../chat/orchestrate/send-gate';
-import { resolveEffectiveOrchestratePlanPathWithSync } from '../chat/orchestrate/plan-path-sync';
 import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
 import { resolveWorkAgentBinding } from '../agents/resolve-work-agent-binding';
 import { UI_DESIGNER_AGENT_ID } from '../agents/ui-designer/constants';
@@ -374,7 +363,6 @@ import {
   detectLocalServer,
   getEnabledToolDefinitionsForChat,
 } from './client';
-import { setBoardExecutorContext } from './board-tools';
 import { setSubAgentExecutorContext } from './sub-agent-executor';
 import {
   copyHistoryForOutboundApi,
@@ -1533,7 +1521,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     modeId: loopModeId,
     parentChatId: chat.id,
   });
-  setBoardExecutorContext({ chatId: chat.id });
   setBugBoardExecutorContext({ chatId: chat.id });
 
   if (normalizeModeId(chat.modeId) === 'orchestrate') {
@@ -1674,9 +1661,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       if (boardTaskId && boardGroupId && sessionState) {
         const group = sessionState.groups?.find((g) => g.id === boardGroupId);
         if (group?.orchestrateBoard) {
-          void import('../state/orchestrate-board-store.ts').then(({ updateTask }) => {
-            updateTask(group, boardTaskId, { error: err.message });
-          });
+          const task = group.orchestrateBoard.tasks.find((t) => t.id === boardTaskId);
+          if (task) task.error = err.message;
         }
       }
       return;
@@ -1760,12 +1746,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
 
   if (ownsGlobalStreaming) {
-    if (pushUser && chat.boardTaskId) {
-      const { markBoardTaskInProgressFromChat } = await import(
-        '../state/orchestrate-board-store'
-      );
-      markBoardTaskInProgressFromChat(chat);
-    }
     setStreaming(true, chat.id);
     syncOrchestrateInitSplitChrome(chat);
     if (
@@ -2925,7 +2905,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         tEnd: turnResult.tEnd,
         workAgentId: activeWorkAgent?.id ?? null,
       });
-      const displayMeta = applyOrchestrateAggregatedStatsToChat(chat, parentTurnId, meta);
+      const displayMeta = meta;
       const modelInfo = resolveModelInfo(streamMeta.model || modelId, displayMeta.model_info);
       chat.lastStats = buildLastStatsSnapshot(displayMeta.stats, displayMeta.usage);
       chat.modelInfo = { ...modelInfo };
@@ -2998,9 +2978,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
       renderSidebar();
       scheduleSaveSessions();
-      if (shouldUseBoardAggregateStats()) {
-        refreshMetricsStripForChat(getActiveChat());
-      }
 
       // Push-now during final prose: inject steer and run another model round in this turn.
       if (chat.pendingSteerMessage?.trim()) {
@@ -3210,7 +3187,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       chat.workAgentId = savedWorkAgentId;
     }
     setSubAgentExecutorContext(null);
-    setBoardExecutorContext(null);
     setBugBoardExecutorContext(null);
     if (normalizeModeId(chat.modeId) === 'orchestrate') {
       const board = getBoardGroupForChat(chat)?.orchestrateBoard;
@@ -3658,29 +3634,9 @@ export async function sendMessageWithTools(
     clearComposerAfterSend(chat, input);
   }
 
-  const orchestratePlanPath = resolveEffectiveOrchestratePlanPathWithSync(
-    chat,
-    getBoardGroupForChat(chat),
-    { sync: true },
-  );
-
-  if (
-    orchestrateRequiresPlanBlock(
-      chat.modeId,
-      orchestratePlanPath,
-      effectiveRawText,
-      pendingWithoutErrors.length,
-    ) === 'block'
-  ) {
-    setStatus('err', 'Select a plan to orchestrate');
-    return;
-  }
-
-  const slashInput = resolveOrchestrateSlashInput(
-    chat.modeId,
-    orchestratePlanPath,
-    effectiveRawText,
-  );
+  // V1 orchestrate send-gate (plan required / default "Execute the selected
+  // plan.") is gone with MIN-714. Empty composer still no-ops below.
+  const slashInput = effectiveRawText;
   const pickerSkillId = goalDriven ? null : getPickerAppliedSkillId(input);
 
   // Composer sampler UI checks (programmatic path uses runChatTurn's sampler reader)

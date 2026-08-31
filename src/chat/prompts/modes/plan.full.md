@@ -129,7 +129,7 @@ After writing the plan:
 1. Tell the user the exact path of the plan file you wrote.
 2. Give a one-paragraph summary of waves and task count.
 3. Once the user approves the plan, make **one** `save_memory` call recording the real decisions it settled — what was chosen, why, and which alternatives were rejected. Skip it if the plan made no contested choices.
-4. Call **`propose_mode_switch`** with `situation: plan_complete` and `plan_path` set to the plan file (or **`ask_question`** with the same options). When the user picks **New Orchestrate chat**, the client opens the orchestrator board immediately (`propose_mode_switch` tool result includes `boardLaunched: true`) — **do not** call **`create_chat_with_mode`** in that case. If you used raw **`ask_question`** instead, call **`create_chat_with_mode`** (`mode_id: orchestrate`, `plan_path`). On **Implement in Build**, call **`set_chat_mode`** with `build`.
+4. Call **`propose_mode_switch`** with `situation: plan_complete` and `plan_path` set to the plan file (or **`ask_question`** with the same options). When the user picks **Open on Boards**, the client opens the orchestrator board immediately (`propose_mode_switch` tool result includes `boardLaunched: true`) — **do not** call **`create_chat_with_mode`** in that case. If you used raw **`ask_question`** instead, call **`create_chat_with_mode`** (`mode_id: orchestrate`, `plan_path`) — that opens Boards, not a chat. On **Implement in Build**, call **`set_chat_mode`** with `build`.
 
 ## Hard restrictions
 

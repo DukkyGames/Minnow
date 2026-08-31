@@ -21,7 +21,6 @@ import {
   resolveBoardRestoreGroupOnSwitch,
   toggleGroupCollapsed,
 } from '../../src/state/chat-groups.ts';
-import { initBoard } from '../../src/state/orchestrate-board-store.ts';
 import {
   createEmptyChatObject,
   flushScheduledSessionSaveForTests,
@@ -29,13 +28,31 @@ import {
   sessionState,
   setSessionStateForTests,
 } from '../../src/state/sessions.ts';
+import type { Chat, ChatGroup, OrchestrateBoardState } from '../../src/types.ts';
 
 const WS = 'C:\\workspace\\demo';
 const PLANNER_ID = '11111111-1111-1111-1111-111111111111';
 const PLAN_PATH = 'documentation/plans/demo-plan.md';
 
+/**
+ * Attach leftover V1 hydrate so folder helpers still see a board blob.
+ * Live V2 boards are journals — this is session-only, not the engine.
+ */
+function attachLeftoverBoard(
+  group: ChatGroup,
+  tasks: OrchestrateBoardState['tasks'],
+): void {
+  group.orchestrateBoard = {
+    planPath: PLAN_PATH,
+    startedAt: 1,
+    lastUpdatedAt: 1,
+    waves: [{ id: 'W1' }],
+    tasks,
+  };
+}
+
 /** Sidebar list helpers hide ephemeral empty chats; seed one turn for fixtures. */
-function markSidebarListed(chat: ReturnType<typeof createEmptyChatObject>): void {
+function markSidebarListed(chat: Chat): void {
   if (chat.history.length === 0 && !chat.composerDraft?.trim()) {
     chat.history.push({ role: 'user', content: 'fixture' });
   }
@@ -83,11 +100,7 @@ describe('chat groups', () => {
     });
     const group = getOrCreateBoardGroup(planner);
     assert.equal(planner.name, 'Orchestrator - demo-plan');
-    initBoard(group, planner, {
-      planPath: PLAN_PATH,
-      tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build' }],
-      waves: [{ id: 'W1' }],
-    });
+    attachLeftoverBoard(group, [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build', status: 'planned' }]);
     assert.equal(planner.boardGroupId, group.id);
     assert.equal(planner.groupId, group.id);
     assert.equal(findBoardGroupForPlanner(planner.id)?.id, group.id);
@@ -138,11 +151,9 @@ describe('chat groups', () => {
       chats: [planner, taskChat],
     });
     const group = getOrCreateBoardGroup(planner);
-    initBoard(group, planner, {
-      planPath: PLAN_PATH,
-      tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build', chatId: taskChat.id }],
-      waves: [{ id: 'W1' }],
-    });
+    attachLeftoverBoard(group, [
+      { id: 'W1-A', title: 'A', wave: 'W1', category: 'build', status: 'planned', chatId: taskChat.id },
+    ]);
     taskChat.groupId = group.id;
     taskChat.boardGroupId = group.id;
 
@@ -168,11 +179,9 @@ describe('chat groups', () => {
       chats: [planner, taskChat, other],
     });
     const group = getOrCreateBoardGroup(planner);
-    initBoard(group, planner, {
-      planPath: PLAN_PATH,
-      tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build', chatId: taskChat.id }],
-      waves: [{ id: 'W1' }],
-    });
+    attachLeftoverBoard(group, [
+      { id: 'W1-A', title: 'A', wave: 'W1', category: 'build', status: 'planned', chatId: taskChat.id },
+    ]);
     taskChat.groupId = group.id;
     taskChat.boardGroupId = group.id;
     taskChat.boardTaskId = 'W1-A';
@@ -204,11 +213,7 @@ describe('chat groups', () => {
       chats: [planner, other],
     });
     const group = getOrCreateBoardGroup(planner);
-    initBoard(group, planner, {
-      planPath: PLAN_PATH,
-      tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build' }],
-      waves: [{ id: 'W1' }],
-    });
+    attachLeftoverBoard(group, [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build', status: 'planned' }]);
     const result = removeChatById(planner.id, '');
     assert.equal(result.ok, true);
     assert.equal(result.activeChanged, true);

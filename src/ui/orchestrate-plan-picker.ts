@@ -5,9 +5,8 @@
 import {
   discoverOrchestratePlans,
   type DiscoverOrchestratePlansResult,
-} from '../chat/orchestrate/list-plans';
-import { normalizeOrchestratePlanPath, resolveEffectiveOrchestratePlanPath } from '../chat/orchestrate/plan-path';
-import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title';
+} from '../chat/plans/list-plans';
+import { normalizeOrchestratePlanPath, resolveEffectiveOrchestratePlanPath } from '../chat/plans/plan-path';
 import { normalizeModeId } from '../chat/modes/types';
 import { getActiveBoardGroup, getBoardGroupForChat } from '../state/chat-groups';
 import { scheduleSaveSessions, touchChat } from '../state/sessions';
@@ -126,7 +125,6 @@ export function persistOrchestratePlanPathFromSelectValue(
       delete chat.orchestratePlanPath;
     }
   }
-  syncOrchestratorPlannerChatTitle(chat, chat.orchestratePlanPath);
   const group = getBoardGroupForChat(chat);
   if (group && chat.orchestratePlanPath) {
     group.orchestratePlanPath = chat.orchestratePlanPath;

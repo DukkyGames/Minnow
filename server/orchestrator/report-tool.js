@@ -1,9 +1,8 @@
 /**
  * P2-E — the structured report tool (MIN-702).
  *
- * V1 inferred why an agent stopped by scraping the transcript
- * (`orchestrate-failure-classify.ts`, 303 lines of `ECONNREFUSED` / `spawn ELOOP`
- * markers). The replacement is not a better classifier. It is asking the agent,
+ * V1 inferred why an agent stopped by scraping the transcript. The replacement
+ * is not a better classifier. It is asking the agent,
  * and rejecting a malformed answer at the tool boundary so it can retry inside
  * the same turn.
  *

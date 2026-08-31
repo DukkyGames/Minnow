@@ -1294,7 +1294,7 @@
   {
     "key": "agents.autopilot",
     "label": "Orchestrator autopilot",
-    "description": "Global defaults for orchestrate board execution, testing, and heartbeat.",
+    "description": "Global defaults for orchestrate board concurrency, planner model, and heartbeat.",
     "keywords": [
       "orchestrate",
       "board",
@@ -1313,19 +1313,23 @@
     ]
   },
   {
-    "key": "agents.autopilot.handsOff",
-    "label": "Hands-off by default",
+    "key": "agents.autopilot.defaultStatus",
+    "label": "New boards start",
     "keywords": [
-      "afk",
-      "autonomous",
-      "unattended",
-      "hands off"
+      "running",
+      "stopped",
+      "start",
+      "unattended"
     ],
     "category": "agents",
     "area": "autopilot",
     "storage": "meta",
-    "path": "autopilot.defaultHandsOff",
-    "type": "boolean",
+    "path": "autopilot.defaultStatus",
+    "type": "enum",
+    "allowedValues": [
+      "running",
+      "stopped"
+    ],
     "sensitivity": "normal",
     "writable": true,
     "refreshAreas": [
@@ -1454,7 +1458,7 @@
   {
     "key": "agents.autopilot.selfHeal",
     "label": "Self-heal & provisioning",
-    "description": "Configure AFK self-heal rounds, infra provisioning, and worktree cd-guard.",
+    "description": "Configure self-heal rounds, infra provisioning, and worktree cd-guard.",
     "keywords": [
       "self-heal",
       "provision",
@@ -3757,162 +3761,6 @@
     "storage": "resource",
     "resource": "tools",
     "path": "permissions.default.spawn_sub_agent",
-    "type": "enum",
-    "allowedValues": [
-      "off",
-      "ask",
-      "full"
-    ],
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "tools"
-    ]
-  },
-  {
-    "key": "integrations.tools.permission.board_init",
-    "label": "Tool permission: board_init",
-    "description": "Permission mode for the board_init tool (off, ask, or full).",
-    "keywords": [
-      "board_init",
-      "permission",
-      "tools"
-    ],
-    "category": "integrations",
-    "area": "tools",
-    "storage": "resource",
-    "resource": "tools",
-    "path": "permissions.default.board_init",
-    "type": "enum",
-    "allowedValues": [
-      "off",
-      "ask",
-      "full"
-    ],
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "tools"
-    ]
-  },
-  {
-    "key": "integrations.tools.permission.board_update_task",
-    "label": "Tool permission: board_update_task",
-    "description": "Permission mode for the board_update_task tool (off, ask, or full).",
-    "keywords": [
-      "board_update_task",
-      "permission",
-      "tools"
-    ],
-    "category": "integrations",
-    "area": "tools",
-    "storage": "resource",
-    "resource": "tools",
-    "path": "permissions.default.board_update_task",
-    "type": "enum",
-    "allowedValues": [
-      "off",
-      "ask",
-      "full"
-    ],
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "tools"
-    ]
-  },
-  {
-    "key": "integrations.tools.permission.board_set_autonomy",
-    "label": "Tool permission: board_set_autonomy",
-    "description": "Permission mode for the board_set_autonomy tool (off, ask, or full).",
-    "keywords": [
-      "board_set_autonomy",
-      "permission",
-      "tools"
-    ],
-    "category": "integrations",
-    "area": "tools",
-    "storage": "resource",
-    "resource": "tools",
-    "path": "permissions.default.board_set_autonomy",
-    "type": "enum",
-    "allowedValues": [
-      "off",
-      "ask",
-      "full"
-    ],
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "tools"
-    ]
-  },
-  {
-    "key": "integrations.tools.permission.board_get_state",
-    "label": "Tool permission: board_get_state",
-    "description": "Permission mode for the board_get_state tool (off, ask, or full).",
-    "keywords": [
-      "board_get_state",
-      "permission",
-      "tools"
-    ],
-    "category": "integrations",
-    "area": "tools",
-    "storage": "resource",
-    "resource": "tools",
-    "path": "permissions.default.board_get_state",
-    "type": "enum",
-    "allowedValues": [
-      "off",
-      "ask",
-      "full"
-    ],
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "tools"
-    ]
-  },
-  {
-    "key": "integrations.tools.permission.board_report",
-    "label": "Tool permission: board_report",
-    "description": "Permission mode for the board_report tool (off, ask, or full).",
-    "keywords": [
-      "board_report",
-      "permission",
-      "tools"
-    ],
-    "category": "integrations",
-    "area": "tools",
-    "storage": "resource",
-    "resource": "tools",
-    "path": "permissions.default.board_report",
-    "type": "enum",
-    "allowedValues": [
-      "off",
-      "ask",
-      "full"
-    ],
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "tools"
-    ]
-  },
-  {
-    "key": "integrations.tools.permission.delegate_tasks",
-    "label": "Tool permission: delegate_tasks",
-    "description": "Permission mode for the delegate_tasks tool (off, ask, or full).",
-    "keywords": [
-      "delegate_tasks",
-      "permission",
-      "tools"
-    ],
-    "category": "integrations",
-    "area": "tools",
-    "storage": "resource",
-    "resource": "tools",
-    "path": "permissions.default.delegate_tasks",
     "type": "enum",
     "allowedValues": [
       "off",

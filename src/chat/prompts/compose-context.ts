@@ -15,7 +15,7 @@ import {
   loadUserRules,
 } from '../../config/user-rules';
 import { getExpertSelection, sessionState } from '../../state/sessions';
-import { resolveChatToolWorkspaceRoot } from '../../state/worktree-isolation';
+import { resolveChatToolWorkspaceRoot } from '../../state/chat-worktree';
 import { getExpertAwareToolNamesForChat } from '../experts/expert-tool-policy';
 import { loadToolConfig } from '../../tools/config';
 import type { Chat } from '../../types';
@@ -35,7 +35,7 @@ import { getWorkspacePath } from '../../state/workspace';
 import { resolveShellSandboxModeForChat } from '../../tools/shell-sandbox-client';
 import type { ComposeContext, PromptProfile } from './types';
 import { getBoardGroupForChat } from '../../state/chat-groups';
-import { resolveEffectiveOrchestratePlanPathWithSync } from '../orchestrate/plan-path-sync';
+import { resolveEffectiveOrchestratePlanPath } from '../plans/plan-path';
 
 /** Workspace folder path for {{cwd}} in system prompts (falls back to origin). */
 export function resolveComposeCwd(): string {
@@ -94,9 +94,7 @@ export async function buildComposeContext(
   const modeId = normalizeModeId(chat.modeId);
   const orchestratePlanPath =
     modeId === 'orchestrate'
-      ? resolveEffectiveOrchestratePlanPathWithSync(chat, getBoardGroupForChat(chat), {
-          sync: true,
-        }) ?? null
+      ? resolveEffectiveOrchestratePlanPath(chat, getBoardGroupForChat(chat)) ?? null
       : null;
   const enabledToolIds = getEnabledToolIdsForChat(chat);
 

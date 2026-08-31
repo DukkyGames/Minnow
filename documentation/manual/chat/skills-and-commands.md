@@ -75,7 +75,7 @@ Then enable it in the Skills catalog. A user skill wins over a built-in of the s
 
 After each turn a separate evaluator agent checks the condition against the code and test results, then either confirms it or sends the chat back to work. It is the difference between "I have fixed the tests" and tests that pass.
 
-- `/goal all tests in test/orchestrate pass`
+- `/goal all tests in test/orchestrator pass`
 - `/goal clear` stops the loop (`stop`, `off` and `reset` also work)
 
 The goal persists on the chat across reloads. Bind a capable model to the evaluator role in **Models → Routing → Goal evaluator** — a weak evaluator will happily rubber-stamp a broken build.

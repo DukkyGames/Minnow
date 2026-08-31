@@ -238,8 +238,7 @@ export type ValidationResult =
  * One task as declared in a plan document.
  *
  * `dependsOn` is always present and always resolved: absent and empty
- * `Depends on:` parse identically, retiring the Planner prompt's "never emit an
- * empty list" workaround rather than reproducing it.
+ * `Depends on:` parse identically. The parser is the source of truth.
  */
 export interface PlanTask {
   id: string;
@@ -407,10 +406,9 @@ export interface FinalTestState {
  *
  * Autonomy is this pair and nothing else (PRD §6): `status` is whether the
  * reconcile loop is ticking, `concurrency` is how many attempts may *start*.
- * Sequential is Running at N=1; AFK is Running with no interactive gates;
- * Manual is Stopped plus per-task start. V1's `executionMode` / `handsOff` /
- * `pendingAfk` / `autoRunning` / `systemPaused` / `userStopped` are not here —
- * they could contradict each other. Field deletion from V1 structs is P4-F.
+ * Sequential is Running at N=1; unattended is Running with no interactive gates;
+ * Manual is Stopped plus per-task start. The old multi-flag leftover blob is
+ * folded onto this pair at hydrate (MIN-718) and is not a BoardState field.
  */
 export interface BoardState {
   boardId: string;

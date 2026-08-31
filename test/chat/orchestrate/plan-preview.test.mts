@@ -13,7 +13,7 @@ import {
   planMarkdownForDisplay,
   readPlanArtifactMarkdown,
   splitPlanMarkdown,
-} from '../../../src/chat/orchestrate/plan-preview.ts';
+} from '../../../src/chat/plans/plan-preview.ts';
 
 const PLAN_MARKDOWN = `---
 name: demo-feature

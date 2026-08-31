@@ -10,7 +10,7 @@ export interface BoardScenarioMetadata {
   family: string;
   description: string;
   preset: BoardScenario['preset'];
-  executionMode: BoardScenario['executionMode'];
+  concurrency: number;
   expectedOutcome: BoardScenario['expected']['boardOutcome'];
   faultCount: number;
   tags: string[];
@@ -44,7 +44,7 @@ const BUILTIN_SCENARIOS = validateScenarioCatalog([
     family: 'happy',
     description: 'Quick preset completes without injected faults.',
     preset: 'quick',
-    executionMode: 'afk',
+    concurrency: 2,
     seed: 'happy.quick.v1',
     expected: { boardOutcome: 'passed' },
     faults: [],
@@ -55,7 +55,7 @@ const BUILTIN_SCENARIOS = validateScenarioCatalog([
     family: 'happy',
     description: 'Multi-wave smoke preset completes without injected faults.',
     preset: 'smoke',
-    executionMode: 'afk',
+    concurrency: 2,
     seed: 'happy.smoke.v1',
     expected: { boardOutcome: 'passed' },
     faults: [],
@@ -66,7 +66,7 @@ const BUILTIN_SCENARIOS = validateScenarioCatalog([
     family: 'report-contract',
     description: 'A builder omits its first report and recovers after a deterministic nudge.',
     preset: 'quick',
-    executionMode: 'afk',
+    concurrency: 2,
     seed: 'report.builder-missing-recover.v1',
     expected: {
       boardOutcome: 'passed',
@@ -87,7 +87,7 @@ const BUILTIN_SCENARIOS = validateScenarioCatalog([
     family: 'report-contract',
     description: 'A builder repeatedly omits its report until bounded policy blocks the board.',
     preset: 'quick',
-    executionMode: 'afk',
+    concurrency: 2,
     seed: 'report.builder-missing-terminal.v1',
     expected: { boardOutcome: 'blocked' },
     faults: [
@@ -106,7 +106,7 @@ const BUILTIN_SCENARIOS = validateScenarioCatalog([
     family: 'tester-verdict',
     description: 'A tester fails once, then the task rebuilds and passes verification.',
     preset: 'quick',
-    executionMode: 'afk',
+    concurrency: 2,
     seed: 'verdict.tester-recover.v1',
     expected: {
       boardOutcome: 'passed',
@@ -132,7 +132,7 @@ function metadataFor(scenario: BoardScenario): BoardScenarioMetadata {
     family: scenario.family,
     description: scenario.description,
     preset: scenario.preset,
-    executionMode: scenario.executionMode,
+    concurrency: scenario.concurrency,
     expectedOutcome: scenario.expected.boardOutcome,
     faultCount: scenario.faults.length,
     tags: [...(scenario.tags ?? [])],

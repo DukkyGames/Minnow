@@ -138,7 +138,7 @@ describe('Settings board scenario runner', () => {
               family: 'happy',
               description: 'Quick preset completes without injected faults.',
               preset: 'quick',
-              executionMode: 'afk',
+              concurrency: 2,
               expectedOutcome: 'passed',
               faultCount: 0,
               tags: ['baseline'],

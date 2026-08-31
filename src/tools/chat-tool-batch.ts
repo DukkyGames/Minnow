@@ -7,18 +7,11 @@ import { patchMainTurnActivity } from '../chat/main-turn-activity.ts';
 import { notifyChatStreamActivity } from '../chat/streaming-state.ts';
 import { normalizeModeId } from '../chat/modes/types.ts';
 import {
-  logBoardTerminalRun,
-  logBoardToolCall,
-} from '../state/orchestrate-board-store.ts';
-import {
-  boardWorktreesRootsFromState,
-  resolveChatToolWorkspaceRoot,
-} from '../state/worktree-isolation.ts';
-import {
   recordChatMessage,
   scheduleSaveSessions,
   sessionState,
 } from '../state/sessions.ts';
+import { resolveChatToolWorkspaceRoot } from '../state/chat-worktree.ts';
 import type { Chat, ToolCall, TurnRunId } from '../types.ts';
 import { getActiveChatMountElement } from '../ui/chat-mount.ts';
 import { scrollChatIfPinned } from '../ui/chat-scroll.ts';
@@ -28,7 +21,6 @@ import { renderToolCall, renderToolResult } from '../ui/tool-messages.ts';
 import { assertUiDesignerToolAllowed } from '../agents/ui-designer/tools.ts';
 import type { UiDesignerMode } from '../agents/ui-designer/constants.ts';
 import { setBugBoardExecutorContext } from './bug-board-tools.ts';
-import { setBoardExecutorContext } from './board-tools.ts';
 import { executeTool, type ExecuteToolContext } from './client.ts';
 import {
   executeToolCallBatch,
@@ -38,76 +30,8 @@ import { parallelToolsActivityLabel } from './parallel-tool-policy.ts';
 import { parseToolArguments } from './parse-tool-arguments.ts';
 import { setSubAgentExecutorContext } from './sub-agent-executor.ts';
 import { findToolWrapInDom } from './tool-wrap-dom.ts';
-import {
-  refreshActiveBoardIfMounted,
-} from '../ui/orchestrate-board.ts';
-import {
-  isOrchestrateBoardInitSplitActive,
-  isOrchestrateInitSplitChromeActive,
-  syncOrchestrateInitSplitChrome,
-} from '../ui/orchestrate-board-init-split.ts';
-import { isOrchestrateBoardViewActive } from '../ui/view-mode-toggle.ts';
 import { renderSidebar } from '../ui/sidebar.ts';
 import { notifyMemorySavedFromTool } from '../ui/memory-saved-toast.ts';
-
-/** Parse exit code from execute_command formatted output. */
-function parseTerminalExitCode(content: string): number | undefined {
-  const match = content.match(/\(exit (-?\d+)\)/);
-  if (!match) {
-    return undefined;
-  }
-  const code = Number(match[1]);
-  return Number.isFinite(code) ? code : undefined;
-}
-
-/** Log board-task tool/terminal activity when the chat is linked to a board task. */
-function maybeLogBoardToolExecution(
-  chat: Chat,
-  toolName: string,
-  args: unknown,
-  content: string,
-): void {
-  const boardTaskId = chat.boardTaskId?.trim();
-  const boardGroupId = chat.boardGroupId?.trim();
-  if (!boardTaskId || !boardGroupId || !sessionState) {
-    return;
-  }
-  const group = sessionState.groups?.find((g) => g.id === boardGroupId);
-  if (!group?.orchestrateBoard) {
-    return;
-  }
-
-  const argsPreview =
-    args && typeof args === 'object' ? JSON.stringify(args) : String(args ?? '');
-  const errored = content.trimStart().startsWith('Error');
-
-  if (toolName === 'execute_command') {
-    const command =
-      args && typeof args === 'object' && !Array.isArray(args)
-        ? String((args as Record<string, unknown>).command ?? '')
-        : '';
-    logBoardTerminalRun(
-      group,
-      boardTaskId,
-      command || toolName,
-      parseTerminalExitCode(content),
-      content,
-      errored,
-      chat.id,
-    );
-    return;
-  }
-
-  logBoardToolCall(
-    group,
-    boardTaskId,
-    toolName,
-    argsPreview,
-    content,
-    errored,
-    chat.id,
-  );
-}
 
 export interface RunChatToolBatchOptions {
   chat: Chat;
@@ -138,7 +62,6 @@ function buildChatToolExecuteContext(
   signal: AbortSignal,
 ): ExecuteToolContext {
   const scopedWorkspaceRoot = resolveChatToolWorkspaceRoot(chat, sessionState?.groups);
-  const boardWorktreeRoots = boardWorktreesRootsFromState(sessionState?.groups);
   return {
     chatId: chat.id,
     toolCallId,
@@ -146,7 +69,6 @@ function buildChatToolExecuteContext(
     workAgentId: chat.workAgentId ?? null,
     signal,
     ...(scopedWorkspaceRoot ? { workspaceRoot: scopedWorkspaceRoot } : {}),
-    ...(boardWorktreeRoots.length ? { extraPathRoots: boardWorktreeRoots } : {}),
   };
 }
 
@@ -222,7 +144,6 @@ function applyToolOutcome(
     ...(toolOut.attachments?.length ? { attachments: toolOut.attachments } : {}),
     ...(toolOut.codeChange ? { codeChange: toolOut.codeChange } : {}),
   });
-  maybeLogBoardToolExecution(chat, toolName, args, toolContent);
   notifyMemorySavedFromTool(toolName, args, toolContent);
   options.trackHistoryPush();
   options.syncContextUsage();
@@ -231,10 +152,6 @@ function applyToolOutcome(
   // if it is actually mounted right now.
   if (toolWrap.isConnected) {
     scrollChatIfPinned();
-  }
-
-  if (toolName === 'board_init') {
-    syncOrchestrateInitSplitChrome(chat);
   }
 }
 
@@ -340,7 +257,6 @@ export async function runChatToolBatch(
         parentChatId: chat.id,
         parentToolCallId: ctx.toolCallId,
       });
-      setBoardExecutorContext({ chatId: chat.id });
       setBugBoardExecutorContext({ chatId: chat.id });
 
       return executeTool(
@@ -366,14 +282,6 @@ export async function runChatToolBatch(
   recordChatMessage(chat);
   scheduleSaveSessions();
   renderSidebar();
-
-  if (
-    isOrchestrateBoardViewActive() ||
-    isOrchestrateBoardInitSplitActive(chat) ||
-    isOrchestrateInitSplitChromeActive()
-  ) {
-    refreshActiveBoardIfMounted();
-  }
 
   if (signal.aborted) {
     throw new DOMException('Aborted', 'AbortError');

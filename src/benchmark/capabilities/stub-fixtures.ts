@@ -57,14 +57,6 @@ const STUB_BY_TOOL: Record<string, unknown> = {
   },
   get_sub_agent_status: { id: CAP_STUB_SUB_AGENT_ID, status: 'running', progress: 0.4 },
 
-  board_get_state: {
-    boardId: 'board-cap-1',
-    tasks: [
-      { id: CAP_STUB_BOARD_TASK_ID, title: 'audit the tool catalog', state: 'in_progress' },
-      { id: 'task-2', title: 'write the report', state: 'todo' },
-    ],
-  },
-
   recall_chat_context: {
     turns: [
       { index: 3, role: 'user', text: 'Deployment checklist: 1) tag, 2) build, 3) smoke test staging.' },

@@ -6,9 +6,7 @@
 
 import { getChatAbort, setChatStopReason } from '../app-state.ts';
 import { reportBackgroundError } from '../boot/report-background-error.ts';
-import { isBoardSetupIncomplete } from '../chat/orchestrate/board-setup.ts';
-import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path.ts';
-import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title.ts';
+import { normalizeOrchestratePlanPath } from '../chat/plans/plan-path.ts';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, ChatGroup } from '../types';
 import { getChatLastMessageAt } from './session-workspace-scope';
@@ -68,7 +66,7 @@ export type WorkspaceSidebarEntry =
  * True when a chat belongs to an Orchestrate board (planner, task, tester or fixer).
  *
  * Every board chat is stamped with `boardGroupId` when it is created
- * (see orchestrate-board-actions.ts and linkPlannerChatToBoardFolder), so this
+ * (stamped when the leftover planner/task chat is created), so this
  * stays a plain field read: no group lookup, no import cycle with sessions.ts.
  *
  * Board chats live in the Orchestrate screen, not the chats panel. Callers that
@@ -83,9 +81,27 @@ export function isBoardTaskChat(chat: Chat): boolean {
   return Boolean(chat.boardTaskId?.trim());
 }
 
-/** True when a folder is a board (running or still in setup) and so is Orchestrate's, not the sidebar's. */
+/** True when a folder is a leftover V1 board and so is Orchestrate's, not the sidebar's. */
 export function isBoardOwnedGroup(group: ChatGroup): boolean {
-  return Boolean(group.orchestrateBoard) || isBoardSetupIncomplete(group);
+  return Boolean(group.orchestrateBoard);
+}
+
+/**
+ * Leftover V1 session blob looks in-flight. V2 boards do not write this;
+ * used only so dead folders are not treated as live.
+ */
+export function isLeftoverBoardRunning(group: ChatGroup): boolean {
+  return group.orchestrateBoard?.status === 'running';
+}
+
+/** Leftover V1 task progress (complete+quarantined / total). */
+export function leftoverBoardProgressPercent(group: ChatGroup): number {
+  const tasks = group.orchestrateBoard?.tasks ?? [];
+  if (!tasks.length) return 0;
+  const done = tasks.filter(
+    (t) => t.status === 'complete' || t.status === 'quarantined',
+  ).length;
+  return Math.round((done / tasks.length) * 100);
 }
 
 /** Board folders pin the planner chat first; other members stay activity-sorted. */
@@ -206,17 +222,8 @@ function teardownBoardGroup(group: ChatGroup, chatIds: readonly string[]): void 
     setChatStopReason(chatId, 'system');
     getChatAbort(chatId)?.abort();
   }
-  if (group.orchestrateBoard?.integrationBranch) {
-    // The board folder is going away, so nothing is left to commit from the
-    // integration checkout — `includeIntegration` is what stops it (and the board
-    // worktree dir) leaking forever. Branches are kept; only directories go.
-    // Imported lazily: orchestrate-board-actions imports this module.
-    void import('./orchestrate-board-actions.ts')
-      .then((m) => m.cleanupBoardIsolation(group, { includeIntegration: true }))
-      .catch(() => {
-        /* best-effort on folder delete */
-      });
-  }
+  // V1 isolation cleanup lived in the deleted engine. Leftover integration
+  // worktrees are orphaned directories; P4-C/P4-F do not revive that path.
 }
 
 /** Remove a plain group (ungroup chats) or a board folder (delete all member chats). */
@@ -412,10 +419,6 @@ export function linkPlannerChatToBoardFolder(plannerChat: Chat, group: ChatGroup
   if (plannerChat.orchestratePlanPath && !group.orchestratePlanPath) {
     group.orchestratePlanPath = plannerChat.orchestratePlanPath;
   }
-  syncOrchestratorPlannerChatTitle(
-    plannerChat,
-    plannerChat.orchestratePlanPath ?? group.orchestratePlanPath,
-  );
   touchChat(plannerChat);
   persistGroupChange(group.id);
 }
@@ -475,17 +478,9 @@ function activateBoardGroupView(groupId: string, group: ChatGroup): void {
   void import('../ui/code-overview')
     .then(({ dismissCodeOverviewForNavigation }) => {
       dismissCodeOverviewForNavigation();
-      return import('./orchestrate-board-store.ts');
-    })
-    .then(({ applyOpenBoardWaveCollapse }) => {
-      if (group.orchestrateBoard) {
-        applyOpenBoardWaveCollapse(group);
-      }
       void import('../ui/sidebar').then((m) => m.renderSidebar());
-      void import('../ui/messages').then((m) => {
-        const chat = state.chats.find((c) => c.id === state.activeId);
-        if (chat) m.renderChatFromHistory(chat);
-      });
+      // V1 kanban is gone — leftover board folders open the V2 Boards surface.
+      void import('../os/router').then((m) => m.navigateToCodeBoards());
     })
     .catch((err) => reportBackgroundError('board-view-activate', err));
 }
@@ -495,7 +490,7 @@ export function openBoardGroup(groupId: string): void {
   const state = requireSession();
   const group = findGroupById(groupId);
   if (!group) return;
-  if (!group.orchestrateBoard && !isBoardSetupIncomplete(group)) return;
+  if (!group.orchestrateBoard) return;
 
   const plannerId = group.plannerChatId?.trim();
   const active = state.chats.find((c) => c.id === state.activeId);

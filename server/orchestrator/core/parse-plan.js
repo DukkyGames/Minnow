@@ -2,14 +2,13 @@
  * P0-F — `parsePlan(markdown) -> TaskGraph | ParseError[]`. Board intake with no
  * model call.
  *
- * V1 ran an LLM (`board_init`) to read a plan the Planner had already emitted in
- * a specified format — a model deserializing something the producer already
- * structured. The cost of that round trip is visible in the prompts: the
- * orchestrator prompt has to plead *"never emit `dependsOn: []` — omit the field
- * entirely"*, a workaround for a failure mode a parser cannot have. And
- * `board_init`'s schema required only `id, title, wave, category`, so dependency
- * edges — the thing the entire scheduler runs on — were optional and re-inferred
- * from prose on every load, even though the Planner was required to state them.
+ * V1 used an LLM in the control plane to read a plan the Planner had already
+ * emitted in a specified format — a model deserializing something the producer
+ * already structured. That round trip forced a prompt workaround for empty
+ * `dependsOn` arrays (a failure mode a parser cannot have). The old intake
+ * schema required only `id, title, wave, category`, so dependency edges — the
+ * thing the entire scheduler runs on — were optional and re-inferred from prose
+ * on every load, even though the Planner was required to state them.
  *
  * ## What a parser buys that a model cannot
  *
@@ -482,9 +481,8 @@ function validateTasks(body, errors) {
       }
     }
 
-    // `Depends on:` absent and `Depends on:` empty must parse identically. The
-    // Planner prompt's "never emit an empty list" workaround is retired, not
-    // reproduced.
+    // `Depends on:` absent and `Depends on:` empty must parse identically
+    // (no extra prompt workaround — the parser is the source of truth).
     task.dependsOn = splitList(task.dependsRaw);
     task.touches = splitList(task.touchesRaw);
 

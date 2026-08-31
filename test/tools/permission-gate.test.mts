@@ -11,7 +11,6 @@ import {
   toolInvocationWouldPrompt,
 } from '../../src/tools/permission-gate.ts';
 import { defaultToolConfig, setToolConfigForTests } from '../../src/tools/config.ts';
-import { initBoard } from '../../src/state/orchestrate-board-store.ts';
 import {
   createEmptyChatObject,
   flushScheduledSessionSaveForTests,
@@ -101,18 +100,26 @@ describe('toolInvocationWouldPrompt', () => {
   });
 });
 
-describe('AFK interaction execution guard', () => {
-  test('denies an attempted question without opening UI and logs exactly that attempt', () => {
+describe('leftover interaction execution guard', () => {
+  test('no longer skips prompts based on leftover board flags', () => {
     const planner = createEmptyChatObject('model', '/tmp/ws');
-    planner.id = 'planner-afk';
+    planner.id = 'planner-leftover';
     planner.modeId = 'orchestrate';
     const group: ChatGroup = {
-      id: 'group-afk',
-      name: 'AFK board',
+      id: 'group-leftover',
+      name: 'Leftover board',
       workspacePath: '/tmp/ws',
       collapsed: false,
       order: 0,
       plannerChatId: planner.id,
+      orchestrateBoard: {
+        planPath: 'documentation/plans/leftover.md',
+        tasks: [{ id: 'W1-A', title: 'Task', wave: 'W1', category: 'build', status: 'planned' }],
+        waves: [{ id: 'W1' }],
+        startedAt: 1,
+        lastUpdatedAt: 1,
+        status: 'running',
+      },
     };
     setSessionStateForTests({
       version: 5,
@@ -120,28 +127,13 @@ describe('AFK interaction execution guard', () => {
       chats: [planner],
       groups: [group],
     });
-    initBoard(group, planner, {
-      planPath: 'documentation/plans/afk.md',
-      tasks: [{ id: 'W1-A', title: 'Task', wave: 'W1', category: 'build' }],
-      waves: [{ id: 'W1' }],
-    });
-    group.orchestrateBoard!.handsOff = true;
-    const config = defaultToolConfig();
-    config.enabled.ask_question = true;
-    config.permissions.default.ask_question = 'full';
-    setToolConfigForTests(config);
 
     const result = blockAfkInteractionAttempt(
       { chatId: planner.id, modeId: 'orchestrate' },
       'question',
-      'ask_question was attempted during AFK execution',
+      'ask_question was attempted',
     );
 
-    assert.match(result?.content ?? '', /AFK execution denied user interaction/);
-    const interactions = group.orchestrateBoard!.log?.filter(
-      (event) => event.type === 'interaction_required',
-    );
-    assert.equal(interactions?.length, 1);
-    assert.equal(interactions?.[0]?.detail?.interactionKind, 'question');
+    assert.equal(result, null);
   });
 });

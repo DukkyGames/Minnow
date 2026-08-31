@@ -1,7 +1,7 @@
 /**
  * P2-E — V2 Builder and Tester prompts (MIN-702).
  *
- * V1's work-agent prompts stay put (`board_report` / `env_blocked`). These
+ * V1's work-agent prompts no longer name deleted board tools (MIN-715). These
  * files are the V2 lineage: `blocked` is defined, and boards / waves /
  * delegation / lifecycle reporting are gone.
  */
@@ -29,13 +29,12 @@ function read(abs) {
   return fs.readFileSync(abs, 'utf8').replace(/\r\n/g, '\n');
 }
 
-describe('V1 prompts are untouched', () => {
-  it('still documents board_report / env_blocked', () => {
+describe('V1 work-agent prompts no longer name deleted board tools', () => {
+  it('builder and tester do not mention board_report', () => {
     const builder = read(V1_BUILDER);
     const tester = read(V1_TESTER);
-    assert.match(builder, /board_report/);
-    assert.match(builder, /env_blocked/);
-    assert.match(tester, /board_report/);
+    assert.equal(builder.includes('board_report'), false);
+    assert.equal(tester.includes('board_report'), false);
   });
 });
 

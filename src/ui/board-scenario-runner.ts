@@ -42,9 +42,9 @@ const TERMINAL_STATUSES = new Set(['completed', 'stopped']);
 const DEFAULT_CUSTOM_SCENARIO: BoardScenario = {
   id: 'custom.quick',
   family: 'custom',
-  description: 'Custom quick AFK scenario.',
+  description: 'Custom quick Running scenario.',
   preset: 'quick',
-  executionMode: 'afk',
+  concurrency: 2,
   seed: 'custom.quick.v1',
   expected: { boardOutcome: 'passed' },
   faults: [],
@@ -409,7 +409,7 @@ export function renderBoardScenarioRunner(
     scenarioDescription.textContent = custom
       ? 'Custom JSON will be sent exactly as entered.'
       : entry
-        ? `${entry.family} · ${entry.preset} · ${entry.executionMode} · expected ${entry.expectedOutcome} · ${entry.faultCount} fault${entry.faultCount === 1 ? '' : 's'}`
+        ? `${entry.family} · ${entry.preset} · N=${entry.concurrency} · expected ${entry.expectedOutcome} · ${entry.faultCount} fault${entry.faultCount === 1 ? '' : 's'}`
         : 'Scenario metadata unavailable.';
   }
 

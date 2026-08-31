@@ -73,7 +73,7 @@ describe('resolveChatCwd', () => {
           createdAt: 1,
           orchestrateBoard: {
             planPath: 'plan.md',
-            executionMode: 'auto',
+            status: 'running',
             tasks: [
               {
                 id: TASK_ID,
@@ -118,7 +118,7 @@ describe('resolveChatCwd', () => {
           createdAt: 1,
           orchestrateBoard: {
             planPath: 'plan.md',
-            executionMode: 'auto',
+            status: 'running',
             tasks: [],
             waves: [],
             finalTest: { status: 'pending' },
@@ -223,7 +223,7 @@ describe('resolveChatCwd (SQLite hot path)', () => {
             createdAt: 1,
             orchestrateBoard: {
               planPath: 'plan.md',
-              executionMode: 'auto',
+              status: 'running',
               tasks: [
                 {
                   id: TASK_ID,

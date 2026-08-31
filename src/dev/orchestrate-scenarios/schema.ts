@@ -3,7 +3,6 @@
  */
 
 export const SCENARIO_PRESETS = ['quick', 'smoke', 'generated'] as const;
-export const SCENARIO_EXECUTION_MODES = ['afk', 'auto', 'sequential'] as const;
 export const SCENARIO_BOUNDARIES = [
   'generation_request',
   'generation_stream',
@@ -67,7 +66,6 @@ export const SCENARIO_CHECKPOINTS = [
 ] as const;
 
 export type ScenarioPreset = (typeof SCENARIO_PRESETS)[number];
-export type ScenarioExecutionMode = (typeof SCENARIO_EXECUTION_MODES)[number];
 export type ScenarioBoundary = (typeof SCENARIO_BOUNDARIES)[number];
 export type ScenarioRole = (typeof SCENARIO_ROLES)[number];
 export type ScenarioPhase = (typeof SCENARIO_PHASES)[number];
@@ -120,7 +118,8 @@ export interface BoardScenario {
   family: string;
   description: string;
   preset: ScenarioPreset;
-  executionMode: ScenarioExecutionMode;
+  /** How many attempts may start. Sequential scenarios use 1. */
+  concurrency: number;
   seed: string;
   expected: ScenarioExpectedOutcome;
   faults: ScenarioFault[];
@@ -374,7 +373,7 @@ export function parseBoardScenario(value: unknown): BoardScenario {
       'family',
       'description',
       'preset',
-      'executionMode',
+      'concurrency',
       'seed',
       'expected',
       'faults',
@@ -415,7 +414,7 @@ export function parseBoardScenario(value: unknown): BoardScenario {
     family: stringAt(row.family, '$.family', ID_PATTERN),
     description: stringAt(row.description, '$.description'),
     preset,
-    executionMode: enumAt(row.executionMode, SCENARIO_EXECUTION_MODES, '$.executionMode'),
+    concurrency: positiveIntegerAt(row.concurrency, '$.concurrency'),
     seed: stringAt(row.seed, '$.seed'),
     expected: parseExpected(row.expected, '$.expected'),
     faults,

@@ -2,7 +2,7 @@
  * Plan mode write restrictions — only markdown plans under documentation/plans/.
  */
 
-import { ORCHESTRATE_PLANS_PREFIX } from '../orchestrate/plan-path';
+import { ORCHESTRATE_PLANS_PREFIX } from '../plans/plan-path';
 import { validatePlanSaveNoCodeSnippets } from '../super-plan/no-code-guard';
 import { extractPathLikeArgs } from '../../tools/path-args';
 import { normalizeModeId, type ModeId } from './types';

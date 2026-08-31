@@ -47,8 +47,9 @@ export function ensureCodeWorkspaceModules(): Promise<void> {
       const { initCodeChangeStrip } = await import('../ui/code-change-strip');
       initCodeChangeStrip();
 
-      const { initOrchestrateStatsLiveRefresh } = await import('../chat/orchestrate/stats-live');
-      initOrchestrateStatsLiveRefresh();
+      // V1 board live-stats refresh and renderer lifecycle repair are gone
+      // (MIN-714). The engine is `derive(journal)` on the server; a hidden
+      // window is not a correctness problem.
 
       terminal.registerTerminalKeyboardShortcut();
       initialized = true;

@@ -82,8 +82,7 @@ function makeAfkSessionState() {
       lastUpdatedAt: 2,
       waves: [{ id: 'W1', status: 'in_progress' }],
       tasks: [],
-      handsOff: true,
-      autoRunning: true,
+      status: 'running',
     },
   };
   return { version: 5 as const, activeId: PARENT_CHAT, sidebarCollapsed: false, chats: [planner, taskChat], groups: [group] };

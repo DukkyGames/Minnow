@@ -65,7 +65,7 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
   {
     id: 'orchestrate',
     label: 'Orchestrate',
-    description: 'Coordinate multi-step work; delegate and structure tasks.',
+    description: 'Open a multi-agent board from a plan. Not a chat — parsePlan is intake.',
     promptId: 'orchestrate',
     toolPolicy: allowGroupsToolPolicy('orchestrate', MODE_ALLOWED_GROUPS.orchestrate),
   },

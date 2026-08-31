@@ -813,7 +813,7 @@
   padding-right: min(320px, 38%);
 }
 
-/* Planned-task detail: build/test specs from board_init. */
+/* Planned-task detail: build/test specs from the parsed plan. */
 .board-task-plan-panel {
   position: absolute;
   inset: 0 0 0 auto;

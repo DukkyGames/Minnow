@@ -8,7 +8,7 @@ import { isActiveChatStreaming } from '../chat/streaming-state';
 import {
   normalizeOrchestratePlanPath,
   isExecutableOrchestratePlan,
-} from '../chat/orchestrate/plan-path';
+} from '../chat/plans/plan-path';
 import { normalizeModeId } from '../chat/modes/types';
 import {
   getActiveChat,

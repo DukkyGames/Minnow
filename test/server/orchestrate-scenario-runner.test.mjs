@@ -75,7 +75,7 @@ describe('orchestrate scenario runner', () => {
           family: 'custom',
           description: 'Invalid custom scenario.',
           preset: 'quick',
-          executionMode: 'afk',
+          concurrency: 2,
           seed: 'strict.v1',
           expected: { boardOutcome: 'passed' },
           faults: [],

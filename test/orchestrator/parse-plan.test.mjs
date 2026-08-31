@@ -389,8 +389,8 @@ describe('parsePlan — field layout variants', () => {
 
 describe('parsePlan — the retired workaround', () => {
   it('parses an absent and an empty Depends on identically', () => {
-    // V1's orchestrator prompt had to plead "never emit `dependsOn: []` — omit
-    // the field entirely". A parser cannot have that failure mode.
+    // Absent Depends-on and empty Depends-on must parse the same. The parser
+    // is the source of truth — prompts must not paper over that.
     const absent = parsePlan(
       mutate('- **Touches:** `server/widgets/**`\n- **Depends on:**\n', '- **Touches:** `server/widgets/**`\n'),
     );

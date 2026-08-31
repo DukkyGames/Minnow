@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { findLastPlanSavePath } from '../../../src/chat/orchestrate/plan-from-history.ts';
+import { findLastPlanSavePath } from '../../../src/chat/plans/plan-from-history.ts';
 import type {
   AssistantToolCallMessage,
   Message,

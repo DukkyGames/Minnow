@@ -3,7 +3,6 @@
  */
 
 import { isChatStreaming } from '../chat/streaming-state';
-import { getIncompleteBoardSetupGroup } from '../chat/orchestrate/board-setup';
 import { findChatById, getActiveChat } from '../state/sessions';
 import type { Chat } from '../types';
 import {
@@ -19,11 +18,10 @@ export function isBoardOnboardingMounted(): boolean {
   return Boolean(document.getElementById('boardOnboardingPlanSelect'));
 }
 
-function resolveOnboardingPlannerChat(forChatId?: string): Chat | null {
-  const targetChatId = forChatId?.trim() || getActiveChat().id;
-  const chat = findChatById(targetChatId) ?? getActiveChat();
-  if (!getIncompleteBoardSetupGroup(chat)) return null;
-  return chat;
+function resolveOnboardingPlannerChat(_forChatId?: string): Chat | null {
+  // P4-C retired planner-chat board setup. Leftover onboarding chrome must
+  // not claim the main column just because a folder had a plan path.
+  return null;
 }
 
 /** True while board onboarding owns the main column instead of chat bubbles. */

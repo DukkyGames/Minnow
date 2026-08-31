@@ -332,11 +332,15 @@ export function setChatMode(modeId: ModeId): SetChatModeResult {
     };
   }
 
-  chat.modeId = normalized;
-  if (normalizeModeId(normalized) === 'orchestrate' && !chat.orchestrateBoard) {
-    // Keep the empty-chat hub visible until there is history or a mounted board.
-    chat.viewMode = chat.history.length > 0 ? 'board' : 'chat';
+  // Orchestrate opens the V2 Boards surface — it is not a chat mode (MIN-715).
+  if (normalizeModeId(normalized) === 'orchestrate') {
+    void import('./orchestrate-hub').then((m) => m.openOrchestrateLanding());
+    const mode = listModes().find((m) => m.id === 'orchestrate');
+    if (mode) showModeStatusPill(mode.label);
+    return { ok: true, modeId: 'orchestrate', label: mode?.label };
   }
+
+  chat.modeId = normalized;
   if (chat.workAgentAuto !== false) {
     const agent = getDefaultWorkAgentForMode(normalized);
     chat.workAgentId = agent?.id ?? null;

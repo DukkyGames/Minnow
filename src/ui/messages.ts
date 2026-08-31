@@ -88,7 +88,7 @@ import { isBoardViewActive, syncBoardViewChrome } from './view-mode-toggle';
 import { closeDrawer } from './settings';
 import { appConfirm } from './app-dialog';
 import { setStatus } from './status';
-import { refreshMetricsStripForChat } from '../chat/orchestrate/board-stats-aggregate';
+import { refreshMetricsStripForChat } from './stats';
 import { refreshContextUsageRing } from './context-usage-ring';
 import { resetCodeChangeTotals, recomputeWorkspaceCodeChangeTotals } from '../usage/code-change-ledger';
 import { sessionState } from '../state/sessions';
@@ -362,10 +362,7 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     // kanban import is async and used to leave `.input-bar` on screen.
     syncBoardViewChrome();
     void import('./orchestrate-board-setup-banner').then((m) => m.removeBoardSetupReturnBanner());
-    void import('./orchestrate-board').then((m) => {
-      m.renderBoardView(boardGroup);
-      m.refreshActiveBoardIfMounted();
-    });
+    void import('../os/router').then((m) => m.navigateToCodeBoards());
     return;
   }
   /*

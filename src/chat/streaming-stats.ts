@@ -12,7 +12,7 @@ import { resolveModelInfo } from '../api/models';
 import {
   aggregateTurnUsageSegments,
   averageStatsSegments,
-} from './orchestrate/stats-math';
+} from '../chat/plans/stats-math';
 import { estimateTokensFromText } from './prompts/token-estimate-core';
 import { getActiveChat } from '../state/sessions';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';

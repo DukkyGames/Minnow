@@ -1,9 +1,10 @@
 import { STATS_STRIP_OPEN_KEY } from '../constants';
 import { getArchiveDisabledReason } from '../chat/archive/index';
+import { resolveModelInfo } from '../api/models';
 import { getActiveChat } from '../state/sessions';
 import { formatStatCount } from '../usage/format-stat-count';
 import { formatUsd } from '../usage/token-ledger';
-import type { LastStats, ModelInfo, Stats, Usage } from '../types';
+import type { Chat, LastStats, ModelInfo, Stats, Usage } from '../types';
 
 export function buildLastStatsSnapshot(stats: Stats | undefined, usage: Usage | undefined): LastStats {
   const s = stats || {};
@@ -230,4 +231,39 @@ export function updateStrip(
   });
   stopEl.classList.toggle('lit', stopEl.textContent !== '—');
   updateStatsExpandPreview();
+}
+
+/**
+ * Paint the metrics strip from one chat's lastStats.
+ *
+ * V1 board-wide rollup across planner + member chats is gone (MIN-714). V2
+ * attempt tokens live on the journal / live SSE, not leftover session chats.
+ */
+export function refreshMetricsStripForChat(chat: Chat): void {
+  const mid = chat.modelId?.trim() || '';
+  const ls = chat.lastStats;
+  const hasNumeric =
+    ls &&
+    (ls.tokens_per_second != null ||
+      ls.time_to_first_token != null ||
+      ls.generation_time != null ||
+      ls.total_tokens != null);
+  if (!hasNumeric) {
+    updateStrip({}, {}, resolveModelInfo(mid, chat.modelInfo || {}));
+    return;
+  }
+  updateStrip(
+    {
+      tokens_per_second: ls.tokens_per_second ?? undefined,
+      time_to_first_token: ls.time_to_first_token ?? undefined,
+      generation_time: ls.generation_time ?? undefined,
+      stop_reason: ls.stop_reason ?? undefined,
+    },
+    {
+      total_tokens: ls.total_tokens ?? undefined,
+      prompt_tokens: ls.prompt_tokens ?? undefined,
+      completion_tokens: ls.completion_tokens ?? undefined,
+    },
+    resolveModelInfo(mid, chat.modelInfo || {}),
+  );
 }

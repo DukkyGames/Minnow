@@ -50,7 +50,7 @@ import type { ResearchScope } from '../research/types';
 import {
   mountPlanPreviewContent,
   readPlanArtifactMarkdown,
-} from '../chat/orchestrate/plan-preview';
+} from '../chat/plans/plan-preview';
 import { findChatById } from '../state/sessions';
 import type { Chat } from '../types';
 import { bindComposerAutoResize } from './composer-auto-resize';

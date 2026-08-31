@@ -3,10 +3,7 @@ import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { describe, test } from 'node:test';
 import { promisify } from 'node:util';
-import {
-  BOARD_GATE_EXIT,
-  parseBoardGateArgs,
-} from '../../scripts/run-board-cli.mjs';
+import { parseBoardGateArgs } from '../../scripts/run-board-cli.mjs';
 
 const execFileAsync = promisify(execFile);
 const root = path.resolve(import.meta.dirname, '../..');
@@ -28,7 +25,7 @@ async function runScript(name, args = []) {
   }
 }
 
-describe('board gate command line', () => {
+describe('board scenario-contract command line', () => {
   test('strictly validates names, values, multiplicity, and integer bounds', () => {
     const specs = {
       scenario: { type: 'string', multiple: true },
@@ -62,15 +59,5 @@ describe('board gate command line', () => {
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.classification, 'pass');
     assert.ok(payload.scenarioCount > 0);
-  });
-
-  test('invalid scenario and missing Electron package are usage failures', async () => {
-    const scenario = await runScript('run-board-persisted.mjs', ['--scenario', 'not-in-catalog']);
-    assert.equal(scenario.code, BOARD_GATE_EXIT.usage);
-    assert.match(scenario.stderr, /Unknown board scenario/);
-
-    const electron = await runScript('run-board-electron-smoke.mjs');
-    assert.equal(electron.code, BOARD_GATE_EXIT.usage);
-    assert.match(electron.stderr, /requires --package-path/);
   });
 });

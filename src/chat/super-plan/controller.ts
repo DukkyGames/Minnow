@@ -330,7 +330,7 @@ export async function onSuperPlanStreamEnd(chatId: string): Promise<void> {
   // would still read true without yielding first. This previously worked only
   // because `await import(...)` happened to defer past that block — make the
   // ordering explicit instead of relying on that coincidence (same hazard
-  // documented in src/state/orchestrate-board-actions.ts).
+  // documented in the Super Plan sequential loop).
   await new Promise((resolve) => setTimeout(resolve, 0));
   const { findChatById } = await import('../../state/sessions');
   const chat = findChatById(chatId);

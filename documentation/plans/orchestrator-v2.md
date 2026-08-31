@@ -268,7 +268,7 @@ The two runners coexist during Phases 2–5: the client loop keeps serving norma
 
 ## 10. What gets deleted
 
-`orchestrate-board-actions.ts` (6,276), `orchestrate-self-heal.ts` (343), `orchestrate-failure-classify.ts` (303), `orchestrate-pipeline-holds.ts` (273), the launch-slot machinery, the queue drain, both fixers, `board-display-wake.ts`, `board-boot-resume.ts`, `oom-recovery.ts`, and the six retry counters — plus the orphaned 6.5 MB `server/session/engine-bundle/` left over from the reverted MIN-354 v1.
+`orchestrate-board-actions.ts` (6,276), `orchestrate-self-heal.ts` (343), `orchestrate-failure-classify.ts` (303), `orchestrate-pipeline-holds.ts` (273), the launch-slot machinery, the queue drain, both fixers, `board-display-wake.ts`, `board-boot-resume.ts`, `oom-recovery.ts`, and the six retry counters — plus the orphaned `server/session/engine-bundle/` left over from the reverted MIN-354 v1 (deleted in P4-E / MIN-717; 18.04 MB on disk, of which ~6.20 MB was the packaged `.mjs`).
 
 Deleted at Phase 8: `src/agents/controller/` (3,089 — the sub-agent watchdog, heartbeats, dispatch timers, last-write-wins registry mirror, and boot reconcile) and the client `src/agents/sub-agent-runner.ts` (1,375), superseded by `server/runner/`. `src/agents/sub-agent-config.ts` stays — it is configuration, and the effector reads it.
 

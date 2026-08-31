@@ -1,6 +1,6 @@
 /**
  * Single sanitizer for worktree path segments and git ref fragments.
- * Shared by the client isolation helpers (src/state/worktree-isolation.ts) and the
+ * Shared by the client worktree helpers (src/state/chat-worktree.ts) and the
  * server worktree paths (server/worktree/paths.js) so a slot name always resolves to
  * the same directory on both sides.
  */

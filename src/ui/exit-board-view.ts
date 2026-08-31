@@ -4,7 +4,6 @@
 
 import { dismissActiveBoardView } from '../state/chat-groups';
 import { syncOrchestrateInitSplitChrome } from './orchestrate-board-init-split';
-import { disposeOrchestrateBoardSession } from './orchestrate-board';
 import { closeBoardChatEmbedForTeardown } from './orchestrate-board-chat';
 
 /**
@@ -35,7 +34,6 @@ export function exitBoardViewForNavigation(): boolean {
     area?.querySelector(':scope > .ob-page, :scope > .board-root'),
   );
   if (!boardWasOpen && !hadBoardDom) return false;
-  disposeOrchestrateBoardSession();
   releaseOrchestrateChatArea();
   syncOrchestrateInitSplitChrome();
   return true;

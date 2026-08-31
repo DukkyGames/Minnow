@@ -3,11 +3,13 @@
  * Builds rail + main chrome used by the hub ask pane and live board run pane.
  */
 
-import { boardSetupStatusLabel } from '../chat/orchestrate/board-setup';
-import { getGroupsForWorkspace } from '../state/chat-groups';
-import { getBoardProgressPercent, isBoardRunning } from '../state/orchestrate-board-store';
+import {
+  getGroupsForWorkspace,
+  isLeftoverBoardRunning,
+  leftoverBoardProgressPercent,
+} from '../state/chat-groups';
 import { sessionState } from '../state/sessions';
-import type { BoardTask, Chat, ChatGroup } from '../types';
+import type { Chat, ChatGroup, LeftoverBoardTask } from '../types';
 import { getWorkspacePath } from '../state/workspace';
 import {
   applyChatItemDotClasses,
@@ -37,7 +39,7 @@ function listWorkspaceBoards(workspacePath: string): ChatGroup[] {
 
 /** True when the group has a board that is actively running. */
 function isBoardGroupRunning(group: ChatGroup): boolean {
-  return Boolean(group.orchestrateBoard) && isBoardRunning(group);
+  return isLeftoverBoardRunning(group);
 }
 
 /** Terminal / total task counts for the rail's `done/total` readout. */
@@ -110,7 +112,7 @@ export interface PaintOrchestrateChatRailOptions {
 }
 
 /** Role suffix for a chat's meta line, derived from the task it is linked to. */
-function chatRoleForTask(task: BoardTask, chatId: string): string | null {
+function chatRoleForTask(task: LeftoverBoardTask, chatId: string): string | null {
   if (task.chatId?.trim() === chatId) return 'build';
   if (task.testChatId?.trim() === chatId) return 'tester';
   if (task.fixerChatId?.trim() === chatId) {
@@ -338,8 +340,8 @@ export function paintOrchestrateBoardRail(
     filter,
     ...boards.map((g) => {
       const board = g.orchestrateBoard;
-      const status = board ? 'Board' : boardSetupStatusLabel(g);
-      const pct = board ? getBoardProgressPercent(board) : 0;
+      const status = board ? 'Board' : 'Plan';
+      const pct = leftoverBoardProgressPercent(g);
       const counts = boardTaskCounts(g);
       return [
         g.id,
@@ -391,9 +393,9 @@ export function paintOrchestrateBoardRail(
     const when = formatRelativeTime(boardGroupSortKey(group));
     const statusLabel = group.orchestrateBoard
       ? 'Board'
-      : boardSetupStatusLabel(group);
+      : 'Plan';
     const board = group.orchestrateBoard;
-    const progressPct = board ? getBoardProgressPercent(board) : 0;
+    const progressPct = leftoverBoardProgressPercent(group);
     const { done, total } = boardTaskCounts(group);
     const running = isBoardGroupRunning(group);
 

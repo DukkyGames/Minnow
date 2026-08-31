@@ -1,7 +1,6 @@
 ﻿import { reportBackgroundError } from '../boot/report-background-error';
 import { isChatsWorkspacePath } from '../lib/chats-workspace';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
-import { isBoardSetupIncomplete } from '../chat/orchestrate/board-setup';
 import { isChatStreaming } from '../chat/streaming-state';
 import { stopGeneration } from '../chat/stop-generation';
 import {
@@ -59,8 +58,8 @@ import {
 } from './experts/experts-scope';
 import { getWorkspacePath } from '../state/workspace';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
-import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
-import type { BoardCategory, BoardTask, Chat, ChatGroup } from '../types';
+import { normalizeOrchestratePlanPath } from '../chat/plans/plan-path';
+import type { BoardCategory, Chat, ChatGroup, LeftoverBoardTask } from '../types';
 import {
   applySidebarVisuals,
   closeMobileSidebar,
@@ -154,7 +153,7 @@ import {
 import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
 
 /** True when every task in a wave is complete (sidebar auto-collapse). */
-function isWaveComplete(tasks: BoardTask[], waveId: number | string): boolean {
+function isWaveComplete(tasks: LeftoverBoardTask[], waveId: number | string): boolean {
   const wt = tasks.filter((t) => t.wave === waveId);
   return wt.length > 0 && wt.every((t) => t.status === 'complete');
 }
@@ -665,7 +664,7 @@ function appendGroupHeader(
     showGroupContextMenu(e.clientX, e.clientY, group.id, nameSpan);
   });
 
-  if (group.orchestrateBoard || isBoardSetupIncomplete(group)) {
+  if (group.orchestrateBoard) {
     head.addEventListener('click', (e) => {
       if ((e.target as Element).closest('.chat-group-header__caret')) return;
       openBoardGroup(group.id);
@@ -1117,7 +1116,7 @@ export function showChatItemContextMenu(
       e.stopPropagation();
       closeMenu();
       const group = getBoardGroupForChat(chat) ?? findBoardGroupForPlanner(chat.id);
-      if (group && (group.orchestrateBoard || isBoardSetupIncomplete(group))) {
+      if (group && group.orchestrateBoard) {
         void import('../state/chat-groups').then((m) => m.openBoardGroup(group.id));
         return;
       }

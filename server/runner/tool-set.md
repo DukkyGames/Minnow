@@ -25,7 +25,7 @@ each default id is not answered with `Not implemented: <name>`.
 | `wikipedia_search` | Browser executor (CORS fetch) | Exclude. Use `fetch_web_content` / `web_search_ddg`. |
 | `web_search` | **Client router** to Brave (browser) or `web_search_ddg` / Tavily / SearXNG | Exclude the router name. Include the **server backends** (`web_search_ddg`, `web_search_tavily`, `web_search_searxng`). |
 | `spawn_sub_agent`, `cancel_sub_agent`, `list_sub_agents`, `get_sub_agent_status` | Nested loops in the renderer adapter | Exclude. V2 attempts are processes started by the effector (P2-F), not sub-agent tools. |
-| `board_init`, `board_add_tasks`, `board_update_task`, `board_set_autonomy`, `board_get_state`, `board_report`, `delegate_tasks` | V1 board UI + session state | Exclude. V2 reports through the injected report tool (`report_outcome`); the engine owns the graph. |
+| V1 board mutation tools (deleted MIN-715) | V1 board UI + session state | Gone. V2 reports through the injected report tool (`report_outcome`); the engine owns the graph. |
 | `set_chat_mode`, `create_chat_with_mode`, `launch_minnow_app`, `propose_mode_switch` | Mode handoff + OS window | Exclude. Headless turns do not switch composer modes. |
 | `browser_*`, `request_browser_origin_access` | Electron preview + **origin allowlist** (`checkBrowserNavigationAllowed`) | **Exclude.** Phase 5 ports a server-side driver and must take the allowlist with it. Shipping `browser_navigate` in-process without that allowlist would bypass the guard Linear called out. |
 | `todo_write` | Chat checklist DOM (`src/ui/todo-panel`) | Exclude. No transcript-scoped todo panel on the server. |

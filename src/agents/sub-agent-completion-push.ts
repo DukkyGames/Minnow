@@ -5,14 +5,13 @@
  * A completion is only ever dropped from the queue once it is *known delivered*
  * (MIN-639). Every other outcome — a guard bailing out, a transport failure, a
  * parent that is still streaming — leaves the run pending and schedules another
- * attempt. When the parent can never accept the resume (chat deleted,
- * user-stopped, switched to orchestrate) the summary is surfaced as a
- * notification and persisted onto the chat instead of vanishing.
+ * attempt. When the parent can never accept the resume (chat deleted or
+ * switched to orchestrate) the summary is surfaced as a notification and
+ * persisted onto the chat instead of vanishing.
  */
 
 import { normalizeModeId } from '../chat/modes/types';
-import { buildSubAgentParentResumeMessage } from '../chat/orchestrate/sub-agent-resume-message';
-import { isUserStoppedChat } from '../chat/orchestrate/user-stopped';
+import { buildSubAgentParentResumeMessage } from './sub-agent-resume-message';
 import {
   isChatStreaming,
   notifyChatStreamEnded,
@@ -74,13 +73,14 @@ function isOrchestrateChat(chatId: string): boolean {
  * (the board owns delivery — nothing was lost) differently from a chat that has
  * gone away underneath a queued completion.
  */
-type PushSkipReason = 'missing_chat' | 'orchestrate' | 'user_stopped';
+type PushSkipReason = 'missing_chat' | 'orchestrate';
 
 function pushSkipReason(chatId: string): PushSkipReason | null {
   const chat = findChatById(chatId);
   if (!chat) return 'missing_chat';
+  // Orchestrate / V2 boards own delivery via the journal; leftover V1
+  // user-stopped-on-incomplete-board skip is gone (MIN-714).
   if (normalizeModeId(chat.modeId) === 'orchestrate') return 'orchestrate';
-  if (isUserStoppedChat(chat)) return 'user_stopped';
   return null;
 }
 

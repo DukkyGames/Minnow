@@ -19,7 +19,6 @@ import {
   usedStubUid,
 } from './probe-helpers.ts';
 import {
-  CAP_STUB_BOARD_TASK_ID,
   CAP_STUB_SNAPSHOT_UIDS,
   CAP_STUB_SUB_AGENT_ID,
   CAP_STUB_THREAD_ID,
@@ -112,56 +111,6 @@ export const SURFACE_PROBES: Record<string, CapabilityProbeSpec> = {
       }
       if (listed) return partial('Inspected sub-agents but never cancelled');
       return partial('Cancelled without checking what was running');
-    },
-  },
-  'agents-board-init': {
-    kind: 'tool-chain',
-    maxToolRounds: 8,
-    toolIds: ['board_init', 'board_update_task', 'board_get_state'],
-    emitOnly: true,
-    verdict: (out) => {
-      const seeded = hasTool(out.toolCalls, 'board_init');
-      const moved = hasTool(out.toolCalls, 'board_update_task');
-      if (seeded && moved) return pass('Seeded the board and moved a task');
-      if (seeded) return partial('Seeded the board but left every task untouched');
-      if (moved) return partial('Updated tasks without seeding a board');
-      return fail('No board tools called');
-    },
-  },
-  'agents-board-report': {
-    kind: 'tool-chain',
-    maxToolRounds: 8,
-    toolIds: ['board_get_state', 'board_report', 'board_update_task'],
-    emitOnly: true,
-    verdict: (out) => {
-      const reported = hasTool(out.toolCalls, 'board_report');
-      const read = hasTool(out.toolCalls, 'board_get_state');
-      if (reported) {
-        return usedStubId(out, 'board_report', [CAP_STUB_BOARD_TASK_ID])
-          ? pass('Reported completion against the assigned task')
-          : partial('Reported completion without naming the assigned task');
-      }
-      if (read) return partial('Read the board but went quiet instead of reporting');
-      if (hasTool(out.toolCalls, 'board_update_task')) {
-        return partial('Updated the task without reporting back');
-      }
-      return fail('No completion report');
-    },
-  },
-  'agents-delegate-tasks': {
-    kind: 'tool-call',
-    maxToolRounds: 8,
-    toolIds: ['delegate_tasks'],
-    emitOnly: true,
-    verdict: (out) => {
-      if (!hasTool(out.toolCalls, 'delegate_tasks')) {
-        return fail('No delegate_tasks call');
-      }
-      const calls = out.toolCalls.filter((tc) => tc.function?.name === 'delegate_tasks');
-      if (calls.length >= 2) {
-        return pass('Delegated multiple tasks in one fan-out');
-      }
-      return partial('Delegated once but did not fan out every ready task');
     },
   },
 

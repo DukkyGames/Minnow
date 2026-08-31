@@ -6,8 +6,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 import { installHappyDomGlobals } from '../os/dom-helpers.mts';
-import { initBoard } from '../../src/state/orchestrate-board-store.ts';
-import { isBoardRunning } from '../../src/state/orchestrate-board-store.ts';
+import { isLeftoverBoardRunning } from '../../src/state/chat-groups.ts';
 import { setSessionStateForTests } from '../../src/state/sessions.ts';
 import { resetWorkspaceStateForTests, setWorkspaceFromServer } from '../../src/state/workspace.ts';
 import type { Chat, ChatGroup } from '../../src/types.ts';
@@ -67,7 +66,7 @@ function makeGroup(): ChatGroup {
 function seedRunningBoard(): { planner: Chat; group: ChatGroup } {
   const planner = makePlanner();
   const group = makeGroup();
-  initBoard(group, planner, {
+  group.orchestrateBoard = {
     planPath: PLAN_PATH,
     waves: [{ id: 'W1' }],
     tasks: [
@@ -76,13 +75,15 @@ function seedRunningBoard(): { planner: Chat; group: ChatGroup } {
         title: 'Task',
         wave: 'W1',
         category: 'build',
-        build: 'Work',
+        status: 'in_progress',
+        chatId: PLANNER_ID,
       },
     ],
-  });
-  const board = group.orchestrateBoard!;
-  board.maxConcurrentTasks = 3;
-  board.autoRunning = true;
+    startedAt: 1,
+    lastUpdatedAt: 1,
+    maxConcurrentTasks: 3,
+    status: 'running',
+  };
   setSessionStateForTests({
     version: 5,
     activeId: PLANNER_ID,
@@ -121,7 +122,7 @@ describe('workspace-switch-guard', () => {
 
   test('detects a running board in the current workspace', () => {
     const { group } = seedRunningBoard();
-    assert.equal(isBoardRunning(group), true);
+    assert.equal(isLeftoverBoardRunning(group), true);
     assert.equal(isBoardBlockingWorkspaceSwitch(group), true);
     assert.deepEqual(getBlockingBoardsForWorkspace(CURRENT_WS).map((g) => g.id), [GROUP_ID]);
     assert.equal(isWorkspaceSwitchBlockedByRunningBoard(OTHER_WS), true);
@@ -158,7 +159,7 @@ describe('workspace-switch-guard', () => {
     cancelBtn.click();
     const allowed = await allowedPromise;
     assert.equal(allowed, false);
-    assert.equal(isBoardRunning(group), true);
+    assert.equal(isLeftoverBoardRunning(group), true);
   });
 
   test('confirmAndStopBoardsForWorkspaceSwitch stops boards when confirmed', async () => {
@@ -168,8 +169,8 @@ describe('workspace-switch-guard', () => {
     confirmBtn.click();
     const allowed = await allowedPromise;
     assert.equal(allowed, true);
-    assert.equal(isBoardRunning(group), false);
-    assert.equal(group.orchestrateBoard?.userStopped, true);
+    assert.equal(isLeftoverBoardRunning(group), false);
+    assert.equal(group.orchestrateBoard?.status, 'stopped');
   });
 
   test('running V2 board blocks switch until confirm, then stop is issued', async () => {

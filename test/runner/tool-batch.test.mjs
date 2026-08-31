@@ -51,7 +51,7 @@ describe('isParallelSafeTool (server port)', () => {
     assert.equal(isParallelSafeTool('execute_command'), false);
     assert.equal(isParallelSafeTool('ask_question'), false);
     assert.equal(isParallelSafeTool('spawn_sub_agent'), false);
-    assert.equal(isParallelSafeTool('board_update_task'), false);
+    assert.equal(isParallelSafeTool('issue_update'), false);
   });
 
   test('clipboard and unknown-prefix tools are sequential', () => {

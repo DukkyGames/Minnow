@@ -96,17 +96,7 @@ export function syncOrchestrateInitSplitChrome(chat?: Chat): void {
 
   if (!isOrchestrateBoardViewActive() && !initActive) return;
 
-  void import('./orchestrate-board').then((m) => {
-    const group =
-      getActiveBoardGroup() ??
-      getBoardGroupForChat(active) ??
-      getOrCreateBoardGroup(active);
-    m.renderBoardView(group);
-    m.refreshBoardOnboardingIfMounted();
-    if (group.orchestrateBoard) {
-      m.refreshActiveBoardIfMounted();
-    }
-  });
+  void import('../os/router').then((m) => m.navigateToCodeBoards());
 }
 
 /** Clear legacy split chrome between happy-dom test runs. */

@@ -97,7 +97,7 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
 
   const lead = el('p', 'settings-section-lead');
   lead.append(
-    'Global defaults for orchestrate boards: concurrency, hands-off autonomy, git worktree isolation (not host containment), test retries, and planner model fallback. Per-board overrides stay on the board header. Stall and heartbeat thresholds live under ',
+    'Global defaults for orchestrate boards: concurrency, Running or Stopped start, git worktree isolation (not host containment), test retries, and planner model fallback. Per-board overrides stay on the board header. Stall and heartbeat thresholds live under ',
     linkToSettingsSection('Watchdog', 'watchdog'),
     '; work agents under ',
     linkToSettingsSection('Agents', 'agent-center'),
@@ -127,17 +127,27 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
     { emphasis: true },
   );
 
-  const { row: handsOffRow, input: handsOffToggle } = createSettingsToggleRow(
-    'Hands-off by default',
-    {
-      id: 'settingsAutopilotHandsOff',
-      checked: meta.defaultHandsOff,
-      searchKey: 'agents.autopilot.handsOff',
+  const statusSelect = document.createElement('select');
+  statusSelect.id = 'settingsAutopilotDefaultStatus';
+  statusSelect.className = 'settings-select';
+  for (const opt of [
+    { value: 'stopped', label: 'Stopped (start each task by hand)' },
+    { value: 'running', label: 'Running (unattended)' },
+  ]) {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.label;
+    statusSelect.appendChild(option);
+  }
+  statusSelect.value = meta.defaultStatus;
+  defaultsBody.appendChild(
+    createSettingsSelectRow('New boards start', {
+      select: statusSelect,
+      searchKey: 'agents.autopilot.defaultStatus',
       description:
-        'New boards run fully autonomously — the orchestrator never prompts you until Stop or board finish. Available at any concurrency.',
-    },
+        'Running is unattended at the current concurrency. Stopped is Manual: nothing starts until you start a task. Sequential is Running at N = 1.',
+    }).row,
   );
-  defaultsBody.appendChild(handsOffRow);
 
   const isoSelect = document.createElement('select');
   isoSelect.id = 'settingsAutopilotIsolation';
@@ -180,7 +190,7 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
     el(
       'p',
       'settings-field-hint',
-      'Applies in Auto and AFK modes. Sequential always uses one task at a time.',
+      'How many tasks may start at once. Sequential is this value set to 1.',
     ),
   );
 
@@ -348,8 +358,10 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
     { label: 'Configure providers', sectionId: 'providers' },
   ]);
 
-  handsOffToggle.addEventListener('change', () => {
-    void persist({ defaultHandsOff: handsOffToggle.checked });
+  statusSelect.addEventListener('change', () => {
+    const value = statusSelect.value === 'running' ? 'running' : 'stopped';
+    statusSelect.value = value;
+    void persist({ defaultStatus: value });
   });
   isoSelect.addEventListener('change', () => {
     void persist({

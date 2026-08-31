@@ -60,7 +60,6 @@ const BOARD_SHORTCUTS: ShortcutDoc[] = [
   { section: 'Orchestrate board', keys: 'Tab', label: 'Move between task cards and header controls' },
   { section: 'Orchestrate board', keys: 'Arrow keys', label: 'Navigate cards in the kanban grid' },
   { section: 'Orchestrate board', keys: 'Enter / Space', label: 'Open task chat or plan panel' },
-  { section: 'Orchestrate board', keys: 'Arrow keys (exec mode)', label: 'Change execution mode when a segment is focused' },
 ];
 
 const ISSUES_SHORTCUTS: ShortcutDoc[] = [

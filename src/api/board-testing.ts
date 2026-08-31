@@ -104,7 +104,7 @@ export type BoardScenarioCatalogEntry = {
   family: string;
   description: string;
   preset: 'quick' | 'smoke' | 'generated';
-  executionMode: 'afk' | 'auto' | 'sequential';
+  concurrency: number;
   expectedOutcome: 'passed' | 'blocked';
   faultCount: number;
   tags: string[];

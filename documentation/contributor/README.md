@@ -15,7 +15,7 @@ Documentation for cloning the repo, running from source, testing, and understand
 
 | Doc | What it covers |
 |-----|----------------|
-| [orchestrate-board-testing.md](orchestrate-board-testing.md) | `test:board`, fake model, seed board, board-log invariants, harness layout |
+| [orchestrate-board-testing.md](orchestrate-board-testing.md) | `test:orchestrator`, fake model, scenario contract, journal suite |
 | [accessibility-audit.md](accessibility-audit.md) | Keyboard-first checklist, focus, screen readers, contrast regression |
 | [lan-companion.md](lan-companion.md) | LAN pairing, security boundary, companion layout (MIN-393) |
 

@@ -13,8 +13,7 @@ import {
   normalizeThinkingTriState,
   type ThinkingTriState,
 } from '../agents/thinking-types.ts';
-import { resolveBoardModelBinding } from '../chat/orchestrate/board-model-binding.ts';
-import type { BoardReasoningPatch } from '../chat/orchestrate/board-reasoning-binding.ts';
+import type { BoardReasoningPatch } from '../orchestrator/board-journal-reasoning.ts';
 import {
   defaultComposerReasoningLevel,
   formatReasoningEffortLabel,
@@ -26,15 +25,11 @@ import {
   resolveEffectiveReasoningEffort,
 } from '../lib/reasoning-effort.ts';
 import { resolveSendCapabilities } from '../providers/model-capabilities.ts';
-import { setBoardReasoning } from '../state/orchestrate-board-actions.ts';
-import { isBoardRunning } from '../state/orchestrate-board-store.ts';
-import type { Chat, ChatGroup, ReasoningEffortOption } from '../types.ts';
+import type { ReasoningEffortOption } from '../types.ts';
 import { nextThinkingTriStateOnClick } from './composer-thinking.ts';
 import { createIcon } from './icon.ts';
 
-type V1BoardState = NonNullable<ChatGroup['orchestrateBoard']>;
-
-/** Persist + display seam so V1 session boards and V2 journal boards share this strip. */
+/** Persist + display seam so leftover session boards and V2 journal boards share this strip. */
 export interface BoardHeaderReasoningSource {
   resolveBinding: () => { providerId: string; modelId: string };
   getBoard: () => {
@@ -264,49 +259,8 @@ export function detachBoardHeaderReasoning(): void {
   wrapEl?.remove();
 }
 
-function v1Source(
-  group: ChatGroup,
-  board: V1BoardState,
-  plannerChat: Chat,
-  onChanged: () => void,
-): BoardHeaderReasoningSource {
-  return {
-    resolveBinding: () => resolveBoardModelBinding(plannerChat, board),
-    getBoard: () => ({
-      thinkingMode: board.thinkingMode,
-      reasoningEffort: board.reasoningEffort,
-    }),
-    getInherit: () => ({
-      thinkingMode: plannerChat.thinkingMode,
-      reasoningEffort: plannerChat.reasoningEffort,
-    }),
-    isRunning: () => isBoardRunning(group),
-    persist: (patch) => setBoardReasoning(group, plannerChat, patch),
-    onChanged,
-  };
-}
-
-/** Mount reasoning controls beside the board model chip. */
-export function wireBoardHeaderReasoning(
-  controls: HTMLElement,
-  group: ChatGroup,
-  board: V1BoardState,
-  plannerChat: Chat,
-  onChanged: () => void,
-): void {
-  wireBoardHeaderReasoningSource(controls, v1Source(group, board, plannerChat, onChanged));
-}
-
 /** Keep board reasoning controls aligned after header refresh or model change. */
-export function syncBoardHeaderReasoning(
-  group?: ChatGroup,
-  board?: V1BoardState,
-  plannerChat?: Chat,
-): void {
-  if (group && board && plannerChat && boardReasoningSource) {
-    const onChanged = boardReasoningSource.onChanged;
-    boardReasoningSource = v1Source(group, board, plannerChat, onChanged);
-  }
+export function syncBoardHeaderReasoning(): void {
   if (!wrapEl || !toggleBtn) return;
 
   const caps = effectiveCapabilities();

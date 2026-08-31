@@ -151,22 +151,15 @@ export async function dispatchIssueToAgent(
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const { launchBoardFromPlan } = await import('../../ui/orchestrate-launch.ts');
-    const launched = launchBoardFromPlan(planPath);
+    const launched = await launchBoardFromPlan(planPath);
 
-    // Take the board from the launch itself. Reading `activeId` here recorded the
-    // wrong chat whenever the launch reused or kept the previous one (MIN-637).
-    const boardChatId = launched?.chat.id;
-    const group = launched?.group;
-
+    // V2 boards have no planner chat (MIN-715).
     startIssueAgentRun(issueId, {
       agentId: options?.agentId ?? 'builder',
       step: 'Planning the board',
-      chatId: boardChatId,
-      boardGroupId: group?.id,
     });
     updateIssue(issueId, {
       status: requireIssueStatusForRole('in_progress'),
-      ...(boardChatId ? { boardChatId } : {}),
     });
     scheduleSaveIssues();
 
@@ -174,12 +167,11 @@ export async function dispatchIssueToAgent(
       kind: 'issue_agent_started',
       title: `${issue.id} ${issue.title}`,
       preview: 'Agent started — working in its own worktree',
-      chatId: boardChatId,
       appId: 'issues',
       dedupeKey: `issue-agent-start:${issueId}:${Date.now()}`,
     });
 
-    return { ok: true, planPath, boardChatId };
+    return { ok: Boolean(launched), planPath };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     updateIssueAgentRun(issueId, { phase: 'failed', error: message, envBlocked: true });
@@ -202,8 +194,7 @@ export async function cancelIssueAgent(issueId: string): Promise<boolean> {
     const { sessionState } = await import('../../state/sessions.ts');
     const group = (sessionState?.groups ?? []).find((g) => g.id === groupId);
     if (!group) return true;
-    const actions = await import('../../state/orchestrate-board-actions.ts');
-    actions.cleanupBoardIsolation(group);
+    // V1 worktree teardown is gone; leftover paths are a cleanup chore, not a broken state.
     return true;
   } catch {
     // The slot is already canceled as far as Issues is concerned; a worktree

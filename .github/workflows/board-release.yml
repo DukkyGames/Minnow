@@ -1,3 +1,9 @@
+# Board release — scenario contract after package (MIN-716)
+
+# V1 Electron AFK smoke (`board:electron-smoke`) drove `runChatTurn` against the
+# deleted renderer engine. V2 packed-app coverage is the same journal suite as
+# CI plus the catalog contract that Settings → Board testing still ships.
+
 name: board release smoke
 
 on:
@@ -10,12 +16,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  electron-afk-smoke:
-    name: package + Electron AFK smoke
+  scenario-contract:
+    name: packaged catalog contract
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      MINNOW_HOME: ${{ runner.temp }}/minnow-board-release
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -27,17 +31,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and package unpacked Electron app
-        run: npm run package:dir
-
-      - name: Electron AFK smoke
-        run: npm run board:electron-smoke -- --package-path release/pkg/linux-unpacked
-
-      - name: Upload Electron smoke artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: board-electron-smoke
-          path: ${{ runner.temp }}/minnow-board-release/logs/orchestrate-scenarios
-          if-no-files-found: warn
-          retention-days: 14
+      - name: Validate board scenario catalog
+        run: npm run board:scenario-contract

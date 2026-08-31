@@ -1,5 +1,5 @@
 /**
- * Orchestrate mode prompts must document board_* tools (not progress.md).
+ * Orchestrate mode prompts must not name deleted V1 board tools (MIN-715).
  */
 
 import assert from 'node:assert/strict';
@@ -9,82 +9,64 @@ import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MODES_DIR = path.join(__dirname, '../../src/chat/prompts/modes');
+const PROMPTS_ROOT = path.join(__dirname, '../../src/chat/prompts');
+const SERVER_PROMPTS = path.join(__dirname, '../../server/orchestrator/prompts');
 
-const BOARD_TOOLS = ['board_init', 'board_update_task', 'board_get_state'];
-const PROMPT_FILES = ['orchestrate.full.md', 'orchestrate.lite.md'];
-
-/** Prompt must teach distinct field names and common failure modes. */
-const BOARD_API_CONTRACT = [
-  { pattern: /"task_id"/, label: 'board_update_task JSON must show task_id' },
-  { pattern: /tasks\[\]\.id|"id":\s*"W1-A"/, label: 'board_init tasks must use id' },
-  {
-    pattern: /board_task_id|requires non-empty "tasks"|plan_path alone/i,
-    label: 'board_init / spawn linkage or empty-tasks guard',
-  },
-  {
-    pattern: /not\s*`id`|not\s+`id`|Do not use the field name id/i,
-    label: 'must warn against using id on board_update_task',
-  },
+const DELETED_TOOLS = [
+  'board_init',
+  'board_update_task',
+  'board_set_autonomy',
+  'delegate_tasks',
+  'board_report',
+  'board_add_tasks',
+  'board_get_state',
 ];
 
-/** Patterns that indicate the legacy markdown progress-file workflow. */
-const FORBIDDEN_PROGRESS_PATTERNS = [
-  /documentation\/progress\//i,
-  /-progress\.md/i,
-  /progress file format/i,
-  /most state lives in the progress file/i,
-];
+const FORBIDDEN_DEPENDS_ON_EMPTY = /dependsOn["']?\s*:\s*\[\s*\]/;
 
-function readPrompt(name) {
-  return fs.readFileSync(path.join(MODES_DIR, name), 'utf8');
+function walkMarkdown(dir) {
+  /** @type {string[]} */
+  const out = [];
+  if (!fs.existsSync(dir)) return out;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...walkMarkdown(full));
+      continue;
+    }
+    if (entry.name.endsWith('.md')) out.push(full);
+  }
+  return out;
 }
 
-function assertBoardPromptContract(name, content) {
-  for (const tool of BOARD_TOOLS) {
-    assert.ok(
-      content.includes(tool),
-      `${name} must mention ${tool}`,
-    );
-  }
-
-  for (const pattern of FORBIDDEN_PROGRESS_PATTERNS) {
-    assert.ok(
-      !pattern.test(content),
-      `${name} must not match forbidden progress pattern: ${pattern}`,
-    );
-  }
-
-  assert.ok(
-    /spawn_sub_agent/i.test(content) && /category/i.test(content),
-    `${name} must mention spawn_sub_agent category`,
-  );
-  assert.ok(
-    content.includes('board_task_id'),
-    `${name} must mention board_task_id on spawn_sub_agent`,
-  );
-
-  for (const { pattern, label } of BOARD_API_CONTRACT) {
-    assert.ok(pattern.test(content), `${name}: ${label}`);
-  }
-}
-
-describe('orchestrate board prompts', () => {
-  test('orchestrate board_init example has no self-dependency in dependsOn', () => {
-    const content = readPrompt('orchestrate.full.md');
-    const exampleBlock = content.match(/```json[\s\S]*?```/)?.[0] ?? '';
-    assert.ok(exampleBlock.length > 0, 'board_init JSON example present');
-    assert.doesNotMatch(
-      exampleBlock,
-      /"dependsOn":\s*\[\s*"W1-A"\s*\]/,
-      'example must not show a task depending on itself',
-    );
+describe('orchestrate prompts after P4-C', () => {
+  test('mode prompts say Orchestrate opens a board, not a planner chat', () => {
+    const full = fs.readFileSync(path.join(PROMPTS_ROOT, 'modes', 'orchestrate.full.md'), 'utf8');
+    const lite = fs.readFileSync(path.join(PROMPTS_ROOT, 'modes', 'orchestrate.lite.md'), 'utf8');
+    assert.match(full, /board, not a chat/i);
+    assert.match(lite, /board, not a chat/i);
+    assert.doesNotMatch(full, FORBIDDEN_DEPENDS_ON_EMPTY);
+    assert.doesNotMatch(lite, FORBIDDEN_DEPENDS_ON_EMPTY);
   });
 
-  for (const file of PROMPT_FILES) {
-    test(`${file} documents board tools and spawn linkage`, () => {
-      const content = readPrompt(file);
-      assertBoardPromptContract(file, content);
-    });
-  }
+  test('prompt corpus does not name deleted board tools or the empty-dependsOn workaround', () => {
+    const files = [...walkMarkdown(PROMPTS_ROOT), ...walkMarkdown(SERVER_PROMPTS)];
+    assert.ok(files.length > 0);
+    for (const abs of files) {
+      const body = fs.readFileSync(abs, 'utf8');
+      const rel = path.relative(path.join(__dirname, '../..'), abs);
+      for (const tool of DELETED_TOOLS) {
+        assert.equal(
+          body.includes(tool),
+          false,
+          `${rel} still names ${tool}`,
+        );
+      }
+      assert.equal(
+        FORBIDDEN_DEPENDS_ON_EMPTY.test(body),
+        false,
+        `${rel} still has the empty-dependsOn prompt workaround`,
+      );
+    }
+  });
 });

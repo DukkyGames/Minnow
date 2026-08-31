@@ -5,12 +5,16 @@
  * medium / high are journaled so the header round-trips the same control V1 uses.
  */
 
-import type { OrchestrateBoardState, ReasoningEffortOption } from '../types.ts';
+import type { ReasoningEffortOption } from '../types.ts';
 import type { ThinkingTriState } from '../agents/thinking-types.ts';
-import {
-  applyBoardReasoningPatch,
-  type BoardReasoningPatch,
-} from '../chat/orchestrate/board-reasoning-binding.ts';
+
+/** Header-control patch (V2 journals this; leftover V1 chat propagation is gone). */
+export type BoardReasoningPatch = {
+  reasoningEffort?: ReasoningEffortOption;
+  thinkingMode?: ThinkingTriState;
+  clearReasoningEffort?: boolean;
+  clearThinkingMode?: boolean;
+};
 
 /** Values POST `/api/boards/:id/model` accepts on `reasoning`. */
 export const BOARD_JOURNAL_REASONING = ['on', 'off', 'low', 'medium', 'high'] as const;
@@ -60,10 +64,16 @@ export function mergeReasoningPatch(
   current: BoardReasoningFields,
   patch: BoardReasoningPatch,
 ): BoardReasoningFields {
-  const board = { ...current } as OrchestrateBoardState;
-  applyBoardReasoningPatch(board, patch);
-  const next: BoardReasoningFields = {};
-  if (board.thinkingMode !== undefined) next.thinkingMode = board.thinkingMode;
-  if (board.reasoningEffort !== undefined) next.reasoningEffort = board.reasoningEffort;
+  const next: BoardReasoningFields = { ...current };
+  if (patch.clearReasoningEffort) {
+    delete next.reasoningEffort;
+  } else if (patch.reasoningEffort !== undefined) {
+    next.reasoningEffort = patch.reasoningEffort;
+  }
+  if (patch.clearThinkingMode) {
+    delete next.thinkingMode;
+  } else if (patch.thinkingMode !== undefined) {
+    next.thinkingMode = patch.thinkingMode;
+  }
   return next;
 }

@@ -353,10 +353,10 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   }),
   field('agents.autopilot', 'Orchestrator autopilot', 'agents', 'autopilot', {
     keywords: ['orchestrate', 'board', 'autopilot', 'concurrency', 'isolation'],
-    description: 'Global defaults for orchestrate board execution, testing, and heartbeat.',
+    description: 'Global defaults for orchestrate board concurrency, planner model, and heartbeat.',
   }),
-  field('agents.autopilot.handsOff', 'Hands-off by default', 'agents', 'autopilot', {
-    keywords: ['afk', 'autonomous', 'unattended', 'hands off'],
+  field('agents.autopilot.defaultStatus', 'New boards start', 'agents', 'autopilot', {
+    keywords: ['running', 'stopped', 'start', 'unattended'],
   }),
   field('agents.autopilot.isolation', 'Default isolation mode', 'agents', 'autopilot'),
   field('agents.autopilot.concurrency', 'Max concurrent tasks', 'agents', 'autopilot'),
@@ -391,7 +391,7 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   }),
   field('agents.autopilot.selfHeal', 'Self-heal & provisioning', 'agents', 'autopilot', {
     keywords: ['self-heal', 'provision', 'quarantine', 'infra', 'worktree', 'stall'],
-    description: 'Configure AFK self-heal rounds, infra provisioning, and worktree cd-guard.',
+    description: 'Configure self-heal rounds, infra provisioning, and worktree cd-guard.',
   }),
   field('agents.autopilot.selfHealMaxRounds', 'Max self-heal rounds', 'agents', 'autopilot', {
     keywords: ['self-heal', 'rounds', 'quarantine'],
@@ -550,7 +550,7 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
     keywords: ['fake-board', 'openai stub', 'deterministic model'],
   }),
   field('advanced.boardTesting.seed', 'Seed test board', 'advanced', 'board-testing', {
-    keywords: ['quick preset', 'smoke preset', 'board_init', 'planner'],
+    keywords: ['quick preset', 'smoke preset', 'planner'],
   }),
   field('advanced.boardTesting.log', 'Validate board log', 'advanced', 'board-testing', {
     keywords: ['jsonl', 'invariants', 'check-board-log', 'orchestrate log'],

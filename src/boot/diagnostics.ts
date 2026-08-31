@@ -198,7 +198,7 @@ export function installRendererDiagnostics(): void {
     if (!marker) return;
     const isOom = marker.reason === 'oom';
     const message = isOom
-      ? 'Board auto-pilot paused after out-of-memory crash — press Start when ready.'
+      ? 'Board stopped after out-of-memory crash — press Start when ready.'
       : `Recovered from crash: ${marker.reason ?? marker.kind} (exit ${marker.exitCode ?? '?'})`;
     report('render-process-gone-recovered', message, marker.message);
   });

@@ -3,8 +3,8 @@
 Builder, Tester, and Final Tester system prompts for the headless runner. They live here, not
 under `src/chat/prompts/work-agents/`, so:
 
-- V1's `builder` / `tester` prompts (`board_report` / `env_blocked`) stay
-  intact — V1's Orchestrate hub is still reachable.
+- V1's `builder` / `tester` work-agent prompts stay as general work agents.
+  V2 boards use these files; `report_outcome` is the attempt report tool.
 - `server/runner/` never imports them. The runner does not know what a task is;
   P2-F loads a prompt and passes it as `runTurn({ systemPrompt })` along with
   `reportToolFor(role)` and `parseReportFor(role)`. **Phase 6 finding:**

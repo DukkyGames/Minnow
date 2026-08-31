@@ -1,18 +1,15 @@
 /**
- * /api/orchestrate/board-testing/* — fake model host, seed board, log validation.
+ * /api/orchestrate/board-testing/* — fake model host, scenario runner, log validation.
  */
-
-import path from 'node:path';
 import { FAKE_PROVIDER_ID } from '../board-testing/fake-model-ids.js';
 import { listProviders } from '../../providers/store.js';
-import { patchSessionState, readWholeSessionState } from '../../config/sessions-repo.js';
+import { readWholeSessionState } from '../../config/sessions-repo.js';
 import { getWorkspaceRoot } from '../../workspace/root.js';
 import {
   getFakeModelStatus,
   getFakeModelRequestTail,
   getFakeModelScenario,
   configureFakeModelScenario,
-  resetFakeModelScenario,
   startFakeModel,
   stopFakeModel,
 } from './fake-model-host.js';
@@ -210,72 +207,11 @@ export async function handleBoardTestingRequest(req, res, pathname, options = {}
   }
 
   if (pathname === `${API_PREFIX}/seed` && req.method === 'POST') {
-    try {
-      const body = await readJsonBody(req);
-      const preset = body.preset === 'smoke' ? 'smoke' : 'quick';
-      const mode =
-        body.mode === 'afk' || body.mode === 'auto' || body.mode === 'sequential'
-          ? body.mode
-          : 'manual';
-      const workspacePath =
-        typeof body.workspacePath === 'string' && body.workspacePath.trim()
-          ? path.resolve(body.workspacePath.trim())
-          : getWorkspaceRoot();
-
-      const { installHeadlessLocalStorage } = await importTsModule(
-        '../../../src/headless/server-context.ts',
-      );
-      const { normalizeWorkspacePath } = await importTsModule(
-        '../../../src/lib/normalize-workspace-path.ts',
-      );
-      const { buildTestBoardSession, taskCountForPreset } = await importTsModule(
-        '../../../src/dev/test-board-seed.ts',
-      );
-
-      installHeadlessLocalStorage();
-
-      const { planner, group } = buildTestBoardSession({
-        workspacePath,
-        preset,
-        mode,
-        providerId: typeof body.providerId === 'string' ? body.providerId : undefined,
-        modelId: typeof body.modelId === 'string' ? body.modelId : undefined,
-        autoStart: body.autoStart === true,
-        stableIds: body.stableIds === true,
-      });
-
-      const existing = readWholeSessionState();
-      const workspaceKey = normalizeWorkspacePath(planner.workspacePath);
-      const lastByWorkspace = {
-        ...(existing.lastActiveChatIdByWorkspace ?? {}),
-        [workspaceKey]: planner.id,
-      };
-
-      patchSessionState({
-        baseVersion: existing.version ?? 6,
-        chats: [planner],
-        groups: [group],
-        scalars: {
-          activeId: planner.id,
-          activeBoardGroupId: group.id,
-          lastActiveChatIdByWorkspace: lastByWorkspace,
-        },
-      });
-
-      // Each seeded board expects builder nth=0 → board_report; reset when reusing the host.
-      resetFakeModelScenario();
-
-      sendJson(res, 200, {
-        ok: true,
-        groupId: group.id,
-        plannerId: planner.id,
-        workspacePath: planner.workspacePath,
-        taskCount: taskCountForPreset(preset),
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      sendJson(res, 400, { ok: false, error: message });
-    }
+    // V1 session seed is gone (MIN-716). Create a V2 board via POST /api/boards.
+    sendJson(res, 410, {
+      ok: false,
+      error: 'V1 session seed is retired. Create a board with POST /api/boards (plan markdown).',
+    });
     return true;
   }
 

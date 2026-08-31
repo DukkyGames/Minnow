@@ -221,14 +221,7 @@ export async function showCodeStageSection(section: CodeSectionId): Promise<void
     await superPlan.openSuperPlanScreen({ skipNavigate: true });
     return;
   }
-  if (section === 'orchestrate') {
-    const hub = await import('./orchestrate-hub');
-    // Resume the board the user was last inside; the hub is the fallback, not
-    // the unconditional destination.
-    hub.openOrchestrateLanding();
-    return;
-  }
-  if (section === 'boards') {
+  if (section === 'orchestrate' || section === 'boards') {
     const boards = await import('../orchestrator/boards-view');
     await boards.openBoardsView();
     return;

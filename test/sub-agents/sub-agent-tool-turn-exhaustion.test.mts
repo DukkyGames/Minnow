@@ -17,7 +17,6 @@ import {
 import type { SubAgentRunner } from '../../src/agents/types.ts';
 import { buildSubAgentStatusPayload } from '../../src/agents/orchestrator.ts';
 import { getOrCreateBoardGroup } from '../../src/state/chat-groups.ts';
-import { initBoard } from '../../src/state/orchestrate-board-store.ts';
 import {
   executeSubAgentTool,
   setSubAgentExecutorContext,
@@ -56,11 +55,14 @@ function seedChat() {
     chats: [chat],
   });
   const group = getOrCreateBoardGroup(chat);
-  initBoard(group, chat, {
+  // Leftover session blob only — V2 boards are journals and this run does not write them.
+  group.orchestrateBoard = {
     planPath: PLAN_PATH,
-    tasks: [{ id: TASK_ID, title: 'Task A', wave: 'W1', category: 'build' }],
+    startedAt: 1,
+    lastUpdatedAt: 1,
     waves: [{ id: 'W1' }],
-  });
+    tasks: [{ id: TASK_ID, title: 'Task A', wave: 'W1', category: 'build', status: 'planned' }],
+  };
 }
 
 describe('sub-agent tool turn exhaustion', () => {
@@ -94,7 +96,7 @@ describe('sub-agent tool turn exhaustion', () => {
     assert.ok(chat);
     const group = getOrCreateBoardGroup(chat);
     const task = group.orchestrateBoard?.tasks.find((t) => t.id === TASK_ID);
-    assert.equal(task?.status, 'failed');
+    // Sub-agents do not mutate leftover V1 cards; the run failing is the signal.
     assert.notEqual(task?.status, 'complete');
   });
 

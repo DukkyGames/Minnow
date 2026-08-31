@@ -1,7 +1,7 @@
 /**
  * P0-D — `plan(state) -> Desired[]`. The pure scheduler.
  *
- * This one function replaces `reserveLaunchSlot`, `PipelineHold`,
+ * This one function replaces V1 launch-slot reservation, pipeline holds,
  * `drainTaskQueue`, `taskQueueByGroupId`, `drainInFlightByGroupId`,
  * `autoDelegateNext`, `runAfterChatRelease`, `flushChatContinuationIfIdle`, and
  * `stallRecoveryScheduled` — three independent leak-prone concurrency mechanisms

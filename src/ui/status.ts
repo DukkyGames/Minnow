@@ -4,7 +4,6 @@ import { closeMobileSidebar } from './layout';
 import { closeModelSelectMenu } from './model-select-picker';
 import { closeSubAgentDrawer } from './sub-agent-drawer';
 import { closeGoalEvalDrawer } from './goal-eval-drawer';
-import { closeBoardTimelineDrawer } from './board-timeline-drawer';
 import { closeResearchPanel, isResearchPanelOpen } from './research-panel';
 import { closeIssuesFileDrawer, isIssuesFileDrawerOpen } from './issues-file-drawer';
 import { showToast } from './toast';
@@ -130,7 +129,6 @@ export function dismissOpenLayers(): void {
   closeModelSelectMenu();
   closeSubAgentDrawer();
   closeGoalEvalDrawer();
-  closeBoardTimelineDrawer();
   if (isResearchPanelOpen()) {
     closeResearchPanel();
     return;

@@ -66,8 +66,6 @@ import {
 
 import { applyFileSidebarVisuals, isMobileLayout, openMobileFileSidebar } from './file-layout';
 
-import { subscribeAllBoardChanges } from '../state/orchestrate-board-events';
-
 import { getActiveChat, sessionState } from '../state/sessions';
 
 import { listWorktrees } from '../state/worktree-service';
@@ -2278,12 +2276,6 @@ export function initGitPanel(): void {
 
     syncGraphSelectedCommit();
 
-  });
-
-  subscribeAllBoardChanges((groupId) => {
-    const boardGroup = getActiveBoardGroupFromSession();
-    if (!boardGroup || boardGroup.id !== groupId || boardGroup.viewMode !== 'board') return;
-    syncPanelFromActiveChat();
   });
 
   syncPanelFromActiveChat();

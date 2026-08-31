@@ -38,7 +38,7 @@ async function loadBaseAndModeFixtures(): Promise<Record<string, string>> {
     'utf8',
   );
   const agentsDir = repoPath('src/chat/prompts/work-agents');
-  for (const agentId of ['builder', 'planner', 'orchestrator']) {
+  for (const agentId of ['builder', 'planner']) {
     for (const profile of ['full', 'lite'] as const) {
       const rel = `./work-agents/${agentId}/agent.${profile}.md`;
       const abs = path.join(agentsDir, agentId, `agent.${profile}.md`);
@@ -204,7 +204,7 @@ describe('composeSystemPrompt mode part', () => {
       workAgentId: null,
       skillBody: null,
       memoryBlock: null,
-      enabledToolIds: ['spawn_sub_agent', 'board_init'],
+      enabledToolIds: ['spawn_sub_agent'],
       infoPresetId: null,
     });
     assert.doesNotMatch(out, /Sub-agent delegation/);

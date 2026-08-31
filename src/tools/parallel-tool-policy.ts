@@ -42,7 +42,6 @@ const SEQUENTIAL_TOOL_GROUP_IDS = [
   'git-write',
   'code-exec',
   'browser',
-  'board',
   'issues',
   'mode-mgmt',
 ] as const;

@@ -21,7 +21,6 @@ const builtinIds = new Set([
   'general',
   'desktop',
   'planner',
-  'orchestrator',
   'builder',
   'verifier',
   'tester',

@@ -1,3 +1,11 @@
+# Board nightly — V2 journal suite (MIN-716)
+
+# V1 persisted / restart / soak / gate-metrics scripts were retired with
+# `test/orchestrate/`. Crash recovery and scheduler conformance live in
+# `test/orchestrator/` (P1-F / P1-G) and already run on every PR via `npm test`.
+# This workflow re-runs that suite on a schedule so a flake that slipped the
+# PR window still shows up overnight.
+
 name: board nightly reliability
 
 on:
@@ -10,14 +18,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  board-reliability:
-    name: persisted + restart + soak (${{ matrix.os }})
+  orchestrator-suite:
+    name: orchestrator suite (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 180
+    timeout-minutes: 60
     env:
       MINNOW_HOME: ${{ runner.temp }}/minnow-board-gates
     steps:
@@ -31,40 +39,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Persisted real-git scenarios
-        id: persisted
-        continue-on-error: true
-        run: npm run board:persisted
-
-      - name: Restart checkpoint matrix
-        id: restart
-        if: always()
-        continue-on-error: true
-        run: npm run board:restart
-
-      - name: Deterministic 100x soaks
-        id: soak
-        if: always()
-        continue-on-error: true
-        run: npm run board:soak -- --scenario happy.quick --scenario report.builder-missing-recover --iterations 100 --seed 513
-
-      - name: Aggregate board gate metrics
-        id: metrics
-        if: always()
-        continue-on-error: true
-        run: npm run board:gate-metrics -- --output "${{ runner.temp }}/board-gate-metrics.json" --fail-on-unexpected
-
-      - name: Upload board gate artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: board-gates-${{ matrix.os }}
-          path: |
-            ${{ runner.temp }}/minnow-board-gates/logs/orchestrate-scenarios
-            ${{ runner.temp }}/board-gate-metrics.json
-          if-no-files-found: warn
-          retention-days: 14
-
-      - name: Enforce every nightly gate
-        if: always() && (steps.persisted.outcome != 'success' || steps.restart.outcome != 'success' || steps.soak.outcome != 'success' || steps.metrics.outcome != 'success')
-        run: node -e "process.exit(1)"
+      - name: Orchestrator V2 suite (P1-F / P1-G + keepers)
+        run: node test/run-all.mjs --suite orchestrator

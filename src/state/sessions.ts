@@ -17,8 +17,7 @@ import { defaultSessionState } from '../config/defaults';
 import { randomUUID } from '../lib/random-id.ts';
 import { isServerStorageMode } from '../config/storage-mode';
 import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
-import { normalizeOrchestratePlanPath } from '../chat/orchestrate/plan-path';
-import { syncOrchestratorPlannerChatTitle } from '../chat/orchestrate/planner-chat-title';
+import { normalizeOrchestratePlanPath } from '../chat/plans/plan-path';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { isMinnowSandboxWorkspacePath } from '../lib/workspace-sandbox';
 import { paintChatHistoryPendingInForegroundShell } from '../ui/messages';
@@ -66,7 +65,7 @@ import {
 } from '../chat/loop/parse-command';
 import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
 import { cleanupChatArchiveOnDelete } from '../chat/archive/cleanup';
-import { resolveChatWorktreeRoot } from './worktree-isolation';
+import { resolveChatWorktreeRoot } from './chat-worktree';
 import {
   ensureChatCodeChangeBackfillOnSwitch,
   runSessionCodeChangeBackfill,
@@ -1129,7 +1128,7 @@ function repairBoardChatWorktreeRoots(state: SessionState): void {
 
 /** Planners linked via boardGroupId appear under their board folder in the sidebar. */
 function repairPlannerChatFolderMembership(state: SessionState): void {
-  let titleChanged = false;
+  let dirty = false;
   for (const group of state.groups ?? []) {
     const plannerId = group.plannerChatId?.trim();
     if (!plannerId) continue;
@@ -1137,18 +1136,10 @@ function repairPlannerChatFolderMembership(state: SessionState): void {
     if (!planner) continue;
     if (planner.boardGroupId === group.id && planner.groupId !== group.id) {
       planner.groupId = group.id;
-    }
-    if (
-      syncOrchestratorPlannerChatTitle(
-        planner,
-        planner.orchestratePlanPath ?? group.orchestratePlanPath,
-      )
-    ) {
-      touchChat(planner);
-      titleChanged = true;
+      dirty = true;
     }
   }
-  if (titleChanged) {
+  if (dirty) {
     scheduleSaveSessions();
   }
 }

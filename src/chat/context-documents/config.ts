@@ -9,7 +9,7 @@ import {
 } from '../../agents/thinking-types';
 import { getWorkspacePath } from '../../state/workspace';
 import { sessionState } from '../../state/sessions';
-import { resolveChatToolWorkspaceRoot } from '../../state/worktree-isolation';
+import { resolveChatToolWorkspaceRoot } from '../../state/chat-worktree';
 import type { Chat } from '../../types';
 import {
   CONTEXT_DOCUMENT_PRESETS,

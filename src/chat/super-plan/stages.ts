@@ -12,7 +12,7 @@ import {
   type SuperPlanStageModelBinding,
 } from '../../config/super-plan-meta';
 import { fetchSkillById } from '../../skills/client';
-import { findLastPlanSavePath } from '../orchestrate/plan-from-history';
+import { findLastPlanSavePath } from '../plans/plan-from-history';
 import { isSuperPlanReferenceArtifactPath } from '../modes/plan-write-guard';
 import { isFirstUserMessagePending } from '../titles/schedule';
 import {

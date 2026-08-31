@@ -40,7 +40,7 @@ const ASK_QUESTION_TOOL = {
 };
 
 /**
- * OpenAI-v1 tool-call SSE, same shape as the fake host's board_report helper
+ * OpenAI-v1 tool-call SSE, same shape as the fake host's report_outcome helper
  * but with an injected tool name so this suite never hardcodes a role tool.
  * @param {string} name
  * @param {unknown} args

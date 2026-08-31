@@ -17,7 +17,7 @@ import {
   listBoardGroupChatIds,
 } from '../state/chat-groups';
 import { sessionState } from '../state/sessions';
-import type { BoardTask, Chat, ChatGroup } from '../types';
+import type { Chat, ChatGroup, LeftoverBoardTask } from '../types';
 import { appConfirm } from './app-dialog';
 import {
   OB_PAGE_CHAT_OPEN_CLASS,
@@ -281,7 +281,7 @@ export function boardChatRailCollapsedWaves(): ReadonlySet<string> {
 }
 
 /** Task a chat is linked to, for the header's id and state line. */
-function findTaskForChat(group: ChatGroup, chatId: string): BoardTask | undefined {
+function findTaskForChat(group: ChatGroup, chatId: string): LeftoverBoardTask | undefined {
   const board = group.orchestrateBoard;
   if (!board) return undefined;
   return board.tasks.find(
@@ -293,7 +293,7 @@ function findTaskForChat(group: ChatGroup, chatId: string): BoardTask | undefine
 }
 
 /** Human label for the header's state chip. */
-function headerStateLabel(chat: Chat, task: BoardTask | undefined): string {
+function headerStateLabel(chat: Chat, task: LeftoverBoardTask | undefined): string {
   if (isChatStreaming(chat.id)) return 'Running';
   if (chat.turnError) return 'Error';
   if (!task) return 'Idle';
@@ -316,7 +316,7 @@ function headerStateLabel(chat: Chat, task: BoardTask | undefined): string {
 }
 
 /** Semantic class for the state chip; colour never carries the meaning alone. */
-function headerStateTone(chat: Chat, task: BoardTask | undefined): string {
+function headerStateTone(chat: Chat, task: LeftoverBoardTask | undefined): string {
   if (isChatStreaming(chat.id)) return 'is-running';
   if (chat.turnError || task?.status === 'failed' || task?.status === 'quarantined') {
     return 'is-failed';
@@ -332,7 +332,7 @@ function headerStateTone(chat: Chat, task: BoardTask | undefined): string {
  * changes fire per stream token), and replacing the header that often threw away
  * the Back button between a click's mousedown and mouseup.
  */
-function chatHeaderKey(chat: Chat, task: BoardTask | undefined): string {
+function chatHeaderKey(chat: Chat, task: LeftoverBoardTask | undefined): string {
   return [
     chat.name?.trim() ?? '',
     task?.id ?? '',

@@ -9,7 +9,7 @@
 
 import type { BoardState } from '../../server/orchestrator/core/types';
 import { decodeModelSelectKey } from '../lib/model-select-key.ts';
-import type { BoardReasoningPatch } from '../chat/orchestrate/board-reasoning-binding.ts';
+import type { BoardReasoningPatch } from './board-journal-reasoning.ts';
 import {
   fieldsFromJournalReasoning,
   isBoardJournalReasoning,

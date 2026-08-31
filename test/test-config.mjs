@@ -113,7 +113,6 @@ export const PATH_RUNNER_RULES = [
   // Both use mock.module and transitively pull in UI code that imports CSS.
   { pattern: 'test/chat/super-plan/stages.test.mts', runner: 'tsx-mocks-loader' },
   { pattern: 'test/super-plan/controller-lifecycle.test.mts', runner: 'tsx-mocks-loader' },
-  { pattern: 'test/ui/orchestrate-finish-dashboard.test.mjs', runner: 'tsx-mocks-loader' },
   { pattern: 'test/ui/orchestrate-plan-screen.test.mts', runner: 'tsx-mocks-loader' },
   { pattern: 'test/ui/settings-layout-links.test.mjs', runner: 'tsx-mocks-loader' },
   // Mocks server/email/{accounts,imap-session}.js to drive sync against a fake server.
@@ -301,11 +300,15 @@ export const SCOPED_SUITES = {
       'test/ui/question-cards-modal-focus.test.mts',
     ],
   },
-  board: {
-    patterns: ['test/orchestrate/**/*.test.mts', 'test/orchestrate/**/*.test.mjs'],
-  },
   orchestrator: {
-    patterns: ['test/orchestrator/**/*.test.mjs', 'test/orchestrator/**/*.test.mts'],
+    patterns: [
+      'test/orchestrator/**/*.test.mjs',
+      'test/orchestrator/**/*.test.mts',
+      'test/dev/**/*.test.mts',
+      'test/dev/**/*.test.mjs',
+      // Plan-listing keeper ported from V1 list-plans (lives next to src/chat/plans/).
+      'test/chat/plans/list-plans.test.mts',
+    ],
   },
   runner: {
     patterns: ['test/runner/**/*.test.mjs', 'test/runner/**/*.test.mts'],

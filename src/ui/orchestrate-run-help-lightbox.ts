@@ -1,5 +1,5 @@
 /**
- * Run-settings help lightbox: what concurrency, hands-off, and the four isolation
+ * Run-settings help lightbox: what concurrency, Running/Stopped, and the four isolation
  * modes actually do. Modelled on `git-help-lightbox.ts` — same focus trap, Escape
  * handling, and `registerChromePopover` call for Electron visibility.
  */
@@ -114,7 +114,7 @@ function buildBody(): HTMLElement {
   const intro = document.createElement('p');
   intro.className = 'board-run-help-intro';
   intro.textContent =
-    'A board run is described by two things: how many tasks may run at once, and whether the orchestrator may interrupt you. Isolation decides where each task does its work on disk.';
+    'A board run is described by two things: whether it is Running or Stopped, and how many tasks may start at once. Isolation decides where each task does its work on disk.';
 
   const settings = document.createElement('div');
   settings.className = 'board-run-help-settings';
@@ -129,11 +129,11 @@ function buildBody(): HTMLElement {
       ],
     ),
     createSetting(
-      'Hands-off',
-      'The orchestrator runs to the end without asking you anything.',
+      'Status (Running / Stopped)',
+      'Whether the reconcile loop is ticking.',
       [
-        'Available at any concurrency, including 1.',
-        'Permission prompts are answered automatically, so only turn it on for work you would have approved anyway.',
+        'Running starts eligible work up to the concurrency cap.',
+        'Stopped is Manual: nothing new starts unless you start a task by hand.',
         'Stop always takes control back.',
       ],
     ),

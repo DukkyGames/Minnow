@@ -395,39 +395,6 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores list-then-cancel against a stubbed running agent."
   },
   {
-    "id": "agents-delegate-tasks",
-    "group": "agents-tasks",
-    "header": "delegate_tasks",
-    tier: 2,
-    "scoreMode": "auto",
-    "howToTest": "Give three independent chunks of work and ask it to fan them out.",
-    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Give three independent chunks of work and ask it to fan them out.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores delegate_tasks fan-out against a stubbed orchestrate board."
-  },
-  {
-    "id": "agents-board-init",
-    "group": "agents-tasks",
-    "header": "board_init / board_update_task",
-    tier: 2,
-    "scoreMode": "auto",
-    "howToTest": "In Orchestrate mode: does it seed the board and keep task states moving?",
-    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "In Orchestrate mode: does it seed the board and keep task states moving?",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores board seeding and task moves; the board itself is stubbed."
-  },
-  {
-    "id": "agents-board-report",
-    "group": "agents-tasks",
-    "header": "board_report / board_get_state",
-    tier: 2,
-    "scoreMode": "auto",
-    "howToTest": "Does the worker report back on completion instead of going quiet? (known weak spot)",
-    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Does the worker report back on completion instead of going quiet? (known weak spot)",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores whether the model reports completion against a stubbed board."
-  },
-  {
     "id": "agents-issue-tools",
     "group": "agents-tasks",
     "header": "issue_* tools",

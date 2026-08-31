@@ -176,7 +176,7 @@
         "Related"
       ],
       "section": "Chat",
-      "hash": "165d4f63c6da809a7d10fc0b7d4c912005d6efb25c006d2c4d11ba6b8bf3ff4d"
+      "hash": "d979bff746982ea275767ad2e39efd471838a9bccf03477fccdeccdd07b7dbaa"
     },
     {
       "path": "documentation/manual/apps/overview.md",
@@ -321,7 +321,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "03f42798dee1a78cead9445b7e05302ca96b37efa28fcc91d461f2e5edee5a8a"
+      "hash": "3f180ee7e73d2f6d8ad93fc13b63e1ed5664961f246c63b7bccc74da5c433a07"
     },
     {
       "path": "documentation/manual/orchestrate/boards.md",
@@ -342,7 +342,7 @@
         "Related"
       ],
       "section": "Orchestrate",
-      "hash": "ee8834137d89e6977f74d7f0800ce8fc890a3e6d483cdabea3c226f4ba8f5e0f"
+      "hash": "ce987f2aaa046053277460d4fb61366c679cca958b85c449a19a08993b660ba8"
     },
     {
       "path": "documentation/manual/orchestrate/super-plan.md",
@@ -376,7 +376,7 @@
         "Related"
       ],
       "section": "Orchestrate",
-      "hash": "b2c647665bcf1249850aab88520cad7b93caa12a18cc7e6d83701483fa7e12c2"
+      "hash": "6460a5a56f76fa3c623f0179af321588060585dd5c0038bb838fcac81607beb5"
     },
     {
       "path": "documentation/manual/extend/integrations.md",
@@ -446,7 +446,7 @@
         "Related"
       ],
       "section": "Reference",
-      "hash": "43adebd44671448c742a189e4701ca08528119f2fdc3935830bbf54d02984f6c"
+      "hash": "e94cc2177e86aa634cbc8b96e373b038a6c2f91ee006d9fc92086895d556f2d2"
     },
     {
       "path": "documentation/manual/reference/configuration.md",
@@ -504,12 +504,12 @@
     {
       "path": "documentation/manual/reference/glossary.md",
       "title": "Glossary",
-      "summary": "Terms Minnow uses, in the sense Minnow means them. AFK mode — The most autonomous orchestrate board setting. Runs hands off until you press Stop or the board finishes, and will not prompt you. Board — A kanban of tasks generated from a plan document, worked by agents. See Orchest",
+      "summary": "Terms Minnow uses, in the sense Minnow means them. Running — The board is ticking: eligible work starts up to the concurrency cap until you press Stop or the board finishes. Board — A kanban of tasks generated from a plan document, worked by agents. See Orchestrate boards. Brain ",
       "headings": [
         "Related"
       ],
       "section": "Reference",
-      "hash": "a78a5cf70cb8a5374584ba33dd139106dc0a80ae851112cc857d86efe1434c51"
+      "hash": "98357349547f8cc2b301ed57b3070a82c068d0192334a3eb98766e89623683eb"
     },
     {
       "path": "documentation/manual/reference/wiki-and-brain.md",

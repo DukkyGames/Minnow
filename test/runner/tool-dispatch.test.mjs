@@ -337,7 +337,6 @@ describe('in-process tool dispatch', { concurrency: false }, () => {
       'ask_question',
       'browser_navigate',
       'spawn_sub_agent',
-      'board_report',
       'todo_write',
     ];
     for (const name of samples) {

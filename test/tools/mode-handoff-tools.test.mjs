@@ -17,7 +17,7 @@ function buildPlanCompleteQuestions(planPath) {
         id: 'next_step',
         prompt: `The plan${planHint} is saved. What should we do next?`,
         options: [
-          { id: 'orchestrate_new', label: 'New Orchestrate chat' },
+          { id: 'orchestrate_new', label: 'Open on Boards' },
           { id: 'stay_plan', label: 'Stay in Plan' },
           { id: 'build_here', label: 'Implement in Build (this chat)' },
         ],

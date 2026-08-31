@@ -5,7 +5,7 @@
 import { formatGenerationErrorMessage } from '../../api/generations';
 import { loadGoalEvalConfig } from '../../config/goal-eval-meta';
 import { sessionState } from '../../state/sessions';
-import { resolveChatToolWorkspaceRoot } from '../../state/worktree-isolation';
+import { resolveChatToolWorkspaceRoot } from '../../state/chat-worktree';
 import type { ApiMessage, Chat, ToolCall } from '../../types';
 import { ensureToolConfigReady } from '../../tools/config';
 import { executeTool } from '../../tools/client';

@@ -9,7 +9,6 @@
  * Phase 4 of `documentation/plans/issues-app-v2.md`.
  */
 
-import { subscribeAllBoardChanges } from '../../state/orchestrate-board-events.ts';
 import {
   findIssueById,
   listIssuesWithActiveAgents,
@@ -19,13 +18,13 @@ import {
 } from '../../state/issues-store.ts';
 import { requireIssueStatusForRole } from '../../state/issues-store.ts';
 import { pushNotification } from '../../notifications/push.ts';
-import type { BoardTask, ChatGroup, IssueAgentPhase, IssueCard } from '../../types.ts';
+import type { ChatGroup, IssueAgentPhase, IssueCard, LeftoverBoardTask } from '../../types.ts';
 
 /** Board task statuses that mean the agent is actively working. */
 const RUNNING_STATUSES = new Set(['in_progress', 'testing', 'merging']);
 
 /** Human-readable step from a board task, without leaking board vocabulary. */
-export function stepLabelForTask(task: BoardTask | undefined): string | undefined {
+export function stepLabelForTask(task: LeftoverBoardTask | undefined): string | undefined {
   if (!task) return undefined;
   switch (task.status) {
     case 'in_progress':
@@ -48,7 +47,7 @@ export function stepLabelForTask(task: BoardTask | undefined): string | undefine
  * multi-task plan at an issue still gets a sane answer: any failure wins,
  * then any running task, then all-complete.
  */
-export function phaseForBoardTasks(tasks: readonly BoardTask[]): IssueAgentPhase | null {
+export function phaseForBoardTasks(tasks: readonly LeftoverBoardTask[]): IssueAgentPhase | null {
   if (tasks.length === 0) return null;
   if (tasks.some((task) => task.status === 'failed' || task.status === 'quarantined')) {
     return 'failed';
@@ -59,7 +58,7 @@ export function phaseForBoardTasks(tasks: readonly BoardTask[]): IssueAgentPhase
 }
 
 /** The first error message on the board, for the "in plain words" failure line. */
-export function failureReasonForTasks(tasks: readonly BoardTask[]): string | undefined {
+export function failureReasonForTasks(tasks: readonly LeftoverBoardTask[]): string | undefined {
   for (const task of tasks) {
     const error = task.error?.trim();
     if (error) return error;
@@ -178,26 +177,9 @@ export function clearIssueAwaitingInput(chatId: string): boolean {
 
 let bound = false;
 
-/** Subscribe to board changes. Safe to call on every boot. */
+/** V1 board events are gone; leftover session rows are not live. Safe to call on every boot. */
 export function initIssueAgentWatcher(): void {
-  if (bound) return;
   bound = true;
-
-  subscribeAllBoardChanges((groupId) => {
-    void (async () => {
-      try {
-        const { sessionState } = await import('../../state/sessions.ts');
-        const group = (sessionState?.groups ?? []).find((g) => g.id === groupId);
-        if (!group?.orchestrateBoard) return;
-        for (const issue of issuesForGroup(group)) {
-          const current = findIssueById(issue.id);
-          if (current) applyBoardToIssue(current, group);
-        }
-      } catch {
-        // A board update must never take the shell down with it.
-      }
-    })();
-  });
 }
 
 /** Reset module state (tests). */

@@ -11,7 +11,7 @@ import {
 } from '../state/git-api';
 import { annotateRunSnapshots } from '../state/runs-store';
 import { sessionState } from '../state/sessions';
-import { resolveChatToolWorkspaceRoot } from '../state/worktree-isolation';
+import { resolveChatToolWorkspaceRoot } from '../state/chat-worktree';
 import { getWorkspacePath } from '../state/workspace';
 import type { Chat, TurnRunId } from '../types';
 

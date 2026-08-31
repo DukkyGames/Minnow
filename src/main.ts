@@ -135,10 +135,6 @@ import {
   resolveBoardOnboardingQuestionHost,
 } from './ui/orchestrate-board-onboarding-questions';
 import { subscribeInstances } from './os/instances';
-import { bootOrchestrateBoardResume } from './chat/orchestrate/board-boot-resume';
-import { initBoardLogDiskSink } from './state/board-log-disk.ts';
-import { registerOrchestrateBoardShutdownHandler } from './chat/orchestrate/board-shutdown';
-import { rehydrateAllBoardWorktreeRoots } from './state/orchestrate-board-actions';
 import { initComposerInput } from './ui/input';
 import {
   applySidebarVisuals,
@@ -264,7 +260,6 @@ export async function initApp(): Promise<void> {
   });
   await detectConfigServer();
   refreshConfigStorageBanner();
-  initBoardLogDiskSink();
   const migrated = await runMigrationIfNeeded();
   // Load tools before any UI reads permissions (drawer + settings page rebuilds).
   await loadToolConfigFromStorage();
@@ -272,7 +267,6 @@ export async function initApp(): Promise<void> {
   await initWorkAgentSystem();
   // Skip forced re-fetch when startApp already hydrated unless migration wrote new data.
   await loadSessionsFromStorage(migrated ? { force: true } : undefined);
-  registerOrchestrateBoardShutdownHandler();
   registerSessionPersistenceShutdownHandler();
   // Issues store migrates leftover bugs/state.json / minnow-bugs-v1 on first load.
   // Issues taxonomy loads before issues store (guards + defaults reference catalog).
@@ -459,10 +453,8 @@ export async function initApp(): Promise<void> {
   warmIssuesAppInBackground();
 
   if (sessionState) {
-    await rehydrateAllBoardWorktreeRoots(sessionState);
     await bootGenerationResumeForChats(sessionState.chats);
     await bootIncompleteToolResumeForChats(sessionState.chats);
-    await bootOrchestrateBoardResume(sessionState);
   }
 
   // Session-scoped /loop ticker (15s safety scan + dueAt wake timer)

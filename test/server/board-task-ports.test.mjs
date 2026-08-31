@@ -115,7 +115,7 @@ describe('board-task-ports (SQLite hot path)', () => {
           createdAt: 1,
           orchestrateBoard: {
             planPath: 'plan.md',
-            executionMode: 'auto',
+            status: 'running',
             tasks: [
               {
                 id: 'T1',

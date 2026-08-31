@@ -10,7 +10,7 @@
 import { normalizeWorkspacePath } from '../../lib/normalize-workspace-path';
 import { executeTool } from '../../tools/client';
 import { isLocalServerAvailable } from '../../tools/config';
-import { isExecutableOrchestratePlan } from '../orchestrate/plan-path';
+import { isExecutableOrchestratePlan } from '../plans/plan-path';
 import { normalizeModeId } from '../modes/types';
 import { sessionState } from '../../state/sessions';
 import { getWorkspacePath } from '../../state/workspace';

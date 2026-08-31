@@ -15,7 +15,7 @@ import {
 import { fetchBrainCodeConfig } from './client';
 import { getWorkspacePath } from '../state/workspace';
 import { sessionState } from '../state/sessions';
-import { resolveChatToolWorkspaceRoot } from '../state/worktree-isolation';
+import { resolveChatToolWorkspaceRoot } from '../state/chat-worktree';
 import type { Chat } from '../types';
 
 /** Per-chat override; reuses thinking tri-state semantics (inherit / on / off). */

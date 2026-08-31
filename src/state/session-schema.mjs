@@ -4,7 +4,7 @@
  * client load stay on one allowlist (sessions SQLite migration Phase B.1).
  */
 
-import { applyLegacyExecutionMode } from '../lib/legacy-execution-mode.mjs';
+import { foldLeftoverBoardAutonomy } from '../lib/leftover-autonomy.mjs';
 
 /** Inline copy of server/config/orchestrate-plan-path.js (avoid server→client coupling). */
 const ORCHESTRATE_PLANS_PREFIX = 'documentation/plans/';
@@ -233,6 +233,7 @@ const BOARD_CATEGORIES = new Set(['build', 'fix', 'test', 'research']);
 const BOARD_LOG_MAX = 500;
 const BOARD_LOG_LEVELS = new Set(['info', 'warn', 'error']);
 const BOARD_LOG_TYPES = new Set([
+  // Leftover V1 session log vocabulary (hydrate only — not a live tool).
   'board_init',
   'mode_change',
   'auto_start',
@@ -562,7 +563,7 @@ function ensureOrchestrateFinalTest(raw) {
   return out;
 }
 
-/** Verified project commands reported by the final tester (board_report FULL_BOARD). */
+/** Verified project commands reported by the final tester. */
 function ensureBoardRunInstructions(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const r = /** @type {Record<string, unknown>} */ (raw);
@@ -636,17 +637,9 @@ function ensureOrchestrateBoard(raw) {
   if (typeof r.finishReport === 'string' && r.finishReport.trim()) {
     out.finishReport = r.finishReport.trim();
   }
-  if (r.autoRunning === true) out.autoRunning = true;
-  if (r.handsOff === true) out.handsOff = true;
-  if (r.pendingAfk === true) out.pendingAfk = true;
-  // Legacy four-value executionMode folds into concurrency + hands-off, then is
-  // dropped from the persisted shape. The mode is derived from those two now
-  // (src/state/board-execution-mode.ts); persisting it would make that circular.
-  if (typeof r.executionMode === 'string') {
-    applyLegacyExecutionMode(out, r.executionMode.trim());
-    if (out.autoRunning !== true) delete out.autoRunning;
-    if (out.handsOff !== true) delete out.handsOff;
-  }
+  // V1 six-flag autonomy collapses here. Stale inbound keys are read by the
+  // folder and never copied onto `out`, so a later save cannot persist them.
+  foldLeftoverBoardAutonomy(out, r);
   if (typeof r.worktreeSlug === 'string' && r.worktreeSlug.trim()) {
     out.worktreeSlug = r.worktreeSlug.trim().slice(0, 64);
   }
@@ -665,7 +658,6 @@ function ensureOrchestrateBoard(raw) {
   }
   const finalTest = ensureOrchestrateFinalTest(r.finalTest);
   if (finalTest) out.finalTest = finalTest;
-  if (r.userStopped === true) out.userStopped = true;
   if (typeof r.isolationBaseRef === 'string' && r.isolationBaseRef.trim()) {
     out.isolationBaseRef = r.isolationBaseRef.trim();
   }

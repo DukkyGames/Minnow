@@ -5,7 +5,6 @@
 
 import { STOPPED_TOOL_MSG } from './execute-tool-batch';
 import { executeBrowserTool } from './browser-executor';
-import { executeBoardTool } from './board-tools';
 import { executeTodoWrite } from './todo-tools';
 import { executeBugBoardTool } from './bug-board-tools';
 import { executeIssueTool } from './issue-tools';
@@ -25,19 +24,13 @@ import {
   isToolAllowedForMode,
 } from '../chat/modes/tool-policy';
 import {
-  applyBoardMemberToolFilter,
-  applyOrchestrateAutoToolFilter,
-  injectBoardMemberSubsetTools,
-} from '../chat/modes/orchestrate-tool-filter';
-import {
   GIT_SETUP_SKILL_ID,
   injectGitSetupSkillTools,
 } from '../skills/git-setup-client';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import { filterToolsByExpertSnapshot } from '../chat/experts/expert-tool-policy';
 import type { Chat } from '../types';
-import { getBoardGroupForChat, isBoardTaskChat } from '../state/chat-groups';
-import { deriveBoardExecutionMode } from '../state/board-execution-mode.ts';
+import { resolveChatToolWorkspaceRoot } from '../state/chat-worktree';
 import type { CodeChangeStats, ToolExecutionResult } from '../types';
 import { findChatById } from '../state/sessions';
 import { normalizeCodeChangePayload } from '../usage/code-change-payload';
@@ -71,7 +64,6 @@ import {
 } from './permission-gate';
 import { getChatsWorkspacePath } from '../lib/chats-workspace';
 import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
-import { resolveChatToolWorkspaceRoot } from '../state/worktree-isolation';
 import { isChatAppForeground } from '../ui/chat-mount';
 import { runWithFileTreeAutoRefresh } from '../ui/file-tree-auto-refresh';
 import { executeWithResultCache } from './result-cache';
@@ -366,22 +358,6 @@ async function executeToolInner(
     return { content: text };
   }
 
-  if (
-    name === 'board_init' ||
-    name === 'board_update_task' ||
-    name === 'board_set_autonomy' ||
-    name === 'board_get_state' ||
-    name === 'board_report' ||
-    name === 'delegate_tasks'
-  ) {
-    const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
-    if (blocked) return blocked;
-    const text = await executeBoardTool(name, args, {
-      chatId: context?.chatId,
-    });
-    return { content: text };
-  }
-
   if (name === 'todo_write') {
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
@@ -635,7 +611,7 @@ export function getEnabledToolDefinitionsForMode(
 }
 
 /**
- * Enabled tools for a chat turn — applies orchestrate auto-pilot gating for delegate_tasks.
+ * Enabled tools for a chat turn.
  */
 export function getEnabledToolDefinitionsForChat(
   chat: Chat,
@@ -644,16 +620,6 @@ export function getEnabledToolDefinitionsForChat(
   const normalized = normalizeModeId(chat.modeId);
   let defs = getEnabledToolDefinitionsForMode(normalized);
   defs = filterToolsByExpertSnapshot(chat, defs);
-  const executionMode = deriveBoardExecutionMode(
-    getBoardGroupForChat(chat)?.orchestrateBoard,
-  );
-  if (isBoardTaskChat(chat)) {
-    defs = injectBoardMemberSubsetTools(defs);
-  }
-  defs = applyBoardMemberToolFilter(defs, chat, executionMode);
-  if (normalized === 'orchestrate') {
-    defs = applyOrchestrateAutoToolFilter(defs, executionMode);
-  }
   if (options?.skillId === GIT_SETUP_SKILL_ID) {
     defs = injectGitSetupSkillTools(defs);
   }

@@ -59,15 +59,6 @@ export const TOOL_GROUP_IDS = {
     'list_sub_agents',
     'get_sub_agent_status',
   ],
-  board: [
-    'board_init',
-    'board_add_tasks',
-    'board_update_task',
-    'board_set_autonomy',
-    'board_get_state',
-    'board_report',
-    'delegate_tasks',
-  ],
   issues: [
     'issue_add',
     'issue_update',
@@ -242,7 +233,6 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'git-read',
     'code-intel',
     'sub-agents',
-    'board',
     'mode-mgmt',
     'ask',
     'brain-core',
@@ -343,17 +333,14 @@ export function allowGroupsToolPolicy(
 }
 
 /**
- * Orchestrator board member roles (builder / tester / fixer). Tool allowlists are
- * enforced in {@link applyBoardMemberToolFilter} — see MIN-333 matrix in
- * documentation/plans/context-reduction.md.
+ * Leftover V1 board member roles (builder / tester / fixer). V2 attempts use
+ * the server runner's tool set, not this matrix. Kept so leftover task chats
+ * still get a sensible allowlist if they stream.
  */
 export type BoardMemberRole = 'build' | 'test' | 'fix';
 
-/** Board subset for all roles — mutating board tools stay stripped by the filter. */
-export const BOARD_ROLE_BOARD_SUBSET = ['board_get_state', 'board_report'] as const;
-
 /**
- * Per-role group matrix for orchestrator board chats (MIN-333). Build and fix differ
+ * Per-role group matrix for leftover orchestrator board chats (MIN-333). Build and fix differ
  * only by browser (build ●, fix ○). Tester omits files-write.
  *
  * All three get `brain-core` for read/search during work; durable writes on board
@@ -402,13 +389,9 @@ export const BOARD_ROLE_ALLOWED_GROUPS: Record<BoardMemberRole, readonly ToolGro
   ],
 };
 
-/** Expand a board role matrix row to the allowed tool id set (incl. board subset). */
+/** Expand a leftover board role matrix row to the allowed tool id set. */
 export function expandBoardRoleAllowedTools(role: BoardMemberRole): Set<string> {
-  const allowed = new Set(expandToolGroups(BOARD_ROLE_ALLOWED_GROUPS[role]));
-  for (const id of BOARD_ROLE_BOARD_SUBSET) {
-    allowed.add(id);
-  }
-  return allowed;
+  return new Set(expandToolGroups(BOARD_ROLE_ALLOWED_GROUPS[role]));
 }
 
 /** Inverse map: tool id → groups that contain it (for matrix tests). */

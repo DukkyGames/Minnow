@@ -69,9 +69,9 @@ mock.module('../../../src/tools/client.ts', {
 });
 
 // Same trap as tools/client.ts above: orchestrator.ts is a re-export shim with
-// ~20 exports (tools/loop.ts needs cancelAllForParentTurn, board-tools.ts needs
-// getSubAgentRun, etc.) — an incomplete namedExports set here silently falls
-// back to the real module instead of erroring, so every export must be listed.
+// ~20 exports (tools/loop.ts needs cancelAllForParentTurn, etc.) — an incomplete
+// namedExports set here silently falls back to the real module instead of
+// erroring, so every export must be listed.
 mock.module('../../../src/agents/orchestrator.ts', {
   namedExports: {
     spawnSubAgent: (input: Record<string, unknown>) => spawnSubAgentImpl(input),

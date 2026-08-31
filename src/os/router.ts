@@ -491,7 +491,7 @@ export function navigateToCodeOrchestrate(): void {
   navigateToCodeSection('orchestrate');
 }
 
-/** Orchestrator V2's Boards surface. Beside V1's Orchestrate, not instead of it. */
+/** Orchestrator V2's Boards surface. The V1 kanban is gone. */
 export function navigateToCodeBoards(): void {
   navigateToCodeSection('boards');
 }

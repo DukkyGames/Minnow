@@ -78,35 +78,35 @@ describe('constrained-tool-content', () => {
     assert.equal(merged[0].function.name, 'get_datetime');
   });
 
-  test('toolArgumentsRichnessScore ranks full board_init above plan_path-only', () => {
-    const partial = '{"plan_path":"documentation/plans/minnow-marketing-website.md"}';
+  test('toolArgumentsRichnessScore ranks a full spawn_sub_agent payload above task-only', () => {
+    const partial = '{"task":"Explore the auth module"}';
     const full = JSON.stringify({
-      plan_path: 'documentation/plans/minnow-marketing-website.md',
-      tasks: [{ id: 'W1-A', title: 'A', wave: 'W1', category: 'build' }],
-      waves: [{ id: 'W1' }],
+      task: 'Explore the auth module',
+      type: 'explore',
+      wait: true,
     });
     assert.ok(toolArgumentsRichnessScore(full) > toolArgumentsRichnessScore(partial));
   });
 
-  test('mergeContentJsonToolCalls prefers content when streamed board_init is partial', () => {
+  test('mergeContentJsonToolCalls prefers content when streamed spawn_sub_agent is partial', () => {
     const streamed = [
       {
         id: 'call_1',
         type: 'function' as const,
         function: {
-          name: 'board_init',
-          arguments: '{"plan_path":"documentation/plans/minnow-marketing-website.md"}',
+          name: 'spawn_sub_agent',
+          arguments: '{"task":"Explore the auth module"}',
         },
       },
     ];
     const text = JSON.stringify({
       tool_calls: [
         {
-          name: 'board_init',
+          name: 'spawn_sub_agent',
           arguments: {
-            plan_path: 'documentation/plans/minnow-marketing-website.md',
-            tasks: [{ id: 'W1-A', title: 'Scaffold', wave: 'W1', category: 'build' }],
-            waves: [{ id: 'W1' }],
+            task: 'Explore the auth module',
+            type: 'explore',
+            wait: true,
           },
         },
       ],
@@ -115,11 +115,11 @@ describe('constrained-tool-content', () => {
     assert.equal(merged.length, 1);
     assert.equal(merged[0].id, 'call_1');
     const args = JSON.parse(merged[0].function.arguments) as {
-      tasks?: unknown[];
-      waves?: unknown[];
+      type?: string;
+      wait?: boolean;
     };
-    assert.equal(args.tasks?.length, 1);
-    assert.equal(args.waves?.length, 1);
+    assert.equal(args.type, 'explore');
+    assert.equal(args.wait, true);
   });
 
   test('normalizeHarmonyToolName strips functions and repo_browser namespaces', () => {

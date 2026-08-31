@@ -19,10 +19,6 @@ export const EMIT_ONLY_TOOL_IDS = new Set([
   'ask_question',
   'spawn_sub_agent',
   'spawn_work_agent',
-  'board_init',
-  'board_update_task',
-  'board_get_state',
-  'delegate_tasks',
 ]);
 
 const OVERRIDES: Record<string, ToolFixture> = {

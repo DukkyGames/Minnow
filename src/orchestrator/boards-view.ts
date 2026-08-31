@@ -3,12 +3,11 @@
  *
  * A **new surface**, not a retrofit of `orchestrate-board.ts`. V1's `BoardTask`
  * carries ~50 fields; V2's `TaskState` carries 17 and deliberately drops the
- * retry counters, `executionMode`, `handsOff`, `pendingAfk`, `autoRunning`,
- * `systemPaused` and `userStopped` that PRD §6 replaces with one enum and one
- * integer. Every V1 site reading a deleted field needs a decision rather than a
- * substitution, and V1's Orchestrate section is additionally wired to planner
- * chats, rails, onboarding and kickoff that V2 removes outright. So this is
- * built beside it and V1 is left alone until Phase 4 deletes it.
+ * retry counters and the multi-flag leftover autonomy blob that PRD §6 replaces
+ * with one enum and one integer. Every V1 site reading a deleted field needs a
+ * decision rather than a substitution, and V1's Orchestrate section is additionally
+ * wired to planner chats, rails, onboarding and kickoff that V2 removes outright.
+ * So this is built beside it and V1 is left alone until Phase 4 deletes it.
  *
  * ## The rule this file exists to keep
  *
@@ -84,7 +83,7 @@ import {
 import {
   discoverOrchestratePlans,
   type DiscoverOrchestratePlansResult,
-} from '../chat/orchestrate/list-plans';
+} from '../chat/plans/list-plans';
 import { button, el, empty, pill } from './dom';
 import { createIcon } from '../ui/icon';
 import {
@@ -333,6 +332,11 @@ function selectBoard(boardId: string | null): void {
   }
   paintList();
   paintBoard();
+}
+
+/** Select a board after create/launch. Exported so Orchestrate entry can skip a chat. */
+export function showBoard(boardId: string): void {
+  selectBoard(boardId);
 }
 
 /**

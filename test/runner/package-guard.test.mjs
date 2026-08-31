@@ -109,12 +109,11 @@ const SKIP_LOOP_DIRS = new Set([
   'node_modules',
   'dist',
   'release',
-  'engine-bundle',
   '.git',
   'coverage',
 ]);
 
-/** Source files that may contain a turn-loop copy, excluding generated bundles. */
+/** Source files that may contain a turn-loop copy. */
 function sourceFilesForLoopScan() {
   /** @type {string[]} */
   const out = [];

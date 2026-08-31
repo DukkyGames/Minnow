@@ -79,7 +79,7 @@ describe('resolveChatContext', () => {
           createdAt: 1,
           orchestrateBoard: {
             planPath: 'plan.md',
-            executionMode: 'afk',
+            status: 'running',
             tasks: [
               {
                 id: TASK_ID,

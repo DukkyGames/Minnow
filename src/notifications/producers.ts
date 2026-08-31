@@ -1,121 +1,26 @@
 /**
- * Wire notification producers to board, sub-agent, and background job events.
+ * Wire notification producers to sub-agent and background job events.
+ *
+ * Board completion toasts come from the V2 journal (`run.finished` and task
+ * attempt events on the server), not from leftover `ChatGroup.orchestrateBoard`
+ * mutation hooks. MIN-714 deleted those lifecycle producers — a sleeping
+ * window is not a correctness problem for the engine.
+ *
  * Chat turn alerts are pushed from {@link notifyChatTurnEnded} in `loop.ts` after finalizeRun.
  */
 
 import { isSubAgentRunTerminal } from '../agents/sub-agent-outcome.ts';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events.ts';
 import type { SubAgentRun } from '../agents/types.ts';
-import { isOrchestratePlanComplete } from '../chat/orchestrate/plan-complete.ts';
-import { subscribeAllBoardChanges } from '../state/orchestrate-board-events.ts';
-import { findChatById, sessionState } from '../state/sessions.ts';
-import type { BoardTask, BoardTaskStatus } from '../types.ts';
+import { findChatById } from '../state/sessions.ts';
 import { truncatePreview } from './preview.ts';
 import { pushNotification } from './push.ts';
 
 let initialized = false;
-
-/** Previous board task status for transition detection. */
-const taskStatusById = new Map<string, BoardTaskStatus>();
 const notifiedSubAgentRuns = new Set<string>();
-const notifiedBoardComplete = new Set<string>();
 
 function chatTitle(chat: { name?: string }): string {
   return chat.name?.trim() || 'Chat';
-}
-
-function waveLabel(wave: BoardTask['wave']): string {
-  return typeof wave === 'number' ? `Wave ${wave}` : String(wave);
-}
-
-function handleBoardChange(groupId: string): void {
-  const group = (sessionState?.groups ?? []).find((g) => g.id === groupId);
-  const board = group?.orchestrateBoard;
-  if (!board) return;
-
-  const plannerChatId = group.plannerChatId;
-  const defaultChatId = plannerChatId ?? undefined;
-
-  for (const task of board.tasks) {
-    const prev = taskStatusById.get(task.id);
-    taskStatusById.set(task.id, task.status);
-
-    if (prev === task.status) continue;
-
-    const targetChatId = task.chatId?.trim() || defaultChatId;
-    const title = task.title.trim() || task.id;
-    const wave = waveLabel(task.wave);
-    const dedupeBase = `task:${groupId}:${task.id}:${task.status}`;
-
-    if (task.status === 'in_progress' && prev !== 'in_progress') {
-      pushNotification({
-        kind: 'task_started',
-        title,
-        preview: `${wave} — in progress`,
-        chatId: targetChatId,
-        appId: 'code',
-        dedupeKey: dedupeBase,
-      });
-      continue;
-    }
-
-    if (task.status === 'complete' && prev !== 'complete') {
-      pushNotification({
-        kind: 'task_complete',
-        title,
-        preview: `${wave} — complete`,
-        chatId: targetChatId,
-        appId: 'code',
-        dedupeKey: dedupeBase,
-      });
-      continue;
-    }
-
-    if (task.status === 'quarantined' && prev !== 'quarantined') {
-      pushNotification({
-        kind: 'task_quarantined',
-        title,
-        preview: `${wave} — quarantined`,
-        chatId: targetChatId,
-        appId: 'code',
-        dedupeKey: dedupeBase,
-      });
-      continue;
-    }
-
-    if (
-      (task.status === 'failed' || task.status === 'blocked') &&
-      prev !== task.status
-    ) {
-      const err = task.error?.trim() || task.status;
-      pushNotification({
-        kind: 'task_failed',
-        title,
-        preview: `${wave} — ${err}`,
-        chatId: targetChatId,
-        appId: 'code',
-        dedupeKey: dedupeBase,
-      });
-    }
-  }
-
-  if (isOrchestratePlanComplete(board) && !notifiedBoardComplete.has(groupId)) {
-    notifiedBoardComplete.add(groupId);
-    const completeCount = board.tasks.filter((t) => t.status === 'complete').length;
-    const quarantinedCount = board.tasks.filter((t) => t.status === 'quarantined').length;
-    const allQuarantined = completeCount === 0 && quarantinedCount > 0;
-    const unresolvedCount = board.unresolvedIssues?.length ?? 0;
-    pushNotification({
-      kind: allQuarantined ? 'board_blocked' : 'board_complete',
-      title: 'Orchestrate board',
-      preview: allQuarantined
-        ? `Blocked — ${quarantinedCount} quarantined`
-        : `Complete — ${unresolvedCount} unresolved issue${unresolvedCount === 1 ? '' : 's'}`,
-      chatId: defaultChatId,
-      appId: 'code',
-      dedupeKey: `board_complete:${groupId}`,
-    });
-  }
 }
 
 function handleSubAgentRun(run: SubAgentRun): void {
@@ -152,39 +57,20 @@ function handleSubAgentRun(run: SubAgentRun): void {
   });
 }
 
-/** Seed task status map so first poll does not fire spurious started events. */
-function seedBoardTaskStatuses(): void {
-  for (const group of sessionState?.groups ?? []) {
-    const board = group.orchestrateBoard;
-    for (const task of board?.tasks ?? []) {
-      taskStatusById.set(task.id, task.status);
-    }
-    if (board && isOrchestratePlanComplete(board)) {
-      notifiedBoardComplete.add(group.id);
-    }
-  }
-}
-
 /** Register notification event producers (call once from main.ts). */
 export function initNotificationProducers(): void {
   if (initialized) return;
   initialized = true;
-
-  seedBoardTaskStatuses();
-  subscribeAllBoardChanges(handleBoardChange);
   subscribeSubAgentRuns(handleSubAgentRun);
 }
 
 /** Reset producer state (tests). */
 export function resetNotificationProducersForTests(): void {
   initialized = false;
-  taskStatusById.clear();
   notifiedSubAgentRuns.clear();
-  notifiedBoardComplete.clear();
 }
 
 /** Exported for unit tests. */
 export const __testHooks = {
-  handleBoardChange,
   handleSubAgentRun,
 };

@@ -4,8 +4,7 @@
  */
 
 import { normalizeModeId } from '../../chat/modes/types';
-import { getBoardGroupForChat } from '../../state/chat-groups';
-import { appendTaskRunHistory, getBoardExecutionMode, isBoardRunning, updateTask } from '../../state/orchestrate-board-store';
+import { isLeftoverBoardRunning, getBoardGroupForChat } from '../../state/chat-groups';
 import { resolveSelfHealMaxRounds } from '../../config/autopilot-meta';
 import { resolveSupervisionThresholds } from '../../config/supervision-thresholds';
 import { findChatById } from '../../state/sessions';
@@ -332,96 +331,19 @@ async function settleRunCompleted(
   settleRun(internals, 'completed', summary, null);
 }
 
-/** Sync linked board task when watchdog surfaces suspect/recovering/blocked. */
+/** V1 board store is gone — leftover session blobs are not mutated from the controller. */
 function syncBoardTaskOnLifecycle(
-  run: SubAgentRun,
-  phase: 'suspect' | 'recovering' | 'blocked',
-  error?: string | null,
-): void {
-  const taskId = run.boardTaskId;
-  const chatId = run.parentChatId;
-  if (!taskId || !chatId) return;
-  const chat = findChatById(chatId);
-  const group = chat ? getBoardGroupForChat(chat) : undefined;
-  if (!chat || !group?.orchestrateBoard) return;
+  _run: SubAgentRun,
+  _phase: 'suspect' | 'recovering' | 'blocked',
+  _error?: string | null,
+): void {}
 
-  if (phase === 'suspect' || phase === 'recovering') {
-    updateTask(
-      group,
-      taskId,
-      {
-        status: 'in_progress',
-        error: error ?? undefined,
-      },
-      chat,
-    );
-    return;
-  }
-
-  if (phase === 'blocked') {
-    updateTask(
-      group,
-      taskId,
-      {
-        status: 'blocked',
-        endedAt: Date.now(),
-        error: error ?? 'blocked',
-        assignedRunId: undefined,
-        lastRunId: run.runId,
-      },
-      chat,
-    );
-  }
-}
-
-/** Map terminal sub-agent status onto linked board task. */
+/** V1 board store is gone — leftover session blobs are not mutated from the controller. */
 function syncBoardTaskOnSettle(
-  run: SubAgentRun,
-  status: SubAgentStatus,
-  error: string | null,
-): void {
-  const taskId = run.boardTaskId;
-  const chatId = run.parentChatId;
-  if (!taskId || !chatId) return;
-  const chat = findChatById(chatId);
-  const group = chat ? getBoardGroupForChat(chat) : undefined;
-  if (!chat || !group?.orchestrateBoard) return;
-
-  const endedAt = Date.now();
-  const maxTurnFailure =
-    status === 'completed' && isMaxToolTurnFailure(run.summary, error);
-
-  const settlePatch = {
-    lastRunId: run.runId,
-    assignedRunId: undefined,
-  };
-
-  if (status === 'completed' && !maxTurnFailure) {
-    updateTask(group, taskId, {
-      endedAt,
-      ...settlePatch,
-    }, chat);
-    return;
-  }
-  if (status === 'failed' || status === 'cancelled' || maxTurnFailure) {
-    if (error === 'watchdog_tier1_restart') return;
-    const watchdogBlocked =
-      error === 'timeout' ||
-      (typeof error === 'string' && error.startsWith('watchdog_tier2:'));
-    updateTask(group, taskId, {
-      status: watchdogBlocked ? 'blocked' : 'failed',
-      endedAt,
-      error:
-        error ||
-        (maxTurnFailure
-          ? SUB_AGENT_MAX_TOOL_TURNS_ERROR
-          : status === 'cancelled'
-            ? 'cancelled'
-            : 'failed'),
-      ...settlePatch,
-    }, chat);
-  }
-}
+  _run: SubAgentRun,
+  _status: SubAgentStatus,
+  _error: string | null,
+): void {}
 
 /** Push a transcript snapshot to the run row and notify UI subscribers. */
 function publishRunMessages(run: SubAgentRun, messages: ApiMessage[]): void {
@@ -683,21 +605,6 @@ async function spawnSubAgentInternal(
   bindRunSupervision(runId, run);
 
   if (input.boardTaskId && input.parentChatId) {
-    const parentChat = findChatById(input.parentChatId);
-    const boardGroup = parentChat ? getBoardGroupForChat(parentChat) : undefined;
-    if (parentChat && boardGroup?.orchestrateBoard) {
-      updateTask(
-        boardGroup,
-        input.boardTaskId,
-        {
-          status: 'in_progress',
-          assignedRunId: runId,
-          startedAt: Date.now(),
-        },
-        parentChat,
-      );
-      appendTaskRunHistory(boardGroup, input.boardTaskId, runId, parentChat);
-    }
     void supersedeOlderAttempts(input.boardTaskId, run.attempt ?? 1);
   }
 
@@ -1210,16 +1117,14 @@ function tier2SurfaceSubAgent(runId: string, reason: string): void {
   cancelSubAgent(runId, message);
 }
 
-/** True when the sub-agent belongs to an actively-running AFK/auto board. */
+/** True when the sub-agent belongs to a leftover board whose status is Running. */
 function isRunAfkSupervised(run: SubAgentRun): boolean {
   if (!run.parentChatId) return false;
   const chat = findChatById(run.parentChatId);
   if (!chat) return false;
   const group = getBoardGroupForChat(chat);
   if (!group) return false;
-  const mode = getBoardExecutionMode(group.orchestrateBoard);
-  if (mode !== 'afk' && mode !== 'auto') return false;
-  return isBoardRunning(group);
+  return isLeftoverBoardRunning(group);
 }
 
 /** Bounded re-dispatch for mutating runs in AFK/auto boards instead of surfacing. */
@@ -1338,21 +1243,6 @@ async function finalizeReconciledCompleted(
   const taskId = record.boardTaskId;
   const chatId = record.parentChatId;
   if (!taskId || !chatId) return;
-  const chat = findChatById(chatId);
-  const group = chat ? getBoardGroupForChat(chat) : undefined;
-  if (!chat || !group?.orchestrateBoard) return;
-  updateTask(
-    group,
-    taskId,
-    {
-      status: 'complete',
-      endedAt: Date.now(),
-      assignedRunId: undefined,
-      lastRunId: record.runId,
-      error: undefined,
-    },
-    chat,
-  );
 }
 
 async function reconcileInterruptedRecord(record: PersistedRunRecord): Promise<void> {
@@ -1399,22 +1289,6 @@ async function reconcileInterruptedRecord(record: PersistedRunRecord): Promise<v
     });
     return;
   }
-
-  const chat = findChatById(chatId);
-  const group = chat ? getBoardGroupForChat(chat) : undefined;
-  if (!chat || !group?.orchestrateBoard) return;
-  updateTask(
-    group,
-    taskId,
-    {
-      status: 'blocked',
-      endedAt: Date.now(),
-      error: 'interrupted',
-      assignedRunId: undefined,
-      lastRunId: record.runId,
-    },
-    chat,
-  );
 }
 
 let controllerInitPromise: Promise<void> | null = null;

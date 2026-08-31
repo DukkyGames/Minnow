@@ -15,7 +15,7 @@ import {
 import { postChatCompletions } from '../providers/fetch-chat';
 import { getActiveProvider } from '../providers/store';
 import { runHeadlessToolBatch } from '../tools/headless-tool-batch';
-import { sumUsageSegments } from '../chat/orchestrate/stats-math';
+import { sumUsageSegments } from '../chat/plans/stats-math';
 import type { ApiMessage, ChatCompletionChunk, ToolCallAccumulator, Usage } from '../types';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import type { EvalTask } from './types';

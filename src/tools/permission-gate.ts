@@ -4,9 +4,6 @@
 
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
 import { findChatById, isGoalLoopActive } from '../state/sessions';
-import { getBoardGroupForChat } from '../state/chat-groups.ts';
-import { isBoardHandsOff } from '../state/board-execution-mode.ts';
-import { logInteractionRequired } from '../state/orchestrate-board-store.ts';
 import {
   getToolSecurityMetaCached,
   loadToolSecurityMeta,
@@ -36,23 +33,16 @@ import {
 export type { ToolApprovalContext };
 
 /**
- * Deny an attempted user-interaction seam during AFK execution. This check is
- * deliberately at execution time (in addition to catalog filtering), so a
- * stale or hallucinated tool call can never open UI.
+ * V1 leftover boards used to skip permission prompts when they were AFK.
+ * That distinction is gone (MIN-718): leftover Running is not a prompt policy.
+ * Kept as a named no-op so existing call sites stay compile-clean.
  */
 export function blockAfkInteractionAttempt(
-  context: ToolApprovalContext,
-  kind: 'question' | 'approval' | 'confirmation' | 'mode_switch' | 'other',
-  reason: string,
+  _context: ToolApprovalContext,
+  _kind: 'question' | 'approval' | 'confirmation' | 'mode_switch' | 'other',
+  _reason: string,
 ): ToolExecutionResult | null {
-  const chatId = context.chatId?.trim();
-  const chat = chatId ? findChatById(chatId) : undefined;
-  const group = chat ? getBoardGroupForChat(chat) : undefined;
-  if (!group || !isBoardHandsOff(group.orchestrateBoard)) return null;
-  logInteractionRequired(group, kind, reason, chat?.boardTaskId?.trim());
-  return {
-    content: `Error: AFK execution denied user interaction (${reason}).`,
-  };
+  return null;
 }
 
 const COMPANION_MUTATING_TOOLS = new Set([
