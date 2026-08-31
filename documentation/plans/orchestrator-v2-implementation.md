@@ -395,6 +395,33 @@ P5-B should wrap `server/browser-driver/index.js` as tools rather than reaching
 into the modules under it. Interaction (click/fill against snapshot uids) was
 deliberately left to P5-B, which owns the tool shape.
 
+**P5-B is built.** Eight tools, `browser_drive_{navigate,read_page,click,type,
+read_console,read_network,screenshot,resize}`, live in
+`server/tools/browser-driver-tools.js` and are registered in
+`SERVER_TOOL_HANDLERS` like any other server tool, so they arrive through P2-D's
+dispatch with its guards intact. Four things P5-C needs to know:
+
+- **The gate is `headlessToolIdsForRole()`** in `server/runner/tool-set.js`.
+  Only role `final` gets `FINAL_TESTER_TOOL_IDS`; every other role gets
+  `DEFAULT_HEADLESS_TOOL_IDS`, which contains no browser tool. Ask that function
+  rather than assembling a list — it is the one place the rule lives.
+- **The names are `browser_drive_*`, not `browser_*`.** The renderer's
+  `browser_navigate` / `browser_click` are Electron-bound and listed in
+  `RENDERER_ONLY_TOOL_IDS`; reusing those names would make a headless list look
+  renderer-poisoned. The two sets are asserted disjoint.
+- **Degradation is a string prefix, not an exception.**
+  `BROWSER_UNAVAILABLE_PREFIX` (no Chromium, or `browser.enabled = false`) and
+  `BROWSER_BLOCKED_PREFIX` (allowlist) are exported for the rung to match on.
+  A machine with no browser must skip the rung, never fail the run.
+- **Reads are deterministic by construction, and tested as such.** Console
+  timestamps, CDP request ids, and response timings are dropped; network rows
+  are sorted by (url, method, status). `browser_drive_screenshot` is evidence
+  for a human and nothing asserts on it. Session lifetime is one browser per
+  attempt root; call `closeBrowserToolSession()` when the rung ends.
+
+Not done here, and left to P5-C: the ladder rung itself, and any mention of the
+browser in `prompts/final/agent.full.md`.
+
 ### Phase 6 — Normal chat adopts the runner
 *Proves: one engine for all chat. Written now, scheduled after Phase 5.*
 

@@ -6,6 +6,13 @@
  * agent turns that must not require a renderer.
  *
  * Port vs exclude decisions: `server/runner/tool-set.md`.
+ *
+ * This module has no imports and must keep none: it is re-exported from the
+ * isomorphic `index.js` barrel, and the package guard
+ * (`test/runner/package-guard.test.mjs`) requires the shared runner's whole
+ * runtime closure to stay inside `server/runner/`. Names that live elsewhere
+ * are therefore duplicated here and pinned by a test, the same arrangement
+ * `RENDERER_ONLY_TOOL_IDS` already uses for the renderer catalog.
  */
 
 /**
@@ -123,6 +130,77 @@ export const DEFAULT_HEADLESS_TOOL_IDS = Object.freeze([
   'load_aesthetics_reference',
   'run_impeccable',
 ]);
+
+/**
+ * P5-B — the browser driver surface (MIN-720).
+ *
+ * These are **not** the `browser_*` ids above. Those run in the renderer
+ * against an Electron `WebContentsView`; these are server-side, headless, and
+ * dispatched through the ordinary registry. The names are disjoint on purpose.
+ *
+ * Keep in sync with `server/tools/browser-driver-tool-defs.js`, which owns the
+ * handlers' schemas. The P5-B tool-surface test pins the two lists together and
+ * fails if they ever diverge.
+ */
+export const BROWSER_TOOL_IDS = Object.freeze([
+  'browser_drive_navigate',
+  'browser_drive_read_page',
+  'browser_drive_click',
+  'browser_drive_type',
+  'browser_drive_read_console',
+  'browser_drive_read_network',
+  'browser_drive_screenshot',
+  'browser_drive_resize',
+]);
+
+const BROWSER_TOOL_SET = new Set(BROWSER_TOOL_IDS);
+
+/**
+ * The Final Tester's set: the headless default plus the browser.
+ *
+ * A Builder that can drive a browser will drive one, and per-task verification
+ * is not where a rendered page belongs — a Builder proving its own work in a
+ * browser is exactly the self-marking this pipeline separates roles to avoid.
+ * So the browser lives here and only here.
+ */
+export const FINAL_TESTER_TOOL_IDS = Object.freeze([
+  ...DEFAULT_HEADLESS_TOOL_IDS,
+  ...BROWSER_TOOL_IDS,
+]);
+
+/**
+ * The single gate. Every caller that builds a role's tool list — the runner
+ * effector today, P5-C's ladder rung next — asks here rather than assembling
+ * its own array, so "browser tools are Final-Tester-only" is one fact in one
+ * place instead of a convention.
+ *
+ * @param {string} role
+ * @returns {readonly string[]}
+ */
+export function headlessToolIdsForRole(role) {
+  return role === 'final' ? FINAL_TESTER_TOOL_IDS : DEFAULT_HEADLESS_TOOL_IDS;
+}
+
+/**
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function isBrowserDriverTool(name) {
+  return BROWSER_TOOL_SET.has(name);
+}
+
+/**
+ * Browser ids present in `ids`. Empty is the Builder/Tester invariant.
+ * @param {Iterable<string>} ids
+ * @returns {string[]}
+ */
+export function browserToolsIn(ids) {
+  const hits = [];
+  for (const id of ids) {
+    if (BROWSER_TOOL_SET.has(id)) hits.push(id);
+  }
+  return hits;
+}
 
 /**
  * @param {string} name

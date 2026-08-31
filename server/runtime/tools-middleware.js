@@ -90,6 +90,7 @@ import {
   toolCreateWordDocument,
 } from '../tools/create-document.js';
 import { toolBoardProvisionInfra } from '../workspace/board-infra-provision.js';
+import { BROWSER_DRIVER_TOOL_HANDLERS } from '../tools/browser-driver-tools.js';
 import {
   toolFetchWebContent,
   toolRagWebContent,
@@ -1482,6 +1483,11 @@ const SERVER_TOOL_HANDLERS = {
   summarize_inbox: toolSummarizeInbox,
   generate_reply_variants: toolGenerateReplyVariants,
   email_action: toolEmailAction,
+  // P5-B: the browser driver surface (MIN-720). Registered here and nowhere
+  // else, so the Final Tester's browser calls take the same dispatch, guards,
+  // and output path as `grep` — never a side channel. Which agents may *call*
+  // them is a separate question, answered by `server/runner/tool-set.js`.
+  ...BROWSER_DRIVER_TOOL_HANDLERS,
 };
 
 /**

@@ -23,10 +23,11 @@ import { randomUUID } from 'node:crypto';
 import {
   createInProcessToolDispatch,
   createMemoryTranscriptStore,
-  DEFAULT_HEADLESS_TOOL_IDS,
+  headlessToolIdsForRole,
   postChatCompletionsInProcess,
   runTurn as defaultRunTurn,
 } from '../runner/node.js';
+import { BROWSER_DRIVER_TOOL_DEFINITIONS_BY_NAME } from '../tools/browser-driver-tool-defs.js';
 import { cancel as cancelGeneration, listGenerationStates } from '../generations/store.js';
 import { resolveLibraryAttemptBinding } from '../models/library-binding.js';
 import { getProvider } from '../providers/store.js';
@@ -131,21 +132,29 @@ function createServerRunnerDeps(postChatCompletions) {
 }
 
 /**
- * OpenAI function stubs for the headless subset. Full parameter schemas live
+ * OpenAI function stubs for a role's tool subset. Full parameter schemas live
  * in the renderer catalog (`src/tools/definitions.ts`); the server must not
  * import that TS module. Names are what the allow-list and dispatch key on.
  *
+ * P5-B: the ids come from `headlessToolIdsForRole`, which is where "browser
+ * tools are Final-Tester-only" is decided. Browser tools carry real schemas
+ * because they have no renderer catalog entry to fall back on.
+ *
+ * @param {string} role
  * @returns {import('../runner/run-turn').TurnToolDefinition[]}
  */
-function headlessToolDefs() {
-  return DEFAULT_HEADLESS_TOOL_IDS.map((name) => ({
-    type: 'function',
-    function: {
-      name,
-      description: name,
-      parameters: { type: 'object', additionalProperties: true },
-    },
-  }));
+function headlessToolDefs(role) {
+  return headlessToolIdsForRole(role).map(
+    (name) =>
+      BROWSER_DRIVER_TOOL_DEFINITIONS_BY_NAME[name] ?? {
+        type: 'function',
+        function: {
+          name,
+          description: name,
+          parameters: { type: 'object', additionalProperties: true },
+        },
+      },
+  );
 }
 
 /**
@@ -670,10 +679,10 @@ export function createRunnerEffector(options = {}) {
         await loadRolePrompt(desired.role, promptVariant),
         { cwd: attemptCwd },
       );
-      const tools = [...headlessToolDefs(), reportToolFor(desired.role)];
+      const tools = [...headlessToolDefs(desired.role), reportToolFor(desired.role)];
       const dispatch = createInProcessToolDispatch({
         cwd: attemptCwd,
-        allowedToolNames: DEFAULT_HEADLESS_TOOL_IDS,
+        allowedToolNames: headlessToolIdsForRole(desired.role),
       });
 
       const controller = new AbortController();

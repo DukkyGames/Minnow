@@ -27,8 +27,13 @@ export {
   partitionToolCalls,
 } from './parallel-tool-policy.js';
 export {
+  BROWSER_TOOL_IDS,
   DEFAULT_HEADLESS_TOOL_IDS,
+  FINAL_TESTER_TOOL_IDS,
   RENDERER_ONLY_TOOL_IDS,
+  browserToolsIn,
+  headlessToolIdsForRole,
+  isBrowserDriverTool,
   isRendererOnlyTool,
   rendererOnlyToolsIn,
 } from './tool-set.js';
