@@ -233,7 +233,7 @@ export const DEFAULT_ASK_TIMEOUT_MS: number;
 export const ASK_QUESTION_UNAVAILABLE_ERROR: string;
 export const ASK_QUESTION_TIMEOUT_ERROR: string;
 
-export { buildOpeningMessages } from './opening-messages';
+export { buildOpeningMessages, buildOpeningTranscript } from './opening-messages';
 
 /**
  * Apply ask-capability injection then optionally ensure the report tool.

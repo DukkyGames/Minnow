@@ -15,6 +15,7 @@ export {
   ASK_QUESTION_TIMEOUT_ERROR,
   resolveTurnTools,
   buildOpeningMessages,
+  buildOpeningTranscript,
 } from './run-turn';
 export type {
   TurnResult,

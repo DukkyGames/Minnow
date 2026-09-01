@@ -32,7 +32,7 @@
 
 import { sumUsageSegments } from './stats-math.js';
 import { createSubAgentRunner } from './sub-agent-runner.js';
-import { buildOpeningMessages } from './opening-messages.js';
+import { buildOpeningTranscript } from './opening-messages.js';
 import {
   ASK_QUESTION_TIMEOUT_ERROR,
   ASK_QUESTION_TOOL_NAME,
@@ -270,7 +270,7 @@ export function resolveTurnTools(tools, options = {}) {
   return withReportTool(withAsk, injection.reportToolName);
 }
 
-export { buildOpeningMessages } from './opening-messages.js';
+export { buildOpeningMessages, buildOpeningTranscript } from './opening-messages.js';
 
 /**
  * @param {AbortSignal[]} signals
@@ -401,29 +401,28 @@ function emit(onEvent, event) {
  * Persist only the new tail. The inner loop owns the in-memory transcript;
  * this store is the durable seam for callers (and P2-F).
  *
- * Isolated turns persist every inner row (including the leading system).
- * Continue turns skip that leading system so we suffix product history
- * instead of splicing `[system, user(seed)]` into a live chat.
+ * Isolated turns persist every inner row (including the leading system) and
+ * re-derive the anchor from the store each time, so appending is self-aligning.
+ *
+ * Continue turns pass `from` — `buildOpeningTranscript().persistFrom`, the
+ * index of the first opening row the store does not already hold. That is the
+ * only honest anchor: the opening is not `store.load().messages.length + 1`
+ * whenever the fold collapses a leading assistant greeting into the system row
+ * (expert chats), nor when the opening appends a seed row the store lacks.
+ * Deriving it from `have` drops this turn's first rows in the first case and
+ * skips the seed row in the second.
  *
  * @param {import('./transcript-store').TranscriptStore} store
  * @param {string} chatId
  * @param {unknown[]} messages
- * @param {{ skipLeadingSystem?: boolean }} [opts]
+ * @param {{ from?: number }} [opts]
  */
 function persistNewMessages(store, chatId, messages, opts = {}) {
   if (!store || typeof store.append !== 'function') return;
-  const have = store.load(chatId)?.messages?.length ?? 0;
-  // Inner loop always prepends systemPrompt. Chat transcripts do not store it.
-  const offset =
-    opts.skipLeadingSystem &&
-    Array.isArray(messages) &&
-    messages[0] &&
-    typeof messages[0] === 'object' &&
-    /** @type {{ role?: string }} */ (messages[0]).role === 'system'
-      ? 1
-      : 0;
-  const aligned = have + offset;
-  if (!Array.isArray(messages) || messages.length <= aligned) return;
+  if (!Array.isArray(messages)) return;
+  const aligned =
+    typeof opts.from === 'number' ? opts.from : (store.load(chatId)?.messages?.length ?? 0);
+  if (messages.length <= aligned) return;
   for (let i = aligned; i < messages.length; i += 1) {
     store.append(chatId, messages[i]);
   }
@@ -475,7 +474,8 @@ export async function runTurn(options) {
   } else if (options.seedKind === 'continue') {
     priorMessages = transcript.load(chatId)?.messages ?? [];
   }
-  const skipLeadingSystemPersist = priorMessages !== undefined;
+  // Continue turns suffix an existing product transcript; isolated turns own theirs.
+  const isContinueTurn = priorMessages !== undefined;
   // Phase 6 finding: optional `systemPrompt` so a caller can inject Builder /
   // Tester instructions without the runner knowing what a role is. Default
   // stays domain-free. When the report tool is omitted, do not tell the model
@@ -486,6 +486,16 @@ export async function runTurn(options) {
       : injection.inject
         ? 'When you have a result, call the report tool. Do not put the outcome only in assistant text.'
         : 'You are a helpful assistant.';
+
+  // Continue-mode persist anchor. `buildOpeningTranscript` is pure and the
+  // inner runner opens with exactly these arguments (`task: seed`,
+  // `systemPrompt`, `priorMessages`), so recomputing it here yields the same
+  // boundary the loop started from. It beats `have + 1`, which the fold (rows
+  // removed) and the appended seed row (a row added) both invalidate.
+  const continuePersistFrom =
+    priorMessages === undefined
+      ? 0
+      : buildOpeningTranscript(systemPrompt, seed, priorMessages).persistFrom;
 
   /** @type {import('./run-turn').TurnResult | null} */
   let captured = null;
@@ -718,7 +728,7 @@ export async function runTurn(options) {
         // Isolated turns persist live (board default). Continue turns wait
         // until the loop settles so streaming partials are not appended as
         // extra assistant rows on the product transcript.
-        if (!skipLeadingSystemPersist) {
+        if (!isContinueTurn) {
           persistNewMessages(transcript, chatId, messages);
         }
         if (!Array.isArray(messages) || messages.length === 0) return;
@@ -764,9 +774,9 @@ export async function runTurn(options) {
     }
     return withUsage({ outcome: 'crashed', error: errorMessage(err) });
   } finally {
-    if (skipLeadingSystemPersist && lastSnapshot) {
+    if (isContinueTurn && lastSnapshot) {
       persistNewMessages(transcript, chatId, lastSnapshot, {
-        skipLeadingSystem: true,
+        from: continuePersistFrom,
       });
     }
     if (wallTimer) clearTimeout(wallTimer);

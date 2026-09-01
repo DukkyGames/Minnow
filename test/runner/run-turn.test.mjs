@@ -874,6 +874,96 @@ describe('P6-C runTurn interface (MIN-725)', () => {
     assert.equal(persisted.filter((m) => m.role === 'user' && m.content === 'second').length, 1);
   });
 
+  /**
+   * Expert chats seed `chat.history` with an authored assistant greeting
+   * (`createExpertChatFromSeed`), so a continue turn on one used to open the
+   * conversation on an assistant row. `buildOpeningTranscript` folds that
+   * preamble into the system message — and reports the `persistFrom` boundary,
+   * because the folded row makes the opening shorter than `prior.length + 1`.
+   */
+  test(
+    'expert chat: user-first body, and the reply is persisted exactly once',
+    { timeout: 20_000 },
+    async () => {
+      const greeting = 'Hi — I am **Security reviewer**. What are we looking at?';
+      const store = createMemoryTranscriptStore();
+      // What an expert chat holds on its second send: the greeting, then the
+      // user row chat pushed before calling runTurn.
+      store.append(CHAT_UUID, { role: 'assistant', content: greeting });
+      store.append(CHAT_UUID, { role: 'user', content: 'audit this' });
+
+      await withFake([{ emit: proseSseChunks('reply') }], async (baseUrl, fake) => {
+        const result = await runTurn({
+          chatId: CHAT_UUID,
+          seed: 'audit this',
+          seedKind: 'continue',
+          tools: [],
+          model: { providerId: 'local-fake', id: 'fake-model' },
+          transcript: store,
+          deps: stubDeps(baseUrl),
+          injectReportTool: false,
+          nudgeToolUse: false,
+          finalizeStructuredOutcome: false,
+          systemPrompt: 'chat system',
+        });
+        assert.equal(result.outcome, 'no_report');
+
+        const completion = fake.requests.find((row) => row.pathname === '/v1/chat/completions');
+        const sent = completion?.body?.messages ?? [];
+        assert.equal(sent[0]?.role, 'system');
+        assert.match(sent[0].content, /chat system/);
+        assert.match(sent[0].content, /already greeted the user in the UI/);
+        assert.match(sent[0].content, /Security reviewer/, 'greeting reaches the model');
+        assert.deepEqual(
+          sent.slice(1).map((m) => `${m.role}:${m.content}`),
+          ['user:audit this'],
+          'no assistant row before the first user turn',
+        );
+      });
+
+      // The fold is send-only: the greeting stays in product history, the user
+      // row is not duplicated, and this turn's reply lands exactly once.
+      // Anchoring persist on `have + 1` instead of `persistFrom` drops it.
+      assert.deepEqual(
+        (store.load(CHAT_UUID)?.messages ?? []).map((m) => `${m.role}:${m.content}`),
+        [`assistant:${greeting}`, 'user:audit this', 'assistant:reply'],
+      );
+    },
+  );
+
+  test(
+    'continue: a seed already stored is not persisted a second time',
+    { timeout: 20_000 },
+    async () => {
+      const store = createMemoryTranscriptStore();
+      store.append(CHAT_UUID, { role: 'user', content: 'first' });
+      store.append(CHAT_UUID, { role: 'assistant', content: 'hi' });
+      // Chat pushes the user row before the send; the opening must not re-add it.
+      store.append(CHAT_UUID, { role: 'user', content: 'second' });
+
+      await withFake([{ emit: proseSseChunks('second reply') }], async (baseUrl) => {
+        await runTurn({
+          chatId: CHAT_UUID,
+          seed: 'second',
+          seedKind: 'continue',
+          tools: [],
+          model: { providerId: 'local-fake', id: 'fake-model' },
+          transcript: store,
+          deps: stubDeps(baseUrl),
+          injectReportTool: false,
+          nudgeToolUse: false,
+          finalizeStructuredOutcome: false,
+          systemPrompt: 'chat system',
+        });
+      });
+
+      assert.deepEqual(
+        (store.load(CHAT_UUID)?.messages ?? []).map((m) => `${m.role}:${m.content}`),
+        ['user:first', 'assistant:hi', 'user:second', 'assistant:second reply'],
+      );
+    },
+  );
+
   test('isolated seed (board default) still starts [system, user] with no prior', { timeout: 20_000 }, async () => {
     const store = createMemoryTranscriptStore();
     await withFake([{ emit: proseSseChunks('Done.') }], async (baseUrl, fake) => {
