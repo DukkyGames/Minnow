@@ -11,6 +11,7 @@ import {
 import { sessionState } from '../state/sessions';
 import type { Chat, ChatGroup, LeftoverBoardTask } from '../types';
 import { getWorkspacePath } from '../state/workspace';
+import { scheduleAnimationFrame } from '../lib/schedule-animation-frame';
 import {
   applyChatItemDotClasses,
   getChatItemDotContext,
@@ -289,14 +290,15 @@ export function buildOrchestratePageShell(options: {
   // Auto-collapse rail when the page is narrow (Super Plan pattern).
   if (typeof ResizeObserver === 'function') {
     let wasNarrow: boolean | null = null;
-    const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 0;
+    const applyNarrow = scheduleAnimationFrame(() => {
+      const width = page.clientWidth;
       if (width <= 0) return;
       const narrow = width < OB_RAIL_NARROW_MAX_PX;
       if (narrow === wasNarrow) return;
       wasNarrow = narrow;
       syncOrchestratePageRailVisibility(page);
     });
+    const observer = new ResizeObserver(() => applyNarrow());
     observer.observe(page);
     (page as HTMLElement & { __obRailObserver?: ResizeObserver }).__obRailObserver =
       observer;

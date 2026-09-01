@@ -5,6 +5,7 @@
  * guest document.
  */
 
+import { scheduleAnimationFrame } from '../lib/schedule-animation-frame';
 import type { CapturedRegion } from './region-capture';
 import { boundingRectOfShape, type CommentPin, type DesignShape } from './shape-model';
 
@@ -124,11 +125,6 @@ export function createAnnotationOverlay(
   let draftRect: SVGRectElement | null = null;
   const pinnedCaptures = new Map<string, CapturedRegion>();
 
-  const resizeObserver = new ResizeObserver(() => {
-    syncViewBox();
-  });
-  resizeObserver.observe(host);
-
   function syncViewBox(): void {
     const rect = host.getBoundingClientRect();
     const w = Math.max(1, rect.width);
@@ -137,6 +133,11 @@ export function createAnnotationOverlay(
     svg.setAttribute('width', String(w));
     svg.setAttribute('height', String(h));
   }
+
+  const resizeObserver = new ResizeObserver(scheduleAnimationFrame(() => {
+    syncViewBox();
+  }));
+  resizeObserver.observe(host);
 
   function hostContentScale(): number {
     const rect = host.getBoundingClientRect();

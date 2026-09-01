@@ -10,6 +10,7 @@
  * contract every instance shares with window.minnow.preview.
  */
 
+import { scheduleAnimationFrame } from '../lib/schedule-animation-frame';
 import type { MinnowPreviewBounds } from '../electron';
 
 export function usesElectronPreview(): boolean {
@@ -66,7 +67,7 @@ export function bindPreviewInstanceToElement(instanceId: string, element: HTMLEl
   const bound: BoundInstance = { element, observer: null, visible: true };
   boundInstances.set(instanceId, bound);
 
-  const observer = new ResizeObserver(() => syncInstance(instanceId));
+  const observer = new ResizeObserver(scheduleAnimationFrame(() => syncInstance(instanceId)));
   observer.observe(element);
   bound.observer = observer;
 
