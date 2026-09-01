@@ -22,6 +22,10 @@ import { getMainTurnActivity } from '../../src/chat/main-turn-activity.ts';
 import { getChatAbort, setChatAbort, setStreaming } from '../../src/app-state.ts';
 import { DEFAULT_TITLES_CONFIG, setTitlesConfigForTests } from '../../src/config/titles-meta.ts';
 import {
+  resetSamplerMetaCache,
+  setSamplerMetaForTests,
+} from '../../src/config/sampler-meta.ts';
+import {
   appendIsolatedProductRows,
   maybeRunChatTurnViaRunner,
   resetRunTurnForTests,
@@ -84,6 +88,7 @@ describe('P6-D runTurn chat adapter (MIN-726)', () => {
     flushScheduledSessionSaveForTests();
     setSessionStateForTests(null);
     setTitlesConfigForTests({ ...DEFAULT_TITLES_CONFIG, enabled: false });
+    resetSamplerMetaCache();
   });
 
   test('simple turn always invokes runTurn (no dual-path flag)', async () => {
@@ -146,6 +151,38 @@ describe('P6-D runTurn chat adapter (MIN-726)', () => {
     const area = document.getElementById('chatArea');
     assert.ok(area?.querySelector('.msg-bubble'), 'delta must paint the assistant bubble');
     assert.ok(area?.querySelector('.tool-call-msg'), 'tool_call must paint a tool row');
+  });
+
+  test('main chat passes Settings sampler max tokens into runTurn (not the 2048 sub-agent fallback)', async () => {
+    setTitlesConfigForTests({ ...DEFAULT_TITLES_CONFIG, enabled: false });
+    installChatDom();
+    // Distinctive ceiling so a missing model.sampler (2048) or the shipped
+    // default (32768) cannot pass this assertion by accident.
+    setSamplerMetaForTests({ temperature: 1, maxTokens: 131072 });
+    const calls: RunTurnOptions[] = [];
+    setRunTurnForTests(async (options) => {
+      calls.push(options);
+      options.onEvent?.({ type: 'delta', text: 'ok' });
+      return { outcome: 'no_report' } satisfies TurnResult;
+    });
+
+    const chat = makeChat();
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    const { runChatTurn } = await import('../../src/chat/run-turn-chat.ts');
+    await runChatTurn({
+      chat,
+      ...SIMPLE_TURN,
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.model.sampler?.maxTokens, 131072);
+    assert.ok(calls[0]?.model.sampler?.preset);
   });
 
   test('leftover exclusive shapes still invoke runTurn (attachments, Super Plan, resume, skill)', async () => {

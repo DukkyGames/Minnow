@@ -1235,6 +1235,28 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     // thinking. Fetch once so a later caller overlay can use it if needed.
     await fetchReplayPriorReasoningEnabled().catch(() => false);
 
+    // Resolve sampler on every send, including resume. `runTurn` substitutes
+    // `model.sampler` for `deps.resolveSamplerPreset`; omitting it drops the
+    // inner loop onto the sub-agent 2048-token fallback, so Settings → Sampler
+    // max tokens never reached the provider and replies finished with
+    // finish_reason: length ("Response truncated").
+    const globalSampler = mergeGlobalSamplerWithLibraryModel(
+      readGlobalSamplerForSend(
+        replaySnapshot
+          ? {
+              temperature: replaySnapshot.temperature,
+              maxTokens: replaySnapshot.maxTokens,
+            }
+          : undefined,
+      ),
+      sendModelId,
+    );
+    const resolvedSampler = resolveSamplerPreset({
+      kind: 'work-agent',
+      agentKey: activeWorkAgent?.id ?? null,
+      global: globalSampler,
+    });
+
     if (!resumeGenerationId) {
       const forkHistoryIndex = resolveForkHistoryIndex(chat, pushUser);
       const userRow = chat.history[forkHistoryIndex];
@@ -1247,22 +1269,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
       snapTools = applyUiDesignerToolFilter(snapTools, uiDesignerCtx);
       const enabledToolNames = snapTools.map((t) => t.function.name);
-      const globalSampler = mergeGlobalSamplerWithLibraryModel(
-        readGlobalSamplerForSend(
-          replaySnapshot
-            ? {
-                temperature: replaySnapshot.temperature,
-                maxTokens: replaySnapshot.maxTokens,
-              }
-            : undefined,
-        ),
-        sendModelId,
-      );
-      const resolvedSampler = resolveSamplerPreset({
-        kind: 'work-agent',
-        agentKey: activeWorkAgent?.id ?? null,
-        global: globalSampler,
-      });
       const resolvedThinking = replaySnapshot
         ? { mode: replaySnapshot.thinkingMode, sourceLabel: 'replay' }
         : resolveThinkingMode({
@@ -1417,6 +1423,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       model: {
         providerId: provider.id,
         id: sendModelId,
+        // Wrapped `{ preset, maxTokens }` — same shape the sub-agent effector
+        // uses. A flat sampler row would crash `applySamplerToBody`.
+        sampler: resolvedSampler,
         thinking:
           chat.thinkingMode === 'off' || chat.thinkingMode === 'on'
             ? { mode: chat.thinkingMode }
