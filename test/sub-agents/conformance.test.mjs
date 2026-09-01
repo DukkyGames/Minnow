@@ -68,6 +68,7 @@ function stamp(events, event) {
 function checkStartGate(state, desired, caps) {
   const open = [];
   for (const run of state.runs.values()) {
+    if (run.phase === 'cancelling') continue;
     if (run.attempts.some((a) => !a.ended)) open.push(run);
   }
   const openIds = new Set(open.map((r) => r.runId));
@@ -118,7 +119,7 @@ function checkStartGate(state, desired, caps) {
     if (d.role !== SUB_AGENT_ROLE) return `role: ${d.role} is not ${SUB_AGENT_ROLE}`;
     const run = state.runs.get(d.taskId);
     if (!run) return `unknown run ${d.taskId}`;
-    if (run.phase === 'passed' || run.phase === 'abandoned' || run.phase === 'cancelled') {
+    if (run.phase === 'passed' || run.phase === 'abandoned' || run.phase === 'cancelled' || run.phase === 'cancelling') {
       return `terminal: plan() desired ${d.taskId} in phase ${run.phase}`;
     }
   }

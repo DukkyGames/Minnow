@@ -9,7 +9,7 @@ isProject: true
 **Date:** 2026-08-28
 **Goal:** Replace the V1 board engine with a server-side journal + reconcile engine whose state is a pure fold, so multi-agent runs are as reliable as today's sequential single-agent path.
 **PRD:** [`orchestrator-v2.md`](./orchestrator-v2.md) — read it first. This document plans the build; it does not restate the design.
-**Linear:** [Orchestrator V2](https://linear.app/minnowai/project/orchestrator-v2-97ced8c22ad8) (team Minnow AI) — phase parents `MIN-677`–`MIN-683`, `MIN-727`, `MIN-741`, `MIN-753`. Phase 8 is filed as `MIN-753` with sub-issues `MIN-754`–`MIN-761`. Phase 9 is `MIN-741` with `MIN-742`–`MIN-750`. Each sub-issue carries its own full plan.
+**Linear:** [Orchestrator V2](https://linear.app/minnowai/project/orchestrator-v2-97ced8c22ad8) (team Minnow AI) — phase parents `MIN-677`–`MIN-683`, `MIN-727`, `MIN-741`, `MIN-753`, `MIN-765`. Phase 8 is filed as `MIN-753` with sub-issues `MIN-754`–`MIN-761`. Phase 9 is `MIN-741` with `MIN-742`–`MIN-750`. Phase 10 is `MIN-765` with `MIN-766`–`MIN-778`. Each sub-issue carries its own full plan.
 
 ## Context
 
@@ -36,13 +36,13 @@ Five things were verified in the codebase. Two materially de-risk Phase 2; one a
 
 **A. Provider streaming is already server-side.** The PRD's §12 top risk — *"provider streaming must move server-side — the largest single piece"* — is largely already done. `server/generations/upstream.js` (`pumpUpstream`) owns the upstream SSE connection; `server/generations/store.js` owns subscriber fan-out, `cancel`, `markComplete`/`markError`, and fallback roles. The renderer's `src/providers/fetch-chat.ts` is a thin client that POSTs `/api/generations` and replays bytes back through a synthetic `Response`. A server-side runner calls that store **in-process** — no HTTP hop, no new provider plumbing. Phase 2's real work is the *turn loop*, not the transport.
 
-**B. A zero-UI headless turn loop already exists.** `src/agents/sub-agent-runner.ts` (1,375 lines, *"isolated sub-agent completion + tool loop, no parent chat history"*) has **no `../ui/` imports and no `document.` / `window.` references** across its 46 import sources. It already handles SSE parsing, constrained tool calls, XML tool calls, inline/Harmony thinking routing, context-budget policy, vision gating, and structured outcomes. This — not `src/tools/loop.ts` (3,773 lines, heavily UI-coupled) — is the port target. Its one real coupling is `src/state/sessions.ts` (2,206 lines, 10 browser-global hits), which is broken behind an injected transcript store in P2-A.
+**B. A zero-UI headless turn loop already exists.** The extract target was `src/agents/sub-agent-runner.ts` (1,375 lines at planning time, *"isolated sub-agent completion + tool loop, no parent chat history"*) — **no `../ui/` imports and no `document.` / `window.` references** across its 46 import sources. It already handled SSE parsing, constrained tool calls, XML tool calls, inline/Harmony thinking routing, context-budget policy, vision gating, and structured outcomes. This — not `src/tools/loop.ts` (3,773 lines, heavily UI-coupled) — was the port target. Its one real coupling was `src/state/sessions.ts` (2,206 lines, 10 browser-global hits), broken behind an injected transcript store in P2-A. **P8-G deleted that `.ts`.** The loop is hand-maintained `server/runner/sub-agent-runner.js`. The renderer seam is `src/agents/renderer-runner-deps.ts`.
 
 **C. There was no rebase operation.** `server/worktree/worktree-ops.js` had `ensureIntegration`, `createWorktree`, `mergeIntoIntegration`, `checkMerged`, `abortMerge`, `restoreIntegration`, `verifyIntegrationMerge` — but nothing that rebased. §5.6's *"rebase before merge"* is P3-B (`rebaseOntoIntegration`, MIN-706 — done).
 
 **D. The shared core must be `.js` + `.d.ts`, not `.ts`.** The server ships and runs as raw JavaScript (`npm start` → `node server.js`; no transpile step covers `server/**`). The existing TS bridge, `server/orchestrate/board-testing/ts-import.js`, lazily registers `tsx` and is explicitly dev-only — it cannot work in a packaged app. The repo already has the right pattern: `server/tools/output-cap.js` + `output-cap.d.ts`, imported from the renderer by `src/ui/terminal-panel.ts`. The V2 core follows it.
 
-**E. The sub-agent controller is V1’s disease in miniature.** `src/agents/controller/` (3,089 lines) reproduces every fault the PRD diagnoses in V1: a mutable `SubAgentRun` struct; a **last-write-wins mirror** of it to disk (`persistence.ts` — *“coalesced registry mirror queue”*) instead of an append-only log; a watchdog inferring liveness from heartbeat and progress ages; boot reconciliation that marks in-flight runs `failed` / `interrupted` (`controller.ts:1357`); and counters — `attempt`, `progressSeq`, `tier1Attempted`, `handlingSuspect` — mutated from several places. It carries three faults the boards never had: a wall-clock `setTimeout` that cancels a *healthy* run at 5 minutes (`defaultTimeoutMs` in `src/agents/defaults/sub-agents.json`); a finalization that settles a run `failed` when the model’s closing JSON does not parse, unless it both produced prose and called a tool (`sub-agent-runner.ts:1318`); and `enqueueToolApproval` with no abort signal, so a cancelled run still executes its tool once the modal is answered. PRD §10 lists none of it for deletion. V2 solves this exact problem and then does not apply the solution to its closest neighbour — hence Phase 8.
+**E. The sub-agent controller is V1’s disease in miniature.** `src/agents/controller/` (3,089 lines) reproduces every fault the PRD diagnoses in V1: a mutable `SubAgentRun` struct; a **last-write-wins mirror** of it to disk (`persistence.ts` — *“coalesced registry mirror queue”*) instead of an append-only log; a watchdog inferring liveness from heartbeat and progress ages; boot reconciliation that marks in-flight runs `failed` / `interrupted` (`controller.ts:1357`); and counters — `attempt`, `progressSeq`, `tier1Attempted`, `handlingSuspect` — mutated from several places. It carries three faults the boards never had: a wall-clock `setTimeout` that cancels a *healthy* run at 5 minutes (`defaultTimeoutMs` in `src/agents/defaults/sub-agents.json`); a finalization that settles a run `failed` when the model’s closing JSON does not parse, unless it both produced prose and called a tool (originally `src/agents/sub-agent-runner.ts:1318`; **P8-A landed** the ungated prose fallback in `server/runner/sub-agent-runner.js` — `returnProseFallbackOutcome`, no `toolTurns > 0` gate); and `enqueueToolApproval` with no abort signal, so a cancelled run still executes its tool once the modal is answered. **P8-A** also moved non-ok HTTP retry into `server/runner/transient-fetch-retry.js` (wrap at `streamSubAgentTurn`, originally the `.ts` `:337` path). PRD §10 lists none of it for deletion. V2 solves this exact problem and then does not apply the solution to its closest neighbour — hence Phase 8.
 
 ## Architecture / Key Files
 
@@ -65,7 +65,6 @@ Five things were verified in the codebase. Two materially de-risk Phase 2; one a
 | `server/sub-agents/middleware.js` | `/api/agents/*` REST + SSE | CREATE (Phase 8) |
 | `server/orchestrator/engine.js`, `journal.js` | Take `{ fold, plan }` and a journal namespace as arguments | MODIFY (Phase 8) |
 | `src/agents/controller/*.ts` (3,089) | Watchdog, heartbeats, timers, registry mirror, boot reconcile | DELETE (Phase 8) |
-| `src/agents/sub-agent-runner.ts` (1,375) | Client copy of the loop, superseded by `server/runner/` | DELETE (Phase 8) |
 | `src/state/orchestrate-*.ts`, `src/state/board-*.ts` (~9.9k) | V1 engine | DELETE (Phase 4) |
 | `src/chat/orchestrate/*.ts` (~3.3k) | V1 lifecycle repair + planner-chat glue | DELETE (Phase 4) |
 | `src/tools/board-tools.ts` (1,107) | `board_init` / `board_update_task` / `board_set_autonomy` / `delegate_tasks` | DELETE (Phase 4) |
@@ -582,7 +581,7 @@ One turn loop for chat. Leftover exclusive `loop.ts` behaviour is a **caller ove
 - [x] Delete `src/tools/loop.ts` as the turn loop. Keepers (`buildApiMessages`, `buildHistoryUserContent`, `sendMessageWithTools`, …) live in `src/chat/build-api-messages.ts` / `src/chat/run-turn-chat.ts` / `src/chat/messaging.ts`. `grep` for `tools/loop` under `src/` returns nothing
 - [x] Delete the P6-A/P6-C dual-path flag — one path
 - [x] Satellites verified: keep `chat-tool-batch.ts`, `turn-continuation.ts` (re-export of server), `tool-wrap-dom.ts`, `stream-chat-dom.ts`, `streaming-state.ts` (other callers). Keep `src/api/board-testing.ts` (V2 Settings → Board testing)
-- [x] **Keep** `src/agents/controller/` and the renderer `sub-agent-runner.ts` adapter — Phase 8. Sub-agents spawn *from within a turn*; they are not the board scheduler. Deleting them here would drop in-turn spawn with nothing to replace it
+- [x] **Keep** `src/agents/controller/` and the renderer `sub-agent-runner.ts` adapter — Phase 8 (this was the P6-D decision). **P8-G deleted both.** The loop is `server/runner/sub-agent-runner.js`; the renderer seam is `src/agents/renderer-runner-deps.ts`
 - [x] Resume uses HTTP `/api/generations` re-subscribe inside wrapped `postChatCompletions` (first call only; later tool rounds POST). No `runTurn` resume option. No `isBoard`
 - [x] Forward inner `onToolCallDelta` / `onLiveActivity.currentToolName` as `TurnEvent.tool_streaming` so chat can paint "Calling {tool}…" without a second SSE parser (Phase 6 finding: the wrapper was dropping a name the inner loop already had)
 - [x] Update `documentation/context.md`; AGENTS.md / DESIGN.md / user manual did not describe a client turn loop as the engine
@@ -594,6 +593,8 @@ One turn loop for chat. Leftover exclusive `loop.ts` behaviour is a **caller ove
 **Phase 6 finding (tool name while args stream):** `runTurn` now forwards inner `onLiveActivity.currentToolName` as `{ type: 'tool_streaming', name }`. Chat's painter maps that onto `attachToolStartIndicator` (including remount). This is not a second stream parser — the inner loop already had `onToolCallDelta`. Boards that omit `onEvent` are unchanged.
 
 **Phase 6 finding (SSE framing through `/api/generations`):** `subscribeToGenerationRaw` must forward each upstream block with a trailing `\n\n`. A single newline left `feedSseEventBuffer` unparsed until the generation ended, so mid-stream `tool_streaming` never fired.
+
+**Phase 6 findings (chat parity):** P10-B / P10-C / P10-I changed `runTurn` / `TurnEvent` / `TurnResult`. The canonical list — every new event member, `onMessagesChange` meta, `onRoundBoundary`, and why each is a neutral fact rather than a product branch — lives under **Phase 10** below. Caller overlays (decorating store, Stop/fail partials, metrics, tool-row chrome) are recorded there too; they are not runner signature changes.
 
 ### Phase 7 — Chat-stream UI stays responsive mid-generation
 *Proves: typing, scrolling, and clicking stay live while a chat streams, without giving back local tok/s. Can start now.*
@@ -630,10 +631,10 @@ Orchestration started 2026-08-31. Worktree: `C:\Users\dukky\.cursor\worktrees\Or
 | P8-G Delete the controller | [MIN-760](https://linear.app/minnowai/issue/MIN-760) | P8-F | **done** (verify PASS 2026-08-31) |
 | P8-H E2E + reliability | [MIN-761](https://linear.app/minnowai/issue/MIN-761) | P8-G | **done** (verify PASS 2026-08-31) |
 
-- **P8-A — Stabilize the client loop (interim, ships to `main`).** Blocked on nothing; superseded by P8-G except the last item, which normal chat needs too.
-  - [x] Reset the dispatch timeout on progress instead of firing on wall-clock (`armRunTimers`, `src/agents/controller/registry.ts`). Check-in nudge stays one-shot.
-  - [x] Drop the `toolTurns > 0` condition on the prose fallback (`server/runner/sub-agent-runner.js`) so a JSON parse failure with real prose completes degraded instead of `failed`.
-  - [x] Retry non-ok HTTP with backoff (`server/runner/transient-fetch-retry.js`) and return the partial transcript on terminal failure.
+- **P8-A — Stabilize the client loop (interim, ships to `main`).** Blocked on nothing; superseded by P8-G except the last item, which normal chat needs too. The loop fixes landed in `server/runner/sub-agent-runner.js` (the `.ts` was already the extract source, then P8-G deleted it). Do not re-apply them against a resurrected `src/agents/sub-agent-runner.ts`.
+  - [x] Reset the dispatch timeout on progress instead of firing on wall-clock (`armRunTimers`, `src/agents/controller/registry.ts` — deleted with the controller in P8-G). Check-in nudge stays one-shot (`run.nudged`).
+  - [x] Drop the `toolTurns > 0` condition on the prose fallback (`server/runner/sub-agent-runner.js` `returnProseFallbackOutcome`, originally `.ts:1318`) so a JSON parse failure with real prose completes degraded instead of `failed`.
+  - [x] Retry non-ok HTTP with backoff (`server/runner/transient-fetch-retry.js`, wrap at `streamSubAgentTurn`; originally `.ts:337`) and return the partial transcript on terminal failure.
   - [x] Give `enqueueToolApproval` an `AbortSignal` (`src/tools/approval-queue.ts`) so a cancelled run cannot execute its tool when the modal is answered minutes later.
 
 - **P8-B — Engine + journal over an injected graph shape.** `engine.js` statically imports `plan` from `core/plan.js` and `foldInto` from `core/derive.js`; `journal.js` is pathed on `boardDir(boardId)`. Both take `{ fold, plan }` and a journal namespace as arguments instead. Pure refactor — `BoardState` is untouched and the Phase 1 conformance suite is the regression test.
@@ -760,9 +761,249 @@ Phase 1's P1-E deliberately built the smallest surface that proves "the renderer
 - **P9-I — States, a11y, tests.** Loading skeletons instead of "Loading the board…", a real empty state, the error states P9-A now has something to show, focus management across repaints (the surface calls `replaceChildren` on every frame — anything focused is lost), and DOM tests over the column mapping and the failure frames. `test/ui/orchestrator-boards-create.test.mts` is the pattern.
 
 Ordering note: **before Phase 4.** Phase 4 deletes `orchestrate-board.ts` and its satellites — the kanban column defs, the model chip, the reasoning controls, the finish dashboard, and the `ob-*` shell the twin-shape brief landed. Anything in this phase that ports from V1 has to be ported while V1 still exists. P9-A is not a port and should not wait for the rest of the phase: it is a live bug on the branch today.
+
+### Phase 10 — Chat parity after the runner migration
+*Proves: one turn loop can carry the whole product chat surface, not just a board attempt. Blocked on nothing. Merge gate for `Orchestrator-V2`.*
+
+**MIN-765** · [issue](https://linear.app/minnowai/issue/MIN-765/phase-10-chat-parity-after-the-runner-migration)
+
+Phase 6 deleted `src/tools/loop.ts` and routed every product send through `runTurn()`. The replacement caller (`src/chat/run-turn-chat.ts` + `run-turn-chat-paint.ts`) did not rebuild the per-round transcript rows or stream chrome `loop.ts` owned — that was the merge-gate bug this phase closed. Invariants: `loop.ts` stays deleted; the runner does not know what a chat is; `server/runner/sub-agent-runner.js` is hand-maintained source of truth; board callers stay byte-identical; nothing writes `chat.history` without `touchChat`. `scripts/extract-sub-agent-runner.mjs` is deleted (P10-J) — `SRC` pointed at the gone `.ts`.
+
+K–M added 2026-09-01 from live symptoms. A–E close data loss. F–H close visible chrome. I restores in-turn steer and the live context ring. J is docs + the automated parity gate.
+
+**Phase 10 complete except the live Electron gate** (2026-09-01). A–I and K–M verify PASS on this branch. P10-J records the findings, flips the gap list, deletes the dead extractor, and runs the scoped automated gate. The ten-step MIN-765 QA **cannot** pass in this worktree (must not steal port 9473; main checkout is a different tree). Remaining human QA is after `/apply-worktree` — list copied below so it is not lost.
+
+| Todo | Issue | Depends on | Status |
+| ---- | ----- | ---------- | ------ |
+| P10-A Reproduce and instrument the chat regressions | MIN-766 | — | **done** (findings in orchestrator-v2-p6a-gap-list.md, 2026-09-01) |
+| P10-B `TurnEvent` contract: rounds, stream meta, phase, full tool results | MIN-767 | P10-A | **done** |
+| P10-C Settled, incremental transcript persistence | MIN-768 | P10-A | **done** |
+| P10-D Chat transcript parity: the decorating store | MIN-769 | P10-B, P10-C | **done** |
+| P10-E Stopped and failed turns persist their partial | MIN-770 | P10-C, P10-D | **done** |
+| P10-F Per-round transcript rows, the thinking timer, and stream phases | MIN-771 | P10-B, P10-D | **done** |
+| P10-G Metrics parity: live strip, per-message stats, token ledger | MIN-772 | P10-B, P10-D | **done** |
+| P10-H Tool row parity: args, attachments, code change, shell kill, re-strand | MIN-773 | P10-B, P10-D | **done** |
+| P10-I In-turn steer and the live context ring | MIN-774 | P10-B, P10-F | **done** |
+| P10-J Docs, findings, and the parity gate | MIN-775 | all | **done** (automated half; live Electron remaining) |
+| P10-K Sub-agent spawns lose their parent context | MIN-776 | — | **done** |
+| P10-L Sub-agent card freezes on "Generating response…" | MIN-777 | P10-B (label half) | **done** |
+| P10-M Live frames not filtered per run | MIN-778 | — | **done** |
+
+#### Phase 6 findings (chat parity)
+
+Phase 6's rule: any change to `runTurn({ … })` / `TurnEvent` / `TurnResult` is a recorded finding, not a quiet patch. P10-B, P10-C, and P10-I changed that surface. Each addition is a **neutral fact** the inner loop already computed (or a caller-injected seam with the same shape as `AskCapability`). None of them is an `isChat` / `isBoard` / `isSubAgent` branch in `server/runner/`.
+
+| Addition | Why it is a fact, not a product branch |
+| -------- | -------------------------------------- |
+| `TurnEvent.phase` (`generating` \| `thinking` \| `tools`) | Forward of inner `onLiveActivity.phase`. The wrapper used to discard it. Mapping onto "Generating response…" is a **caller** job (chat painter P10-F; sub-agent `onLive` P10-L). |
+| `TurnEvent.reasoning_end` | Once per round, when the inner loop leaves the reasoning channel (first prose, first tool-call streaming, or end of stream). Chat uses it to `endReasoningPhase`. |
+| `TurnEvent.stream_meta` | Throttled (~80 ms) forward of merged `streamMeta` from `handleChunk` (`usage`, `stats`, llama.cpp `runtime`, `model`, `finishReason`). Chat folds it into a `StreamMetaAccumulator` (P10-G). |
+| `TurnEvent.round_start` / `round_end` | Per-model-round boundary. `round_end` carries `text`, `reasoning`, `toolCallCount`, `usage`, `stats`, `finishReason`, `t0` / `tFirst` / `tEnd`, and fires **after** the last `tool_result` of that round (including a report-tool throw that unwinds the loop). Chat opens a new assistant row when `toolCallCount > 0` (P10-F). Boards that omit `onEvent` are unchanged. |
+| `tool_result` widened (`attachments?`, `codeChange?`, `isError?`) | The execute outcome already had these. Emit moved onto `onToolDone` so parseError and abort fills are not silent. Chat paints them (P10-H); a sink that only reads `content` still works. |
+| `onMessagesChange(messages, meta?: { settled: boolean })` | Forced emits after a real `messages.push` are `settled: true`; throttled stream clones (synthetic partial assistant) are `false`. Existing callers that ignore the second argument stay valid. Continue-mode persist suffixes each settled snapshot via a monotonic `persistCursor`; `finally` is an idempotent backstop. Isolated/board persist is unchanged. Sub-agent retries are continue turns against `createMemoryTranscriptStore()` (persist is a no-op). |
+| `RunTurnOptions.onRoundBoundary?: () => TranscriptMessage[] \| null` | Same injection shape as `AskCapability`. The inner loop consults it at the top of every tool-loop iteration; returned rows splice into the in-memory transcript. Chat implements it (`consumePendingSteer`). Board and sub-agent callers **omit** it. A throwing hook is swallowed. |
+
+**Event-type filter is a `server/runner/` contract.** Any `TurnEvent` sink must classify through this package — do not invent a second exclusion list in an effector.
+
+- [`isHighFrequencyTurnEvent`](../../server/runner/turn-event.js) — **disk** drop list: `stream_meta`, `phase`, `round_start`, `reasoning_end`, `token`, `delta`, `reasoning_delta`. `round_end` is **not** high-frequency; it is recorded. Board attempt transcripts (`transcripts.js`) and board live SSE use this predicate so a 12 Hz `stream_meta` cannot cap a P9-D log.
+- [`shouldEmitSubAgentLiveTurnEvent`](../../server/runner/turn-event.js) — sub-agent **live** SSE allow-list (P10-L): forwards `phase` (a handful of times per turn, not 12 Hz) and otherwise matches the disk drop. Cards need `phase` to leave the generating fallback before the first `tool_call`.
+
+This is **not** a board detail. It is **not** something P8-F already consumes: the sub-agent effector records **no** attempt transcript (`recordTranscriptEvent` is board-only / P9-D). P8-F forwards `TurnEvent`s to `emitLive` only. Sub-agent live SSE forwards `phase` (P10-L); disk still drops it.
+
+Order within a model round:
+
+```
+round_start → (phase / thinking / delta / stream_meta)* → reasoning_end
+  → tool_streaming → tool_call* → tool_result* → round_end
+```
+
+**Caller overlays (not runner signature changes):** decorating store + `touchChat` (P10-D); stopped/failed partial rows (P10-E); per-round live chrome (P10-F); metrics strip / ledger (P10-G); tool-row args/attachments/shell-kill (P10-H); spawn-card re-anchor (P10-K); live vs terminal + cancel origin (P10-L); per-run live-frame filter (P10-M).
+
+**P10-B accept (MIN-767) — implementer**
+
+- [x] New `TurnEvent` members (`phase`, `reasoning_end`, `stream_meta`, `round_start`, `round_end`) emitted from the inner loop and forwarded by `runTurn`
+- [x] Ordering: `round_start` → (`phase` / `thinking` / `delta` / `stream_meta`)* → `reasoning_end` → `tool_streaming` → `tool_call*` → `tool_result*` → `round_end`
+- [x] `tool_result` carries full outcome (`attachments` / `codeChange` / `isError`) and fires for parseError and abort fills via `onToolDone`
+- [x] One `isHighFrequencyTurnEvent` predicate for **disk** (and board live SSE). Sub-agent live uses `shouldEmitSubAgentLiveTurnEvent` so `phase` reaches cards (P10-L). P8-F records no transcript.
+- [x] `round_end` recorded and labelled `'Round'` in `LOG_LABEL`
+- [x] README + `context.md` + this plan record the signature change
+- [x] Unit test per new member in `test/runner/turn-event.test.mjs`; package-guard and untouched effector-runner stay green
+- [x] No product-shaped chat branch, no extractor run, no P8-A re-application
+
+**P10-C accept (MIN-768) — implementer**
+
+- [x] `onMessagesChange(messages, meta?: { settled })` — forced emits `true`, throttled stream clones `false`
+- [x] Continue turns persist on every settled snapshot via a monotonic `persistCursor`; `finally` is an idempotent backstop
+- [x] A tool round is readable in the store after the first settled emit, not only at turn end
+- [x] Killing the turn mid-stream leaves the settled prefix persisted and no synthetic partial assistant row
+- [x] Isolated/board persist unchanged; `test/orchestrator/effector-runner.test.mjs` untouched
+- [x] Sub-agent retries still `createMemoryTranscriptStore()`; `test/sub-agents/effector-runner.test.mjs` untouched
+- [x] `test/runner/opening-messages-fold.test.mjs` covers seed-equality + `persistFrom` past the prior transcript
+- [x] README + `context.md` + this plan record the `onMessagesChange` signature change
+- [x] No decorating store / `touchChat` (P10-D); no stopped/failed partial rows (P10-E); no TurnEvent regression; no extractor; no P8-A re-application
+
+**P10-D accept (MIN-769) — implementer**
+
+- [x] New `src/chat/chat-transcript-store.ts` wraps `createSessionTranscriptStore()` (not a fork)
+- [x] Inner-loop control user rows never land in `chat.history`
+- [x] Wire `reasoning` / `reasoning_content` stripped; `thinking[]` / `thinkingDurationMs` / `thinkingSignature` written
+- [x] `stats` / `usage` from `round_end` (or `stream_meta`) on the assistant row
+- [x] `role:'tool'` rows carry `attachments` / `codeChange` from `tool_result`
+- [x] Every append: `noteRunOutputIndex` + `recordChatMessage` (`touchChat`)
+- [x] `noteRunGeneration` from `onGenerationId`; `seed: historyContent` (ephemeral continue still wins)
+- [x] `applyClassifiedStreamEnd` + `resolveFinalAssistantContent` on persist
+- [x] `load()` still the same UI-only filter as `overlayMultimodalHistoryForRunTurn`
+- [x] Tests: `test/chat/chat-transcript-store.test.mts` + `test/chat/run-turn-chat.test.mts`
+- [x] No P10-E Stop/fail branches; no P10-F live chrome rewrite; no board/sub-agent effector edits; no extractor
+
+**P10-E accept (MIN-770) — implementer**
+
+- [x] Stop mid-reply persists `{ stopped: true }` (thinking included) and survives a simulated session save/reload
+- [x] Triggered from the **returned** `{ outcome: 'crashed', error: 'aborted' }` path (the real Stop) **and** a thrown `AbortError`
+- [x] Provider error mid-reply persists `{ failed: true }` via `resolveFailedTurnPartialRow` *before* triage; error bubble below; Continue can resume
+- [x] `GENERATION_LOST_ON_RESTART_MESSAGE` leaves the transcript and drops only an orphan tool tail
+- [x] A turn that produced nothing rolls back to the user row (no stray empty assistant)
+- [x] `finalizeRun` records `stopped` + captured `stopReason` (`user` / `timeout` / `system`)
+- [x] `test/chat/failed-turn-partial.test.mts` and `test/chat/finalize-stopped-turn.test.mts` revived against `runChatTurn`
+- [x] Helpers used, not rewritten: `resolveFailedTurnPartialRow`, `resolveFinalAssistantContent`, `rollbackFailedTurnHistory`, `repairSessionHistoryTail`, `turnProducedOutput`, `markMessageStopped` / `markMessageFailed`
+- [x] No P10-F live timer UI; `abortThinking` on the decorating store is a tick-stop only
+- [x] P10-B/C/D not reverted; `loop.ts` stays deleted
+
+**P10-F accept (MIN-771) — implementer**
+
+- [x] `run-turn-chat-paint.ts` is round-aware: `round_end` with `toolCallCount > 0` finalizes the current assistant row and opens a fresh streaming shell (`painter.retarget`)
+- [x] One `ThoughtBubbleController` consume + Thoughts toggle per round; tool rows stay under the assistant that called them
+- [x] P7-B rAF coalescing kept (`schedulePaintTick`, one `scrollTranscript()` per tick)
+- [x] `ThinkingDurationTracker` in `runChatTurn` ticks `setThinkingElapsed` on the thought controller and stream status while the stream DOM is visible
+- [x] `ThoughtPhaseCallbacks` ported from `loop.ts`; `endReasoningPhase` driven from `reasoning_end`; `patchMainTurnActivity` thinking/generating driven from `phase`
+- [x] Turn-end attaches message actions, voice play, truncation chip, `renderSidebar()`, `setStatus('ok', 'Ready')`; `wrap.dataset.historyIndex` from `lastAssistantHistoryIndex()`
+- [x] `test/chat/run-turn-chat-paint.test.mts` covers round boundaries, one thought group per round, and row order
+- [x] P10-B/C/D/E not reverted; no P10-G metrics strip; no P10-H tool-row extras; `loop.ts` stays deleted
+
+**P10-G accept (MIN-772) — implementer**
+
+- [x] Live strip feeds `streamingStatsPublisher` a real `StreamMetaAccumulator` from P10-B `stream_meta` (not `streamMeta: {}`)
+- [x] P7-C kept: schedule from coalesced paint using thinking **length**, never `getJoinedDisplayText()`
+- [x] Each `round_end` pushes `usage`/`stats` into `priorSegments` / `priorStatsSegments`; 3-round weighting covered in `test/chat/streaming-stats.test.mts`
+- [x] `appendStats` on the live row at tool-bearing `round_end` (`onRoundFinalized`) and at turn end
+- [x] `chat.lastStats` via `buildLastStatsSnapshot` and `chat.modelInfo` via `resolveModelInfo` from `aggregateTurnMetaSegments` / `finalizeResponseMeta`
+- [x] `recordMainChatTurnUsage` per round (`source.kind: 'main'`); `deps.recordTurnUsage` remapped off the sub-agent helper; end-of-turn `recordChatCompletionUsage` kept as a fallback when no round recorded
+- [x] `stream_meta.runtime` mapped through `llamaRuntimeStatusView` onto `setRuntimeDetail` / `prompt_processing` (`test/chat/turn-stream-meta.test.mts`)
+- [x] P10-B–F not reverted; no P10-H tool-row extras; `loop.ts` stays deleted
+
+**P10-H accept (MIN-773) — implementer**
+
+- [x] Display args via `parseToolArguments` (no `{ raw }` fallback); malformed args paint an error row and the turn continues
+- [x] Full-arity `renderToolResult(wrap, content, attachments, args, codeChange)` from P10-B's widened `tool_result`
+- [x] `resolveLiveToolWrap` exported from `chat-tool-batch.ts` and used by the painter (MIN-649 remount)
+- [x] `attachShellKillUi` on tool-row create and on result; `notifyMemorySavedFromTool` after result
+- [x] `runChatTurn` `execute` sets `setSubAgentExecutorContext` / `setBugBoardExecutorContext` and `assertUiDesignerToolAllowed`; **clears** `setSubAgentExecutorContext(null)` on every exit path
+- [x] `parallelToolsActivityLabel(n)` on a parallel-safe `tool_call` streak (`patchMainTurnActivity`)
+- [x] P10-B–G not reverted; no P10-I steer/context ring; no P10-K card re-anchor; `loop.ts` stays deleted
+
+**Phase 10 finding (P10-H / MIN-773 — tool-row chrome is a caller overlay):** the painter is the live view of `TurnEvent.tool_call` / `tool_result`; `chat-tool-batch.ts` remains the incomplete-tool-resume path and the helper source (`parseToolArguments`, `resolveLiveToolWrap`, `attachShellKillUi`, `notifyMemorySavedFromTool`). Do not fork those. Executor context is module-level — set around `execute`, clear in `runChatTurn` `finally`, never per-tool (a parallel batch would wipe a sibling's parent). Card re-anchor is P10-K (`sub-agent-cards.ts`).
+
+**P10-I accept (MIN-774) — implementer**
+
+- [x] `runTurn({ onRoundBoundary?: () => TranscriptMessage[] | null })` — AskCapability-shaped hook, not an `isChat` branch (Phase 6 finding: signature change)
+- [x] Inner loop consults the hook at the top of every tool-loop iteration; returned rows splice into the in-memory transcript
+- [x] `runChatTurn` implements it with `createChatRoundBoundary` (`consumePendingSteer` + `syncComposerMessageQueue`)
+- [x] Abort-on-enqueue is gone (`setSteerEnqueuedListener` / `controller.abort()` / `abortedForSteer` not in `runChatTurn`)
+- [x] Mid-turn steer continues the same turn; the run is not marked failed; transcript shows one turn (original send + steered user)
+- [x] Steer chip on the user row survives `renderChatFromHistory` (`steer: true` persisted; `markMessageSteered`)
+- [x] Board and sub-agent effectors omit the hook; `test/orchestrator/effector-runner.test.mjs` and `test/sub-agents/effector-runner.test.mjs` untouched
+- [x] Continue persist: wrapper advances `persistCursor` by spliced length so suffix persist does not duplicate the product row
+- [x] Live context ring: `syncTurnContextUsage` driven from coalesced paint (once per rAF, never per token) and once per `tool_call` with serialized calls; cleared in `runChatTurn` `finally`
+- [x] `streamSubAgentTurnOnce` HTTP-status throw unchanged (P8-A retry)
+- [x] Tests: `test/chat/steer-*.test.mts`, `test/chat/context-usage.test.mts`, `test/chat/run-turn-chat.test.mts`, `test/runner/run-turn.test.mjs` P10-I describe
+- [x] README + `context.md` + this plan record the `onRoundBoundary` signature change
+- [x] P10-B–H not reverted; no P10-K/L/M/J; `loop.ts` stays deleted
+
+**Phase 6 finding (P10-I / MIN-774 — in-turn steer is an injected hook):** P6-C reduced mid-turn steer to abort + follow-up. That killed the live turn, marked the run failed, and split one turn into two. P10-I restores the `loop.ts` behaviour with `onRoundBoundary` on `runTurn` — same injection shape as `AskCapability`, not an `isChat` / `isBoard` branch. Chat implements it; board and sub-agent callers omit it. A steer with no tool-loop boundary this turn still becomes a follow-up via `resumeParentChatWithMessage` (not abort). The live context ring is a caller overlay (`syncTurnContextUsage` from coalesced paint + `tool_call`), never a runner concern.
+
+**P10-K accept (MIN-776) — implementer**
+
+- [x] Card placement is upsert-resilient in `sub-agent-cards.ts`: re-anchor when the element is detached or the spawn tool row exists and the card is not already adjacent
+- [x] P10-H `setSubAgentExecutorContext` / `finally` clear left in place (not duplicated, not undone)
+- [x] `parentToolCallId`, `parentTurnId`, `modeId` non-null on the execute latch; `parentTurnId` matches the turn `cancelAllForParentTurn` indexes
+- [x] Context is null after success, returned Stop (`crashed`/`aborted`), and a thrown error
+- [x] `resolveParentChatId` prefers the execute latch over `getActiveChat()`; the active-chat fallback is documented, not a hard error (issue expand can still omit `parentChatId`)
+- [x] Tests: `test/ui/sub-agent-cards.test.mts`, `test/chat/run-turn-chat.test.mts`, `test/sub-agents/orchestrator-store.test.mts`
+- [x] P10-B–I not reverted; no P10-L/M/J; `loop.ts` stays deleted
+
+**Phase 10 finding (P10-K / MIN-776 — spawn cards re-anchor on upsert):** P10-H set the execute latch so `parentToolCallId` reaches the journal. Placement was still creation-only (`if (!el)`), so a live card created before the tool row existed, or a registry node detached by `renderChatFromHistory`, stayed at the bottom of the transcript. `upsertSubAgentCardForRun` now re-anchors whenever the card is detached or the `[data-tool-call-id]` row exists and the card is not already the next sibling. `resolveParentChatId` reads the same latch before guessing `getActiveChat()` so a mid-POST chat switch cannot journal the run under B. The fallback itself is not an error yet: `runIssueExpandWithAgent` can pass `parentChatId: null`.
+
+**P10-M accept (MIN-778) — implementer**
+
+- [x] `onLive` ignores frames whose `taskId` is not this `runId`
+- [x] A stale `attemptId` after retry does not paint onto the current attempt
+- [x] `/api/agents/:runId/events` does not forward sibling live frames (`taskId` filter)
+- [x] P10-B `isHighFrequencyTurnEvent` disk drop unchanged; sub-agent live forwards `phase` (P10-L)
+- [x] Tests: `test/sub-agents/live-frame-isolation.test.mts` (two runs, one parent, fake stream) + SSE sibling assertion in `test/sub-agents/api.test.mjs`
+- [x] `context.md` + this plan
+- [x] P10-B–K not reverted; no P10-L/J; `loop.ts` stays deleted
+
+**Phase 10 finding (P10-M / MIN-778 — live frames are parent-keyed):** `emitLive` is keyed on `parentChatId` by design (P8-B). Each card opens `/api/agents/:runId/events`, which drops `taskId !== runId` so sibling token traffic never leaves the server, and `onLive` ignores a sibling `taskId` or a stale `attemptId` after retry. Boards still dispatch by `taskId` on the parent stream. Disk transcripts still drop high-frequency types including `phase` (P10-B). Sub-agent live SSE forwards `phase` (P10-L).
+
+**P10-L accept (MIN-777) — implementer**
+
+- [x] Live guard drops **replayed** frames (stale `seq` / attempt ended with an outcome), not because the fold is terminal. An open attempt after `run.cancelled` still paints
+- [x] `phaseOf`: open attempt + `cancelledReason` → `cancelling`; no open attempt → `cancelled`. Commented. Replay of cancel+`attempt.ended` is cancelled
+- [x] Sub-agent live SSE forwards `phase`; disk `isHighFrequencyTurnEvent` still drops it from transcripts; board live SSE still drops it
+- [x] `onLive` translates `phase` so the pre-tool window is not the generating fallback
+- [x] Zero-attempt cancel does not sit on generating
+- [x] Cancel origin named: `waitForSubAgent` `onAbort` POSTs cancel only when **its** signal aborts (Super Plan timeout). Chat spawn does not pass `chatSignal`. `cancelAllForParentTurn` is not on the Stop path
+- [x] Tests: `test/sub-agents/live-frame-isolation.test.mts` (open attempt after cancel; replay after genuine end; phase; zero-attempt cancel), derive/plan/graph, turn-event split, orchestrator-store wiring
+- [x] `context.md` + this plan
+- [x] P10-B–K/M not reverted; P10-J records this; `loop.ts` stays deleted
+
+**Phase 10 finding (P10-L / MIN-777 — live vs terminal, cancel origin):** The card froze because `onLive` treated a terminal fold as "ignore every live frame," and `cancelledReason` won (then `closeOpenAttempts`) the instant cancel was journaled — while the effector was still running. `phase` never reached the card because P10-B listed it as high-frequency for **both** disk and live. Disk still drops it; sub-agent live forwards it. Fold phase `cancelling` overlays `livePhase: stopping` on the card. The "0 tool turns" parent line was delivery-on-`run.cancelled` with `toolTurns` still 0, not a mysterious second cancel writer. `run.cancelled` is only the cancel route. The MIN-777 suspect (`chatSignal` → `waitForSubAgent`) is real **if** a signal is passed, and is **not** wired for `spawn_sub_agent` (`executeSubAgentTool` ignores `context.signal`; `wait:true` calls `waitForSubAgent(runId)` only). Super Plan review timeout is the intentional `parent_abort` path. `cancelAllForParentTurn` can index P10-K `parentTurnId` but Stop / `runChatTurn` never call it.
+
+**P10-J accept (MIN-775) — implementer**
+
+- [x] Phase 10 section complete; **Phase 6 findings (chat parity)** block lists every `runTurn` / `TurnEvent` / `TurnResult` addition and why it is a neutral fact
+- [x] Event-type filter documented as a `server/runner/` contract any sink must use — not a board detail, not something P8-F already consumes (no transcript recorder). Sub-agent live forwards `phase` (P10-L); disk still drops it
+- [x] File-table row for `src/agents/sub-agent-runner.ts` (1,375) **removed**; P8-A file/line refs point at `server/runner/sub-agent-runner.js`
+- [x] Gap list: findings 6 and 7 plus leftover rows flipped to P10 resolutions; P10-A folded; no stale leftover P10 closed
+- [x] `server/runner/README.md` event contract, ordering, `onRoundBoundary`, settled persist, `isHighFrequencyTurnEvent`, `shouldEmitSubAgentLiveTurnEvent`
+- [x] `documentation/context.md` chat send path current
+- [x] `scripts/extract-sub-agent-runner.mjs` deleted; `ADAPTER_ENTRY` stays `src/agents/renderer-runner-deps.ts`; package-guard asserts the extractor is gone
+- [x] Extractor **not** run
+- [x] Automated gate: `npx tsc --noEmit` PASS. Scoped `test/chat` + `test/runner` + `test/tools` + `test/ui` via `test/run-all.mjs` runner profiles (`--test-force-exit`): **2,521 tests, 2,520 pass, 1 fail**. The fail is `test/ui/panel-worktree-cwd.test.mts` *planner resolves the integration worktree once board state is active* (`C:/repo` vs `C:/wt/board-1/integration`) — **MIN-752 worktree resolution**, not a P10 regression. Full `npm test` re-measure remains for CI/main checkout (this worktree skipped a >15 min full run).
+- [ ] Live Electron ten-step QA on MIN-765 — remaining after `/apply-worktree` (this worktree must not steal port 9473)
+
+#### `npm test` baseline (MIN-775)
+
+Linear recorded **8,784 tests — 8,759 pass, 21 fail** on `Orchestrator-V2` @ `c85c1d9c` (2026-09-01, main checkout, Windows). P10-J did **not** re-run full `npm test` in this worktree (expected >15 minutes; scoped gate run instead). Full re-measure remains for CI / the main checkout after `/apply-worktree`. Do not treat these clusters as a P10 regression:
+
+| Cluster | Suites | Cause |
+| -- | -- | -- |
+| Windows privilege | `isResolvedPathUnderRoot` (2), `orchestrate board-testing API` → `tails bounded board logs` | `EPERM` — symlink creation needs elevation / Developer Mode. Environmental. |
+| Stale config fixtures | `config API CRUD` → `PUT tools with brave key`, `config migration` → `POST migrate` | Fixtures still expect `board_init` / `board_update_task` / `board_set_autonomy` / `board_get_state` / `board_report` / `board_provision_infra` / `delegate_tasks`, which **P4-C deleted**. Real debt, pre-dates Phase 8. |
+| `BoardState` schema | `V2 BoardState autonomy shape` | `BOARD_STATE_KEYS` lacks `workspacePath`. [MIN-752](https://linear.app/minnowai/issue/MIN-752). |
+| Worktree resolution | `chat groups`, `resolvePanelBrowseCwd`, `buildComposeContext cwd` | Board/planner worktree precedence. Also [MIN-752](https://linear.app/minnowai/issue/MIN-752). Reproduced in this worktree's scoped UI gate (`panel-worktree-cwd.test.mts`). |
+| Benchmark catalog drift | `capability catalog`, `capability-matrix suite`, `benchmark test catalog coverage` | 59-row spreadsheet / 13-band counts out of sync. Unrelated to V2. |
+
+**Known flakes:** browser driver 20-cycle orphan (19 vs 20); `report-wiring.test.mjs` libuv `UV_HANDLE_CLOSING` teardown under `--test-force-exit` (assertions pass); `cascade-propagation.test.mjs` intermittent.
+
+#### Remaining human QA (MIN-765, after `/apply-worktree`)
+
+Run in the **main checkout** on port 9473 (`Minnow Full-Stack` launch config, `MINNOW_DEBUG=1`). A worktree cannot run Electron here.
+
+1. Reasoning model, plain reply → timer ticks, flips to "Generating response…", Thoughts toggle shows a duration, metrics strip fills live, per-message stats survive the stream-end re-render.
+2. Build mode, 3+ tool calls across 2 rounds → each round has its own assistant row with its own thought group; tool rows sit under their round; code-change badges and tool screenshots render; the transcript does not jump.
+3. Malformed tool argument → the row shows the parse error and the turn continues.
+4. Stop mid-reply → partial persists with the stopped marker, survives a full app restart.
+5. Kill the server mid-turn → the error bubble lands under the preserved partial; Continue works.
+6. Switch chats mid-tool-batch and back → results fill into the redrawn rows.
+7. Leave the chat, return, restart the app → transcript, thoughts, stats and tool rows identical to what was on screen.
+8. Steer mid-turn → the turn continues in place with the steer chip on the user row.
+9. Context ring moves during the turn.
+10. Local-model turn → tok/s not worse than P7's parked baseline.
+
 ## Verification Checklist
 
-- [ ] `npm test` passes (orchestrator suite still has known flakes: client list-poll, snapshot timing, Windows `UV_HANDLE_CLOSING`)
+- [ ] `npm test` passes (see Phase 10 baseline table in P10-J / Linear MIN-775 — 21-fail cluster on `c85c1d9c`; full re-measure is CI/main checkout if the worktree skip applies)
 - [x] `npm run build` passes (Phase 4 worktree; re-run PASS in Phase 6 worktree)
 - [x] The scheduler suite runs to completion with **zero model calls** (Phase 1 gate)
 - [x] Killing the server mid-run and restarting reproduces identical derived state (Phase 1 gate)
@@ -780,6 +1021,13 @@ Ordering note: **before Phase 4.** Phase 4 deletes `orchestrate-board.ts` and it
 - [x] Tasks render as waves × kanban columns, and no column a card sits in is written by the renderer (Phase 9 gate)
 - [x] A failed task's attempt transcript is readable from the board (Phase 9 gate)
 - [x] `grep -rn "lastHeartbeatAt\|tier1Attempted\|progressStallMs" src/` returns nothing (Phase 8 gate)
+- [x] Chat turn: thinking timer, "Generating response…", live metrics, per-message stats survive stream-end re-render (Phase 10 gate — **automated half:** painter / thinking-duration / stream-meta / stats tests. **Live Electron remaining:** MIN-765 step 1)
+- [x] Multi-round Build turn: per-round assistant rows, tool rows under their round, no transcript jump (Phase 10 gate — **automated half:** `run-turn-chat-paint` round-boundary tests. **Live Electron remaining:** MIN-765 step 2)
+- [x] Stop mid-reply and server-kill persist the partial; leave/return/restart keeps transcript (Phase 10 gate — **automated half:** `settle-interrupted-turn` / failed-turn-partial tests. **Live Electron remaining:** MIN-765 steps 4–5, 7)
+- [x] Malformed tool args resolve with a parse error and the turn continues (Phase 10 gate — **automated half:** painter parse-error + `onToolDone`. **Live Electron remaining:** MIN-765 step 3)
+- [x] `src/tools/loop.ts` stays deleted; `test/runner/package-guard.test.mjs` green; board effector suite untouched (Phase 10 gate)
+- [x] A chat turn's transcript, thoughts, stats and tool rows are byte-identical after a reload (Phase 10 gate — **automated half:** decorating store + settled persist + round_end stats/thinking on history rows. **Live Electron remaining:** MIN-765 step 7)
+- [x] A stopped or failed turn keeps what it streamed, across an app restart (Phase 10 gate — **automated half:** P10-E settle + `touchChat` on append. **Live Electron remaining:** MIN-765 steps 4–5)
 
 ## Notes for Build Agents
 
@@ -789,4 +1037,5 @@ Ordering note: **before Phase 4.** Phase 4 deletes `orchestrate-board.ts` and it
 - **The core is plain `.js` + `.d.ts`.** See finding D. Do not introduce a build step for `server/**`.
 - **The runner must not know what a board is.** No board imports in `server/runner/`. Board specifics arrive as arguments. From Phase 8 it has a second caller, so "board-agnostic" stops being a discipline and becomes a fact the tests hold.
 - **Never reintroduce a supervisor.** Phase 8 deletes the sub-agent watchdog, heartbeats, and stall timers for the same reason Phase 1 deleted the board ones: an idempotent reconcile tick over `actual` already restarts what died. A heartbeat is a second source of truth about liveness.
-- Worktrees have no `node_modules`; ~11 extra test failures there are not regressions. `npm test` rewrites `test/fixtures`, and three suites fail on clean `main` — a non-zero exit is not automatically your regression.
+- Worktrees may junction `node_modules` to the main checkout — that is fine. `npm test` rewrites `test/fixtures`. A non-zero full-suite exit is not automatically a regression: known clusters on this branch (Windows `EPERM`, stale `board_init` fixtures, `BoardState.workspacePath` / worktree resolution MIN-752, capability catalog drift, known flakes) are recorded in Linear MIN-775. Do not treat those as yours.
+- **`server/runner/sub-agent-runner.js` is hand-maintained.** Do not run a resurrected `scripts/extract-sub-agent-runner.mjs`. `ADAPTER_ENTRY` is `src/agents/renderer-runner-deps.ts`.

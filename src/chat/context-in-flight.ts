@@ -14,9 +14,31 @@ export interface ContextInFlightOverlay {
 
 let activeOverlay: ContextInFlightOverlay | null = null;
 
-/** Replace or clear the overlay for the active turn (call from loop.ts). */
+let overlayWriteCount = 0;
+
+/** Replace or clear the overlay for the active turn (P10-I: coalesced paint + tool_call). */
 export function setContextInFlightOverlay(overlay: ContextInFlightOverlay | null): void {
+  overlayWriteCount += 1;
   activeOverlay = overlay;
+}
+
+/**
+ * In-flight overlay for the context ring (BUG-019 / P10-I).
+ * Call from coalesced paint (once per rAF) and once per `tool_call` — never per token.
+ */
+export function syncTurnContextUsage(overlay: ContextInFlightOverlay): void {
+  setContextInFlightOverlay(overlay);
+}
+
+/** Test hook: overlay writes must be at most one per paint tick, not per token. */
+export function getContextOverlayWriteCountForTests(): number {
+  return overlayWriteCount;
+}
+
+/** Test hook: reset overlay + write counter between cases. */
+export function resetContextOverlayWriteCountForTests(): void {
+  overlayWriteCount = 0;
+  activeOverlay = null;
 }
 
 /** Overlay fields for a chat when the ring should count in-progress tokens. */

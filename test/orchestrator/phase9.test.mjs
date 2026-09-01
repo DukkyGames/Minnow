@@ -426,6 +426,29 @@ describe('P9-D — attempt transcripts', () => {
     assert.equal(events[0].name, 'bash');
   });
 
+  it('drops P10-B high-frequency types and keeps round_end', async () => {
+    const boardId = await createBoard();
+    for (const type of ['stream_meta', 'phase', 'round_start', 'reasoning_end', 'delta']) {
+      recordTranscriptEvent({ boardId, attemptId: 'r-hf', event: { type, text: 'x' } });
+    }
+    recordTranscriptEvent({
+      boardId,
+      attemptId: 'r-hf',
+      event: {
+        type: 'round_end',
+        index: 0,
+        text: 'done',
+        reasoning: '',
+        toolCallCount: 1,
+      },
+    });
+    const { events } = await readTranscript(boardId, 'r-hf');
+    assert.equal(events.length, 1);
+    assert.equal(events[0].type, 'round_end');
+    assert.equal(events[0].index, 0);
+    assert.equal(events[0].toolCallCount, 1);
+  });
+
   it('refuses an attempt id that is not a filename', async () => {
     const boardId = await createBoard();
     // The id reaches this from HTTP, so it is never interpolated into a path

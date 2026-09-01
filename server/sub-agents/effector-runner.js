@@ -43,6 +43,7 @@ import { resolveLibraryAttemptBinding } from '../models/library-binding.js';
 import { getProvider } from '../providers/store.js';
 import { attemptLimits } from '../orchestrator/attempt-limits.js';
 import { emitLive } from '../orchestrator/live-events.js';
+import { shouldEmitSubAgentLiveTurnEvent } from '../runner/turn-event.js';
 import { resolveAttemptModel } from '../orchestrator/model-binding.js';
 import { peekEngine } from '../orchestrator/engine.js';
 import { SUB_AGENT_ROLE } from './events.js';
@@ -650,7 +651,11 @@ export function createSubAgentEffector(options = {}) {
             onEvent: (event) => {
               if (!parentChatId) return;
               // Opaque key (P8-B). Tokens never journaled — the live bus is
-              // the only path they take, same as boards.
+              // the only path they take, same as boards. Disk transcripts
+              // still drop `phase` via isHighFrequencyTurnEvent (P10-B).
+              // Live SSE forwards `phase` so cards leave "Generating
+              // response…" before the first tool (P10-L / MIN-777).
+              if (!shouldEmitSubAgentLiveTurnEvent(event?.type)) return;
               emitLive({
                 key: parentChatId,
                 boardId: parentChatId,

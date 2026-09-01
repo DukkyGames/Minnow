@@ -73,6 +73,8 @@ export function buildOpeningTranscript(systemPrompt, seed, prior) {
       rest.push({ role: 'user', content: seed });
     }
     // Matching string, or a caller-built multimodal user row: keep as-is.
+    // Chat passes `seed: historyContent` (not pre-tag userText) so a skill-
+    // tagged send does not mint a second user row (P10-D / MIN-769).
   }
   const opened = [system, ...rest];
   const messages = foldLeadingAssistantPreamble(

@@ -221,6 +221,16 @@ describe('server/runner package guard', () => {
     );
   });
 
+  // P10-J: the one-shot extract pointed SRC at the deleted .ts and would ENOENT.
+  // server/runner/sub-agent-runner.js is hand-maintained — do not resurrect this.
+  it('the one-shot runner extractor is gone (P10-J)', () => {
+    assert.equal(
+      fs.existsSync(path.join(PROJECT_ROOT, 'scripts', 'extract-sub-agent-runner.mjs')),
+      false,
+      'scripts/extract-sub-agent-runner.mjs must not exist',
+    );
+  });
+
   it('renderer RunnerDeps does not contain the turn loop', () => {
     const deps = fs.readFileSync(path.join(PROJECT_ROOT, ADAPTER_ENTRY), 'utf8');
     assert.equal(

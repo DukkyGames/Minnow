@@ -1,0 +1,361 @@
+/**
+ * P10-D (MIN-769) — chat-only decorating `TranscriptStore`.
+ *
+ * The runner persists an API transcript (`reasoning` / `reasoning_content`,
+ * inner-loop nudge user rows, tool rows with `content` only).
+ * `renderChatFromHistory` reads `thinking[]`, `stats`/`usage`, `attachments`,
+ * and `codeChange`. This wrapper rewrites each `append` into that shape and
+ * marks the chat dirty. It wraps {@link createSessionTranscriptStore} rather
+ * than forking it — sub-agent callers still share the bare store.
+ */
+
+import { createSessionTranscriptStore } from '../agents/session-transcript-store';
+import { splitThinkingSegments } from '../api/reasoning';
+import { applyClassifiedStreamEnd, classifyStreamEnd } from '../api/stream-end';
+import { findChatById, recordChatMessage, scheduleSaveSessions, touchChat } from '../state/sessions';
+import { noteRunGeneration, noteRunOutputIndex } from '../state/runs-store';
+import {
+  CONTINUE_AFTER_TRUNCATION_INSTRUCTION,
+  EMPTY_POST_TOOL_CONTINUE_INSTRUCTION,
+  PROSE_QUESTION_RETRY_INSTRUCTION,
+  resolveFinalAssistantContent,
+  SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION,
+} from '../tools/turn-continuation';
+import { ThinkingDurationTracker } from '../ui/thinking-duration';
+import type { ThoughtBubbleController } from '../ui/thought-bubbles';
+import type { TurnEvent } from '../../server/runner/run-turn';
+import type { TranscriptMessage, TranscriptStore } from '../../server/runner/transcript-store';
+import type {
+  AssistantMessage,
+  AssistantToolCallMessage,
+  CodeChangeStats,
+  Stats,
+  ToolImageAttachment,
+  TurnRunId,
+  Usage,
+} from '../types';
+
+/** Inner-loop user rows. Visible bubbles if they land in `chat.history`. */
+const INNER_LOOP_CONTROL_USER_CONTENT = new Set<string>([
+  SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION,
+  EMPTY_POST_TOOL_CONTINUE_INSTRUCTION,
+  PROSE_QUESTION_RETRY_INSTRUCTION,
+  CONTINUE_AFTER_TRUNCATION_INSTRUCTION,
+]);
+
+/** Outbound-only replay keys. Persisting them bloats history and re-sends them next turn. */
+const WIRE_REASONING_KEYS = ['reasoning', 'reasoning_content', 'reasoning_signature'] as const;
+
+export interface ChatTranscriptStore extends TranscriptStore {
+  /** Feed `TurnEvent`s so append can decorate from round/tool snapshots. */
+  observe(event: TurnEvent): void;
+  /** `onGenerationId` dirty-tracking — generation ids live on the turn run. */
+  noteGeneration(chatId: string, generationId: string): void;
+  /**
+   * Stop the in-store thinking-duration ticker on abort/error.
+   * Live timer chrome is P10-F; this only prevents a leaked interval.
+   */
+  abortThinking(): void;
+  /**
+   * History index of the last assistant row this store actually appended.
+   * Live rows must use this instead of guessing `chat.history.length - 1`.
+   */
+  lastAssistantHistoryIndex(): number | undefined;
+}
+
+export interface CreateChatTranscriptStoreOptions {
+  /** Defaults to the shared session wrapper. Do not fork that store. */
+  inner?: TranscriptStore;
+  /**
+   * Live thought controller when the chat path has one. Snapshots
+   * `thinking[]` without consuming (P10-F owns live chrome / per-round DOM).
+   */
+  thoughtController?: ThoughtBubbleController | null;
+  turnRunId?: TurnRunId;
+}
+
+interface RoundDecorState {
+  index: number;
+  thinkingSnapshot: string;
+  reasoning: string;
+  stats?: Stats;
+  usage?: Usage;
+  finishReason?: string;
+  streamError?: string;
+  toolCallCount: number;
+}
+
+interface ToolOutcomeDecor {
+  attachments?: ToolImageAttachment[];
+  codeChange?: CodeChangeStats;
+}
+
+function emptyRound(index: number): RoundDecorState {
+  return {
+    index,
+    thinkingSnapshot: '',
+    reasoning: '',
+    toolCallCount: 0,
+  };
+}
+
+function isInnerLoopControlUserRow(message: TranscriptMessage): boolean {
+  if (message.role !== 'user') return false;
+  return typeof message.content === 'string' && INNER_LOOP_CONTROL_USER_CONTENT.has(message.content);
+}
+
+function cloneRow(message: TranscriptMessage): Record<string, unknown> {
+  // Clone so stripping wire reasoning cannot mutate the inner loop's in-memory
+  // transcript — the next completion still needs those outbound replay fields.
+  return { ...(message as unknown as Record<string, unknown>) };
+}
+
+function stripWireReasoning(row: Record<string, unknown>): void {
+  for (const key of WIRE_REASONING_KEYS) {
+    delete row[key];
+  }
+}
+
+function asStats(value: unknown): Stats | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  return value as Stats;
+}
+
+function asUsage(value: unknown): Usage | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  return value as Usage;
+}
+
+function toolCallCountOf(row: Record<string, unknown>): number {
+  const calls = row.tool_calls;
+  return Array.isArray(calls) ? calls.length : 0;
+}
+
+/**
+ * Chat-facing transcript store. `load` delegates so the `have` count that
+ * aligns suffix persist stays the same UI-only filter as the inner store and
+ * `overlayMultimodalHistoryForRunTurn` — a third model-facing view would drift.
+ */
+export function createChatTranscriptStore(
+  options: CreateChatTranscriptStoreOptions = {},
+): ChatTranscriptStore {
+  const inner = options.inner ?? createSessionTranscriptStore();
+  const thoughtController = options.thoughtController ?? null;
+  const turnRunId = options.turnRunId;
+  const thinkingTracker = new ThinkingDurationTracker();
+  const toolOutcomes = new Map<string, ToolOutcomeDecor>();
+
+  let round = emptyRound(0);
+  let lastPersistedAssistantIndex: number | undefined;
+  // `observe` has no chatId; persist always names the chat first.
+  let lastChatId: string | undefined;
+
+  function thinkingSegmentsForRow(): string[] {
+    const fromController = thoughtController?.getSegmentsNormalized() ?? [];
+    if (fromController.length > 0) return fromController;
+    const raw = round.reasoning.trim() || round.thinkingSnapshot.trim();
+    return raw ? splitThinkingSegments(raw) : [];
+  }
+
+  function applyThinkingToRow(row: Record<string, unknown>): string[] {
+    const thinking = thinkingSegmentsForRow();
+    if (thinking.length > 0) {
+      row.thinking = thinking;
+      const durationMs = thinkingTracker.finalizeRound();
+      if (durationMs > 0) row.thinkingDurationMs = durationMs;
+      const signature = thoughtController?.getAnthropicThinkingSignature();
+      if (signature) row.thinkingSignature = signature;
+    } else {
+      thinkingTracker.finalizeRound();
+    }
+    return thinking;
+  }
+
+  function applyStatsToRow(row: Record<string, unknown>): void {
+    if (round.stats && Object.keys(round.stats).length > 0) {
+      row.stats = round.stats;
+    }
+    if (round.usage && Object.keys(round.usage).length > 0) {
+      row.usage = round.usage;
+    }
+  }
+
+  /**
+   * Land `truncated: true` (the runner currently discards this return) and
+   * throw on a provider error so the turn does not complete silently.
+   * Abort is P10-E — do not mint a `stopped` row here.
+   */
+  function applyStreamEndToRow(row: Record<string, unknown>): void {
+    const tools = toolCallCountOf(row);
+    const textLength =
+      typeof row.content === 'string' ? row.content.trim().length : 0;
+    const thinkingCount = Array.isArray(row.thinking) ? row.thinking.length : 0;
+    const classified = classifyStreamEnd({
+      finishReason: round.finishReason,
+      toolCallsCount: tools,
+      textLength,
+      streamError: round.streamError,
+    });
+    if (classified.kind === 'aborted') return;
+    if (
+      classified.kind === 'incomplete' &&
+      (textLength > 0 || thinkingCount > 0 || tools > 0)
+    ) {
+      return;
+    }
+    const applied = applyClassifiedStreamEnd(classified, {
+      hasPostToolTail: tools > 0,
+      textLength,
+    });
+    if (applied.truncated) row.truncated = true;
+  }
+
+  function decorateAssistant(message: TranscriptMessage): Record<string, unknown> {
+    const row = cloneRow(message);
+    stripWireReasoning(row);
+    const thinking = applyThinkingToRow(row);
+    const hasToolCalls = toolCallCountOf(row) > 0;
+    if (!hasToolCalls) {
+      const raw = typeof row.content === 'string' ? row.content : '';
+      const resolved = resolveFinalAssistantContent(raw, thinking);
+      row.content = resolved.content;
+    }
+    applyStatsToRow(row);
+    applyStreamEndToRow(row);
+    return row;
+  }
+
+  function decorateTool(message: TranscriptMessage): Record<string, unknown> {
+    const row = cloneRow(message);
+    const id = typeof row.tool_call_id === 'string' ? row.tool_call_id : '';
+    if (!id) return row;
+    const outcome = toolOutcomes.get(id);
+    if (!outcome) return row;
+    if (outcome.attachments?.length) row.attachments = outcome.attachments;
+    if (outcome.codeChange) row.codeChange = outcome.codeChange;
+    return row;
+  }
+
+  function decorate(message: TranscriptMessage): Record<string, unknown> | null {
+    if (isInnerLoopControlUserRow(message)) return null;
+    if (message.role === 'assistant') return decorateAssistant(message);
+    if (message.role === 'tool') return decorateTool(message);
+    return cloneRow(message);
+  }
+
+  function patchPersistedAssistant(chatId: string): void {
+    if (lastPersistedAssistantIndex === undefined) return;
+    const chat = findChatById(chatId);
+    if (!chat) return;
+    const row = chat.history[lastPersistedAssistantIndex] as
+      | AssistantMessage
+      | AssistantToolCallMessage
+      | undefined;
+    if (!row || row.role !== 'assistant') return;
+    const mutable = row as unknown as Record<string, unknown>;
+    if (!Array.isArray(mutable.thinking) || mutable.thinking.length === 0) {
+      const thinking = thinkingSegmentsForRow();
+      if (thinking.length > 0) mutable.thinking = thinking;
+    }
+    applyStatsToRow(mutable);
+    applyStreamEndToRow(mutable);
+    recordChatMessage(chat);
+    scheduleSaveSessions();
+  }
+
+  return {
+    load(chatId) {
+      return inner.load(chatId);
+    },
+    setMeta(chatId, meta) {
+      inner.setMeta(chatId, meta);
+    },
+    append(chatId, message) {
+      const chat = findChatById(chatId);
+      if (!chat) return;
+      lastChatId = chatId;
+      const decorated = decorate(message);
+      if (decorated === null) return;
+      inner.append(chatId, decorated as unknown as TranscriptMessage);
+      if (decorated.role === 'assistant') {
+        lastPersistedAssistantIndex = chat.history.length - 1;
+      }
+      if (turnRunId) {
+        noteRunOutputIndex(chat, turnRunId, chat.history.length - 1);
+      }
+      recordChatMessage(chat);
+      scheduleSaveSessions();
+    },
+    observe(event) {
+      if (event.type === 'round_start') {
+        // Later rounds must not inherit the previous round's thoughts or
+        // duration — consume resets the live controller after that round's
+        // row was already snapshotted on append (live chrome is P10-F).
+        if (event.index > 0) {
+          thoughtController?.consumePersistedSegments();
+          thoughtController?.resetStreamPhaseHints();
+        }
+        round = emptyRound(event.index);
+        lastPersistedAssistantIndex = undefined;
+        return;
+      }
+      if (event.type === 'thinking') {
+        round.thinkingSnapshot = event.text;
+        thinkingTracker.startSegment();
+        return;
+      }
+      if (event.type === 'reasoning_end') {
+        thinkingTracker.endSegment();
+        return;
+      }
+      if (event.type === 'stream_meta') {
+        const stats = asStats(event.stats);
+        const usage = asUsage(event.usage);
+        if (stats) round.stats = stats;
+        if (usage) round.usage = usage;
+        if (event.finishReason) round.finishReason = event.finishReason;
+        return;
+      }
+      if (event.type === 'tool_result') {
+        if (!event.id) return;
+        const outcome: ToolOutcomeDecor = {};
+        if (Array.isArray(event.attachments) && event.attachments.length > 0) {
+          outcome.attachments = event.attachments as ToolImageAttachment[];
+        }
+        if (event.codeChange && typeof event.codeChange === 'object') {
+          outcome.codeChange = event.codeChange as CodeChangeStats;
+        }
+        toolOutcomes.set(event.id, outcome);
+        return;
+      }
+      if (event.type === 'round_end') {
+        round.index = event.index;
+        round.reasoning = event.reasoning;
+        round.toolCallCount = event.toolCallCount;
+        const stats = asStats(event.stats);
+        const usage = asUsage(event.usage);
+        if (stats) round.stats = stats;
+        if (usage) round.usage = usage;
+        if (event.finishReason) round.finishReason = event.finishReason;
+        // Tool-round persist of the assistant happens before this event.
+        // Patch so stats / truncated still land on the row the renderer reads.
+        if (lastChatId) patchPersistedAssistant(lastChatId);
+      }
+    },
+    noteGeneration(chatId, generationId) {
+      const chat = findChatById(chatId);
+      if (!chat) return;
+      if (turnRunId) {
+        noteRunGeneration(chat, turnRunId, generationId);
+      }
+      touchChat(chat);
+      scheduleSaveSessions();
+    },
+    abortThinking() {
+      thinkingTracker.abort();
+    },
+    lastAssistantHistoryIndex() {
+      return lastPersistedAssistantIndex;
+    },
+  };
+}

@@ -62,7 +62,8 @@ object so a caller can reject without teaching this package a role name.
 | `seed` | Opening user message. |
 | `tools` | Caller OpenAI function-tool list. `ask_question` is added or stripped by `ask` (not by this array). |
 | `model` | `providerId` + `id` + optional sampler / thinking. |
-| `onEvent` | Presentation-free typed events (`delta`, `thinking`, `tool_call`, `tool_result`). The caller chooses DOM, SSE, or nothing. |
+| `onEvent` | Presentation-free typed events (`delta`, `thinking`, `tool_streaming`, `tool_call`, `tool_result`, plus P10-B `phase` / `reasoning_end` / `stream_meta` / `round_start` / `round_end`). The caller chooses DOM, SSE, or nothing. Disk high-frequency types: `isHighFrequencyTurnEvent`. Sub-agent live SSE: `shouldEmitSubAgentLiveTurnEvent` (forwards `phase`). |
+| `onRoundBoundary` | **P10-I.** Optional `() => TranscriptMessage[] \| null`. Consulted at the top of every tool-loop iteration; returned rows splice into the in-memory transcript. Same injection shape as `AskCapability`. Chat implements it; board/sub-agent omit it. |
 | `cwd` | Forwarded to tool execute context. This wrapper does not `chdir`. |
 | `transcript` | P2-A `TranscriptStore`. Falls back to `deps.transcriptStore`. |
 | `signal` | Caller abort. Distinct from wall-clock timeout. |
@@ -132,8 +133,10 @@ no dual-path flag. Stream-end order is `setStreaming(false)` **before**
 `notifyChatStreamEnded`. Board `runTurn` is unchanged (report tool, `ask: null`,
 nudge/finalization defaults on).
 
-Finding 6 (`execute` attachments) and finding 7 (lifecycle events): caller wrap
-and the `runTurn` promise remain enough — `TurnEvent` is unchanged.
+Finding 6 (`execute` attachments) is closed in P10-B: `TurnEvent.tool_result`
+now carries `attachments` / `codeChange` / `isError`. Finding 7 (lifecycle
+events) is the rest of P10-B (`round_start` / `round_end` / `phase` /
+`reasoning_end` / `stream_meta`).
 
 ## Completions — in-process binding (MIN-700 / P2-C)
 
@@ -198,3 +201,105 @@ resolved list. Unattended/headless has no human to answer; a fabricated call
 is an immediate tool error. A parent-injected `AskCapability` later is an
 **options argument on the effector** (default `null`), not an `isSubAgent`
 branch in this package. Do not add one.
+
+## Phase 10 — P10-B TurnEvent contract (MIN-767)
+
+`TurnEvent` is widened so a caller can rebuild per-round chrome from facts the
+inner loop already computed and dropped. The runner still does not know what a
+chat is. `phase` is the
+inner loop's own word (`generating` | `thinking` | `tools`).
+
+New members, in order within a model round:
+
+```
+round_start → (phase / thinking / delta / stream_meta)* → reasoning_end
+  → tool_streaming → tool_call* → tool_result* → round_end
+```
+
+- `phase` — forwarded from `onLiveActivity.phase` (the wrapper used to discard it).
+- `reasoning_end` — once per round, when the inner loop leaves the reasoning
+  channel (first prose, first tool-call streaming, or end of stream).
+- `stream_meta` — throttled (~80 ms) forward of merged `streamMeta` from
+  `handleChunk` (`usage`, `stats`, llama.cpp `runtime`, `model`, `finishReason`).
+- `round_start` / `round_end` — `round_end` carries `text`, `reasoning`,
+  `toolCallCount`, `usage`, `stats`, `finishReason`, `t0` / `tFirst` / `tEnd`.
+  It fires **after** the last `tool_result` of that round (including a
+  report-tool throw that unwinds the loop). The stream-error partial path is
+  not a round boundary.
+
+`tool_result` now carries `attachments` / `codeChange` / `isError`, and always
+fires: emit moved onto `onToolDone` so parseError and abort fills are not
+silent. `execute` no longer emits.
+
+High-frequency types (`stream_meta`, `phase`, `round_start`, `reasoning_end`,
+plus `token` / `delta` / `reasoning_delta`) are classified by
+`isHighFrequencyTurnEvent` in this package. **This is a runner contract any
+`TurnEvent` sink must use** — not a board detail. Do not invent a second list.
+
+- **Disk** (board `transcripts.js`) and **board live SSE** drop the whole set so
+  a 12 Hz `stream_meta` cannot cap a P9-D log. `round_end` is **not**
+  high-frequency; it is recorded.
+- **Sub-agent live SSE** uses `shouldEmitSubAgentLiveTurnEvent` (P10-L) so
+  `phase` reaches cards. `phase` is not 12 Hz; the generating fallback without
+  it was a lie. Disk still drops `phase`. P8-F records **no** attempt
+  transcript — the sub-agent effector forwards to `emitLive` only.
+
+## Phase 10 — P10-C settled persist (MIN-768)
+
+Continue-mode turns used to persist **once**, in `finally`, from the last
+`onMessagesChange` snapshot. A crash, Stop, or chat-switch mid-turn lost every
+completed tool round. Isolated (board) persist was already live and is
+**unchanged**.
+
+**Inner callback (backward compatible):** `onMessagesChange(messages, meta?)`
+gains `meta: { settled: boolean }` (`MessagesChangeMeta`). Existing callers
+that ignore the second argument stay valid.
+
+- Forced emits (`emitProgress(undefined, true)` after a real `messages.push`)
+  → `settled: true`.
+- Throttled emits (`emitProgress(streamingAssistant)` during a stream, synthetic
+  partial on the clone) → `settled: false`.
+
+**Continue persist:** a monotonic `persistCursor` starting at
+`buildOpeningTranscript().persistFrom`. On `settled === true`, suffix
+`persistNewMessages(..., { from: persistCursor })` then
+`persistCursor = messages.length`. `finally` keeps the same persist as an
+idempotent backstop for abort/throw — the cursor makes it a no-op when nothing
+new landed. Unsettled clones are never appended (no synthetic partial assistant
+row). Stopped/failed presentation of a partial is a chat-caller overlay
+(P10-E / `src/chat/settle-interrupted-turn.ts`), not a runner persist of that clone.
+
+**Sub-agent retries** are continue turns (P8-D passes `messages` +
+`seedKind: 'continue'`). They still use `createMemoryTranscriptStore()`, so
+incremental persist is a no-op there. Do not change that.
+
+**Seed equality:** `buildOpeningTranscript` still skips a trailing user row
+whose string content equals `seed`. `persistFrom` points past the whole prior
+transcript when it does append a new user row. Chat passes `seed: historyContent`
+(not `userText`) so a skill-tagged send does not mint a second user row (P10-D).
+
+## Phase 10 — P10-I in-turn steer (`onRoundBoundary`) (MIN-774)
+
+P6-C reduced mid-turn steer to abort + follow-up. That killed the live turn,
+marked the run failed, and split one turn into two. P10-I restores the
+loop.ts behaviour with an injected hook — same shape as `AskCapability`,
+not an `isChat` branch:
+
+```ts
+onRoundBoundary?: () => TranscriptMessage[] | null
+```
+
+The inner loop consults it at the top of every tool-loop iteration (after
+tools, before the next completion). Returned rows are spliced into the
+in-memory transcript. Chat implements this with `consumePendingSteer` +
+`syncComposerMessageQueue` (`createChatRoundBoundary`). Board and sub-agent
+callers **omit** the hook.
+
+Continue persist: chat already wrote the product row in `consumePendingSteer`
+(including `steer: true` for the reload chip). The wrapper advances
+`persistCursor` by the spliced length so suffix persist does not duplicate
+it. Isolated persist still keys off store length.
+
+A throwing hook is swallowed (caller seam). There is still no `isBoard`
+branch. Do not abort the live generation when a steer is enqueued.
+

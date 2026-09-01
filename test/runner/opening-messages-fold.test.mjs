@@ -165,3 +165,46 @@ describe('buildOpeningTranscript persistFrom boundary', () => {
     });
   }
 });
+
+describe('P10-C seed-equality (MIN-768)', () => {
+  test('prior ending in a user row equal to the seed produces no second row', () => {
+    const prior = [
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: 'hi' },
+      { role: 'user', content: 'hello there' },
+    ];
+    const opened = buildOpeningTranscript('sys', 'hello there', prior);
+    assert.equal(
+      opened.messages.filter((m) => m.role === 'user' && m.content === 'hello there').length,
+      1,
+      'must not duplicate the matching last user row',
+    );
+    // persistFrom points past the whole prior transcript (system + surviving prior).
+    assert.equal(opened.persistFrom, opened.messages.length);
+    assert.equal(opened.persistFrom, 1 + prior.length);
+  });
+
+  test('when the seed is new, persistFrom points past the prior transcript at the appended user row', () => {
+    const prior = [
+      { role: 'user', content: 'first' },
+      { role: 'assistant', content: 'hi' },
+    ];
+    const opened = buildOpeningTranscript('sys', 'second', prior);
+    assert.equal(opened.messages[opened.persistFrom]?.role, 'user');
+    assert.equal(opened.messages[opened.persistFrom]?.content, 'second');
+    assert.deepEqual(
+      opened.messages.slice(1, opened.persistFrom).map((m) => `${m.role}:${m.content}`),
+      ['user:first', 'assistant:hi'],
+      'rows before persistFrom are the surviving prior transcript',
+    );
+  });
+
+  test('multimodal last user row is kept as-is even when seed is a different string', () => {
+    const prior = [{ role: 'user', content: [{ type: 'text', text: 'photo' }] }];
+    const opened = buildOpeningTranscript('sys', 'photo', prior);
+    assert.equal(opened.messages.length, 2);
+    assert.equal(opened.messages[1].role, 'user');
+    assert.equal(Array.isArray(opened.messages[1].content), true);
+    assert.equal(opened.persistFrom, 2);
+  });
+});

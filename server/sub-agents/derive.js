@@ -229,7 +229,10 @@ function apply(state, event) {
       const run = state.runs.get(event.runId);
       if (!run) return;
       run.cancelledReason = 'user';
-      closeOpenAttempts(run);
+      // Leave the attempt open. closeOpenAttempts here was the freeze: the
+      // fold looked terminal while the effector was still emitting, and
+      // onLive dropped every live frame. reapVanished journals attempt.ended
+      // after stop() so replay still settles to cancelled (P10-L / MIN-777).
       return;
     }
 
@@ -258,9 +261,10 @@ function apply(state, event) {
 }
 
 /**
- * A user cancel (and an abandon, if one ever races an open attempt) must close
- * the in-flight attempt in the fold. Leaving it open would make `reapVanished`
- * journal `crashed` for work the user stopped — a cancel is not a failure.
+ * Abandon still closes in-flight attempts in the fold. Cancel does not —
+ * that window is `cancelling` until reapVanished sees the effector gone
+ * (P10-L). Closing on abandon keeps reapVanished from double-writing a
+ * crashed end for work policy already gave up on.
  *
  * @param {import('./types').RunState} run
  * @returns {void}
@@ -329,13 +333,27 @@ function recompute(state) {
  * Phase is computed from the record, not maintained incrementally — so there
  * is no transition table to get wrong.
  *
+ * P10-L / MIN-777 precedence (replay-correct):
+ * 1. cancelledReason + an open attempt → `cancelling`. The journal has the
+ *    user's stop; the effector has not confirmed it. A journal that *ends*
+ *    here (crash mid-stop) replays as cancelling, not as a fake completed
+ *    cancel. Cards keep painting live frames.
+ * 2. cancelledReason with no open attempt → `cancelled`. Either the run
+ *    never started, or reapVanished wrote `attempt.ended` after stop().
+ * 3. abandonedReason → `abandoned` (abandon still closes attempts).
+ * 4. open attempt → `running`.
+ * 5. last ended pass → `passed`, else `idle`.
+ *
+ * cancelledReason used to win before the open-attempt check, so a cancel
+ * froze the card while tools were still on disk. Do not restore that order.
+ *
  * @param {import('./types').RunState} run
  * @returns {import('./types').RunPhase}
  */
 function phaseOf(run) {
-  if (run.cancelledReason !== null) return 'cancelled';
-  if (run.abandonedReason !== null) return 'abandoned';
   const open = run.attempts.find((a) => !a.ended);
+  if (run.cancelledReason !== null) return open ? 'cancelling' : 'cancelled';
+  if (run.abandonedReason !== null) return 'abandoned';
   if (open) return 'running';
   const last = lastEndedAttempt(run);
   if (last?.outcome === 'pass') return 'passed';
@@ -353,6 +371,21 @@ function phaseOf(run) {
  */
 export function isTerminal(run) {
   return run.phase === 'passed' || run.phase === 'abandoned' || run.phase === 'cancelled';
+}
+
+/**
+ * Engine `desired`: do not start or keep this attempt. Includes `cancelling`
+ * so the next tick calls effector.stop. Not the same as {@link isTerminal} —
+ * reapVanished must still see cancelling as unsettled so it can journal
+ * `attempt.ended` (the effector confirmation). pendingDeliveries stays on
+ * isTerminal so the parent is not told "cancelled, 0 tool turns" while the
+ * attempt is still winding down.
+ *
+ * @param {import('./types').RunState} run
+ * @returns {boolean}
+ */
+export function isStoppedForScheduling(run) {
+  return isTerminal(run) || run.phase === 'cancelling';
 }
 
 /**

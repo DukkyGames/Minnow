@@ -13,7 +13,7 @@ import {
 const { upsertSubAgentCardForRun, clearSubAgentCardDomRegistry } = await import(
   '../../src/ui/sub-agent-cards.ts',
 );
-const { setSessionStateForTests, createEmptyChatObject, getActiveChat } = await import(
+const { setSessionStateForTests, createEmptyChatObject } = await import(
   '../../src/state/sessions.ts',
 );
 const { renderHub, teardownHub } = await import('../../src/ui/hub.ts');
@@ -53,6 +53,14 @@ const sampleRun = (chatId: string) => ({
   messages: [],
   liveNestedToolCalls: 1,
 });
+
+function laterAssistant(area: HTMLElement): HTMLElement {
+  const trailing = document.createElement('div');
+  trailing.className = 'msg assistant';
+  trailing.textContent = 'Done.';
+  area.appendChild(trailing);
+  return trailing;
+}
 
 describe('sub-agent cards', { concurrency: false }, () => {
   afterEach(() => {
@@ -129,4 +137,160 @@ describe('sub-agent cards', { concurrency: false }, () => {
 
     clearSubAgentCardDomRegistry();
   });
+
+  test('upsert places the card under the spawn_sub_agent tool row', () => {
+    setupCodeDom();
+    const chat = createEmptyChatObject('');
+    chat.id = 'chat-sub-anchor';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    const area = document.getElementById('chatArea');
+    assert.ok(area);
+    const assistant = document.createElement('div');
+    assistant.className = 'msg assistant';
+    area.appendChild(assistant);
+    const toolRow = document.createElement('div');
+    toolRow.className = 'tool-call-msg';
+    toolRow.dataset.toolCallId = 'call_spawn_1';
+    area.appendChild(toolRow);
+    const later = document.createElement('div');
+    later.className = 'msg assistant';
+    later.textContent = 'Done.';
+    area.appendChild(later);
+
+    const el = upsertSubAgentCardForRun(
+      { ...sampleRun(chat.id), parentToolCallId: 'call_spawn_1' },
+      chat.id,
+    );
+    assert.ok(el);
+    assert.equal(el.previousElementSibling, toolRow);
+    assert.equal(toolRow.nextElementSibling, el);
+
+    clearSubAgentCardDomRegistry();
+  });
+
+  test('upsert re-anchors a detached card after a transcript rebuild', () => {
+    setupCodeDom();
+    const chat = createEmptyChatObject('');
+    chat.id = 'chat-sub-reanchor';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    const area = document.getElementById('chatArea');
+    assert.ok(area);
+    const firstRow = document.createElement('div');
+    firstRow.className = 'tool-call-msg';
+    firstRow.dataset.toolCallId = 'call_spawn_2';
+    area.appendChild(firstRow);
+
+    const run = { ...sampleRun(chat.id), parentToolCallId: 'call_spawn_2' };
+    const el = upsertSubAgentCardForRun(run, chat.id);
+    assert.ok(el);
+    assert.equal(el.previousElementSibling, firstRow);
+
+    // Simulate renderChatFromHistory: wipe the transcript but keep the card
+    // in the registry (the creation-only path would then skip placement).
+    area.replaceChildren();
+    assert.equal(el.isConnected, false);
+
+    const rebuilt = document.createElement('div');
+    rebuilt.className = 'tool-call-msg';
+    rebuilt.dataset.toolCallId = 'call_spawn_2';
+    area.appendChild(rebuilt);
+    laterAssistant(area);
+
+    const again = upsertSubAgentCardForRun(run, chat.id);
+    assert.equal(again, el);
+    assert.equal(el.previousElementSibling, rebuilt);
+    assert.equal(rebuilt.nextElementSibling, el);
+
+    clearSubAgentCardDomRegistry();
+  });
+
+  test('upsert moves a bottom-appended card once the spawn tool row appears', () => {
+    setupCodeDom();
+    const chat = createEmptyChatObject('');
+    chat.id = 'chat-sub-late-anchor';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    const area = document.getElementById('chatArea');
+    assert.ok(area);
+    const trailing = document.createElement('div');
+    trailing.className = 'msg assistant';
+    trailing.textContent = 'Done.';
+    area.appendChild(trailing);
+
+    const run = { ...sampleRun(chat.id), parentToolCallId: 'call_spawn_3' };
+    const el = upsertSubAgentCardForRun(run, chat.id);
+    assert.ok(el);
+    assert.equal(area.lastElementChild, el);
+
+    const spawnRow = document.createElement('div');
+    spawnRow.className = 'tool-call-msg';
+    spawnRow.dataset.toolCallId = 'call_spawn_3';
+    area.insertBefore(spawnRow, trailing);
+
+    const again = upsertSubAgentCardForRun(run, chat.id);
+    assert.equal(again, el);
+    assert.equal(el.previousElementSibling, spawnRow);
+    assert.equal(spawnRow.nextElementSibling, el);
+
+    clearSubAgentCardDomRegistry();
+  });
+
+  test('upsert after clearSubAgentCardDomRegistry still sits under the rebuilt tool row', () => {
+    setupCodeDom();
+    const chat = createEmptyChatObject('');
+    chat.id = 'chat-sub-history';
+    setSessionStateForTests({
+      version: 2,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    const area = document.getElementById('chatArea');
+    assert.ok(area);
+    const firstRow = document.createElement('div');
+    firstRow.className = 'tool-call-msg';
+    firstRow.dataset.toolCallId = 'call_spawn_hist';
+    area.appendChild(firstRow);
+
+    const run = { ...sampleRun(chat.id), parentToolCallId: 'call_spawn_hist' };
+    const first = upsertSubAgentCardForRun(run, chat.id);
+    assert.ok(first);
+    assert.equal(first.previousElementSibling, firstRow);
+
+    // Production renderChatFromHistory: drop the registry, wipe the mount,
+    // rebuild the spawn tool row, then re-upsert persisted cards.
+    clearSubAgentCardDomRegistry();
+    area.replaceChildren();
+    const rebuilt = document.createElement('div');
+    rebuilt.className = 'tool-call-msg';
+    rebuilt.dataset.toolCallId = 'call_spawn_hist';
+    area.appendChild(rebuilt);
+    laterAssistant(area);
+
+    const again = upsertSubAgentCardForRun(run, chat.id);
+    assert.ok(again);
+    assert.equal(again.previousElementSibling, rebuilt);
+    assert.equal(rebuilt.nextElementSibling, again);
+
+    clearSubAgentCardDomRegistry();
+  });
 });
+

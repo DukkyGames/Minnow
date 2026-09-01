@@ -7,9 +7,13 @@
  */
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import {
   adoptSubAgentRunForTests,
+  cancelAllForParentTurn,
   cancelSubAgent,
   resetSubAgentOrchestrator,
   setSubAgentApiFetchForTests,
@@ -18,6 +22,11 @@ import {
   waitForSubAgent,
 } from '../../src/agents/orchestrator.ts';
 import type { SubAgentRun } from '../../src/agents/types.ts';
+import { setSubAgentExecutorContext } from '../../src/tools/sub-agent-executor.ts';
+import {
+  createEmptyChatObject,
+  setSessionStateForTests,
+} from '../../src/state/sessions.ts';
 import { FIXED_RUN_ID, FIXED_SUMMARY } from './test-helpers.mts';
 
 const CHAT_ID = '11111111-1111-1111-1111-222222222222';
@@ -104,6 +113,8 @@ describe('orchestrator SSE store (spawn / cancel / wait)', () => {
   });
 
   afterEach(() => {
+    setSubAgentExecutorContext(null);
+    setSessionStateForTests(null);
     setSubAgentApiFetchForTests(null);
     setSubAgentOpenStreamForTests(null);
     resetSubAgentOrchestrator();
@@ -139,11 +150,14 @@ describe('orchestrator SSE store (spawn / cancel / wait)', () => {
     assert.equal(cancel.method, 'POST');
   });
 
-  test('waitForSubAgent rejects AbortError and POSTs cancel', async () => {
+  test('waitForSubAgent rejects AbortError and POSTs cancel when the passed signal aborts', async () => {
+    // chatSignal shape: the same AbortSignal runChatTurn passes to executeTool.
+    // This listener is the cancel origin WHEN a signal is actually passed
+    // (Super Plan AbortSignal.timeout). Chat spawn wait:true does not pass it.
     adoptSubAgentRunForTests(runningRun());
-    const ac = new AbortController();
-    const pending = waitForSubAgent(FIXED_RUN_ID, ac.signal);
-    ac.abort();
+    const chatSignal = new AbortController();
+    const pending = waitForSubAgent(FIXED_RUN_ID, chatSignal.signal);
+    chatSignal.abort();
     await assert.rejects(pending, (err: unknown) => {
       assert.ok(err && typeof err === 'object' && 'name' in err);
       assert.equal((err as { name: string }).name, 'AbortError');
@@ -170,4 +184,116 @@ describe('orchestrator SSE store (spawn / cancel / wait)', () => {
     assert.equal(agg.status, 'completed');
     assert.equal(agg.summary, FIXED_SUMMARY);
   });
+
+  test('spawn forwards parentToolCallId and parentTurnId on the POST', async () => {
+    const result = await spawnSubAgent({
+      type: 'explore',
+      task: 'scan',
+      wait: false,
+      parentChatId: CHAT_ID,
+      parentTurnId: 'turn-1',
+      parentToolCallId: 'call_spawn',
+    });
+    assert.equal(result.runId, FIXED_RUN_ID);
+    const spawn = posts.find((p) => p.method === 'POST' && p.url.endsWith('/api/agents'));
+    assert.ok(spawn);
+    const body = JSON.parse(spawn.body) as {
+      parentChatId: string;
+      parentTurnId: string;
+      parentToolCallId: string;
+    };
+    assert.equal(body.parentChatId, CHAT_ID);
+    assert.equal(body.parentTurnId, 'turn-1');
+    assert.equal(body.parentToolCallId, 'call_spawn');
+  });
+
+  test('cancelAllForParentTurn POSTs cancel for runs indexed by that turn', async () => {
+    adoptSubAgentRunForTests(runningRun());
+    cancelAllForParentTurn('turn-1');
+    await new Promise((r) => setTimeout(r, 20));
+    const cancel = posts.find((p) => p.url.includes(`/${FIXED_RUN_ID}/cancel`));
+    assert.ok(cancel);
+    assert.equal(cancel.method, 'POST');
+  });
+
+  test('cancelAllForParentTurn does not match a different parentTurnId', async () => {
+    adoptSubAgentRunForTests(runningRun());
+    cancelAllForParentTurn('turn-other');
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(
+      posts.filter((p) => p.url.includes('/cancel')).length,
+      0,
+    );
+  });
+
+  test('spawn without parentChatId prefers executor context over the active chat', async () => {
+    const chatA = createEmptyChatObject('');
+    chatA.id = 'chat-parent-a';
+    const chatB = createEmptyChatObject('');
+    chatB.id = 'chat-parent-b';
+    setSessionStateForTests({
+      version: 3,
+      activeId: chatB.id,
+      sidebarCollapsed: false,
+      chats: [chatA, chatB],
+    });
+    setSubAgentExecutorContext({
+      parentTurnId: 'turn-a',
+      modeId: 'debug',
+      parentChatId: chatA.id,
+      parentToolCallId: 'call_a',
+    });
+
+    await spawnSubAgent({
+      type: 'explore',
+      task: 'scan',
+      wait: false,
+    });
+
+    const spawn = posts.find((p) => p.method === 'POST' && p.url.endsWith('/api/agents'));
+    assert.ok(spawn);
+    const body = JSON.parse(spawn.body) as { parentChatId: string };
+    assert.equal(body.parentChatId, chatA.id);
+  });
 });
+
+describe('cancel origin wiring (P10-L / MIN-777)', () => {
+  const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+  test('spawn wait:true does not pass a signal into waitForSubAgent', () => {
+    const source = fs.readFileSync(
+      path.join(PROJECT_ROOT, 'src', 'agents', 'orchestrator.ts'),
+      'utf8',
+    );
+    assert.match(source, /return waitForSubAgent\(result\.runId\);/);
+    assert.equal(/waitForSubAgent\(result\.runId\s*,/.test(source), false);
+  });
+
+  test('executeSubAgentTool does not take the parent chat signal', () => {
+    const source = fs.readFileSync(
+      path.join(PROJECT_ROOT, 'src', 'tools', 'sub-agent-executor.ts'),
+      'utf8',
+    );
+    assert.match(
+      source,
+      /export async function executeSubAgentTool\(\s*name: string,\s*args: Record<string, unknown>/,
+    );
+    const client = fs.readFileSync(path.join(PROJECT_ROOT, 'src', 'tools', 'client.ts'), 'utf8');
+    assert.match(client, /executeSubAgentTool\(name, args\)/);
+    assert.equal(client.includes('executeSubAgentTool(name, args, context)'), false);
+  });
+
+  test('parent Stop and runChatTurn do not call cancelAllForParentTurn', () => {
+    const stop = fs.readFileSync(
+      path.join(PROJECT_ROOT, 'src', 'chat', 'stop-generation.ts'),
+      'utf8',
+    );
+    const chat = fs.readFileSync(
+      path.join(PROJECT_ROOT, 'src', 'chat', 'run-turn-chat.ts'),
+      'utf8',
+    );
+    assert.equal(stop.includes('cancelAllForParentTurn'), false);
+    assert.equal(chat.includes('cancelAllForParentTurn'), false);
+  });
+});
+

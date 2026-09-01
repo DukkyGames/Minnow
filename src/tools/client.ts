@@ -354,6 +354,10 @@ async function executeToolInner(
   ) {
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
+    // context.signal is the parent chat AbortSignal. Do not forward it into
+    // spawn wait:true — that would journal run.cancelled when the parent
+    // turn stops (MIN-777). Background spawn already returned; wait:true
+    // uses waitForSubAgent(runId) with no signal.
     const text = await executeSubAgentTool(name, args);
     return { content: text };
   }

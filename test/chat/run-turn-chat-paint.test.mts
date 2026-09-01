@@ -9,8 +9,13 @@ import { describe, test } from 'node:test';
 import {
   coerceToolCallArgs,
   createChatTurnEventPainter,
+  finalizeAndAnchorThinkingRound,
+  parsePaintToolArguments,
   thinkingDeltaFromSnapshot,
 } from '../../src/chat/run-turn-chat-paint.ts';
+import { TOOL_ARGUMENTS_INVALID_JSON } from '../../src/tools/parse-tool-arguments.ts';
+import { renderToolCall } from '../../src/ui/tool-messages.ts';
+import { resetShellRunRegistryForTests } from '../../src/ui/shell-run-registry.ts';
 
 function hostStub(overrides: {
   schedulePaintTick?: (cb: () => void) => void;
@@ -75,6 +80,11 @@ describe('P6-A chat turn event painter (MIN-723)', () => {
   test('coerceToolCallArgs parses a JSON string from the wire', () => {
     assert.deepEqual(coerceToolCallArgs('{"expression":"1+1"}'), { expression: '1+1' });
     assert.deepEqual(coerceToolCallArgs({ expression: '1+1' }), { expression: '1+1' });
+    // Malformed JSON must not become `{ raw }` — that used to paint as args.
+    assert.deepEqual(coerceToolCallArgs('{not json'), {});
+    const parsed = parsePaintToolArguments('{not json');
+    assert.equal(parsed.parseError, TOOL_ARGUMENTS_INVALID_JSON);
+    assert.deepEqual(parsed.args, {});
   });
 
   test('maps delta, thinking, tool_call, and tool_result onto existing helpers', () => {
@@ -197,7 +207,7 @@ describe('P7-B coalesced chat paint (MIN-729)', () => {
 
     assert.equal(scrolls, 1);
     assert.equal(markdowns, 1);
-    assert.equal(coalescedPaints, 1, 'live stats hook fires once per paint tick');
+    assert.equal(coalescedPaints, 1, 'live stats / context overlay hook fires once per paint tick');
     assert.deepEqual(stub.thinking, ['x'.repeat(burst)]);
     assert.equal(stub.revealed, true);
     assert.equal(painter.snapshot().lastDelta, 'y'.repeat(burst));
@@ -246,5 +256,339 @@ describe('P7-B coalesced chat paint (MIN-729)', () => {
 
     assert.equal(ticks.length, 0, 'tools do not schedule a transcript paint');
     assert.ok(stub.mount.querySelector('.tool-call-msg'), 'tool row appears immediately');
+  });
+});
+
+function roundEnd(
+  index: number,
+  text: string,
+  reasoning: string,
+  toolCallCount: number,
+): Extract<import('../../server/runner/run-turn').TurnEvent, { type: 'round_end' }> {
+  return {
+    type: 'round_end',
+    index,
+    text,
+    reasoning,
+    toolCallCount,
+    t0: 0,
+    tFirst: 1,
+    tEnd: 2,
+  };
+}
+
+function appendAssistantShell(mount: HTMLElement) {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg assistant msg--awaiting-prose';
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  const cursor = document.createElement('div');
+  wrap.appendChild(bubble);
+  bubble.appendChild(cursor);
+  mount.appendChild(wrap);
+  return { wrap, bubble, cursor };
+}
+
+describe('P10-F per-round transcript rows (MIN-771)', () => {
+  test('reasoning_end flushes pending thinking then ends the reasoning phase', () => {
+    const ticks: Array<() => void> = [];
+    let ended = 0;
+    const stub = hostStub({
+      schedulePaintTick: (cb) => {
+        ticks.push(cb);
+      },
+      scrollTranscript: () => {},
+      scheduleMarkdown: () => {},
+    });
+    const painter = createChatTurnEventPainter({
+      ...stub.host,
+      thoughtController: {
+        appendReasoningDelta: (delta: string) => {
+          stub.thinking.push(delta);
+        },
+        endReasoningPhase: () => {
+          ended += 1;
+        },
+      },
+    });
+
+    painter.onEvent({ type: 'thinking', text: 'Let me look.' });
+    assert.equal(ticks.length, 1);
+    assert.deepEqual(stub.thinking, []);
+    assert.equal(ended, 0);
+
+    painter.onEvent({ type: 'reasoning_end' });
+    assert.deepEqual(stub.thinking, ['Let me look.']);
+    assert.equal(ended, 1);
+  });
+
+  test('round_end with tools finalizes one thought group per round and keeps tool rows under the caller', () => {
+    const ticks: Array<() => void> = [];
+    const durations: number[] = [1100, 2300];
+    let durationIdx = 0;
+    const stub = hostStub({
+      schedulePaintTick: (cb) => {
+        ticks.push(cb);
+      },
+      scrollTranscript: () => {},
+      scheduleMarkdown: (_bubble, markdown) => {
+        _bubble.textContent = markdown;
+      },
+    });
+
+    const makeThoughts = () => {
+      let buffer = '';
+      return {
+        appendReasoningDelta: (delta: string) => {
+          buffer += delta;
+        },
+        consumePersistedSegments: () => {
+          const segs = buffer.trim() ? [buffer.trim()] : [];
+          buffer = '';
+          return segs;
+        },
+        endReasoningPhase: () => {},
+      };
+    };
+
+    let thoughts = makeThoughts();
+    const painter = createChatTurnEventPainter({
+      ...stub.host,
+      thoughtController: thoughts,
+      finalizeThinkingRound: () => durations[durationIdx++] ?? 0,
+      beginNextStreamingRow: () => {
+        const next = appendAssistantShell(stub.mount);
+        thoughts = makeThoughts();
+        return {
+          wrap: next.wrap,
+          bubble: next.bubble,
+          cursor: next.cursor,
+          thoughtController: thoughts,
+        };
+      },
+    });
+
+    painter.onEvent({ type: 'round_start', index: 0 });
+    painter.onEvent({ type: 'thinking', text: 'need the clock' });
+    painter.onEvent({ type: 'reasoning_end' });
+    painter.onEvent({ type: 'delta', text: 'Let me check.' });
+    ticks.forEach((tick) => tick());
+    ticks.length = 0;
+    painter.onEvent({
+      type: 'tool_call',
+      name: 'get_datetime',
+      id: 'call_dt',
+      arguments: '{}',
+    });
+    painter.onEvent({
+      type: 'tool_result',
+      name: 'get_datetime',
+      id: 'call_dt',
+      content: 'noon',
+    });
+    painter.onEvent(roundEnd(0, 'Let me check.', 'need the clock', 1));
+
+    painter.onEvent({ type: 'round_start', index: 1 });
+    painter.onEvent({ type: 'thinking', text: 'got it' });
+    painter.onEvent({ type: 'reasoning_end' });
+    painter.onEvent({ type: 'delta', text: 'It is noon.' });
+    ticks.forEach((tick) => tick());
+    // Last round has no tools — turn-end closes it (same helper the caller uses).
+    painter.flush();
+    const lastWrap = stub.mount.querySelectorAll('.msg.assistant')[1] as HTMLElement;
+    finalizeAndAnchorThinkingRound({
+      thoughtController: thoughts,
+      wrap: lastWrap,
+      hasProse: true,
+      durationMs: durations[durationIdx++] ?? 0,
+    });
+
+    const assistants = [...stub.mount.querySelectorAll('.msg.assistant')];
+    assert.equal(assistants.length, 2, 'two assistant rows, one per model round');
+    const children = [...stub.mount.children];
+    assert.equal(children[0], assistants[0]);
+    assert.ok(children[1]?.classList.contains('tool-call-msg'), 'tool row sits under round-1 assistant');
+    assert.equal(children[2], assistants[1]);
+
+    const toggles = assistants.map((row) => row.querySelectorAll('.thoughts-toggle').length);
+    assert.deepEqual(toggles, [1, 1], 'one Thoughts toggle per round');
+    assert.equal(
+      assistants[0]?.querySelector('.thoughts-toggle__label')?.textContent,
+      'Thought for 1.1s',
+    );
+    assert.equal(
+      assistants[1]?.querySelector('.thoughts-toggle__label')?.textContent,
+      'Thought for 2.3s',
+    );
+    assert.equal(assistants[0]?.querySelector('.msg-bubble')?.textContent?.trim(), 'Let me check.');
+    assert.equal(assistants[1]?.querySelector('.msg-bubble')?.textContent?.trim(), 'It is noon.');
+  });
+
+  test('round_end with no tools does not open a second streaming row', () => {
+    const stub = hostStub({
+      schedulePaintTick: (cb) => {
+        cb();
+      },
+      scrollTranscript: () => {},
+      scheduleMarkdown: () => {},
+    });
+    let opened = 0;
+    const painter = createChatTurnEventPainter({
+      ...stub.host,
+      beginNextStreamingRow: () => {
+        opened += 1;
+      },
+    });
+    painter.onEvent({ type: 'delta', text: 'Hello.' });
+    painter.onEvent(roundEnd(0, 'Hello.', '', 0));
+    assert.equal(opened, 0);
+    assert.equal(stub.mount.querySelectorAll('.msg.assistant').length, 1);
+  });
+});
+
+describe('P10-H tool-row chrome (MIN-773)', () => {
+  test('malformed tool arguments paint an error row, not { raw }', () => {
+    const stub = hostStub();
+    const painter = createChatTurnEventPainter(stub.host);
+
+    painter.onEvent({
+      type: 'tool_call',
+      name: 'read_file',
+      id: 'call_bad',
+      arguments: '{not json',
+    });
+    const row = stub.mount.querySelector('.tool-call-msg');
+    assert.ok(row);
+    assert.equal(row?.textContent?.includes('{ raw'), false);
+
+    painter.onEvent({
+      type: 'tool_result',
+      name: 'read_file',
+      id: 'call_bad',
+      content: TOOL_ARGUMENTS_INVALID_JSON,
+      isError: true,
+    });
+    assert.ok(row?.classList.contains('tool-call-msg--fail'));
+    assert.ok(row?.textContent?.includes('not valid JSON'));
+  });
+
+  test('save_file tool_result shows the code-change badge', () => {
+    const stub = hostStub();
+    const painter = createChatTurnEventPainter(stub.host);
+    painter.onEvent({
+      type: 'tool_call',
+      name: 'save_file',
+      id: 'call_save',
+      arguments: '{"path":"a.ts"}',
+    });
+    painter.onEvent({
+      type: 'tool_result',
+      name: 'save_file',
+      id: 'call_save',
+      content: 'Saved a.ts',
+      codeChange: { additions: 12, deletions: 3, path: 'a.ts' },
+    });
+    const badge = stub.mount.querySelector('.tool-call-code-change');
+    assert.ok(badge);
+    assert.equal(badge?.querySelector('.tool-call-code-change__add')?.textContent, '+12');
+    assert.equal(badge?.querySelector('.tool-call-code-change__del')?.textContent, '−3');
+  });
+
+  test('screenshot tool_result shows the image attachment', () => {
+    const stub = hostStub();
+    const painter = createChatTurnEventPainter(stub.host);
+    painter.onEvent({
+      type: 'tool_call',
+      name: 'browser_screenshot',
+      id: 'call_shot',
+      arguments: '{}',
+    });
+    painter.onEvent({
+      type: 'tool_result',
+      name: 'browser_screenshot',
+      id: 'call_shot',
+      content: 'Screenshot saved: abc.png',
+      attachments: [
+        {
+          type: 'image',
+          url: '/api/browser/screenshot/abc',
+          mime: 'image/png',
+          alt: 'Browser screenshot',
+        },
+      ],
+    });
+    assert.ok(stub.mount.querySelector('.tool-call-screenshot'));
+  });
+
+  test('execute_command reveals Stop after a background runId result', () => {
+    resetShellRunRegistryForTests();
+    // attachShellKillUi → refreshShellKillUi uses CSS.escape; this paint
+    // harness's happy-dom window does not install `CSS` (shell-run-kill tests do).
+    const css = globalThis as typeof globalThis & { CSS?: { escape: (s: string) => string } };
+    if (typeof css.CSS === 'undefined') {
+      css.CSS = { escape: (s: string) => s.replace(/["\\]/g, '\\$&') };
+    }
+    const stub = hostStub();
+    const painter = createChatTurnEventPainter({
+      ...stub.host,
+      chatId: 'chat-shell',
+    });
+    painter.onEvent({
+      type: 'tool_call',
+      name: 'execute_command',
+      id: 'call_sh',
+      arguments: '{"command":"sleep 60"}',
+    });
+    const row = stub.mount.querySelector('.tool-call-msg');
+    const killBtn = row?.querySelector<HTMLButtonElement>('.tool-call-kill');
+    assert.ok(killBtn, 'Stop button is part of the execute_command row');
+    assert.ok(killBtn?.classList.contains('hidden'), 'hidden until a run is registered');
+
+    painter.onEvent({
+      type: 'tool_result',
+      name: 'execute_command',
+      id: 'call_sh',
+      content: JSON.stringify({
+        ok: true,
+        background: true,
+        runId: '11111111-1111-1111-1111-111111111111',
+      }),
+    });
+    assert.equal(killBtn?.classList.contains('hidden'), false);
+    resetShellRunRegistryForTests();
+  });
+
+  test('stranded wrap re-resolves by toolCallId after a mid-batch remount', () => {
+    const stub = hostStub();
+    const painter = createChatTurnEventPainter(stub.host);
+    painter.onEvent({
+      type: 'tool_call',
+      name: 'get_datetime',
+      id: 'call_live',
+      arguments: '{}',
+    });
+    const stranded = stub.mount.querySelector('.tool-call-msg') as HTMLElement;
+    assert.ok(stranded);
+
+    // Chat switch rebuilds the transcript from history: the captured node is
+    // gone and a fresh row carries the same data-tool-call-id (MIN-649).
+    stub.mount.replaceChildren();
+    const redrawn = renderToolCall('get_datetime', {});
+    redrawn.dataset.toolCallId = 'call_live';
+    stub.mount.appendChild(redrawn);
+    assert.equal(stranded.isConnected, false);
+    assert.equal(redrawn.isConnected, true);
+
+    painter.onEvent({
+      type: 'tool_result',
+      name: 'get_datetime',
+      id: 'call_live',
+      content: 'noon',
+    });
+    assert.equal(redrawn.querySelector('.tool-call-body')?.dataset.resultRendered, 'true');
+    assert.notEqual(
+      stranded.querySelector('.tool-call-body')?.dataset.resultRendered,
+      'true',
+    );
   });
 });

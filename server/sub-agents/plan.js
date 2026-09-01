@@ -23,7 +23,7 @@
  * once a cap can move (P1-F invariant 1).
  */
 
-import { attemptCount, DEFAULT_GLOBAL_MAX_CONCURRENT, DEFAULT_TYPE_MAX_CONCURRENT, isTerminal, lastEndedAttempt } from './derive.js';
+import { attemptCount, DEFAULT_GLOBAL_MAX_CONCURRENT, DEFAULT_TYPE_MAX_CONCURRENT, isStoppedForScheduling, lastEndedAttempt } from './derive.js';
 import { bundleAbandonmentEvidence } from './evidence.js';
 import { SUB_AGENT_ROLE } from './events.js';
 import { decide } from './policy.js';
@@ -45,7 +45,7 @@ export function defaultCaps() {
  *
  * The only caller of `decide()`. Returns a `start` the scheduler can act on,
  * an `abandon` the engine must journal, or `none` (pass waits for P8-E;
- * cancel is already terminal in the fold).
+ * cancel is already terminal in the fold once no attempt is open).
  *
  * @param {import('./types').AgentsState} state
  * @param {string} runId
@@ -54,7 +54,7 @@ export function defaultCaps() {
 export function nextAction(state, runId) {
   const run = state.runs.get(runId);
   if (!run) return { kind: 'none' };
-  if (isTerminal(run)) return { kind: 'none' };
+  if (isStoppedForScheduling(run)) return { kind: 'none' };
   if (run.attempts.some((a) => !a.ended)) return { kind: 'none' };
 
   const last = lastEndedAttempt(run);
@@ -144,7 +144,7 @@ export function plan(state, caps = defaultCaps()) {
   const inFlight = [];
   for (const id of state.runOrder) {
     const run = state.runs.get(id);
-    if (!run || isTerminal(run)) continue;
+    if (!run || isStoppedForScheduling(run)) continue;
     const open = run.attempts.find((a) => !a.ended);
     if (!open) continue;
     inFlight.push({
@@ -174,7 +174,7 @@ export function plan(state, caps = defaultCaps()) {
   for (const id of state.runOrder) {
     if (occupied.has(id)) continue;
     const run = state.runs.get(id);
-    if (!run || isTerminal(run)) continue;
+    if (!run || isStoppedForScheduling(run)) continue;
     // Rule 3: never two attempts on one run.
     if (run.attempts.some((a) => !a.ended)) continue;
 

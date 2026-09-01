@@ -113,7 +113,9 @@ async function passthroughBatch(options) {
     const result = await options.execute(toolCall.function.name, args, {
       toolCallId: toolCall.id,
     });
-    outcomes.push({ toolCall, result });
+    const outcome = { toolCall, result };
+    options.onToolDone?.(outcome);
+    outcomes.push(outcome);
   }
   return outcomes;
 }
@@ -1110,6 +1112,381 @@ describe('P6-C runTurn interface (MIN-725)', () => {
         assert.ok(nudged, 'board default must still inject the tool-use nudge');
       },
     );
+  });
+});
+
+describe('P10-C settled incremental persist (MIN-768)', () => {
+  const DATETIME_TOOL = {
+    type: 'function',
+    function: {
+      name: 'get_datetime',
+      description: 'Get the current date and time',
+      parameters: { type: 'object', properties: {} },
+    },
+  };
+  const CHAT_SHAPED = {
+    injectReportTool: false,
+    nudgeToolUse: false,
+    finalizeStructuredOutcome: false,
+    systemPrompt: 'chat system',
+  };
+  const PARTIAL = 'partial-should-not-persist';
+  const EFFECTOR_JS = path.join(PROJECT_ROOT, 'server', 'sub-agents', 'effector-runner.js');
+
+  /**
+   * Stream one prose delta, then hang until `signal` aborts.
+   * Delay the first chunk past LIVE_TRANSCRIPT_EMIT_MS so the throttled
+   * unsettled snapshot actually fires (opening persist sets lastProgressEmit).
+   */
+  function hangingPartialResponse(signal, text) {
+    const encoder = new TextEncoder();
+    const chunk = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
+    const abortErr = () => {
+      const err = new Error('aborted');
+      err.name = 'AbortError';
+      return err;
+    };
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          await new Promise((resolve, reject) => {
+            const timer = setTimeout(resolve, 120);
+            if (signal?.aborted) {
+              clearTimeout(timer);
+              reject(abortErr());
+              return;
+            }
+            signal?.addEventListener(
+              'abort',
+              () => {
+                clearTimeout(timer);
+                reject(abortErr());
+              },
+              { once: true },
+            );
+          });
+          controller.enqueue(encoder.encode(chunk));
+          await new Promise((_, reject) => {
+            if (signal?.aborted) {
+              reject(abortErr());
+              return;
+            }
+            signal?.addEventListener('abort', () => reject(abortErr()), { once: true });
+          });
+        } catch (err) {
+          try {
+            controller.error(err);
+          } catch {
+            /* already closed */
+          }
+        }
+      },
+    });
+    return new Response(stream, { headers: { 'content-type': 'text/event-stream' } });
+  }
+
+  function countingStore(inner) {
+    const appends = [];
+    return {
+      appends,
+      store: {
+        load: (id) => inner.load(id),
+        append(id, msg) {
+          appends.push(msg);
+          inner.append(id, msg);
+        },
+        setMeta: (id, meta) => inner.setMeta(id, meta),
+      },
+    };
+  }
+
+  async function waitFor(predicate, label, ms = 8_000) {
+    const start = Date.now();
+    while (Date.now() - start < ms) {
+      if (predicate()) return;
+      await new Promise((r) => setTimeout(r, 15));
+    }
+    throw new Error(`timed out waiting for ${label}`);
+  }
+
+  test('sub-agent retries still use createMemoryTranscriptStore', () => {
+    // P8-D continue retries hit isContinueTurn; persist must stay a no-op there.
+    const source = fs.readFileSync(EFFECTOR_JS, 'utf8');
+    assert.match(source, /createMemoryTranscriptStore\s*\(/);
+    assert.match(source, /seedKind:\s*'continue'/);
+  });
+
+  test(
+    'a tool round is in the store after the first settled emit, not only at turn end',
+    { timeout: 20_000 },
+    async () => {
+      const store = createMemoryTranscriptStore();
+      store.append(CHAT_UUID, { role: 'user', content: 'first' });
+      store.append(CHAT_UUID, { role: 'assistant', content: 'hi' });
+      store.append(CHAT_UUID, { role: 'user', content: 'what time is it' });
+
+      /** @type {unknown[] | null} */
+      let duringExecute = null;
+
+      await withFake(
+        [
+          { match: { nth: 0 }, emit: functionCallChunks('get_datetime', {}, 'call_dt') },
+          { emit: proseSseChunks('It is noon.') },
+        ],
+        async (baseUrl) => {
+          const result = await runTurn({
+            chatId: CHAT_UUID,
+            seed: 'what time is it',
+            seedKind: 'continue',
+            tools: [DATETIME_TOOL],
+            model: { providerId: 'local-fake', id: 'fake-model' },
+            transcript: store,
+            deps: stubDeps(baseUrl, { runHeadlessToolBatch: passthroughBatch }),
+            execute: async () => {
+              // emitProgress(force) is a microtask queued before this await.
+              await Promise.resolve();
+              duringExecute = store.load(CHAT_UUID)?.messages ?? [];
+              return { content: 'noon' };
+            },
+            ...CHAT_SHAPED,
+          });
+          assert.equal(result.outcome, 'no_report');
+        },
+      );
+
+      assert.ok(duringExecute, 'execute must run');
+      const toolAssistant = duringExecute.find(
+        (m) => m.role === 'assistant' && Array.isArray(m.tool_calls),
+      );
+      assert.ok(toolAssistant, 'tool assistant row must already be persisted');
+      assert.equal(toolAssistant.tool_calls[0]?.function?.name, 'get_datetime');
+      assert.equal(
+        duringExecute.some((m) => m.role === 'assistant' && m.content === 'It is noon.'),
+        false,
+        'final prose must not be persisted yet',
+      );
+    },
+  );
+
+  test(
+    'killing mid-stream keeps the settled prefix and no synthetic partial assistant',
+    { timeout: 20_000 },
+    async () => {
+      const store = createMemoryTranscriptStore();
+      store.append(CHAT_UUID, { role: 'user', content: 'first' });
+      store.append(CHAT_UUID, { role: 'assistant', content: 'hi' });
+      store.append(CHAT_UUID, { role: 'user', content: 'what time is it' });
+
+      await withFake(
+        [{ match: { nth: 0 }, emit: functionCallChunks('get_datetime', {}, 'call_dt') }],
+        async (baseUrl) => {
+          const controller = new AbortController();
+          const events = [];
+          let completions = 0;
+          const innerPost = postChatCompletionsHttp;
+          const turn = runTurn({
+            chatId: CHAT_UUID,
+            seed: 'what time is it',
+            seedKind: 'continue',
+            tools: [DATETIME_TOOL],
+            model: { providerId: 'local-fake', id: 'fake-model' },
+            transcript: store,
+            signal: controller.signal,
+            onEvent: (event) => events.push(event),
+            deps: stubDeps(baseUrl, {
+              runHeadlessToolBatch: passthroughBatch,
+              postChatCompletions: async (provider, body, signal, opts) => {
+                completions += 1;
+                if (completions === 1) return innerPost(provider, body, signal, opts);
+                return hangingPartialResponse(signal, PARTIAL);
+              },
+            }),
+            execute: async () => ({ content: 'noon' }),
+            ...CHAT_SHAPED,
+          });
+          await waitFor(
+            () => events.some((e) => e.type === 'delta' && String(e.text).includes(PARTIAL)),
+            'unsettled streaming delta',
+          );
+          controller.abort();
+          const result = await turn;
+          assert.equal(result.outcome, 'crashed');
+        },
+      );
+
+      const persisted = store.load(CHAT_UUID)?.messages ?? [];
+      assert.ok(
+        persisted.some((m) => m.role === 'assistant' && Array.isArray(m.tool_calls)),
+        'settled tool assistant must remain',
+      );
+      assert.ok(
+        persisted.some((m) => m.role === 'tool'),
+        'settled tool result must remain',
+      );
+      assert.equal(
+        persisted.some((m) => String(m.content).includes(PARTIAL)),
+        false,
+        'synthetic partial assistant must not be persisted',
+      );
+    },
+  );
+
+  test(
+    'finally backstop after incremental persist appends nothing',
+    { timeout: 20_000 },
+    async () => {
+      const inner = createMemoryTranscriptStore();
+      inner.append(CHAT_UUID, { role: 'user', content: 'first' });
+      inner.append(CHAT_UUID, { role: 'assistant', content: 'hi' });
+      inner.append(CHAT_UUID, { role: 'user', content: 'second' });
+      const { store, appends } = countingStore(inner);
+
+      await withFake([{ emit: proseSseChunks('second reply') }], async (baseUrl) => {
+        await runTurn({
+          chatId: CHAT_UUID,
+          seed: 'second',
+          seedKind: 'continue',
+          tools: [],
+          model: { providerId: 'local-fake', id: 'fake-model' },
+          transcript: store,
+          deps: stubDeps(baseUrl),
+          ...CHAT_SHAPED,
+        });
+      });
+
+      // Seed was already stored. Incremental persist writes the reply once;
+      // finally re-running from persistCursor must not write it again.
+      assert.equal(appends.length, 1);
+      assert.equal(appends[0]?.content, 'second reply');
+      assert.deepEqual(
+        (store.load(CHAT_UUID)?.messages ?? []).map((m) => `${m.role}:${m.content}`),
+        ['user:first', 'assistant:hi', 'user:second', 'assistant:second reply'],
+      );
+    },
+  );
+});
+
+describe('P10-I onRoundBoundary (MIN-774)', () => {
+  const DATETIME_TOOL = {
+    type: 'function',
+    function: {
+      name: 'get_datetime',
+      description: 'Get the current date and time',
+      parameters: { type: 'object', properties: {} },
+    },
+  };
+  const STEER = 'Use pnpm not npm';
+  const CHAT_SHAPED = {
+    injectReportTool: false,
+    nudgeToolUse: false,
+    finalizeStructuredOutcome: false,
+  };
+
+  test('hook rows splice into the next round; omitted hook is unchanged', { timeout: 20_000 }, async () => {
+    await withFake(
+      [
+        { match: { nth: 0 }, emit: functionCallChunks('get_datetime', {}, 'call_dt') },
+        { emit: proseSseChunks('Switched to pnpm.') },
+      ],
+      async (baseUrl, fake) => {
+        let boundaryCalls = 0;
+        const result = await runTurn({
+          chatId: CHAT_UUID,
+          seed: 'What time is it?',
+          tools: [DATETIME_TOOL],
+          model: { providerId: 'local-fake', id: 'fake-model' },
+          deps: stubDeps(baseUrl, { runHeadlessToolBatch: passthroughBatch }),
+          execute: async () => ({ content: 'noon' }),
+          ...CHAT_SHAPED,
+          onRoundBoundary: () => {
+            boundaryCalls += 1;
+            // First consult is the opening iteration — nothing pending yet.
+            if (boundaryCalls < 2) return null;
+            return [{ role: 'user', content: STEER }];
+          },
+        });
+        assert.equal(result.outcome, 'no_report');
+        assert.ok(boundaryCalls >= 2, 'boundary must run after the tool round');
+        const completions = fake.requests.filter((row) => row.pathname === '/v1/chat/completions');
+        assert.ok(completions.length >= 2, 'tool round then follow-up completion');
+        const first = completions[0].body?.messages ?? [];
+        const second = completions[1].body?.messages ?? [];
+        assert.equal(
+          first.some((m) => m.role === 'user' && m.content === STEER),
+          false,
+          'steer must not land on the first completion',
+        );
+        assert.ok(
+          second.some((m) => m.role === 'user' && m.content === STEER),
+          'steer must splice into the next round',
+        );
+      },
+    );
+  });
+
+  test('omitted hook does not splice a user row between rounds', { timeout: 20_000 }, async () => {
+    await withFake(
+      [
+        { match: { nth: 0 }, emit: functionCallChunks('get_datetime', {}, 'call_dt') },
+        { emit: proseSseChunks('It is noon.') },
+      ],
+      async (baseUrl, fake) => {
+        const result = await runTurn({
+          chatId: CHAT_UUID,
+          seed: 'What time is it?',
+          tools: [DATETIME_TOOL],
+          model: { providerId: 'local-fake', id: 'fake-model' },
+          deps: stubDeps(baseUrl, { runHeadlessToolBatch: passthroughBatch }),
+          execute: async () => ({ content: 'noon' }),
+          ...CHAT_SHAPED,
+        });
+        assert.equal(result.outcome, 'no_report');
+        const completions = fake.requests.filter((row) => row.pathname === '/v1/chat/completions');
+        assert.ok(completions.length >= 2);
+        const second = completions[1].body?.messages ?? [];
+        assert.equal(
+          second.some((m) => m.role === 'user' && m.content === STEER),
+          false,
+        );
+      },
+    );
+  });
+
+  test('throwing hook does not crash the turn', { timeout: 20_000 }, async () => {
+    await withFake([{ emit: proseSseChunks('Done.') }], async (baseUrl) => {
+      const result = await runTurn({
+        chatId: CHAT_UUID,
+        seed: 'Just finish.',
+        tools: [],
+        model: { providerId: 'local-fake', id: 'fake-model' },
+        deps: stubDeps(baseUrl),
+        ...CHAT_SHAPED,
+        onRoundBoundary: () => {
+          throw new Error('hook exploded');
+        },
+      });
+      assert.equal(result.outcome, 'no_report');
+    });
+  });
+
+  test('board and sub-agent effectors omit onRoundBoundary', () => {
+    const board = fs.readFileSync(
+      path.join(PROJECT_ROOT, 'server', 'orchestrator', 'effector-runner.js'),
+      'utf8',
+    );
+    const agents = fs.readFileSync(
+      path.join(PROJECT_ROOT, 'server', 'sub-agents', 'effector-runner.js'),
+      'utf8',
+    );
+    assert.equal(board.includes('onRoundBoundary'), false);
+    assert.equal(agents.includes('onRoundBoundary'), false);
+  });
+
+  test('runner has no isChat / isBoard branch', () => {
+    const runnerJs = fs.readFileSync(RUN_TURN_JS, 'utf8');
+    const stripped = runnerJs.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+    assert.equal(/\bisChat\b/.test(stripped), false);
+    assert.equal(/\bisBoard\b/.test(stripped), false);
   });
 });
 

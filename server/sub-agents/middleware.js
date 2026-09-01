@@ -177,7 +177,9 @@ export function statusFromPhase(run) {
   if (run.phase === 'passed') return 'completed';
   if (run.phase === 'cancelled') return 'cancelled';
   if (run.phase === 'abandoned') return 'failed';
-  if (run.phase === 'running') return 'running';
+  // Cancelling is still in flight for the product status enum; the card
+  // maps fold phase onto livePhase `stopping` (P10-L).
+  if (run.phase === 'running' || run.phase === 'cancelling') return 'running';
   return 'queued';
 }
 
@@ -345,7 +347,7 @@ async function dispatch(route, req, res) {
     case 'cancel': {
       const found = await findRun(runId);
       if (!found) return json(res, 404, { ok: false, error: 'no such run' });
-      if (isTerminal(found.run)) {
+      if (isTerminal(found.run) || found.run.phase === 'cancelling') {
         return json(res, 200, {
           ok: true,
           runId,
@@ -354,6 +356,11 @@ async function dispatch(route, req, res) {
       }
       const engine = await getAgentsEngine(found.parentChatId);
       await engine.append([makeEvent('run.cancelled', { runId, reason: 'user' })]);
+      // Tick 1: plan() drops the run from desired → effector.stop.
+      // Tick 2: reapVanished journals attempt.ended → phase cancelled.
+      // Two ticks so GET/POST settle to cancelled instead of leaving the
+      // HTTP client on cancelling (SSE still sees the window).
+      await engine.tick();
       await engine.tick();
       const after = /** @type {import('./types').AgentsState} */ (engine.getState());
       const run = after.runs.get(runId);
@@ -551,6 +558,11 @@ async function streamEvents(req, res, runId) {
     if (!send('event', event, seq)) cleanup();
   };
   const unsubscribe = engine.subscribe(deliver);
+  // P10-M / MIN-778: the live bus is parent-scoped (P8-B); this stream is
+  // per-run. Drop siblings here so their token traffic never leaves the
+  // server. Type filter is at emit: disk still uses isHighFrequencyTurnEvent
+  // (phase dropped); sub-agent live uses shouldEmitSubAgentLiveTurnEvent
+  // (phase forwarded, P10-L). This filter is identity, not type.
   const unsubscribeLive = subscribeLive(parentChatId, (payload) => {
     if (payload.taskId !== runId) return;
     if (!send('live', payload)) cleanup();

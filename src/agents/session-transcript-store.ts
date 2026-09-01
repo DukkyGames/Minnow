@@ -20,7 +20,10 @@ import type { TranscriptStore } from '../../server/runner/transcript-store';
  * both stay consistent — a stored `role: 'injection'` row reaches the provider
  * as an unknown role and the completion fails with HTTP 400. Any other
  * model-facing view of `chat.history` must filter the same way (see
- * `overlayMultimodalHistoryForRunTurn`), or the persist offset drifts.
+ * `overlayMultimodalHistoryForRunTurn` and the P10-D chat decorator's `load`,
+ * which delegates here), or the persist offset drifts. Do not add a third
+ * filter. Chat product persist wraps this store (`createChatTranscriptStore`)
+ * and must `touchChat` on every `append`; sub-agents keep this wrapper bare.
  */
 export function createSessionTranscriptStore(): TranscriptStore {
   return {

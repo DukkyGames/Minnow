@@ -10,6 +10,7 @@ export function derive(events: Iterable<unknown>): AgentsState;
 export function serializeState(state: AgentsState): string;
 export function stateToJSON(state: AgentsState): Record<string, unknown>;
 export function isTerminal(run: RunState): boolean;
+export function isStoppedForScheduling(run: RunState): boolean;
 export function lastEndedAttempt(run: RunState): Attempt | undefined;
 export function attemptCount(state: AgentsState, runId: string): number;
 export function pendingDeliveries(state: AgentsState): RunState[];

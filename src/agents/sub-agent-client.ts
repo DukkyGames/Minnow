@@ -5,7 +5,8 @@
  * and POSTs commands. It never mutates a run. Reconnection is the browser's
  * (`EventSource` retries with `Last-Event-ID`); a dropped stream costs the
  * tail, not a re-fold from event zero. Live tokens have no `seq` and are
- * never replayed — a reload of a completed run must not paint old tokens.
+ * never replayed. Drop live frames because they are a reconnect mix or a
+ * genuine attempt end — not because the fold says terminal (P10-L).
  */
 
 import { foldInto, emptyState } from '../../server/sub-agents/derive.js';
@@ -19,6 +20,86 @@ export interface EventStream {
 
 export interface SubAgentRunClientOptions {
   openStream?: (url: string) => EventStream;
+}
+
+/**
+ * Live SSE is keyed on parentChatId (P8-B). Each card opens a per-run
+ * EventSource. Identity only (sibling / stale attempt). Replay vs live is
+ * {@link isReplayedLiveFrame} — do not drop because the fold is terminal.
+ */
+export function liveFrameBelongsToRun(
+  payload: { taskId?: unknown; attemptId?: unknown },
+  runId: string,
+  raw: Record<string, unknown> | null,
+): boolean {
+  // A missing taskId is not this run. Fail closed so a sibling cannot paint.
+  if (payload.taskId !== runId) return false;
+  const attemptId = typeof payload.attemptId === 'string' ? payload.attemptId : '';
+  if (!raw) return true;
+  const attempts = Array.isArray(raw.attempts) ? raw.attempts : [];
+  const phase = (raw as { phase?: unknown }).phase;
+  const foldSettled =
+    phase === 'passed' || phase === 'cancelled' || phase === 'abandoned';
+  if (attempts.length === 0) {
+    // Zero-attempt cancel/pass/abandon must not sit on generating.
+    if (foldSettled) return false;
+    return true;
+  }
+  if (!attemptId) {
+    // No attempt id: paint only while an attempt is still open.
+    return attempts.some((row) => {
+      if (!row || typeof row !== 'object') return false;
+      return (row as { ended?: unknown }).ended !== true;
+    });
+  }
+  const open = attempts.find((row) => {
+    if (!row || typeof row !== 'object') return false;
+    return (row as { ended?: unknown }).ended !== true;
+  }) as { attemptId?: unknown } | undefined;
+  if (typeof open?.attemptId === 'string' && open.attemptId) {
+    return attemptId === open.attemptId;
+  }
+  // Retry gap: every known attempt has ended. A frame for one of them is stale.
+  return !attempts.some((row) => {
+    if (!row || typeof row !== 'object') return false;
+    const rec = row as { attemptId?: unknown; ended?: unknown };
+    return rec.attemptId === attemptId && rec.ended === true;
+  });
+}
+
+/**
+ * Drop live frames that are a reconnect mix or a genuine attempt end.
+ *
+ * Live frames have no `seq` (P8-B). A numeric seq on this channel is a
+ * journal event leaked onto `event: live`. An attempt that ended *with an
+ * outcome* has been confirmed by the effector. Fold-terminal `cancelled`
+ * while the attempt is still open is *not* replay — that is the
+ * cancelling window P10-L must paint.
+ */
+export function isReplayedLiveFrame(
+  payload: { seq?: unknown; attemptId?: unknown },
+  raw: Record<string, unknown> | null,
+): boolean {
+  if (typeof payload.seq === 'number' && Number.isSafeInteger(payload.seq)) return true;
+  if (!raw) return false;
+  const attempts = Array.isArray(raw.attempts) ? raw.attempts : [];
+  const attemptId = typeof payload.attemptId === 'string' ? payload.attemptId : '';
+  if (!attemptId) return false;
+  const match = attempts.find((row) => {
+    if (!row || typeof row !== 'object') return false;
+    return (row as { attemptId?: unknown }).attemptId === attemptId;
+  }) as { ended?: unknown; outcome?: unknown } | undefined;
+  return match?.ended === true && match.outcome != null;
+}
+
+/** Combine identity (P10-M) with replay (P10-L) for one consume-path test. */
+export function shouldPaintLiveFrame(
+  payload: { taskId?: unknown; attemptId?: unknown; seq?: unknown },
+  runId: string,
+  raw: Record<string, unknown> | null,
+): boolean {
+  if (isReplayedLiveFrame(payload, raw)) return false;
+  return liveFrameBelongsToRun(payload, runId, raw);
 }
 
 export interface EngineError {
@@ -68,9 +149,6 @@ export function createSubAgentRunClient(
   let pending: Record<string, unknown>[] = [];
   const listeners = new Set<() => void>();
   const deliverListeners = new Set<(frame: DeliverFrame) => void>();
-
-  const isTerminalPhase = (phase: unknown): boolean =>
-    phase === 'passed' || phase === 'cancelled' || phase === 'abandoned';
 
   const emit = () => {
     for (const listener of listeners) {
@@ -140,16 +218,30 @@ export function createSubAgentRunClient(
 
   const onLive = (event: { data: string }) => {
     try {
-      // A reload of a completed run must not paint old tokens — live frames
-      // are never journaled, and a terminal fold is proof the attempt is over.
-      if (isTerminalPhase(raw?.phase)) return;
       const payload = JSON.parse(event.data) as {
-        event?: { type?: string; name?: string; text?: string };
+        seq?: unknown;
+        taskId?: unknown;
+        attemptId?: unknown;
+        event?: { type?: string; name?: string; text?: string; phase?: string };
       };
+      // Drop replayed frames (stale seq / genuine attempt end), not because
+      // the fold is terminal. A live frame for an open attempt after
+      // run.cancelled is journaled MUST paint (P10-L / MIN-777).
+      if (!shouldPaintLiveFrame(payload, runId, raw)) return;
       const inner = payload.event;
       if (!inner?.type) return;
       // Tokens are unbounded; a reconnect must not replay them. Keep only the
-      // "what is it doing" signal the cards already show.
+      // "what is it doing" signal the cards already show — plus `phase` so
+      // the pre-tool window is not stuck on the generating fallback.
+      if (inner.type === 'phase') {
+        const next = inner.phase;
+        if (next === 'thinking' || next === 'generating' || next === 'tools') {
+          livePhase = next;
+          if (next !== 'tools') liveTool = null;
+          emit();
+        }
+        return;
+      }
       if (inner.type === 'tool_call' || inner.type === 'tool_streaming') {
         livePhase = 'tools';
         liveTool = typeof inner.name === 'string' ? inner.name : liveTool;

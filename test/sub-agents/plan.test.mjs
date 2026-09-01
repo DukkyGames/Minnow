@@ -73,6 +73,19 @@ describe('plan — three rules', () => {
     );
     assert.deepEqual(plan(state, defaultCaps()), []);
   });
+
+  it('a cancelling run is not desired so the engine can stop it (P10-L)', () => {
+    const state = derive(
+      journal(
+        requested('r1'),
+        started('r1', 'a1'),
+        makeEvent('run.cancelled', { runId: 'r1', reason: 'user' }),
+      ),
+    );
+    assert.equal(state.runs.get('r1').phase, 'cancelling');
+    assert.deepEqual(plan(state, defaultCaps()), []);
+    assert.equal(nextAction(state, 'r1').kind, 'none');
+  });
 });
 
 describe('plan — two caps, start-gate only', () => {

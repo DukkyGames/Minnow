@@ -278,6 +278,49 @@ describe('GET /api/agents/:runId/events SSE live vs journal', () => {
       if (frame.event === 'event') assert.ok(frame.id, 'journal event missing seq');
     }
   });
+
+  it('does not forward a sibling run live frame onto this stream (P10-M)', async () => {
+    const first = await spawnOk({ task: 'run a' });
+    const second = await spawnOk({ task: 'run b' });
+    const streamed = readSse(`/api/agents/${first.runId}/events`, (frames) => {
+      const lives = frames.filter((f) => f.event === 'live');
+      return lives.some((f) => f.data?.event?.name === 'own_tool');
+    });
+    // Wait until the SSE subscriber is attached, then emit sibling then own.
+    await new Promise((r) => setTimeout(r, 80));
+    emitLive({
+      key: PARENT,
+      boardId: PARENT,
+      attemptId: 'e-sibling',
+      taskId: second.runId,
+      role: 'sub-agent',
+      event: { type: 'tool_call', name: 'sibling_tool' },
+    });
+    emitLive({
+      key: PARENT,
+      boardId: PARENT,
+      attemptId: 'e-own',
+      taskId: first.runId,
+      role: 'sub-agent',
+      event: { type: 'tool_call', name: 'own_tool' },
+    });
+    const frames = await streamed;
+    const lives = frames.filter((f) => f.event === 'live');
+    assert.ok(
+      lives.some((f) => f.data?.event?.name === 'own_tool'),
+      'missing this run live frame',
+    );
+    assert.equal(
+      lives.some((f) => f.data?.event?.name === 'sibling_tool' || f.data?.taskId === second.runId),
+      false,
+      'sibling live frame leaked onto this run stream',
+    );
+    assert.equal(
+      lives.every((f) => f.data?.taskId === first.runId),
+      true,
+      'a live frame on this stream carried another run id',
+    );
+  });
 });
 
 describe('GET /api/agents/:runId/events SSE seq resume', () => {

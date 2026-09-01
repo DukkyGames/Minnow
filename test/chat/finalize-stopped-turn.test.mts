@@ -1,13 +1,83 @@
+/**
+ * P10-E (MIN-770) — Stop mid-reply persists the partial and records run status `stopped`.
+ *
+ * User Stop does not throw into `runChatTurn`'s catch. `runTurn` returns
+ * `{ outcome: 'crashed', error: 'aborted' }`. Tests cover that path and a
+ * thrown AbortError fallback.
+ */
+
+import '../tools/install-dom-before-imports.mts';
+
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
+import type { Chat, Message } from '../../src/types.ts';
+import {
+  chatForSessionsWire,
+  createEmptyChatObject,
+  flushScheduledSessionSaveForTests,
+  getSessionDirtyTrackingForTests,
+  setSessionStateForTests,
+} from '../../src/state/sessions.ts';
+import { findRunById } from '../../src/state/runs-store.ts';
+import { endChatTurnSetup } from '../../src/chat/chat-turn-guard.ts';
+import {
+  getChatAbort,
+  setChatAbort,
+  setChatStopReason,
+  setStreaming,
+} from '../../src/app-state.ts';
+import { DEFAULT_TITLES_CONFIG, setTitlesConfigForTests } from '../../src/config/titles-meta.ts';
+import { resetRunTurnForTests, setRunTurnForTests } from '../../src/chat/run-turn-chat.ts';
 import { markMessageStopped } from '../../src/ui/stopped-affordance.ts';
+
+const CHAT_ID = '33333333-3333-3333-3333-333333333333';
+
+const SIMPLE_TURN = {
+  pushUser: true as const,
+  rawText: 'Write a haiku',
+  userText: 'Write a haiku',
+  skillId: null,
+  displayText: 'Write a haiku',
+  historyContent: 'Write a haiku',
+  validAttachments: [] as [],
+  ownsGlobalStreaming: true,
+};
 
 function setupDom(): void {
   const window = new Window();
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.Node = window.Node;
+}
+
+function installChatDom(): void {
+  document.body.replaceChildren();
+  const chatArea = document.createElement('div');
+  chatArea.id = 'chatArea';
+  document.body.appendChild(chatArea);
+  const sDot = document.createElement('span');
+  sDot.id = 'sDot';
+  document.body.appendChild(sDot);
+  const sText = document.createElement('span');
+  sText.id = 'sText';
+  document.body.appendChild(sText);
+  const msgInput = document.createElement('textarea');
+  msgInput.id = 'msgInput';
+  document.body.appendChild(msgInput);
+}
+
+function makeChat(): Chat {
+  const chat = createEmptyChatObject('m1');
+  chat.id = CHAT_ID;
+  chat.providerId = 'vite-fallback';
+  chat.modelId = 'm1';
+  return chat;
+}
+
+function roundTripHistory(chat: Chat): Message[] {
+  const wire = chatForSessionsWire(chat);
+  return JSON.parse(JSON.stringify(wire.history ?? [])) as Message[];
 }
 
 describe('stopped assistant affordance', () => {
@@ -23,5 +93,161 @@ describe('stopped assistant affordance', () => {
 
     assert.ok(wrap.classList.contains('msg--stopped'));
     assert.equal(wrap.querySelector('.msg-stopped-chip')?.textContent, 'Generation stopped');
+  });
+});
+
+describe('P10-E runChatTurn stopped persist (MIN-770)', () => {
+  afterEach(() => {
+    resetRunTurnForTests();
+    getChatAbort(CHAT_ID)?.abort();
+    setChatAbort(CHAT_ID, null);
+    setStreaming(false, CHAT_ID);
+    endChatTurnSetup(CHAT_ID);
+    flushScheduledSessionSaveForTests();
+    setSessionStateForTests(null);
+    setTitlesConfigForTests({ ...DEFAULT_TITLES_CONFIG, enabled: false });
+  });
+
+  test('returned aborted outcome persists stopped partial that survives wire reload', async () => {
+    setTitlesConfigForTests({ ...DEFAULT_TITLES_CONFIG, enabled: false });
+    installChatDom();
+    setRunTurnForTests(async (options) => {
+      options.onEvent?.({ type: 'thinking', text: 'Counting syllables.' });
+      options.onEvent?.({ type: 'delta', text: 'Soft rain on the roof' });
+      return { outcome: 'crashed', error: 'aborted' };
+    });
+    const chat = makeChat();
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+    const { runChatTurn } = await import('../../src/chat/run-turn-chat.ts');
+    await runChatTurn({ chat, ...SIMPLE_TURN });
+
+    const assistant = chat.history.find((m) => m.role === 'assistant') as Extract<
+      Message,
+      { role: 'assistant' }
+    >;
+    assert.ok(assistant);
+    assert.equal(assistant.stopped, true);
+    assert.equal(assistant.content, 'Soft rain on the roof');
+    assert.deepEqual(assistant.thinking, ['Counting syllables.']);
+    assert.equal(
+      chat.history.some((m) => m.role === 'assistant' && 'failed' in m && m.failed),
+      false,
+    );
+    assert.ok(getSessionDirtyTrackingForTests().dirtyChatIds.includes(CHAT_ID));
+
+    const revived = roundTripHistory(chat);
+    const revivedAssistant = revived.find((m) => m.role === 'assistant') as Extract<
+      Message,
+      { role: 'assistant' }
+    >;
+    assert.equal(revivedAssistant?.stopped, true);
+    assert.equal(revivedAssistant?.content, 'Soft rain on the roof');
+
+    const run = chat.runs?.find((r) => r.status === 'stopped' || r.status === 'failed' || r.status === 'completed');
+    const recorded = run ? findRunById(chat, run.runId) : undefined;
+    assert.equal(recorded?.status, 'stopped');
+    assert.equal(recorded?.stopReason, 'user');
+  });
+
+  test('thrown AbortError also persists a stopped row', async () => {
+    setTitlesConfigForTests({ ...DEFAULT_TITLES_CONFIG, enabled: false });
+    installChatDom();
+    setRunTurnForTests(async (options) => {
+      options.onEvent?.({ type: 'delta', text: 'Halfway thr' });
+      const err = new Error('aborted');
+      err.name = 'AbortError';
+      throw err;
+    });
+    const chat = makeChat();
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+    const { runChatTurn } = await import('../../src/chat/run-turn-chat.ts');
+    await runChatTurn({ chat, ...SIMPLE_TURN });
+
+    const assistant = chat.history.find((m) => m.role === 'assistant') as Extract<
+      Message,
+      { role: 'assistant' }
+    >;
+    assert.equal(assistant?.stopped, true);
+    assert.equal(assistant?.content, 'Halfway thr');
+    const run = chat.runs?.find((r) => r.status === 'stopped');
+    assert.equal(run?.status, 'stopped');
+    assert.equal(run?.stopReason, 'user');
+  });
+
+  test('Stop with nothing streamed does not mint an empty assistant', async () => {
+    setTitlesConfigForTests({ ...DEFAULT_TITLES_CONFIG, enabled: false });
+    installChatDom();
+    setRunTurnForTests(async () => ({ outcome: 'crashed', error: 'aborted' }));
+    const chat = makeChat();
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+    const { runChatTurn } = await import('../../src/chat/run-turn-chat.ts');
+    await runChatTurn({ chat, ...SIMPLE_TURN });
+
+    assert.equal(chat.history.length, 1);
+    assert.equal(chat.history[0]?.role, 'user');
+    const run = chat.runs?.find((r) => r.status === 'stopped');
+    assert.equal(run?.status, 'stopped');
+  });
+
+  test('system Stop keeps currentGenerationId for boot resume', async () => {
+    setTitlesConfigForTests({ ...DEFAULT_TITLES_CONFIG, enabled: false });
+    installChatDom();
+    setRunTurnForTests(async (options) => {
+      options.onEvent?.({ type: 'delta', text: 'Still going' });
+      return { outcome: 'crashed', error: 'aborted' };
+    });
+    const chat = makeChat();
+    chat.currentGenerationId = 'gen-keep';
+    setChatStopReason(CHAT_ID, 'system');
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+    const { runChatTurn } = await import('../../src/chat/run-turn-chat.ts');
+    await runChatTurn({ chat, ...SIMPLE_TURN });
+
+    assert.equal(chat.currentGenerationId, 'gen-keep');
+    const run = chat.runs?.find((r) => r.status === 'stopped');
+    assert.equal(run?.stopReason, 'system');
+  });
+
+  test('captured timeout stopReason lands on the run record', async () => {
+    setTitlesConfigForTests({ ...DEFAULT_TITLES_CONFIG, enabled: false });
+    installChatDom();
+    setChatStopReason(CHAT_ID, 'timeout');
+    setRunTurnForTests(async (options) => {
+      options.onEvent?.({ type: 'delta', text: 'tick' });
+      return { outcome: 'crashed', error: 'aborted' };
+    });
+    const chat = makeChat();
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+    const { runChatTurn } = await import('../../src/chat/run-turn-chat.ts');
+    await runChatTurn({ chat, ...SIMPLE_TURN });
+
+    const run = chat.runs?.find((r) => r.status === 'stopped');
+    assert.equal(run?.status, 'stopped');
+    assert.equal(run?.stopReason, 'timeout');
   });
 });

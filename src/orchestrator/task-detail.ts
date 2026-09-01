@@ -571,6 +571,7 @@ const LOG_LABEL: Record<string, string> = {
   thinking: 'Thought',
   tool_call: 'Tool',
   tool_result: 'Result',
+  round_end: 'Round',
   attempt_end: 'Ended',
   error: 'Error',
 };
@@ -651,6 +652,18 @@ function toLogRow(event: Record<string, unknown>): LogRow | null {
       lead: asText(event.name) || 'result',
       trail: content ? firstLine(content) : 'no output',
       full: content || undefined,
+    };
+  }
+  if (type === 'round_end') {
+    const index = typeof event.index === 'number' ? event.index : null;
+    const tools = typeof event.toolCallCount === 'number' ? event.toolCallCount : 0;
+    const text = asText(event.text);
+    return {
+      kind: 'plain',
+      label,
+      lead: index == null ? 'round' : `round ${index}`,
+      trail: tools > 0 ? `${tools} tool${tools === 1 ? '' : 's'}` : text ? firstLine(text) : undefined,
+      full: text || undefined,
     };
   }
   if (type === 'attempt_end') {

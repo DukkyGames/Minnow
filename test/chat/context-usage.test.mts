@@ -6,6 +6,11 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   estimateInFlightOverlayTokens,
+  getContextInFlightOverlay,
+  resetContextOverlayWriteCountForTests,
+  getContextOverlayWriteCountForTests,
+  setContextInFlightOverlay,
+  syncTurnContextUsage,
 } from '../../src/chat/context-in-flight.ts';
 import {
   assembleContextBudget,
@@ -82,6 +87,38 @@ describe('estimateInFlightOverlayTokens', () => {
       }),
       0,
     );
+  });
+});
+
+describe('P10-I syncTurnContextUsage overlay (MIN-774)', () => {
+  test('writes overlay once per helper call and clears', () => {
+    resetContextOverlayWriteCountForTests();
+    syncTurnContextUsage({
+      chatId: 'c-overlay',
+      partialAssistantText: 'hello',
+      thinkingText: 'hmm',
+      pendingToolCallsJson: '{"name":"read_file"}',
+    });
+    assert.equal(getContextOverlayWriteCountForTests(), 1);
+    const overlay = getContextInFlightOverlay('c-overlay');
+    assert.equal(overlay?.pendingToolCallsJson, '{"name":"read_file"}');
+    assert.equal(overlay?.partialAssistantText, 'hello');
+    setContextInFlightOverlay(null);
+    assert.equal(getContextInFlightOverlay('c-overlay'), undefined);
+    assert.equal(getContextOverlayWriteCountForTests(), 2);
+  });
+
+  test('token burst through one paint-tick helper is one write', () => {
+    resetContextOverlayWriteCountForTests();
+    // Mimic coalesced paint: many deltas, one overlay write.
+    const last = 'x'.repeat(20);
+    syncTurnContextUsage({
+      chatId: 'c-burst',
+      partialAssistantText: last,
+    });
+    assert.equal(getContextOverlayWriteCountForTests(), 1);
+    assert.equal(getContextInFlightOverlay('c-burst')?.partialAssistantText, last);
+    resetContextOverlayWriteCountForTests();
   });
 });
 

@@ -10,6 +10,7 @@ import {
   derive,
   emptyState,
   foldInto,
+  isStoppedForScheduling,
   isTerminal,
   lastEndedAttempt,
   pendingDeliveries,
@@ -156,18 +157,48 @@ describe('derive — attempts and phases', () => {
     assert.deepEqual(pendingDeliveries(skipped), []);
   });
 
-  it('cancel is terminal immediately and closes an in-flight attempt', () => {
-    const state = derive(
+  it('cancel with an open attempt is cancelling until the attempt ends (P10-L)', () => {
+    const mid = derive(
       journal(
         requested('r1'),
         started('r1', 'a1'),
         makeEvent('run.cancelled', { runId: 'r1', reason: 'user' }),
       ),
     );
+    const run = mid.runs.get('r1');
+    assert.equal(run.phase, 'cancelling');
+    assert.equal(run.cancelledReason, 'user');
+    assert.equal(run.attempts[0].ended, false);
+    assert.equal(isTerminal(run), false);
+    assert.equal(isStoppedForScheduling(run), true);
+    assert.deepEqual(pendingDeliveries(mid), []);
+
+    const settled = derive(
+      journal(
+        requested('r1'),
+        started('r1', 'a1'),
+        makeEvent('run.cancelled', { runId: 'r1', reason: 'user' }),
+        ended('r1', 'a1', 'crashed', { summary: 'the user cancelled this run' }),
+      ),
+    );
+    const done = settled.runs.get('r1');
+    assert.equal(done.phase, 'cancelled');
+    assert.equal(done.attempts[0].ended, true);
+    assert.equal(isTerminal(done), true);
+    assert.deepEqual(
+      pendingDeliveries(settled).map((r) => r.runId),
+      ['r1'],
+    );
+  });
+
+  it('cancel with zero attempts is cancelled immediately', () => {
+    const state = derive(
+      journal(requested('r1'), makeEvent('run.cancelled', { runId: 'r1', reason: 'user' })),
+    );
     const run = state.runs.get('r1');
     assert.equal(run.phase, 'cancelled');
     assert.equal(run.cancelledReason, 'user');
-    assert.equal(run.attempts[0].ended, true);
+    assert.equal(run.attempts.length, 0);
     assert.equal(isTerminal(run), true);
   });
 

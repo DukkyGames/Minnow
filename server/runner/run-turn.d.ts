@@ -37,8 +37,23 @@ export type TurnResult =
 export type AttemptResult = TurnResult;
 
 /**
+ * Inner-loop stream phase. The runner's own word — callers map it to chrome
+ * labels. Not a product status string.
+ */
+export type TurnPhase = 'generating' | 'thinking' | 'tools';
+
+/**
  * Presentation-free stream events. The caller decides DOM vs SSE vs nothing.
  * Changing this shape is a Phase 6 finding — record it as one.
+ *
+ * **P10-B / MIN-767:** widened so a chat caller can rebuild per-round chrome
+ * from events the inner loop already computed and used to drop. `phase`,
+ * `reasoning_end`, `stream_meta`, `round_start`, and `round_end` are new.
+ * `tool_result` now carries the whole execute outcome (`attachments`,
+ * `codeChange`, `isError`) and always fires, including parseError / abort
+ * fills (emit moved onto `onToolDone`). Disk transcripts classify flood
+ * types with {@link isHighFrequencyTurnEvent}. Sub-agent live SSE uses
+ * {@link shouldEmitSubAgentLiveTurnEvent} so `phase` reaches cards (P10-L).
  */
 export type TurnEvent =
   | { type: 'delta'; text: string }
@@ -46,7 +61,39 @@ export type TurnEvent =
   /** Tool name while arguments are still streaming (inner `onToolCallDelta`). */
   | { type: 'tool_streaming'; name: string }
   | { type: 'tool_call'; name: string; id?: string; arguments?: unknown }
-  | { type: 'tool_result'; name: string; id?: string; content: string };
+  | {
+      type: 'tool_result';
+      name: string;
+      id?: string;
+      content: string;
+      attachments?: unknown[];
+      codeChange?: unknown;
+      isError?: boolean;
+    }
+  | { type: 'phase'; phase: TurnPhase }
+  | { type: 'reasoning_end' }
+  | {
+      type: 'stream_meta';
+      usage?: Record<string, number>;
+      stats?: Record<string, unknown>;
+      runtime?: unknown;
+      model?: string;
+      finishReason?: string;
+    }
+  | { type: 'round_start'; index: number }
+  | {
+      type: 'round_end';
+      index: number;
+      text: string;
+      reasoning: string;
+      toolCallCount: number;
+      usage?: Record<string, number>;
+      stats?: Record<string, unknown>;
+      finishReason?: string;
+      t0: number;
+      tFirst: number | null;
+      tEnd: number;
+    };
 
 /** Provider + model + sampler + thinking. Resolved by the caller, never looked up by chatId. */
 export interface TurnModel {
@@ -103,8 +150,24 @@ export interface TurnToolDefinition {
  * **Phase 6 finding (P6-C / MIN-725):** chat cannot continue a conversation
  * from `seed` alone. Persist in continue mode suffixes product rows and does
  * not splice a second system+user into the store.
+ *
+ * **Phase 10 finding (P10-C / MIN-768):** continue persist is incremental on
+ * every settled `onMessagesChange` (see {@link MessagesChangeMeta}), not once
+ * in `finally`. Isolated persist is unchanged.
  */
 export type TurnSeedKind = 'isolated' | 'continue';
+
+/**
+ * Meta on the inner `onMessagesChange` callback (P10-C / MIN-768).
+ *
+ * Not a `runTurn` option — the wrapper consumes it to persist continue turns
+ * incrementally. Forced emits after a real `messages.push` are `settled: true`;
+ * throttled stream clones (synthetic partial assistant) are `false`. Existing
+ * callers that ignore the second argument stay valid.
+ */
+export interface MessagesChangeMeta {
+  settled: boolean;
+}
 
 export interface RunTurnOptions {
   /** Opaque correlation id. Never interpreted (not a board lookup, not a UUID parse). */
@@ -219,6 +282,20 @@ export interface RunTurnOptions {
    * caller can pass a schema without wrapping `createSubAgentRunner`.
    */
   summarySchema?: string;
+  /**
+   * Consulted at each tool-loop boundary (the top of every inner-loop
+   * iteration, including after tools and before the next completion).
+   * Return rows to splice into the in-memory transcript, or `null`.
+   *
+   * **Phase 6 finding (P10-I / MIN-774):** in-turn steer is an injected
+   * hook, not an `isChat` branch — same shape as {@link AskCapability}.
+   * Chat implements this with `consumePendingSteer`. Board and sub-agent
+   * callers omit it and are unchanged.
+   *
+   * Sync on purpose: the pending row is already queued. Do not wait on a
+   * human here (that is `ask`).
+   */
+  onRoundBoundary?: () => TranscriptMessage[] | null;
   /** Optional execute for non-report / non-ask tools. P2-D replaces the batch dispatcher, not this. */
   execute?: (
     name: string,
@@ -273,6 +350,9 @@ export interface AskCapability {
  * `seedKind: 'continue'`), optional report-tool injection, and gates for the
  * inner sub-agent nudge + structured-outcome finalization. Chat maps
  * `no_report` → turn complete (finding 3 option a — no new `TurnResult`
- * outcome). There is still no `isBoard` branch.
+ * outcome). P10-B (MIN-767) widened `TurnEvent` (rounds, phase, stream_meta,
+ * full tool_result via `onToolDone`) and added `isHighFrequencyTurnEvent`.
+ * P10-I (MIN-774) added {@link RunTurnOptions.onRoundBoundary} so in-turn
+ * steer is an injected hook, not an abort. There is still no `isBoard` branch.
  */
 export function runTurn(options: RunTurnOptions): Promise<TurnResult>;

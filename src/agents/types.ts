@@ -5,12 +5,16 @@
 import type { AgentContextBudgetConfig, ContextEnforcementPolicy } from '../chat/context-budget';
 import type { ApiMessage, BoardCategory, Stats, Usage } from '../types';
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
+import type { MessagesChangeMeta, TurnEvent } from '../../server/runner/run-turn';
 import type {
   SubAgentBudgetEvent,
   SubAgentStructuredOutcome,
 } from './sub-agent-structured-outcome';
 import type { SamplerPreset } from './sampler-types';
 import type { ThinkingTriState } from './thinking-types';
+
+/** Re-export of the shared runner stream-event union (P10-B / MIN-767). */
+export type { TurnEvent, MessagesChangeMeta };
 
 /** Lifecycle status for a sub-agent run. */
 export type SubAgentStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -247,7 +251,7 @@ export interface SubAgentRunnerOutput {
 }
 
 /** Live stream phase mirrored from main-chat UX (thinking → generating → tools). */
-export type SubAgentLivePhase = 'thinking' | 'generating' | 'tools';
+export type SubAgentLivePhase = 'thinking' | 'generating' | 'tools' | 'stopping';
 
 /** Snapshot pushed while a sub-agent turn is in flight (drawer/cards). */
 export interface SubAgentLiveActivity {
@@ -295,10 +299,23 @@ export interface SubAgentRunner {
       args: Record<string, unknown>,
       toolContext?: import('../tools/client').ExecuteToolContext,
     ) => Promise<import('../types').ToolExecutionResult>;
-    /** Called whenever the in-flight transcript changes (streaming + tools). */
-    onMessagesChange?: (messages: ApiMessage[]) => void;
+    /**
+     * Called whenever the in-flight transcript changes (streaming + tools).
+     * `meta.settled` is true after a real `messages.push` (forced emit) and
+     * false for throttled stream clones that carry a synthetic partial
+     * assistant row. Second argument is optional so older callers keep working.
+     * P10-C / MIN-768.
+     */
+    onMessagesChange?: (messages: ApiMessage[], meta?: MessagesChangeMeta) => void;
     /** Called when stream phase or partial reasoning/tool name changes. */
     onLiveActivity?: (activity: SubAgentLiveActivity) => void;
+    /**
+     * Presentation-free turn events the inner loop already computed
+     * (`round_start` / `round_end` / `reasoning_end` / `stream_meta`).
+     * `runTurn` forwards these onto its `onEvent`. Optional — omit to run
+     * headless. P10-B / MIN-767.
+     */
+    onTurnEvent?: (event: TurnEvent) => void;
     /**
      * One turn's token usage, reported as it lands rather than only in the
      * return value. A run that unwinds by throwing — a reported outcome, a
@@ -306,5 +323,11 @@ export interface SubAgentRunner {
      * accounting that survives every exit path.
      */
     onUsage?: (usage: Record<string, number>) => void;
+    /**
+     * Consulted at each tool-loop boundary. Return rows to splice, or null.
+     * P10-I / MIN-774 — injected like `ask`, not an isChat branch. Board
+     * and sub-agent callers omit it.
+     */
+    onRoundBoundary?: () => unknown[] | null;
   }): Promise<SubAgentRunnerOutput>;
 }

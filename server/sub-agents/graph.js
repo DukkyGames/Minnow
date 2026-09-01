@@ -57,8 +57,15 @@ export function isAlreadyEnded(state, attemptId) {
  *
  * Not a watchdog: it is the same desired-versus-actual diff as everything
  * else, applied when reality is behind the journal. A vanished process ended
- * as `crashed`. User-cancelled runs have already closed their open attempts
- * in the fold, so they are not reaped as crashes.
+ * as `crashed`.
+ *
+ * P10-L: user-cancelled runs no longer close their open attempts in the fold.
+ * `cancelling` is skipped by {@link isTerminal} on purpose so this reap can
+ * journal `attempt.ended` after effector.stop — that is the confirmation
+ * that moves the run to `cancelled`. The outcome is still `crashed` (the
+ * only end-shape for a vanished process); the summary names the cancel so
+ * readers do not treat it as a policy failure. `nextAction` is `none`
+ * because `cancelledReason` is set.
  *
  * @param {import('./types').AgentsState} state
  * @param {Set<string>} live
@@ -69,17 +76,21 @@ export function reapVanished(state, live, buffered) {
   /** @type {Record<string, unknown>[]} */
   const ended = [];
   for (const run of state.runs.values()) {
+    // Fully settled: do not rewrite history. Cancelling is not settled.
     if (isTerminal(run)) continue;
     for (const attempt of run.attempts) {
       if (attempt.ended) continue;
       if (live.has(attempt.attemptId)) continue;
       if (buffered.has(attempt.attemptId)) continue;
+      const cancelled = run.cancelledReason !== null;
       ended.push(
         makeEvent('attempt.ended', {
           runId: run.runId,
           attemptId: attempt.attemptId,
           outcome: 'crashed',
-          summary: 'the process was no longer running',
+          summary: cancelled
+            ? 'the user cancelled this run'
+            : 'the process was no longer running',
         }),
       );
     }

@@ -254,6 +254,43 @@ function createSubAgentRunner(deps) {
     let budgetTripped = false;
     let thinkingChannel;
     let reader = null;
+    // P10-B: the inner loop already merged streamMeta and left the reasoning
+    // channel; those facts used to die here. Emit them so a caller can rebuild
+    // chrome without a second parser. onTurnEvent is optional (headless).
+    const onTurnEvent = typeof streamOptions?.onTurnEvent === "function"
+      ? streamOptions.onTurnEvent
+      : null;
+    let lastStreamMetaEmit = 0;
+    let reasoningEnded = false;
+    function emitStreamMeta(force = false) {
+      if (!onTurnEvent) return;
+      const now = Date.now();
+      // Same ~80 ms cadence as live transcript snapshots — 12 Hz is enough
+      // for prompt-progress / usage chrome and will not flood the live bus.
+      if (!force && now - lastStreamMetaEmit < LIVE_TRANSCRIPT_EMIT_MS) return;
+      lastStreamMetaEmit = now;
+      /** @type {Record<string, unknown>} */
+      const event = { type: "stream_meta" };
+      if (streamMeta.usage) event.usage = streamMeta.usage;
+      if (streamMeta.stats) event.stats = streamMeta.stats;
+      if (streamMeta.timings || streamMeta.prompt_progress) {
+        event.runtime = {
+          timings: streamMeta.timings,
+          prompt_progress: streamMeta.prompt_progress
+        };
+      }
+      if (typeof streamMeta.model === "string" && streamMeta.model) {
+        event.model = streamMeta.model;
+      }
+      if (streamMeta.finish_reason) event.finishReason = streamMeta.finish_reason;
+      onTurnEvent(event);
+    }
+    function emitReasoningEnd() {
+      // Once per round: the caller uses this to close the thinking timer.
+      if (reasoningEnded || !onTurnEvent) return;
+      reasoningEnded = true;
+      onTurnEvent({ type: "reasoning_end" });
+    }
     if (carriedText) {
       onDelta?.(proseText);
     }
@@ -302,6 +339,8 @@ function createSubAgentRunner(deps) {
       if (!text) {
         return;
       }
+      // First visible prose leaves the reasoning channel for this round.
+      emitReasoningEnd();
       proseText += text;
       onDelta?.(proseText);
     }
@@ -344,6 +383,7 @@ function createSubAgentRunner(deps) {
     const sseBuffer = createSseEventBuffer();
     function handleChunk(chunk) {
       streamMeta = mergeStreamMeta(streamMeta, chunk);
+      emitStreamMeta();
       toolAcc = mergeToolCallDelta(toolAcc, chunk);
       const reasoningDelta = extractReasoningDelta(chunk);
       if (reasoningDelta) {
@@ -368,6 +408,8 @@ function createSubAgentRunner(deps) {
       if (!toolCallPhaseStarted && Object.keys(toolAcc).length > 0) {
         toolCallPhaseStarted = true;
         thinkingBudgetTracker?.endSession();
+        // Tool-call streaming also leaves the reasoning channel.
+        emitReasoningEnd();
       }
       const partialTools = finalizeToolCalls(toolAcc);
       const streamingToolName = partialTools[0]?.function?.name?.trim();
@@ -390,6 +432,8 @@ function createSubAgentRunner(deps) {
     }
     flushSseEventBuffer(sseBuffer, handleChunk);
     flushContentRouters();
+    emitReasoningEnd();
+    emitStreamMeta(true);
     let fullText = proseText;
     const split = extractInlineThinkingFromContent(fullText);
     if (split.thinking.length && split.reply.trim()) {
@@ -495,7 +539,7 @@ function createSubAgentRunner(deps) {
       };
       const budgetEvents = [];
       const summarySchema = input.summarySchema;
-      const flushForcedEmit = () => {
+        const flushForcedEmit = () => {
         forcedEmitQueued = false;
         if (!input.onMessagesChange) return;
         lastProgressEmit = Date.now();
@@ -505,7 +549,10 @@ function createSubAgentRunner(deps) {
         if (partial) {
           snapshot.push({ role: "assistant", content: partial });
         }
-        input.onMessagesChange(snapshot);
+        // Forced flush follows a real `messages.push`. The array is the
+        // transcript, not a streaming clone — continue persist can suffix it.
+        // Second arg is optional; older callers ignore it (P10-C / MIN-768).
+        input.onMessagesChange(snapshot, { settled: true });
       };
       const emitProgress = (partialAssistant, force = false) => {
         if (!input.onMessagesChange) return;
@@ -523,26 +570,36 @@ function createSubAgentRunner(deps) {
         if (partialAssistant) {
           snapshot.push({ role: "assistant", content: partialAssistant });
         }
-        input.onMessagesChange(snapshot);
+        // Throttled stream clone — synthetic partial lives on the snapshot
+        // only. Must not be persisted as an extra assistant row.
+        input.onMessagesChange(snapshot, { settled: false });
       };
       let liveEmitQueued = false;
       let pendingLive = null;
+      let lastFlushedPhase = null;
       const flushLiveActivity = () => {
         liveEmitQueued = false;
         if (!pendingLive || !input.onLiveActivity) return;
         const snapshot = pendingLive;
         pendingLive = null;
+        lastFlushedPhase = snapshot.phase ?? lastFlushedPhase;
         input.onLiveActivity(snapshot);
       };
       const emitLiveActivity = (patch, force = false) => {
         if (!input.onLiveActivity) return;
+        const prevPhase = pendingLive?.phase ?? lastFlushedPhase;
         pendingLive = {
           phase: pendingLive?.phase ?? null,
           partialReasoning: pendingLive?.partialReasoning,
           currentToolName: pendingLive?.currentToolName,
           ...patch
         };
-        if (force) {
+        // Phase changes must flush now: a thinking snapshot coalesced with the
+        // first prose generating patch in the same microtask used to vanish,
+        // and runTurn would never see `phase: thinking`.
+        const phaseChanged =
+          patch.phase !== undefined && patch.phase != null && patch.phase !== prevPhase;
+        if (force || phaseChanged) {
           flushLiveActivity();
           return;
         }
@@ -552,6 +609,69 @@ function createSubAgentRunner(deps) {
       };
       emitProgress(void 0, true);
       emitLiveActivity({ phase: "generating", partialReasoning: void 0, currentToolName: null }, true);
+      /**
+       * P10-I: splice caller rows (chat steer) before the next completion.
+       * Boards omit `onRoundBoundary` — this is a no-op there. Consult at
+       * the top of every iteration so a consume after tools is in the body
+       * of the next round, matching loop.ts's pre-`buildApiMessages` slot.
+       */
+      const spliceRoundBoundaryRows = () => {
+        if (typeof input.onRoundBoundary !== "function") return;
+        let extra = null;
+        try {
+          extra = input.onRoundBoundary();
+        } catch {
+          return;
+        }
+        if (!Array.isArray(extra) || extra.length === 0) return;
+        let spliced = 0;
+        for (const row of extra) {
+          if (!row || typeof row !== "object" || typeof row.role !== "string") continue;
+          const next = { role: row.role };
+          if ("content" in row) next.content = row.content;
+          if (typeof row.tool_call_id === "string") next.tool_call_id = row.tool_call_id;
+          if (Array.isArray(row.tool_calls)) next.tool_calls = row.tool_calls;
+          messages.push(next);
+          spliced += 1;
+        }
+        if (spliced > 0) emitProgress(void 0, true);
+      };
+      // P10-B: round / stream-meta / reasoning-end events the inner loop
+      // already had as locals. Optional — board callers that omit onEvent
+      // never attach onTurnEvent either.
+      const emitTurnEvent = (event) => {
+        if (typeof input.onTurnEvent !== "function") return;
+        try {
+          input.onTurnEvent(event);
+        } catch {
+          // View seam — must not change the turn outcome.
+        }
+      };
+      let nextRoundIndex = 0;
+      let currentRoundIndex = 0;
+      const emitRoundStart = () => {
+        currentRoundIndex = nextRoundIndex;
+        nextRoundIndex += 1;
+        emitTurnEvent({ type: "round_start", index: currentRoundIndex });
+      };
+      const emitRoundEnd = (turnResult) => {
+        const usage = turnResult?.streamMeta?.usage;
+        const stats = turnResult?.streamMeta?.stats;
+        const finishReason = turnResult?.finishReason;
+        emitTurnEvent({
+          type: "round_end",
+          index: currentRoundIndex,
+          text: typeof turnResult?.fullText === "string" ? turnResult.fullText : "",
+          reasoning: typeof turnResult?.reasoningText === "string" ? turnResult.reasoningText : "",
+          toolCallCount: Array.isArray(turnResult?.toolCalls) ? turnResult.toolCalls.length : 0,
+          ...(usage && typeof usage === "object" ? { usage } : {}),
+          ...(stats && typeof stats === "object" ? { stats } : {}),
+          ...(finishReason ? { finishReason } : {}),
+          t0: turnResult?.t0,
+          tFirst: turnResult?.tFirst ?? null,
+          tEnd: turnResult?.tEnd
+        });
+      };
       await loadToolCallsMeta();
       const provider = await resolveProvider(input.providerId);
       const sendCaps = resolveSendCapabilities(input.providerId, input.modelId, provider.apiKind);
@@ -654,7 +774,8 @@ function createSubAgentRunner(deps) {
               input.signal,
               input.type,
               void 0,
-              { provider, modelCapabilities: sendCaps }
+              { provider, modelCapabilities: sendCaps },
+              { onTurnEvent: emitTurnEvent }
             );
           } catch (streamErr) {
             if (usedOutcomeResponseFormat && isResponseFormatRejectionError(streamErr)) {
@@ -665,12 +786,14 @@ function createSubAgentRunner(deps) {
                 input.signal,
                 input.type,
                 void 0,
-                { provider, modelCapabilities: sendCaps }
+                { provider, modelCapabilities: sendCaps },
+                { onTurnEvent: emitTurnEvent }
               );
             }
             throw streamErr;
           }
         };
+        emitRoundStart();
         let turnResult = await runFinalizationTurn(body);
         await ledgerSubAgentTurn(input, turnResult);
         const turnUsage = turnResult.streamMeta.usage ?? {};
@@ -690,8 +813,10 @@ function createSubAgentRunner(deps) {
           input.signal
         );
         if (!rawText && usedOutcomeResponseFormat) {
+          emitRoundEnd(turnResult);
           usedOutcomeResponseFormat = false;
           body = stripResponseFormatFromBody(body);
+          emitRoundStart();
           turnResult = await runFinalizationTurn(body);
           await ledgerSubAgentTurn(input, turnResult);
           rawText = await completionTextForTurn(
@@ -702,6 +827,7 @@ function createSubAgentRunner(deps) {
             input.signal
           );
         }
+        emitRoundEnd(turnResult);
         logSubAgentDebug("finalization_turn", {
           repair,
           usedOutcomeResponseFormat,
@@ -738,6 +864,7 @@ function createSubAgentRunner(deps) {
       let turnThinkingBudgetTracker = null;
       let turnBudgetContinuationAttempts = 0;
       for (let turn = 0; ; turn++) {
+        spliceRoundBoundaryRows();
         if (!await enforceContextBudget(turn)) {
           return {
             summary: SUB_AGENT_CONTEXT_BUDGET_ERROR,
@@ -828,7 +955,8 @@ function createSubAgentRunner(deps) {
           { provider, modelCapabilities: sendCaps },
           {
             ...streamOpts,
-            ...streamProgress
+            ...streamProgress,
+            onTurnEvent: emitTurnEvent
           }
         );
         const runSubTurnWithThinkingBudget = async () => {
@@ -911,6 +1039,7 @@ function createSubAgentRunner(deps) {
             tracker.disarm();
           }
         };
+        emitRoundStart();
         let turnResult;
         try {
           turnResult = await runSubTurnWithThinkingBudget();
@@ -1001,39 +1130,46 @@ function createSubAgentRunner(deps) {
             true
           );
           emitProgress(void 0, true);
-          const outcomes = await runHeadlessToolBatch({
-            toolCalls: turnResult.toolCalls,
-            constrained: usedConstrained,
-            signal: input.signal,
-            execute: (name, args, ctx) => input.executeTool(name, args, {
-              ...input.toolExecuteContext,
-              toolCallId: ctx.toolCallId
-            })
-          });
-          for (const outcome of outcomes) {
-            const tc = outcome.toolCall;
-            if (outcome.parseError) {
-              messages.push({
-                role: "tool",
-                tool_call_id: tc.id,
-                content: outcome.parseError
-              });
-            } else {
-              const toolOut = outcome.result ?? { content: "" };
-              messages.push({
-                role: "tool",
-                tool_call_id: tc.id,
-                content: toolOut.content
-              });
-              if (isVisionModel(input.modelId)) {
-                const followUp = toolImageFollowUpFromAttachments(toolOut.attachments);
-                if (followUp) messages.push(followUp);
+          try {
+            const outcomes = await runHeadlessToolBatch({
+              toolCalls: turnResult.toolCalls,
+              constrained: usedConstrained,
+              signal: input.signal,
+              execute: (name, args, ctx) => input.executeTool(name, args, {
+                ...input.toolExecuteContext,
+                toolCallId: ctx.toolCallId
+              })
+            });
+            for (const outcome of outcomes) {
+              const tc = outcome.toolCall;
+              if (outcome.parseError) {
+                messages.push({
+                  role: "tool",
+                  tool_call_id: tc.id,
+                  content: outcome.parseError
+                });
+              } else {
+                const toolOut = outcome.result ?? { content: "" };
+                messages.push({
+                  role: "tool",
+                  tool_call_id: tc.id,
+                  content: toolOut.content
+                });
+                if (isVisionModel(input.modelId)) {
+                  const followUp = toolImageFollowUpFromAttachments(toolOut.attachments);
+                  if (followUp) messages.push(followUp);
+                }
               }
+              emitProgress(void 0, true);
             }
-            emitProgress(void 0, true);
+          } finally {
+            // round_end after the last tool_result of this round, including a
+            // report-tool throw that unwinds the loop (TURN_REPORTED).
+            emitRoundEnd(turnResult);
           }
           continue;
         }
+        emitRoundEnd(turnResult);
         let prose = await completionTextForTurn(
           turnResult,
           body,

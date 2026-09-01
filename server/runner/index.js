@@ -30,6 +30,7 @@ export {
   buildOpeningMessages,
   buildOpeningTranscript,
 } from './run-turn.js';
+export { isHighFrequencyTurnEvent, shouldEmitSubAgentLiveTurnEvent } from './turn-event.js';
 export { executeToolCallBatch, STOPPED_TOOL_MSG } from './tool-batch.js';
 export {
   MAX_PARALLEL_READ_TOOLS,

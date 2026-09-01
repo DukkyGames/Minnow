@@ -38,6 +38,7 @@ export {
   emptyState,
   foldInto,
   isTerminal,
+  isStoppedForScheduling,
   lastEndedAttempt,
   pendingDeliveries,
   serializeState,

@@ -21,6 +21,16 @@ import {
 } from '../../server/runner/run-turn';
 import type { TranscriptMessage, TranscriptStore } from '../../server/runner/transcript-store';
 import { createSessionTranscriptStore } from '../agents/session-transcript-store';
+import { createChatTranscriptStore, type ChatTranscriptStore } from './chat-transcript-store';
+import {
+  isAbortError,
+  isAbortedTurnResult,
+  isFailedTurnResult,
+  isGenerationLostMessage,
+  settleFailedTurn,
+  settleStoppedTurn,
+  type InterruptedTurnChrome,
+} from './settle-interrupted-turn';
 import { createRendererRunnerDeps } from '../agents/renderer-runner-deps';
 import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
 import { resolveWorkAgentBinding } from '../agents/resolve-work-agent-binding';
@@ -75,10 +85,33 @@ import {
   notifyChatStreamActivity,
   notifyChatStreamEnded,
 } from './streaming-state';
-import { createChatTurnEventPainter } from './run-turn-chat-paint';
+import {
+  createChatTurnEventPainter,
+  finalizeAndAnchorThinkingRound,
+  type ChatTurnEventPainter,
+  type ChatTurnPaintHost,
+} from './run-turn-chat-paint';
 import { createStreamingStatsPublisher } from './streaming-stats';
-import { setSteerEnqueuedListener, clearPendingSteer } from './steer-message';
+import {
+  applyStreamMetaEvent,
+  runtimeStatusFromStreamMetaRuntime,
+  streamMetaFromRoundEnd,
+} from './turn-stream-meta';
+import { aggregateTurnMetaSegments } from './plans/stats-math';
+import {
+  finalizeResponseMeta,
+  type StreamMetaAccumulator,
+} from '../api/chat';
+import { resolveModelInfo } from '../api/models';
+import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
+import { consumePendingSteer, clearPendingSteer } from './steer-message';
 import { flushPendingMessageQueue } from './message-queue';
+import { syncComposerMessageQueue } from '../ui/composer-message-queue';
+import {
+  setContextInFlightOverlay,
+  syncTurnContextUsage,
+} from './context-in-flight';
+import { scheduleContextUsageRefresh } from '../ui/context-usage-ring';
 import {
   isFirstUserMessagePending,
   scheduleChatTitleGeneration,
@@ -116,11 +149,16 @@ import {
 import { isBoardOwnedChat, isBoardTaskChat } from '../state/chat-groups';
 import type {
   Chat,
+  ChatStopReason,
   Message,
+  ModelInfo,
+  Stats,
   TurnRunId,
+  TurnRunStatus,
   TurnSnapshot,
   Usage,
 } from '../types';
+import type { StreamingStatusHandle } from '../ui/stream-status';
 import type { Attachment } from '../attachments/types';
 import { linkSentAttachmentsToTurn } from '../design/annotation-store';
 import {
@@ -139,7 +177,19 @@ import {
   stringifyAskQuestionResult,
   validateAskQuestionArgs,
 } from '../tools/ask-question-types';
-import { recordChatCompletionUsage } from '../usage/record-chat-usage';
+import { setSubAgentExecutorContext } from '../tools/sub-agent-executor';
+import { setBugBoardExecutorContext } from '../tools/bug-board-tools';
+import {
+  isParallelSafeTool,
+  parallelToolsActivityLabel,
+} from '../tools/parallel-tool-policy';
+import { assertUiDesignerToolAllowed } from '../agents/ui-designer/tools';
+import { resolveChatToolWorkspaceRoot } from '../state/chat-worktree';
+import {
+  recordChatCompletionUsage,
+  recordMainChatTurnUsage,
+} from '../usage/record-chat-usage';
+import { hasMeasurableUsage } from '../usage/pricing';
 import { schedulePostTurnSynthesis } from '../synthesis/client';
 import {
   buildSynthesisExcerpt,
@@ -161,16 +211,21 @@ import { burstPartyConfetti } from '../ui/party-confetti';
 import {
   appendBubble,
   appendInjectionNoticesDom,
+  appendStats,
   appendStreamingAssistantRow,
-  removeOrphanStreamingRow,
   revealAssistantProseBubble,
 } from '../ui/messages';
+import { ThinkingDurationTracker } from '../ui/thinking-duration';
+import { markMessageTruncated } from '../ui/truncated-affordance';
 import {
   cancelAssistantBubbleRenderDebounce,
   finishStreamingBubbleRender,
   setAssistantBubbleContent,
 } from '../markdown/renderer';
-import { ThoughtBubbleController, renderThoughtsToggle } from '../ui/thought-bubbles';
+import {
+  ThoughtBubbleController,
+  type ThoughtPhaseCallbacks,
+} from '../ui/thought-bubbles';
 import { getActiveChatMountElement, setTurnChatMount } from '../ui/chat-mount';
 import {
   resolveComposerSurface,
@@ -305,6 +360,27 @@ export function createChatAskCapability(input: {
       }
       return enqueue(parsed.args, {}, input.chatId);
     },
+  };
+}
+
+/**
+ * Round-boundary hook for in-turn steer (P10-I / MIN-774).
+ * Same injection shape as {@link createChatAskCapability}: the runner does
+ * not know what a chat is. Boards omit `onRoundBoundary`.
+ */
+export function createChatRoundBoundary(
+  chat: Chat,
+): () => TranscriptMessage[] | null {
+  return () => {
+    const result = consumePendingSteer(chat);
+    // Queue strip is last-write-wins with pendingSteer; refresh after consume.
+    syncComposerMessageQueue();
+    if (!result.consumed || typeof result.content !== 'string' || !result.content) {
+      return null;
+    }
+    // Product `steer: true` is already on chat.history. The runner strips
+    // unknown fields before the next completion.
+    return [{ role: 'user', content: result.content }];
   };
 }
 
@@ -561,9 +637,19 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let turnRunId: TurnRunId | undefined;
   let turnMountPinned = false;
   let turnTeardownRan = false;
-  let abortedForSteer = false;
   let completedNormally = false;
   let thoughtController: ThoughtBubbleController | null = null;
+  let thinkingTracker: ThinkingDurationTracker | null = null;
+  let wrap: HTMLDivElement | undefined;
+  let bubble: HTMLDivElement | undefined;
+  let cursor: HTMLDivElement | undefined;
+  let streamStatus: StreamingStatusHandle | undefined;
+  let painter: ChatTurnEventPainter | undefined;
+  let store: ChatTranscriptStore | undefined;
+  // Default failed so a throw before we classify still records a failed run.
+  let turnRunStatus: TurnRunStatus = 'failed';
+  let turnStopReason: ChatStopReason | undefined;
+  let turnErrorMessage: string | undefined;
   const savedWorkAgentId = chat.workAgentId;
   let uiDesignerActive = false;
   let sendModelId = '';
@@ -572,6 +658,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let sentAttachments: Attachment[] = [];
   let releaseTickedMotion: (() => void) | null = null;
   let streamingStatsPublisher: ReturnType<typeof createStreamingStatsPublisher> | null = null;
+  const ledgerWrites: Promise<void>[] = [];
 
   try {
     if (skillId === GIT_SETUP_SKILL_ID && !resumeGenerationId) {
@@ -811,18 +898,85 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
 
     const streamRow = appendStreamingAssistantRow(chat.id);
-    let { wrap, bubble, cursor, streamStatus } = streamRow;
-    thoughtController = new ThoughtBubbleController(wrap, {
-      onThinkingStart: () => {
-        if (isStreamDomVisible(chat.id)) streamStatus.setPhase('thinking');
-      },
+    wrap = streamRow.wrap;
+    bubble = streamRow.bubble;
+    cursor = streamRow.cursor;
+    streamStatus = streamRow.streamStatus;
+
+    // Live thinking timer (loop.ts:1949–1953). The store has its own tracker
+    // for persist duration; this one drives the elapsed suffix and toggle.
+    thinkingTracker = new ThinkingDurationTracker((elapsedMs) => {
+      if (!isStreamDomVisible(chat.id)) return;
+      thoughtController?.setThinkingElapsed(elapsedMs);
+      streamStatus?.setThinkingElapsed(elapsedMs);
     });
 
     let awaitingProse = true;
     const revealProse = (): void => {
       awaitingProse = false;
-      if (!isStreamDomVisible(chat.id)) return;
+      if (!isStreamDomVisible(chat.id) || !wrap || !bubble) return;
       revealAssistantProseBubble(wrap, bubble, streamStatus);
+    };
+
+    const thoughtPhaseCallbacks: ThoughtPhaseCallbacks = {
+      onThinkingStart: (): void => {
+        patchMainTurnActivity(chat.id, { phase: 'thinking', currentTool: null });
+        if (isStreamDomVisible(chat.id)) {
+          streamStatus?.setPhase('thinking');
+        }
+        setSidebarStreamPhase('thinking', chat.id);
+        thinkingTracker?.startSegment();
+      },
+      onReasoningEnded: (): void => {
+        thinkingTracker?.endSegment();
+        if (isStreamDomVisible(chat.id)) {
+          streamStatus?.setThinkingElapsed(null);
+          if (awaitingProse) {
+            streamStatus?.setPhase('generating');
+            setSidebarStreamPhase('generating', chat.id);
+          } else {
+            setSidebarStreamPhase(null, chat.id);
+          }
+        } else if (awaitingProse) {
+          patchMainTurnActivity(chat.id, { phase: 'generating', currentTool: null });
+          setSidebarStreamPhase('generating', chat.id);
+        } else {
+          setSidebarStreamPhase(null, chat.id);
+        }
+      },
+    };
+
+    thoughtController = new ThoughtBubbleController(wrap, thoughtPhaseCallbacks);
+    const liveThoughts = thoughtController;
+
+    const beginNextStreamingRow = (): Partial<ChatTurnPaintHost> | void => {
+      const nextRow = appendStreamingAssistantRow(chat.id);
+      wrap = nextRow.wrap;
+      bubble = nextRow.bubble;
+      cursor = nextRow.cursor;
+      streamStatus = nextRow.streamStatus;
+      thoughtController?.setAssistantWrap(wrap);
+      thoughtController?.resetStreamPhaseHints();
+      awaitingProse = true;
+      if (isStreamDomVisible(chat.id)) {
+        setStatus('spin', 'Generating reply…');
+      }
+      patchMainTurnActivity(chat.id, { phase: 'generating', currentTool: null });
+      return {
+        wrap,
+        bubble,
+        cursor,
+        streamStatus,
+        thoughtController: thoughtController ?? undefined,
+        revealProse,
+      };
+    };
+
+    const stampLiveRowHistoryIndex = (row: HTMLElement): number | undefined => {
+      const histIdx = store?.lastAssistantHistoryIndex();
+      if (histIdx === undefined || !row.isConnected) return histIdx;
+      row.dataset.historyIndex = String(histIdx);
+      return histIdx;
     };
 
     // Live strip: schedule from the coalesced paint so a token burst is one
@@ -830,34 +984,128 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     streamingStatsPublisher = createStreamingStatsPublisher(chat);
     let statsT0 = 0;
     let statsTFirst: number | null = null;
+    // Real provider usage/stats from P10-B `stream_meta` — never `{}` mid-stream.
+    let liveStreamMeta: StreamMetaAccumulator = {};
+    // Completed rounds, same fields loop.ts fed the publisher as priorSegments.
+    const turnUsageSegments: Usage[] = [];
+    const turnStatsSegments: Array<{ stats: Stats; usage: Usage }> = [];
+    // Box so post-await reads see callback writes (TS does not track those).
+    const metricsState: {
+      lastRound: { stats: Stats; usage: Usage; model_info: ModelInfo } | null;
+      streamModelId: string;
+    } = { lastRound: null, streamModelId: '' };
+    // Inner loop records via deps.recordTurnUsage; fake tests only emit round_end.
+    let recordedUsageViaDeps = false;
+    let recordedRoundUsage = false;
     const publishLiveStats = (
       snap: { lastDelta: string; lastThinking: string },
       flush: boolean,
-      streamMeta: { usage?: Usage } = {},
+      streamMeta: StreamMetaAccumulator = liveStreamMeta,
     ): void => {
       const input = {
         streamMeta,
         t0: statsT0 || performance.now(),
         tFirst: statsTFirst,
         partialText: snap.lastDelta,
+        // Length only — P7-C: never join thought-bubble segments here.
         partialThinkingLength: snap.lastThinking.length,
-        modelId: sendModelId,
+        priorSegments: turnUsageSegments,
+        priorStatsSegments: turnStatsSegments,
+        modelId: metricsState.streamModelId || sendModelId,
         modelInfo: chat.modelInfo ?? undefined,
       };
       if (flush) streamingStatsPublisher?.flush(input);
       else streamingStatsPublisher?.schedule(input);
     };
+    const appendLiveRowStats = (row: HTMLElement, stats: Stats, usage: Usage): void => {
+      if (!row.isConnected || !isStreamDomVisible(chat.id)) return;
+      // Rebuilds from history also call appendStats; drop a live duplicate first.
+      row.querySelector('.msg-stats')?.remove();
+      appendStats(row, stats, usage);
+    };
+    const recordRoundLedger = (
+      streamMeta: StreamMetaAccumulator,
+      t0: number,
+      tFirst: number | null,
+      tEnd: number,
+    ): void => {
+      if (!hasMeasurableUsage(streamMeta.usage)) return;
+      recordedRoundUsage = true;
+      ledgerWrites.push(
+        recordMainChatTurnUsage(chat, {
+          providerId: sendProviderId || provider.id,
+          modelId: metricsState.streamModelId || sendModelId,
+          streamMeta,
+          t0,
+          tFirst,
+          tEnd,
+          workAgentId: activeWorkAgent?.id ?? null,
+        }),
+      );
+    };
 
-    const painter = createChatTurnEventPainter({
-      wrap,
-      bubble,
-      cursor,
-      streamStatus,
-      thoughtController,
+    // Serialized tool calls for the context ring. Updated on tool_call, not per token.
+    const pendingToolCallsForContext: Array<{
+      id?: string;
+      name: string;
+      arguments?: unknown;
+    }> = [];
+
+    const writeLiveContextOverlay = (snap?: {
+      lastDelta?: string;
+      lastThinking?: string;
+    }): void => {
+      const painterSnap = painter?.snapshot();
+      // Coalesced paint + tool_call only — never from raw delta events (P7-B).
+      syncTurnContextUsage({
+        chatId: chat.id,
+        partialAssistantText: snap?.lastDelta ?? painterSnap?.lastDelta,
+        thinkingText: snap?.lastThinking ?? painterSnap?.lastThinking,
+        pendingToolCallsJson:
+          pendingToolCallsForContext.length > 0
+            ? JSON.stringify(pendingToolCallsForContext)
+            : undefined,
+      });
+      scheduleContextUsageRefresh({ duringStream: true });
+    };
+
+    painter = createChatTurnEventPainter({
+      wrap: streamRow.wrap,
+      bubble: streamRow.bubble,
+      cursor: streamRow.cursor,
+      streamStatus: streamRow.streamStatus,
+      thoughtController: liveThoughts,
       mount: getActiveChatMountElement(),
+      chatId: chat.id,
       revealProse,
       onActivity: () => notifyChatStreamActivity(chat.id),
-      onCoalescedPaint: (snap) => publishLiveStats(snap, false),
+      onCoalescedPaint: (snap) => {
+        publishLiveStats(snap, false);
+        // Once per rAF tick — the grain P7-B exists to keep (P10-I).
+        writeLiveContextOverlay(snap);
+      },
+      modeId: chat.modeId,
+      finalizeThinkingRound: () => thinkingTracker?.finalizeRound() ?? 0,
+      beginNextStreamingRow,
+      onRoundFinalized: ({ wrap: closedWrap, connected }) => {
+        if (!connected || !isStreamDomVisible(chat.id)) return;
+        // Per-message footer on the closed live row before any history rebuild.
+        if (metricsState.lastRound) {
+          appendLiveRowStats(closedWrap, metricsState.lastRound.stats, metricsState.lastRound.usage);
+        }
+        const histIdx = stampLiveRowHistoryIndex(closedWrap);
+        if (histIdx === undefined) return;
+        void import('../ui/message-actions').then(({ attachMessageActions }) => {
+          attachMessageActions(closedWrap, {
+            chatId: chat.id,
+            historyIndex: histIdx,
+            turnKind: 'assistant-tools',
+          });
+        });
+        if (isStreamDomVisible(chat.id)) {
+          setStatus('spin', 'Running tools…');
+        }
+      },
     });
 
     // Local inference shares the GPU with the compositor; cloud must not acquire.
@@ -871,7 +1119,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       cursor = row.cursor;
       streamStatus = row.streamStatus;
       thoughtController?.setAssistantWrap(wrap);
-      painter.retarget({
+      painter?.retarget({
         wrap,
         bubble,
         cursor,
@@ -1026,9 +1274,32 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
     if (tools.length === 0) tools = spikeChatToolDefinitions();
 
-    const store = createSessionTranscriptStore();
-    const deps = createRendererRunnerDeps(store);
-    deps.recordTurnUsage = async () => {};
+    const chatStore = createChatTranscriptStore({
+      thoughtController: liveThoughts,
+      turnRunId,
+    });
+    store = chatStore;
+    const deps = createRendererRunnerDeps(chatStore);
+    // Inner loop would otherwise attribute this completion to a sub-agent
+    // helper (`recordSubAgentTurnUsage`). Record as main-chat instead.
+    deps.recordTurnUsage = async (_input, turn) => {
+      const payload = turn as {
+        providerId?: string;
+        modelId?: string;
+        streamMeta?: StreamMetaAccumulator;
+        t0?: number;
+        tFirst?: number | null;
+        tEnd?: number;
+      };
+      if (!payload?.streamMeta || !hasMeasurableUsage(payload.streamMeta.usage)) return;
+      recordedUsageViaDeps = true;
+      recordRoundLedger(
+        payload.streamMeta,
+        Number.isFinite(payload.t0) ? (payload.t0 as number) : performance.now(),
+        payload.tFirst ?? null,
+        Number.isFinite(payload.tEnd) ? (payload.tEnd as number) : performance.now(),
+      );
+    };
 
     // Main chat persists generations so boot resume can re-subscribe. First
     // post of a resume turn subscribes; later tool rounds POST a new generation.
@@ -1041,7 +1312,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         chatId: chat.id,
         onGenerationId: (id) => {
           chat.currentGenerationId = id;
-          scheduleSaveSessions();
+          chatStore.noteGeneration(chat.id, id);
           postOptions?.onGenerationId?.(id);
         },
       };
@@ -1066,13 +1337,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
     };
 
-    setSteerEnqueuedListener((steerChatId) => {
-      if (steerChatId === chat.id) {
-        abortedForSteer = true;
-        controller.abort();
-      }
-    });
-
     const needsOverlay = chatTurnNeedsMultimodalOverlay(chat, validAttachments);
     const priorMessages = needsOverlay
       ? overlayMultimodalHistoryForRunTurn(chat, {
@@ -1082,11 +1346,19 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           attachments: validAttachments,
         })
       : undefined;
+    // Match the user row already pushed (`historyContent`, including skill
+    // tags). `userText` is the pre-tag body — using it here duplicates the
+    // send as a second user bubble. Continue-after-truncation still wins.
     const seed =
       ephemeralContinueInstruction?.trim() ||
-      (priorMessages ? '' : userText);
+      (priorMessages ? '' : historyContent);
 
     statsT0 = performance.now();
+    // Consecutive parallel-safe `tool_call`s in one round (all emitted before
+    // execute) share one activity label — a 6-wide read batch should not flash
+    // the last tool name (P10-H / MIN-773).
+    let parallelSafeStreak = 0;
+
     const result = await runTurnImpl({
       chatId: chat.id,
       seed,
@@ -1103,6 +1375,14 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             : undefined,
       },
       onEvent: (event) => {
+        chatStore.observe(event);
+        if (event.type === 'round_start') {
+          // Each API round has its own t0 / usage; do not inherit the last one.
+          liveStreamMeta = {};
+          statsT0 = performance.now();
+          statsTFirst = null;
+          parallelSafeStreak = 0;
+        }
         if (
           statsTFirst == null &&
           (event.type === 'delta' || event.type === 'thinking') &&
@@ -1110,24 +1390,97 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         ) {
           statsTFirst = performance.now();
         }
+        if (event.type === 'stream_meta') {
+          liveStreamMeta = applyStreamMetaEvent(liveStreamMeta, event);
+          if (typeof event.model === 'string' && event.model.trim()) {
+            metricsState.streamModelId = event.model.trim();
+          }
+          // P10-B runtime is timings + prompt_progress, not a label string.
+          const runtime = runtimeStatusFromStreamMetaRuntime(
+            event.runtime,
+            statsTFirst != null,
+          );
+          if (isStreamDomVisible(chat.id) && streamStatus) {
+            if (runtime.phase === 'prompt_processing' && statsTFirst == null) {
+              streamStatus.setPhase('prompt_processing');
+            }
+            streamStatus.setRuntimeDetail(runtime.detail || null);
+          }
+          // Usage-only snapshot: still length, never a thought-bubble join.
+          const snap = painter?.snapshot() ?? { lastDelta: '', lastThinking: '' };
+          publishLiveStats(snap, false);
+        }
+        if (event.type === 'round_end') {
+          const roundStreamMeta = streamMetaFromRoundEnd(liveStreamMeta, event);
+          // t0 can be 0 in tests; `||` would fall through to wall-clock now.
+          const tEnd = Number.isFinite(event.tEnd) ? event.tEnd : performance.now();
+          const t0 = Number.isFinite(event.t0) ? event.t0 : statsT0 || tEnd;
+          const tFirst = event.tFirst ?? statsTFirst ?? tEnd;
+          metricsState.lastRound = finalizeResponseMeta(roundStreamMeta, t0, tFirst, tEnd);
+          if (metricsState.lastRound.usage && Object.keys(metricsState.lastRound.usage).length > 0) {
+            turnUsageSegments.push(metricsState.lastRound.usage);
+            turnStatsSegments.push({
+              stats: metricsState.lastRound.stats,
+              usage: metricsState.lastRound.usage,
+            });
+          }
+          if (!recordedUsageViaDeps) {
+            recordRoundLedger(roundStreamMeta, t0, tFirst, tEnd);
+          }
+          recordedUsageViaDeps = false;
+          // Strip during tool execution shows completed rounds, not a live estimate.
+          liveStreamMeta = {};
+          publishLiveStats({ lastDelta: '', lastThinking: '' }, true, {});
+        }
+        if (event.type === 'phase') {
+          // thinking / generating come from the runner; do not infer them from
+          // tool_call. phase `tools` also fires from onToolCallDelta (args still
+          // streaming) — remount needs a stream shell until a real tool_call.
+          if (event.phase === 'thinking' || event.phase === 'generating') {
+            patchMainTurnActivity(chat.id, {
+              phase: event.phase,
+              currentTool: null,
+            });
+          }
+        }
         if (event.type === 'tool_streaming') {
-          // Keep phase `generating` so remount still attaches a stream shell
-          // (stream-chat-dom skips remount when phase is `tools` = execute).
-          patchMainTurnActivity(chat.id, { currentTool: event.name });
+          // Args are still streaming — one name is correct until the batch
+          // of `tool_call`s arrives and we can see a parallel segment.
+          if (parallelSafeStreak <= 1) {
+            patchMainTurnActivity(chat.id, { currentTool: event.name });
+          }
         }
         if (event.type === 'tool_call') {
+          if (isParallelSafeTool(event.name)) {
+            parallelSafeStreak += 1;
+          } else {
+            parallelSafeStreak = 0;
+          }
+          const aggregate =
+            parallelSafeStreak > 1
+              ? parallelToolsActivityLabel(parallelSafeStreak)
+              : '';
           patchMainTurnActivity(chat.id, {
             phase: 'tools',
-            currentTool: event.name,
+            currentTool: aggregate || event.name,
           });
+          pendingToolCallsForContext.push({
+            id: event.id,
+            name: event.name,
+            arguments: event.arguments,
+          });
+          // Discrete tool_call — once per call with serialized args (P10-I).
+          writeLiveContextOverlay();
         }
-        painter.onEvent(event);
+        // round_end lastRound is set above so onRoundFinalized can appendStats.
+        painter?.onEvent(event);
       },
-      transcript: store,
+      transcript: chatStore,
       signal: chatSignal,
       deps,
       ask: createChatAskCapability({ chatId: chat.id }),
       askTimeoutMs: resolveSpikeAskTimeoutMs(),
+      onRoundBoundary: createChatRoundBoundary(chat),
       injectReportTool: false,
       nudgeToolUse: false,
       finalizeStructuredOutcome: false,
@@ -1138,22 +1491,60 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
               'Error: ask_question must be handled by the injected ask capability.',
           };
         }
+        const planBlock = uiDesignerActive
+          ? assertUiDesignerToolAllowed(name, uiDesignerCtx.mode)
+          : null;
+        if (planBlock) {
+          return { content: planBlock };
+        }
+
+        const toolLoopModeId = normalizeModeId(chat.modeId);
+        // Nested spawn/cancel read this module-level latch. It must be the
+        // current tool call, and it must be cleared in `finally` — a leak
+        // anchors the next turn's cards to this row (P10-H / MIN-773).
+        // P10-K re-anchors the card on upsert if the tool row was rebuilt.
+        setSubAgentExecutorContext({
+          parentTurnId: turnRunId ?? chat.id,
+          modeId: toolLoopModeId,
+          parentChatId: chat.id,
+          parentToolCallId: ctx.toolCallId,
+        });
+        setBugBoardExecutorContext({ chatId: chat.id });
+
+        const scopedWorkspaceRoot = resolveChatToolWorkspaceRoot(
+          chat,
+          sessionState?.groups,
+        );
         const toolOut = await executeTool(name, asToolArgs(args), {
           chatId: chat.id,
           toolCallId: ctx.toolCallId,
+          modeId: toolLoopModeId,
+          workAgentId: chat.workAgentId ?? null,
           signal: chatSignal,
+          ...(scopedWorkspaceRoot ? { workspaceRoot: scopedWorkspaceRoot } : {}),
         });
-        const payload: { content: string; attachments?: typeof toolOut.attachments } = {
+        const payload: {
+          content: string;
+          attachments?: typeof toolOut.attachments;
+          codeChange?: typeof toolOut.codeChange;
+        } = {
           content: toolOut.content,
         };
         if (toolOut.attachments?.length) payload.attachments = toolOut.attachments;
+        // Persist-time tool rows read attachments/codeChange from TurnEvent.
+        if (toolOut.codeChange) payload.codeChange = toolOut.codeChange;
         return payload;
       },
     });
 
-    if (result.usage) {
+    await Promise.all(ledgerWrites);
+
+    // End-of-turn summed usage is a fallback when no round_end / deps
+    // recording happened. Per-round recordMainChatTurnUsage already wrote
+    // the same tokens; a second write would double-count the ledger.
+    if (result.usage && !recordedRoundUsage) {
       const agent = resolveActiveWorkAgent(chat);
-      void recordChatCompletionUsage(chat, {
+      await recordChatCompletionUsage(chat, {
         source: {
           kind: 'main',
           modeId: normalizeModeId(chat.modeId),
@@ -1165,113 +1556,209 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       });
     }
 
-    chat.currentGenerationId = undefined;
-    recordAssistantReplyOnChat(chat);
-    recordChatMessage(chat);
-    scheduleSaveSessions();
+    const chrome: InterruptedTurnChrome = {
+      chat,
+      wrap,
+      bubble,
+      cursor,
+      streamStatus,
+      thoughtController,
+      painter,
+      store,
+      turnRunId,
+      pushUser,
+      superPlanStage,
+    };
 
-    painter.flush();
-    const painted = painter.snapshot();
-    publishLiveStats(
-      painted,
-      true,
-      result.usage ? { usage: result.usage as Usage } : {},
-    );
-    cancelAssistantBubbleRenderDebounce(bubble);
-    finishStreamingBubbleRender(bubble, cursor);
-    const prose = painted.lastDelta.trim();
-    const thinkingSegments = thoughtController.consumePersistedSegments();
-    if (prose && wrap.isConnected) {
-      revealProse();
-      setAssistantBubbleContent(bubble, prose, { streaming: false, modeId: chat.modeId });
-      completeStreamAnnouncer(prose);
-      if (thinkingSegments.length > 0) {
-        renderThoughtsToggle(wrap, thinkingSegments);
-      }
-      wrap.dataset.historyIndex = String(Math.max(0, chat.history.length - 1));
-    } else if (wrap.isConnected && awaitingProse && !prose) {
-      removeOrphanStreamingRow(wrap, streamStatus);
-    }
-    streamStatus.dispose();
-    // A failed outcome carries its reason in `result.error`; showing the bare
-    // outcome word ("crashed") strands the only diagnostic the turn produced.
-    const failure =
-      result.outcome === 'crashed' || result.outcome === 'timeout'
-        ? ('error' in result && typeof result.error === 'string' && result.error.trim()
-            ? result.error.trim()
-            : result.outcome)
-        : null;
-    if (failure) {
-      console.error(`[chat ${chat.id}] turn ${result.outcome}:`, failure);
-    }
-    if (isStreamDomVisible(chat.id)) {
-      if (failure) {
-        setStatus('err', failure);
-      } else {
-        setStatus('ok', result.outcome === 'no_report' ? 'Done' : result.outcome);
-      }
-      scrollChatIfPinned();
-    }
-
-    if (
-      (firstUserSendForInjections || deferTitleUntilTurnEnd || shouldScheduleTitle) &&
-      (titleSeed || userText || rawText).trim()
+    // Stop is a returned outcome, not a throw. Do not fall through to the
+    // success painter — that path never mints `stopped: true`.
+    if (isAbortedTurnResult(result, chatSignal)) {
+      const settled = settleStoppedTurn(chrome);
+      turnRunStatus = 'stopped';
+      turnStopReason = settled.stopReason;
+    } else if (
+      isFailedTurnResult(result) ||
+      isGenerationLostMessage('error' in result ? result.error : undefined)
     ) {
-      scheduleChatTitleGeneration(chat.id, titleSeed || userText || rawText, {
-        modelId: sendModelId,
-        providerId: sendProviderId || provider.id,
-      });
-    }
+      const errText =
+        result.outcome === 'timeout'
+          ? 'timeout'
+          : 'error' in result && result.error.trim()
+            ? result.error.trim()
+            : result.outcome;
+      const settled = settleFailedTurn(chrome, errText);
+      turnRunStatus = 'failed';
+      turnErrorMessage = settled.errorMessage;
+    } else {
+      chat.currentGenerationId = undefined;
+      recordAssistantReplyOnChat(chat);
+      recordChatMessage(chat);
+      scheduleSaveSessions();
 
-    if (normalizeModeId(chat.modeId) !== 'debug') {
-      const lastAssistant = [...chat.history].reverse().find((m) => m.role === 'assistant');
-      const assistantText =
-        lastAssistant && typeof lastAssistant.content === 'string'
-          ? lastAssistant.content
-          : '';
-      schedulePostTurnSynthesis({
-        chatId: chat.id,
-        messages: buildSynthesisMessages(chat),
-        roundCount: 1,
-        toolCount: painted.toolCallCount,
-        sourceExcerpt: buildSynthesisExcerpt(chat),
-        assistantText,
-        boardChat: isBoardOwnedChat(chat) || isBoardTaskChat(chat),
-        ...(chat.kind === 'expert' && chat.expertId?.trim()
-          ? { expertId: chat.expertId.trim() }
-          : {}),
-      });
-    }
+      painter?.flush();
+      const painted = painter?.snapshot() ?? {
+        lastDelta: '',
+        lastThinking: '',
+        toolCallCount: 0,
+      };
+      // Priors already hold every round; do not pass summed result.usage
+      // (that adds prompts across rounds and looks like a huge context).
+      publishLiveStats(painted, true, {});
+      const displayMeta = turnStatsSegments.length
+        ? aggregateTurnMetaSegments(turnStatsSegments)
+        : metricsState.lastRound;
+      if (displayMeta) {
+        chat.lastStats = buildLastStatsSnapshot(displayMeta.stats, displayMeta.usage);
+        const modelInfo = resolveModelInfo(
+          metricsState.streamModelId || sendModelId,
+          metricsState.lastRound?.model_info ?? {},
+        );
+        chat.modelInfo = { ...modelInfo };
+        if (getActiveChat().id === chat.id) {
+          updateStrip(displayMeta.stats, displayMeta.usage, modelInfo);
+        }
+      }
+      if (bubble && cursor) {
+        cancelAssistantBubbleRenderDebounce(bubble);
+        finishStreamingBubbleRender(bubble, cursor);
+      }
+      const prose = painted.lastDelta.trim();
+      const thinkingDurationMs = thinkingTracker?.finalizeRound() ?? 0;
+      const hasProse = Boolean(prose);
+      if (hasProse && wrap?.isConnected && bubble) {
+        revealProse();
+        setAssistantBubbleContent(bubble, prose, { streaming: false, modeId: chat.modeId });
+        completeStreamAnnouncer(prose);
+      }
+      if (wrap?.isConnected) {
+        finalizeAndAnchorThinkingRound({
+          thoughtController,
+          wrap,
+          streamStatus,
+          hasProse,
+          durationMs: thinkingDurationMs,
+          domVisible: isStreamDomVisible(chat.id),
+        });
+        if (metricsState.lastRound) {
+          appendLiveRowStats(wrap, metricsState.lastRound.stats, metricsState.lastRound.usage);
+        }
+      } else {
+        thoughtController?.consumePersistedSegments();
+      }
+      if (hasProse && wrap?.isConnected && bubble) {
+        const histIdx = stampLiveRowHistoryIndex(wrap);
+        if (isStreamDomVisible(chat.id)) {
+          const { attachMessageActions } = await import('../ui/message-actions');
+          const { attachVoicePlayButton } = await import('../ui/voice-controls');
+          if (histIdx !== undefined) {
+            attachMessageActions(wrap, {
+              chatId: chat.id,
+              historyIndex: histIdx,
+              turnKind: 'assistant',
+            });
+          }
+          attachVoicePlayButton(wrap, prose);
+          const lastMsg =
+            histIdx !== undefined ? chat.history[histIdx] : undefined;
+          if (
+            lastMsg &&
+            lastMsg.role === 'assistant' &&
+            'truncated' in lastMsg &&
+            lastMsg.truncated
+          ) {
+            markMessageTruncated(wrap, chat);
+          }
+        }
+      } else if (wrap?.isConnected && !hasProse) {
+        stampLiveRowHistoryIndex(wrap);
+      }
+      streamStatus?.dispose();
+      if (isStreamDomVisible(chat.id)) {
+        setStatus('ok', 'Ready');
+        scrollChatIfPinned();
+      }
+      renderSidebar();
 
-    completedNormally = result.outcome === 'no_report' || result.outcome === 'pass';
+      if (
+        (firstUserSendForInjections || deferTitleUntilTurnEnd || shouldScheduleTitle) &&
+        (titleSeed || userText || rawText).trim()
+      ) {
+        scheduleChatTitleGeneration(chat.id, titleSeed || userText || rawText, {
+          modelId: sendModelId,
+          providerId: sendProviderId || provider.id,
+        });
+      }
+
+      if (normalizeModeId(chat.modeId) !== 'debug') {
+        const lastAssistant = [...chat.history].reverse().find((m) => m.role === 'assistant');
+        const assistantText =
+          lastAssistant && typeof lastAssistant.content === 'string'
+            ? lastAssistant.content
+            : '';
+        schedulePostTurnSynthesis({
+          chatId: chat.id,
+          messages: buildSynthesisMessages(chat),
+          roundCount: 1,
+          toolCount: painted.toolCallCount,
+          sourceExcerpt: buildSynthesisExcerpt(chat),
+          assistantText,
+          boardChat: isBoardOwnedChat(chat) || isBoardTaskChat(chat),
+          ...(chat.kind === 'expert' && chat.expertId?.trim()
+            ? { expertId: chat.expertId.trim() }
+            : {}),
+        });
+      }
+
+      completedNormally = result.outcome === 'no_report' || result.outcome === 'pass';
+      if (completedNormally) turnRunStatus = 'completed';
+    }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (isStreamDomVisible(chat.id)) {
-      setStatus('err', message);
+    const chrome: InterruptedTurnChrome = {
+      chat,
+      wrap,
+      bubble,
+      cursor,
+      streamStatus,
+      thoughtController,
+      painter,
+      store,
+      turnRunId,
+      pushUser,
+      superPlanStage,
+    };
+    // Thrown AbortError is the fallback Stop path; the usual Stop is a return.
+    if (isAbortError(err) || getChatAbort(chat.id)?.signal.aborted) {
+      const settled = settleStoppedTurn(chrome);
+      turnRunStatus = 'stopped';
+      turnStopReason = settled.stopReason;
+    } else {
+      const settled = settleFailedTurn(chrome, err);
+      turnRunStatus = 'failed';
+      turnErrorMessage = settled.errorMessage;
     }
     // Setup failures after the activity row (abandoned-turn) must propagate
     // so callers can distinguish a throw from a crashed outcome.
     if (!turnTeardownRan && err instanceof Error && /setup exploded/i.test(err.message)) {
       throw err;
     }
-    // Generation-lost-on-restart: clear the stale id (resume wrap may have).
-    const { GenerationNotFoundError, GENERATION_LOST_ON_RESTART_MESSAGE } =
-      await import('../api/generations');
-    if (err instanceof GenerationNotFoundError) {
-      chat.currentGenerationId = undefined;
-      if (isStreamDomVisible(chat.id)) {
-        setStatus('err', GENERATION_LOST_ON_RESTART_MESSAGE);
-      }
-    }
   } finally {
     turnTeardownRan = true;
+    // Nested spawn cards latch onto this module-level parent; a leak
+    // would pin the next turn's cards to a stale tool row (P10-H / MIN-773).
+    setSubAgentExecutorContext(null);
+    setBugBoardExecutorContext(null);
+    await Promise.all(ledgerWrites);
     // Drop the live-strip timer; hand looping animations back to vsync.
     streamingStatsPublisher?.reset();
     streamingStatsPublisher = null;
     releaseTickedMotion?.();
     releaseTickedMotion = null;
     thoughtController?.abort();
-    setSteerEnqueuedListener(null);
+    thinkingTracker?.abort();
+    store?.abortThinking();
+    // Drop in-flight tokens so the ring settles to the post-turn estimate.
+    setContextInFlightOverlay(null);
+    scheduleContextUsageRefresh();
     registerStreamDomRemount(chat.id, null);
     clearMainTurnActivity(chat.id);
     if (uiDesignerActive) {
@@ -1285,9 +1772,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       const start = run?.outputHistoryStart;
       const end = run?.outputHistoryEnd;
       finalizeRun(chat, turnRunId, {
-        status: completedNormally ? 'completed' : 'failed',
+        status: completedNormally ? 'completed' : turnRunStatus,
         outputHistoryStart: start,
         outputHistoryEnd: end,
+        stopReason: turnRunStatus === 'stopped' ? (turnStopReason ?? 'user') : undefined,
+        errorMessage: turnErrorMessage,
       });
       await capturePostTurnSnapshot(chat, turnRunId);
       scheduleSaveSessions();
@@ -1312,22 +1801,23 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       burstPartyConfetti();
     }
 
-    const steerText = chat.pendingSteerMessage?.trim() ?? '';
-    if (steerText || abortedForSteer) {
-      if (steerText) clearPendingSteer(chat);
-      if (steerText) {
-        void resumeParentChatWithMessage(chat, steerText);
-      }
-    } else if (completedNormally) {
-      void flushPendingMessageQueue(chat);
-      if (goalDriven) {
-        void import('./goal/evaluate').then((mod) => {
-          void mod.maybeContinueGoalAfterTurn(chat);
+    if (completedNormally) {
+      const leftoverSteer = chat.pendingSteerMessage?.trim() ?? '';
+      if (leftoverSteer) {
+        // No tool-loop boundary this turn — follow-up send, not abort+resend.
+        clearPendingSteer(chat);
+        void resumeParentChatWithMessage(chat, leftoverSteer);
+      } else {
+        void flushPendingMessageQueue(chat);
+        if (goalDriven) {
+          void import('./goal/evaluate').then((mod) => {
+            void mod.maybeContinueGoalAfterTurn(chat);
+          });
+        }
+        void import('./loop/pacing').then((mod) => {
+          mod.maybeRescheduleLoopsAfterTurn(chat);
         });
       }
-      void import('./loop/pacing').then((mod) => {
-        mod.maybeRescheduleLoopsAfterTurn(chat);
-      });
     }
   }
 }

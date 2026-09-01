@@ -471,8 +471,9 @@ export function buildApiMessages(
  * Persist-aligned prior transcript for `runTurn({ messages })`.
  *
  * Adds no rows of its own (no extra tool-screenshot follow-ups) and drops the
- * same UI-only notice rows `createSessionTranscriptStore().load` drops, so this
- * array and the store's `have` count agree and suffix persist stays aligned.
+ * same UI-only notice rows `createSessionTranscriptStore().load` drops (the
+ * P10-D chat decorator delegates `load` here — do not add a third filter), so
+ * this array and the store's `have` count agree and suffix persist stays aligned.
  * Sending an `injection` / `context` row verbatim fails the completion with
  * HTTP 400 (unknown role), so it cannot ride along just to keep the length.
  * Overlays VLM `image_url` parts onto existing user rows. Inner `runTurn`

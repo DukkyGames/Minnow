@@ -13,6 +13,7 @@
  */
 
 import { findChatById, getActiveChat } from '../state/sessions';
+import { getSubAgentExecutorContext } from '../tools/sub-agent-executor-context';
 import { getWorkspacePath } from '../state/workspace';
 import {
   isContextBudgetFailure,
@@ -89,7 +90,7 @@ function statusFromPhase(phase: string | undefined): SubAgentStatus {
   if (phase === 'passed') return 'completed';
   if (phase === 'cancelled') return 'cancelled';
   if (phase === 'abandoned') return 'failed';
-  if (phase === 'running') return 'running';
+  if (phase === 'running' || phase === 'cancelling') return 'running';
   return 'queued';
 }
 
@@ -188,11 +189,18 @@ function mergeClientView(runId: string): void {
   const err = client?.getEngineError();
   const folded = subAgentRunFromFold(raw ?? { runId, ...(prev ?? {}) }, prev ?? {});
   const terminal = isSubAgentRunTerminal(folded.status);
+  const stopping = raw?.phase === 'cancelling';
   const next = subAgentRunFromFold(raw ?? { runId, ...(prev ?? {}) }, {
     ...(prev ?? {}),
     // Live overlays die with the attempt. Replaying tokens onto a completed
-    // card is exactly the reload bug this store exists to close.
-    livePhase: terminal ? undefined : ((live?.phase as SubAgentRun['livePhase']) ?? prev?.livePhase),
+    // card is exactly the reload bug this store exists to close. Cancelling
+    // maps to product `running` so the card stays live, but the overlay is
+    // always `stopping` — do not keep "Calling {tool}…" after the user stop.
+    livePhase: terminal
+      ? undefined
+      : stopping
+        ? 'stopping'
+        : ((live?.phase as SubAgentRun['livePhase']) ?? prev?.livePhase),
     liveCurrentToolName: terminal ? undefined : (live?.toolName ?? prev?.liveCurrentToolName),
     livePartialReasoning: terminal ? undefined : (live?.thinking || prev?.livePartialReasoning),
     startError: terminal
@@ -300,6 +308,14 @@ export function listSubAgentRunsForParentTurn(parentTurnId: string | null | unde
 
 function resolveParentChatId(input: SpawnSubAgentInput): string {
   if (input.parentChatId?.trim()) return input.parentChatId.trim();
+  // Prefer the in-flight execute latch over whatever chat is on screen.
+  // Spawn from A, switch to B before POST used to journal the run under B (MIN-776).
+  const fromExecutor = getSubAgentExecutorContext()?.parentChatId?.trim() ?? '';
+  if (fromExecutor) return fromExecutor;
+  // Follow-up (MIN-776): remaining callers can omit parentChatId (issue
+  // expand when `ensureIssueWorkflowChat` fails). Do not turn this into an
+  // error until those pass an id — guessing the active chat is still wrong
+  // for them, but a hard throw would 400 a path that currently still POSTs.
   try {
     return getActiveChat()?.id?.trim() ?? '';
   } catch {
@@ -343,7 +359,13 @@ export async function spawnSubAgent(
     runId: String(body.runId),
     status: (body.status as SubAgentStatus) ?? 'queued',
   };
-  if (input.wait === true) return waitForSubAgent(result.runId);
+  if (input.wait === true) {
+    // Do not pass a parent chat AbortSignal. executeTool receives chatSignal
+    // but spawn never forwards it — that wiring would cancel a wait:true
+    // sub-agent whenever the parent turn stopped (MIN-777 false cancel).
+    // Super Plan passes its own timeout signal at the waitForSubAgent site.
+    return waitForSubAgent(result.runId);
+  }
   return result;
 }
 
@@ -412,6 +434,8 @@ export async function waitForSubAgent(
       reject(err);
     };
     const onAbort = () => {
+      // Fires only for the AbortSignal *passed into this wait*. Chat spawn
+      // does not pass chatSignal. Super Plan review uses AbortSignal.timeout.
       fail(new DOMException('Aborted', 'AbortError'));
       cancelSubAgent(runId, 'parent_abort');
     };

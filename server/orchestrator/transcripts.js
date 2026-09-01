@@ -28,6 +28,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { boardDir } from './journal.js';
+import { isHighFrequencyTurnEvent } from '../runner/turn-event.js';
 
 /**
  * Lines kept per attempt.
@@ -176,8 +177,10 @@ function flushPending(file) {
  * because its transcript could not be written would be a worse trade than a
  * transcript with a hole in it.
  *
- * Token deltas are dropped. They are the bulk of the stream and add nothing a
- * reader wants — the tool calls and their results are the story.
+ * High-frequency events are dropped via {@link isHighFrequencyTurnEvent}
+ * (`token` / `delta` / `reasoning_delta` plus P10-B `stream_meta`, `phase`,
+ * `round_start`, `reasoning_end`). They are the bulk of the stream and would
+ * cap the file before the tool calls a reader wants.
  *
  * Reasoning is *coalesced* rather than dropped, because unlike a token delta it
  * is worth reading once it is whole. Each `thinking` event carries the block so
@@ -192,7 +195,10 @@ export function recordTranscriptEvent(entry) {
   const { boardId, attemptId, event } = entry;
   if (!boardId || !attemptId || !event) return;
   const type = typeof event.type === 'string' ? event.type : '';
-  if (!type || type === 'token' || type === 'delta' || type === 'reasoning_delta') return;
+  // High-frequency types are classified next to TurnEvent so this recorder
+  // cannot drift into a second exclusion list (P10-B / MIN-767). stream_meta
+  // at ~12 Hz would burn MAX_LINES in minutes and then drop tool rows.
+  if (!type || isHighFrequencyTurnEvent(type)) return;
 
   /** @type {string} */
   let file;
@@ -210,7 +216,18 @@ export function recordTranscriptEvent(entry) {
   // `content` is where `run-turn.js` puts a tool's output. Without it the log
   // could say which tools ran but never what any of them came back with, which
   // is half of "what did it actually do".
-  for (const key of ['name', 'text', 'summary', 'error', 'id', 'content']) {
+  for (const key of [
+    'name',
+    'text',
+    'summary',
+    'error',
+    'id',
+    'content',
+    'index',
+    'toolCallCount',
+    'reasoning',
+    'finishReason',
+  ]) {
     if (event[key] !== undefined) line[key] = clip(event[key]);
   }
   if (event.arguments !== undefined) line.arguments = clip(event.arguments);

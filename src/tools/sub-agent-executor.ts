@@ -13,20 +13,20 @@ import {
 import { resolveSubAgentRunForParentSession } from '../agents/sub-agent-completion-push';
 import { findChatById } from '../state/sessions';
 import type { BoardCategory } from '../types';
-import type { SubAgentExecutorContext } from '../agents/types';
+import { getSubAgentExecutorContext } from './sub-agent-executor-context';
+
+export {
+  getSubAgentExecutorContext,
+  setSubAgentExecutorContext,
+} from './sub-agent-executor-context';
 
 const BOARD_CATEGORIES = new Set<BoardCategory>(['build', 'fix', 'test', 'research']);
 
-let executorContext: SubAgentExecutorContext | null = null;
-
-/** Set parent turn context for spawn/cancel (from tool loop). */
-export function setSubAgentExecutorContext(
-  ctx: SubAgentExecutorContext | null,
-): void {
-  executorContext = ctx;
-}
-
-/** Execute spawn/cancel/list/status sub-agent parent tools. */
+/** Execute spawn/cancel/list/status sub-agent parent tools.
+ *
+ * No AbortSignal parameter: the parent chat signal lives on executeTool
+ * context and must not cancel a spawned wait:true run (P10-L / MIN-777).
+ */
 export async function executeSubAgentTool(
   name: string,
   args: Record<string, unknown>,
@@ -51,14 +51,17 @@ export async function executeSubAgentTool(
           : undefined;
 
     try {
+      // Chat execute (P10-H) already filled the latch; spawn must not guess
+      // the active chat if the user switched mid-POST (P10-K / MIN-776).
+      const parent = getSubAgentExecutorContext();
       const result = await spawnSubAgent({
         type,
         task,
         wait,
-        parentTurnId: executorContext?.parentTurnId ?? null,
-        parentChatId: executorContext?.parentChatId ?? null,
-        parentToolCallId: executorContext?.parentToolCallId ?? null,
-        modeId: executorContext?.modeId,
+        parentTurnId: parent?.parentTurnId ?? null,
+        parentChatId: parent?.parentChatId ?? null,
+        parentToolCallId: parent?.parentToolCallId ?? null,
+        modeId: parent?.modeId,
         ...(category ? { category } : {}),
         ...(boardTaskId ? { boardTaskId } : {}),
       });
@@ -93,7 +96,7 @@ export async function executeSubAgentTool(
   }
 
   if (name === 'list_sub_agents') {
-    const parentChatId = executorContext?.parentChatId?.trim();
+    const parentChatId = getSubAgentExecutorContext()?.parentChatId?.trim();
     if (!parentChatId) {
       return 'Error: list_sub_agents requires an active parent chat';
     }
@@ -102,7 +105,8 @@ export async function executeSubAgentTool(
   }
 
   if (name === 'get_sub_agent_status') {
-    const parentChatId = executorContext?.parentChatId?.trim();
+    const parent = getSubAgentExecutorContext();
+    const parentChatId = parent?.parentChatId?.trim();
     if (!parentChatId) {
       return 'Error: get_sub_agent_status requires an active parent chat';
     }
@@ -117,7 +121,7 @@ export async function executeSubAgentTool(
     try {
       const run = assertSubAgentRunReadableByParent(
         resolveSubAgentRunForParentSession(runId, parentChatId),
-        { parentChatId, parentTurnId: executorContext?.parentTurnId },
+        { parentChatId, parentTurnId: parent?.parentTurnId },
       );
       return JSON.stringify(buildSubAgentStatusPayload(run), null, 2);
     } catch (err) {

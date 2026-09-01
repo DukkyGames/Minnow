@@ -8,10 +8,12 @@ import {
   eventsForAttemptEnd,
   eventsForStart,
   isSubAgentRole,
+  reapVanished,
   subAgentGraph,
 } from '../../server/sub-agents/graph.js';
-import { SUB_AGENT_ROLE } from '../../server/sub-agents/events.js';
+import { makeEvent, SUB_AGENT_ROLE } from '../../server/sub-agents/events.js';
 import { defaultCaps } from '../../server/sub-agents/plan.js';
+import { derive } from '../../server/sub-agents/derive.js';
 
 describe('sub-agent Graph', () => {
   it('isAgentRole accepts only the pinned worker role', () => {
@@ -66,5 +68,55 @@ describe('sub-agent Graph', () => {
     caps.globalMaxConcurrent = 1;
     // plan() reads the same object; the assertion is that we did not copy.
     assert.equal(caps.globalMaxConcurrent, 1);
+  });
+});
+
+describe('reapVanished (P10-L cancel confirmation)', () => {
+  function journal(...events) {
+    return events.map((e, i) => ({ ...e, seq: i + 1, ts: 1 }));
+  }
+  const requested = makeEvent('run.requested', {
+    runId: 'r1',
+    agentType: 'explore',
+    task: 't',
+    parentChatId: 'chat-1',
+    cwd: '/tmp',
+    requestedAt: 1,
+  });
+  const started = makeEvent('attempt.started', {
+    runId: 'r1',
+    attemptId: 'a1',
+    seed: { kind: 'initial' },
+  });
+
+  it('journals attempt.ended for a cancelling run whose process is gone', () => {
+    const state = derive(
+      journal(requested, started, makeEvent('run.cancelled', { runId: 'r1', reason: 'user' })),
+    );
+    assert.equal(state.runs.get('r1').phase, 'cancelling');
+    const events = reapVanished(state, new Set(), new Set());
+    assert.equal(events.length, 1);
+    assert.equal(events[0].type, 'attempt.ended');
+    assert.equal(events[0].attemptId, 'a1');
+    assert.equal(events[0].outcome, 'crashed');
+    assert.equal(events[0].summary, 'the user cancelled this run');
+  });
+
+  it('does not rewrite a settled cancelled run', () => {
+    const state = derive(
+      journal(
+        requested,
+        started,
+        makeEvent('run.cancelled', { runId: 'r1', reason: 'user' }),
+        makeEvent('attempt.ended', {
+          runId: 'r1',
+          attemptId: 'a1',
+          outcome: 'crashed',
+          summary: 'the user cancelled this run',
+        }),
+      ),
+    );
+    assert.equal(state.runs.get('r1').phase, 'cancelled');
+    assert.equal(reapVanished(state, new Set(), new Set()).length, 0);
   });
 });

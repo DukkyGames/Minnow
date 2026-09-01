@@ -38,6 +38,7 @@ import { attemptLimits } from './attempt-limits.js';
 import { emitLive } from './live-events.js';
 import { resolveAttemptModel } from './model-binding.js';
 import { recordTranscriptEnd, recordTranscriptEvent } from './transcripts.js';
+import { isHighFrequencyTurnEvent } from '../runner/turn-event.js';
 import { interpolatePrompt, loadRolePrompt } from './prompts.js';
 import { parseReportFor, reportToolFor, REPORT_TOOL_NAME } from './report-tool.js';
 import { buildSeed } from './seeds.js';
@@ -744,13 +745,18 @@ export function createRunnerEffector(options = {}) {
             ask: null,
             onEvent: (event) => {
               if (!boardId) return;
-              emitLive({
-                boardId,
-                attemptId,
-                taskId: desired.taskId,
-                role: desired.role,
-                event,
-              });
+              // High-frequency types (stream_meta, phase, delta, …) would
+              // flood live SSE across concurrent attempts. The recorder
+              // also drops them — one predicate, both sinks (P10-B).
+              if (!isHighFrequencyTurnEvent(event?.type)) {
+                emitLive({
+                  boardId,
+                  attemptId,
+                  taskId: desired.taskId,
+                  role: desired.role,
+                  event,
+                });
+              }
               // P9-D. Beside the journal, never on it: the live bus is
               // ephemeral and a finished attempt's `summary` is one line, so
               // without this there is no way to read what an agent actually

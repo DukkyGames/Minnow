@@ -47,4 +47,35 @@ describe('steer at tool-loop boundary', () => {
     assert.equal((chat.history[1] as { steer?: boolean }).steer, true);
     assert.equal(chat.pendingSteerMessage, undefined);
   });
+
+  test('one turn: consume at the boundary does not mint a second user send', () => {
+    const chat = createEmptyChatObject('m1');
+    chat.id = FIXED_CHAT_ID;
+    chat.history.push({ role: 'user', content: 'What time is it?' });
+    chat.history.push({
+      role: 'assistant',
+      content: 'Listing files…',
+      tool_calls: [
+        {
+          id: 'tc-1',
+          type: 'function',
+          function: { name: 'list_dir', arguments: '{}' },
+        },
+      ],
+    });
+    chat.pendingSteerMessage = STEER_TEXT;
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    consumePendingSteer(chat, { renderDom: false });
+
+    const userRows = chat.history.filter((m) => m.role === 'user');
+    assert.equal(userRows.length, 2, 'original send plus in-turn steer');
+    assert.equal((userRows[1] as { steer?: boolean }).steer, true);
+    assert.equal(chat.pendingSteerMessage, undefined);
+  });
 });

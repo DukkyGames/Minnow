@@ -21,15 +21,18 @@ export type {
   TurnResult,
   AttemptResult,
   TurnEvent,
+  TurnPhase,
   TurnModel,
   TurnLimits,
   TurnToolDefinition,
   TurnSeedKind,
+  MessagesChangeMeta,
   RunTurnOptions,
   ParseReport,
   ParseReportResult,
   AskCapability,
 } from './run-turn';
+export { isHighFrequencyTurnEvent, shouldEmitSubAgentLiveTurnEvent } from './turn-event';
 export { executeToolCallBatch, STOPPED_TOOL_MSG } from './tool-batch';
 export {
   MAX_PARALLEL_READ_TOOLS,

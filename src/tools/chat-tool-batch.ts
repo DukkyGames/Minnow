@@ -84,8 +84,11 @@ function buildChatToolExecuteContext(
  * the stranded path. When nothing is mounted (the user is in another chat) the
  * detached node is used and the write is harmless — history repaints it on the
  * way back.
+ *
+ * Exported so the V2 painter (P10-H) can reuse this instead of forking a second
+ * lookup — incomplete-tool-resume already depended on the same identity.
  */
-function resolveLiveToolWrap(toolCallId: string, captured: HTMLElement): HTMLElement {
+export function resolveLiveToolWrap(toolCallId: string, captured: HTMLElement): HTMLElement {
   if (captured.isConnected) return captured;
   return findToolWrapInDom(toolCallId) ?? captured;
 }

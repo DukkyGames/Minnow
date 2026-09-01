@@ -31,7 +31,12 @@ export type SubAgentRole = 'sub-agent';
 
 export type SeedKind = 'initial' | 'continue';
 
-export type RunPhase = 'idle' | 'running' | 'passed' | 'abandoned' | 'cancelled';
+/**
+ * `cancelling` is the P10-L window: `run.cancelled` is on the journal and an
+ * attempt is still open. Scheduling treats it like a stop; replay treats it
+ * as in-flight until `attempt.ended` (reap after effector.stop).
+ */
+export type RunPhase = 'idle' | 'running' | 'passed' | 'abandoned' | 'cancelled' | 'cancelling';
 
 export type AgentsStatus = 'idle' | 'running';
 

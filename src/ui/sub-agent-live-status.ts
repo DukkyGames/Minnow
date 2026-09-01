@@ -31,6 +31,8 @@ export function subAgentLiveBadgeLabel(
   if (run.status === 'queued') return 'Queued';
   const active = run as SubAgentRun;
   if (active.startError) return `Retrying (${active.startError.consecutive})`;
+  // Cancelling outranks the last tool name so Stop is visible promptly (P10-L).
+  if (active.livePhase === 'stopping') return 'Stopping';
   const tool = active.liveCurrentToolName?.trim();
   if (tool) return 'Calling tool';
   if (active.livePhase === 'thinking') return 'Thinking';
@@ -52,6 +54,7 @@ export function subAgentLiveStatusLine(
   if (active.startError) {
     return `${active.startError.message} (${active.startError.consecutive})`;
   }
+  if (active.livePhase === 'stopping') return 'Stopping…';
   const tool = active.liveCurrentToolName?.trim();
   if (tool) return `Calling ${humanizeToolName(tool)}…`;
   if (active.livePhase === 'thinking') return STREAM_LABEL_THINKING;

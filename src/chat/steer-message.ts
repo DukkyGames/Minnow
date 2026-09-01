@@ -1,6 +1,11 @@
 /**
  * Interrupt-and-steer: queue user corrections on an in-flight turn and inject them
  * at the next tool-loop boundary without aborting the current stream.
+ *
+ * P10-I / MIN-774: `runChatTurn` implements `runTurn({ onRoundBoundary })` with
+ * {@link consumePendingSteer} so the SAME turn continues. Do not abort the
+ * live generation when a steer is enqueued — that was the P6-C overlay this
+ * phase replaces.
  */
 
 import type { Chat } from '../types';
@@ -18,7 +23,7 @@ import { forceCloseAskQuestionModal } from '../ui/question-cards-modal';
 type SteerEnqueuedListener = (chatId: string) => void;
 let steerEnqueuedListener: SteerEnqueuedListener | null = null;
 
-/** @internal Loop registers to end the live stream when push-now steer is queued. */
+/** @internal Optional UI hook when push-now steer is queued. P10-I does not abort. */
 export function setSteerEnqueuedListener(listener: SteerEnqueuedListener | null): void {
   steerEnqueuedListener = listener;
 }
@@ -65,7 +70,7 @@ export interface ConsumePendingSteerResult {
 
 /**
  * Move pending steer into chat.history as a user message (tool-loop boundary).
- * Call at the top of each `runChatTurn` for-iteration before `buildApiMessages`.
+ * Call from `runChatTurn`'s `onRoundBoundary` before the next model round.
  */
 export function consumePendingSteer(
   chat: Chat,
