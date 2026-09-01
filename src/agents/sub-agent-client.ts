@@ -299,7 +299,12 @@ export function createSubAgentRunClient(
       }
       if (inner.type === 'thinking') {
         livePhase = 'thinking';
-        if (typeof inner.text === 'string') liveThinking = inner.text.slice(-400);
+        if (typeof inner.text === 'string') {
+          // Tail for cards/status; full text lands on messages so Activity keeps
+          // Thoughts after the phase leaves `thinking` (same mapper as hydrate).
+          liveThinking = inner.text.slice(-400);
+          liveMessages = applyTurnEventToMessages(liveMessages, inner);
+        }
         emit();
       }
     } catch (err) {

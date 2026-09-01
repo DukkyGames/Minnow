@@ -27,7 +27,7 @@ export const BENCHMARK_SAMPLER: SamplerPreset = {
 };
 
 /** Matches main-chat default max tokens (was 131_072 in the old probe driver). */
-export const BENCHMARK_MAX_TOKENS = DEFAULT_SAMPLER_GLOBAL.maxTokens ?? 32768;
+export const BENCHMARK_MAX_TOKENS = DEFAULT_SAMPLER_GLOBAL.maxTokens ?? 64000;
 
 /** Pinned thinking effort for every capability-matrix target. */
 export const BENCHMARK_THINKING_EFFORT: ReasoningEffortOption = 'medium';

@@ -184,6 +184,30 @@ describe('computeContextUsagePercent', () => {
 });
 
 describe('contextLengthFromModelRow', () => {
+  test('prefers loaded_context_length over capabilities.contextLength when loaded', () => {
+    assert.equal(
+      contextLengthFromModelRow({
+        state: 'loaded',
+        loaded_context_length: 32_768,
+        max_context_length: 262_144,
+        capabilities: { contextLength: 262_144 },
+      }),
+      32_768,
+    );
+  });
+
+  test('uses capabilities.contextLength when the model is not loaded', () => {
+    assert.equal(
+      contextLengthFromModelRow({
+        state: 'not-loaded',
+        loaded_context_length: 32_768,
+        max_context_length: 131_072,
+        capabilities: { contextLength: 262_144 },
+      }),
+      262_144,
+    );
+  });
+
   test('uses loaded_context_length when model is loaded', () => {
     assert.equal(
       contextLengthFromModelRow({

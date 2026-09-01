@@ -1,7 +1,13 @@
 import { isModelLoaded } from '../api/model-loaded-state';
 import { lookupKnownContextLength } from './known-context-windows';
 
-/** Context window from a models-list row: configured length when loaded, else catalog max. */
+/**
+ * Context window from a models-list row.
+ *
+ * For a loaded GGUF, `loaded_context_length` is `/props` `n_ctx` (the `-c` we
+ * actually allocated). `capabilities.contextLength` is often `n_ctx_train`
+ * (128k–262k) and would keep the 90% compact trigger above the real window.
+ */
 export function contextLengthFromModelRow(row: {
   id?: string;
   state?: string;
@@ -9,15 +15,15 @@ export function contextLengthFromModelRow(row: {
   max_context_length?: number;
   capabilities?: { contextLength?: number | null };
 }): number | undefined {
-  const fromCaps = row.capabilities?.contextLength;
-  if (typeof fromCaps === 'number' && Number.isFinite(fromCaps) && fromCaps > 0) {
-    return fromCaps;
-  }
   if (isModelLoaded(row.state)) {
     const loaded = row.loaded_context_length;
     if (typeof loaded === 'number' && Number.isFinite(loaded) && loaded > 0) {
       return loaded;
     }
+  }
+  const fromCaps = row.capabilities?.contextLength;
+  if (typeof fromCaps === 'number' && Number.isFinite(fromCaps) && fromCaps > 0) {
+    return fromCaps;
   }
   const max = row.max_context_length;
   if (typeof max === 'number' && Number.isFinite(max) && max > 0) {
