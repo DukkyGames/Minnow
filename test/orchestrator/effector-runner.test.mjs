@@ -35,7 +35,7 @@ import {
   createRunnerEffector,
 } from '../../server/orchestrator/effector-runner.js';
 import { subscribeLive } from '../../server/orchestrator/live-events.js';
-import { ATTEMPT_MAX_TURNS, ATTEMPT_WALL_CLOCK_MS } from '../../server/orchestrator/attempt-limits.js';
+import { ATTEMPT_WALL_CLOCK_MS, attemptLimits } from '../../server/orchestrator/attempt-limits.js';
 import { REPORT_TOOL_NAME } from '../../server/orchestrator/report-tool.js';
 import { createMemoryJournal } from '../../server/orchestrator/testing/memory-journal.js';
 
@@ -295,10 +295,10 @@ describe('P2-F source contract', () => {
   });
 
   test('limits live in one constants module', () => {
-    assert.equal(typeof ATTEMPT_WALL_CLOCK_MS, 'number');
-    assert.equal(typeof ATTEMPT_MAX_TURNS, 'number');
-    assert.ok(ATTEMPT_WALL_CLOCK_MS >= 60_000);
-    assert.ok(ATTEMPT_MAX_TURNS >= 8);
+    assert.equal(ATTEMPT_WALL_CLOCK_MS, 120 * 60 * 1000);
+    const defaults = attemptLimits();
+    assert.equal(defaults.wallClockMs, ATTEMPT_WALL_CLOCK_MS);
+    assert.equal(defaults.maxTurns, undefined);
     const source = fs.readFileSync(EFFECTOR_JS, 'utf8');
     assert.equal(source.includes('30 * 60 * 1000'), false);
     assert.match(source, /attemptLimits/);
