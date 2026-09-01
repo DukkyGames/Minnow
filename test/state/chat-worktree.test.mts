@@ -11,15 +11,27 @@ import {
   isManagedChatWorktreePath,
   suggestChatWorktreeBranchName,
 } from '../../src/state/chat-worktree.ts';
+import { setWorkspaceFromServer } from '../../src/state/workspace.ts';
 
 describe('chat-worktree helpers', () => {
   test('isChatWorktreeMode is true when worktreeRoot is set', () => {
+    setWorkspaceFromServer({ path: '/repo/main', label: 'main', isDefault: false });
     assert.equal(isChatWorktreeMode({ worktreeRoot: '/tmp/wt' }), true);
     assert.equal(isChatWorktreeMode({ worktreeRoot: '' }), false);
     assert.equal(isChatWorktreeMode({}), false);
   });
 
+  test('isChatWorktreeMode is false when worktreeRoot is only a casing twin of the workspace', () => {
+    setWorkspaceFromServer({
+      path: 'c:\\Users\\me\\repo',
+      label: 'repo',
+      isDefault: false,
+    });
+    assert.equal(isChatWorktreeMode({ worktreeRoot: 'C:/Users/me/repo' }), false);
+  });
+
   test('formatComposerRunTargetLabel reflects worktree vs local', () => {
+    setWorkspaceFromServer({ path: '/repo/main', label: 'main', isDefault: false });
     assert.equal(formatComposerRunTargetLabel({}), 'Local');
     assert.equal(formatComposerRunTargetLabel({ worktreeRoot: '/wt' }), 'Worktree');
   });

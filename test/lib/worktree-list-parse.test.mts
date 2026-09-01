@@ -4,8 +4,10 @@ import {
   filterUserFacingBranches,
   filterUserFacingWorktrees,
   formatWorktreeOptionLabel,
+  getPrincipalWorktree,
   isMinnowBoardBranch,
   parseWorktreeListPorcelain,
+  worktreePathsEqual,
 } from '../../src/lib/worktree-list-parse.ts';
 import { repoKeyFromWorkspacePath } from '../../src/lib/repo-key.mjs';
 
@@ -47,6 +49,15 @@ describe('filterUserFacingBranches', () => {
   });
 });
 
+describe('worktreePathsEqual', () => {
+  it('treats Windows drive-letter casing as the same path', () => {
+    assert.equal(
+      worktreePathsEqual('C:/Users/me/repo', 'c:\\Users\\me\\repo'),
+      true,
+    );
+  });
+});
+
 describe('formatWorktreeOptionLabel', () => {
   it('labels main workspace and linked worktrees', () => {
     const main = formatWorktreeOptionLabel(
@@ -65,6 +76,27 @@ describe('formatWorktreeOptionLabel', () => {
       '/repo/main',
     );
     assert.match(task, /^minnow\/board\/x\/task\/y — task-1$/);
+  });
+
+  it('labels the git principal as main worktree when Code workspace is a linked slot', () => {
+    const principal = formatWorktreeOptionLabel(
+      { path: '/repo/main', head: 'abc', branch: 'master', detached: false },
+      '/home/.minnow/worktrees/repo-deadbeef/chat/tool-test-run',
+      { principalPath: '/repo/main' },
+    );
+    assert.equal(principal, 'master — main worktree');
+
+    const workspaceSlot = formatWorktreeOptionLabel(
+      {
+        path: '/home/.minnow/worktrees/repo-deadbeef/chat/tool-test-run',
+        head: 'def',
+        branch: 'tool-test-run',
+        detached: false,
+      },
+      '/home/.minnow/worktrees/repo-deadbeef/chat/tool-test-run',
+      { principalPath: '/repo/main' },
+    );
+    assert.equal(workspaceSlot, 'tool-test-run — workspace');
   });
 });
 
@@ -99,5 +131,24 @@ describe('filterUserFacingWorktrees', () => {
       `/home/.minnow/worktrees/${thisKey}/board-a/task-W1-A`,
       '/tmp/user-worktree',
     ]);
+  });
+
+  it('always keeps the git principal when Code workspace is a linked worktree', () => {
+    const principal = '/repo/minnow';
+    const linked = '/home/.cursor/worktrees/tool-test-run-c70b26fa';
+    const worktrees = [
+      { path: principal, head: 'abc', branch: 'master', detached: false },
+      { path: linked, head: 'def', branch: 'tool-test-run', detached: false },
+      {
+        path: '/home/.cursor/worktrees/other-slot-deadbeef',
+        head: 'ghi',
+        branch: 'other',
+        detached: false,
+      },
+    ];
+    const kept = filterUserFacingWorktrees(worktrees, linked).map((wt) => wt.path);
+    assert.equal(getPrincipalWorktree(worktrees)?.path, principal);
+    assert.ok(kept.includes(principal));
+    assert.ok(kept.includes(linked));
   });
 });

@@ -15,6 +15,8 @@ import {
 
   filterUserFacingWorktrees,
 
+  getPrincipalWorktree,
+
   parseWorktreeListPorcelain,
 
   type ParsedWorktree,
@@ -791,7 +793,9 @@ function ensurePanelDom(): HTMLElement {
   cwdSelect.addEventListener('change', () => {
     const value = cwdSelect?.value ?? '';
     panelCwdUserOverride = true;
-    panelCwd = value || undefined;
+    const ws = getWorkspacePath().trim();
+    // Selecting the Code workspace path means Local browse (undefined cwd).
+    panelCwd = value && !pathsEqual(value, ws) ? value : undefined;
 
     syncWorktreeDeleteButton();
 
@@ -1945,10 +1949,10 @@ async function refreshWorktreeDropdown(): Promise<void> {
 
 
   // Hide other-workspace Minnow slots so a stale list cannot leak after switch.
-  knownWorktrees = filterUserFacingWorktrees(
-    parseWorktreeListPorcelain(listResult.output),
-    ws,
-  );
+  // Always keeps the git principal checkout (MIN-780).
+  const parsed = parseWorktreeListPorcelain(listResult.output);
+  const principal = getPrincipalWorktree(parsed);
+  knownWorktrees = filterUserFacingWorktrees(parsed, ws);
 
   cwdWrap.hidden = knownWorktrees.length === 0;
 
@@ -1966,7 +1970,7 @@ async function refreshWorktreeDropdown(): Promise<void> {
     cwdSelect,
     knownWorktrees.map((wt) => ({
       value: wt.path,
-      label: formatWorktreeOptionLabel(wt, ws),
+      label: formatWorktreeOptionLabel(wt, ws, { principalPath: principal?.path }),
     })),
     selectedPath,
   );

@@ -8,7 +8,10 @@ import {
   branchesLockedToOtherWorktrees,
   filterUserFacingBranches,
   filterUserFacingWorktrees,
+  formatWorktreeOptionLabel,
+  getPrincipalWorktree,
   parseWorktreeListPorcelain,
+  worktreePathsEqual,
 } from '../lib/worktree-list-parse.ts';
 import {
   attachChatToWorktree,
@@ -328,6 +331,12 @@ async function applyNewWorktree(branchName: string): Promise<void> {
 
 async function applyAttachWorktree(path: string, branch?: string): Promise<void> {
   const chat = getActiveChat();
+  const repoRoot = composerGitRepoRoot();
+  // Principal/workspace path → Local, never re-attach the Code folder as a worktree (MIN-780).
+  if (repoRoot && worktreePathsEqual(path, repoRoot)) {
+    await applyLocalTarget();
+    return;
+  }
   busy = true;
   refreshComposerRunTargetDisabled();
   try {
@@ -389,31 +398,54 @@ async function rebuildRunTargetMenu(): Promise<void> {
   runTargetMenu.replaceChildren();
 
   const chat = getActiveChat();
+  const repoRoot = composerGitRepoRoot();
+  const list = await listWorktrees();
+  const parsed =
+    list.ok && list.output ? parseWorktreeListPorcelain(list.output) : [];
+  const principal = getPrincipalWorktree(parsed);
+  const inWorktree = isChatWorktreeMode(chat);
+
   const runOn = menuSection('Run on');
+  // This PC = Code workspace with no chat.worktreeRoot. Enabled whenever we are
+  // attached to an isolated worktree so the user can return to Local.
   const localItem = menuItem('This PC', () => applyLocalTarget(), {
     icon: 'local',
-    disabled: !isChatWorktreeMode(chat),
+    disabled: !inWorktree,
   });
   runOn.appendChild(localItem);
+
+  // When the Code workspace is a linked worktree, surface the git principal
+  // under Run on so it is never buried (or grayed) inside Worktree… (MIN-780).
+  if (
+    principal?.path &&
+    repoRoot &&
+    !worktreePathsEqual(principal.path, repoRoot)
+  ) {
+    const principalLabel = principal.branch?.trim()
+      ? `${principal.branch} (main worktree)`
+      : 'Main worktree';
+    // Never disable — grayed “main” rows were the MIN-780 composer symptom.
+    runOn.appendChild(
+      menuItem(
+        principalLabel,
+        () => applyAttachWorktree(principal.path, principal.branch),
+        { icon: 'worktree' },
+      ),
+    );
+  }
   runTargetMenu.appendChild(runOn);
 
   const wtSection = menuSection('Worktree');
   const attachItem = menuItem('Worktree…', async () => {
-    const list = await listWorktrees();
     if (!list.ok || !list.output) {
       const msg = list.error ?? 'Could not list worktrees';
       setStatus('error', msg);
       showToast(msg, 'error');
       return;
     }
-    const repoRoot = composerGitRepoRoot().replace(/\\/g, '/').replace(/\/+$/, '');
-    const entries = filterUserFacingWorktrees(
-      parseWorktreeListPorcelain(list.output),
-      repoRoot,
-    ).filter((wt) => {
-      const norm = wt.path.replace(/\\/g, '/').replace(/\/+$/, '');
-      return norm !== repoRoot;
-    });
+    const entries = filterUserFacingWorktrees(parsed, repoRoot).filter(
+      (wt) => !worktreePathsEqual(wt.path, repoRoot),
+    );
     if (!entries.length) {
       const msg = 'No extra worktrees found';
       setStatus('error', msg);
@@ -431,9 +463,13 @@ async function rebuildRunTargetMenu(): Promise<void> {
     );
     runTargetMenu.appendChild(back);
     for (const wt of entries) {
-      const label = wt.branch ? wt.branch : wt.path.split(/[/\\]/).pop() ?? wt.path;
+      const label = formatWorktreeOptionLabel(wt, repoRoot, {
+        principalPath: principal?.path,
+      });
       runTargetMenu.appendChild(
-        menuItem(label, () => applyAttachWorktree(wt.path, wt.branch), { icon: 'worktree' }),
+        menuItem(label, () => applyAttachWorktree(wt.path, wt.branch), {
+          icon: 'worktree',
+        }),
       );
     }
     reopenRunTargetMenu();
