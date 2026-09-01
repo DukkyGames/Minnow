@@ -54,6 +54,68 @@ describe('turnEventsToMessages', () => {
     assert.equal(messages[0].reasoning, 'I should look at src/ next.');
   });
 
+  test('keeps post-tool thinking after tools (chronological Activity order)', () => {
+    const messages = turnEventsToMessages([
+      { type: 'thinking', text: 'Let me list the top-level entries.' },
+      {
+        type: 'tool_call',
+        name: 'list_directory',
+        id: 'call_list',
+        arguments: { path: '.' },
+      },
+      { type: 'tool_result', id: 'call_list', content: 'agents\nsrc\npackage.json' },
+      {
+        type: 'thinking',
+        text: 'The task is complete. Reply with sub-agent-ok then report.',
+      },
+      {
+        type: 'tool_call',
+        name: 'report_outcome',
+        id: 'call_report',
+        arguments: { status: 'pass', summary: 'listed entries' },
+      },
+      { type: 'tool_result', id: 'call_report', content: 'ok' },
+      {
+        type: 'round_end',
+        text: 'sub-agent-ok — Workspace contains a Node/TypeScript project.',
+      },
+    ]);
+
+    // Thoughts → List → Thoughts → report_outcome → final reply
+    assert.equal(messages.length, 7);
+    assert.equal(messages[0].reasoning, 'Let me list the top-level entries.');
+    assert.equal(messages[0].tool_calls, undefined);
+    assert.equal(messages[1].tool_calls[0].function.name, 'list_directory');
+    assert.equal(messages[2].role, 'tool');
+    assert.equal(
+      messages[3].reasoning,
+      'The task is complete. Reply with sub-agent-ok then report.',
+    );
+    assert.equal(messages[3].tool_calls, undefined);
+    assert.equal(messages[4].tool_calls[0].function.name, 'report_outcome');
+    assert.equal(messages[5].role, 'tool');
+    assert.equal(
+      messages[6].content,
+      'sub-agent-ok — Workspace contains a Node/TypeScript project.',
+    );
+  });
+
+  test('coalesces growing thinking on the open stub only', () => {
+    const messages = turnEventsToMessages([
+      { type: 'thinking', text: 'Let me' },
+      { type: 'thinking', text: 'Let me list the top-level entries.' },
+      {
+        type: 'tool_call',
+        name: 'list_directory',
+        id: 'call_list',
+        arguments: { path: '.' },
+      },
+    ]);
+    assert.equal(messages.length, 2);
+    assert.equal(messages[0].reasoning, 'Let me list the top-level entries.');
+    assert.equal(messages[1].tool_calls[0].function.name, 'list_directory');
+  });
+
   test('maps attempt_end summary when no later prose exists', () => {
     const messages = turnEventsToMessages([
       { type: 'thinking', text: 'file looks small' },

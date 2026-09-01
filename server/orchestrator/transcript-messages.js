@@ -38,6 +38,22 @@ function lastAssistant(messages) {
 }
 
 /**
+ * True when coalesced `thinking` may rewrite this assistant row's `reasoning`.
+ * Only empty, tool-free stubs are open carriers — once the row has tool_calls
+ * or visible prose, later thinking is a new turn and must append after tools.
+ *
+ * @param {Record<string, unknown>} row
+ * @returns {boolean}
+ */
+function canAttachThinking(row) {
+  const toolCalls = row.tool_calls;
+  if (Array.isArray(toolCalls) && toolCalls.length > 0) return false;
+  if (row.content == null) return true;
+  if (typeof row.content === 'string') return row.content.trim() === '';
+  return false;
+}
+
+/**
  * True when any assistant row already has visible prose (not a tool-call stub).
  *
  * @param {unknown[]} messages
@@ -149,12 +165,14 @@ export function applyTurnEventToMessages(messages, event) {
     return [...list, { role: 'assistant', content: text }];
   }
 
-  // Coalesced on disk: attach to the last assistant's reasoning, or start a row.
+  // Coalesced on disk: rewrite the open reasoning stub, or start a new row.
+  // Never attach post-tool thinking onto a tool_calls assistant — that painted
+  // later Thoughts above the tools that already ran.
   if (type === 'thinking') {
     const text = typeof rec.text === 'string' ? rec.text.trim() : '';
     if (!text) return list;
     const found = lastAssistant(list);
-    if (found) {
+    if (found && canAttachThinking(found.row)) {
       const next = list.slice();
       next[found.index] = { ...found.row, reasoning: text };
       return next;
