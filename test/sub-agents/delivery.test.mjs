@@ -18,6 +18,7 @@ import { deleteGenerationsForProviderShutdown } from '../../server/generations/s
 import { derive, pendingDeliveries } from '../../server/sub-agents/derive.js';
 import { makeEvent } from '../../server/sub-agents/events.js';
 import {
+  buildProductionParentMessage,
   createDelivery,
   createMemoryJournal,
 } from '../../server/sub-agents/delivery.js';
@@ -439,5 +440,60 @@ describe('delivery — kill/restart against the on-disk journal', () => {
     await booted.tickAll();
     assert.deepEqual(ids, [runId]);
     assert.equal((await agentsJournal.loadState(parentChatId)).runs.get(runId).delivered, true);
+  });
+});
+
+describe('buildProductionParentMessage', () => {
+  test('includes type, status, and last attempt summary (not ids-only)', async () => {
+    const journal = createMemoryJournal();
+    await seedPassed(journal);
+    const run = (await journal.loadState(PARENT)).runs.get(RUN);
+    const message = buildProductionParentMessage('completion', [run]);
+    assert.match(message, /\[Sub-agent finished\]/);
+    assert.match(message, /FIXED_SUMMARY/);
+    assert.match(message, /"type": "explore"/);
+    assert.match(message, /"status": "completed"/);
+    // Default copy ended with a comma-joined id list. Product copy must not.
+    assert.equal(/\n\n[a-z0-9-]+$/i.test(message.trim()), false);
+  });
+
+  test('abandon includes reason and evidence', async () => {
+    const journal = createMemoryJournal();
+    await journal.appendEvent(PARENT, requested());
+    await journal.appendEvent(PARENT, started());
+    await journal.appendEvent(
+      PARENT,
+      makeEvent('attempt.ended', {
+        runId: RUN,
+        attemptId: 'a1',
+        outcome: 'fail',
+        summary: 'could not finish',
+      }),
+    );
+    await journal.appendEvent(
+      PARENT,
+      makeEvent('run.abandoned', {
+        runId: RUN,
+        reason: 'failed',
+        evidence: { files: ['src/a.ts'], note: 'gave up after retry' },
+      }),
+    );
+    const run = (await journal.loadState(PARENT)).runs.get(RUN);
+    const message = buildProductionParentMessage('completion', [run]);
+    assert.match(message, /"status": "failed"/);
+    assert.match(message, /could not finish/);
+    assert.match(message, /gave up after retry/);
+    assert.match(message, /src\/a\.ts/);
+  });
+
+  test('check-in copy stays on the ids-bearing default', () => {
+    const message = buildProductionParentMessage(
+      'check_in_nudge',
+      [{ runId: RUN, type: 'explore', phase: 'running' }],
+      { elapsedSec: 12 },
+    );
+    assert.match(message, /\[Sub-agent check-in\]/);
+    assert.match(message, new RegExp(RUN));
+    assert.match(message, /12s/);
   });
 });

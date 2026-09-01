@@ -80,4 +80,9 @@ export function defaultBuildMessage(
   runs: RunState[],
   extra?: { elapsedSec?: number },
 ): string;
+export function buildProductionParentMessage(
+  kind: 'completion' | 'check_in_nudge',
+  runs: RunState[],
+  extra?: { elapsedSec?: number },
+): string;
 export function createDelivery(opts?: DeliveryOptions): DeliveryHandle;

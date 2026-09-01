@@ -167,4 +167,19 @@ describe('renderTranscriptView', () => {
     assert.equal(live?.phase, 'generating');
     assert.equal(live?.isLive, true);
   });
+
+  test('generating live tail paints partial prose so the row is not empty', () => {
+    setupDom();
+    const body = document.getElementById('transcriptBody')!;
+    renderTranscriptView(body, [{ role: 'user', content: 'Explore src/' }], {
+      isLive: true,
+      phase: 'generating',
+      partialText: 'Here is what I found in src/.',
+    });
+    assert.ok(body.querySelector('.stream-status--generating'));
+    assert.match(body.textContent ?? '', /Generating response/);
+    const partial = body.querySelector('.transcript-view__assistant--partial');
+    assert.ok(partial);
+    assert.equal(partial?.textContent, 'Here is what I found in src/.');
+  });
 });

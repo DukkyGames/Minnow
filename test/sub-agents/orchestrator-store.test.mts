@@ -21,6 +21,7 @@ import {
   setSubAgentApiFetchForTests,
   setSubAgentOpenStreamForTests,
   spawnSubAgent,
+  subAgentRunFromFold,
   waitForSubAgent,
 } from '../../src/agents/orchestrator.ts';
 import type { SubAgentRun } from '../../src/agents/types.ts';
@@ -63,6 +64,12 @@ describe('orchestrator SSE store (spawn / cancel / wait)', () => {
       const method = init?.method ?? 'GET';
       const url = String(input);
       posts.push({ method, url, body: String(init?.body ?? '') });
+      if (method === 'GET' && url.includes('/transcript')) {
+        return new Response(
+          JSON.stringify({ ok: true, events: [] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
       if (method === 'POST' && url.endsWith('/api/agents') && !url.includes('/cancel')) {
         return new Response(
           JSON.stringify({
@@ -314,6 +321,12 @@ describe('cancel origin wiring (P10-L / MIN-777)', () => {
     assert.equal(listActiveSubAgentRuns().length, 1);
     setSubAgentApiFetchForTests(async (input) => {
       const url = String(input);
+      if (url.includes('/transcript')) {
+        return new Response(
+          JSON.stringify({ ok: true, events: [] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
       if (url.includes(`parentChatId=${encodeURIComponent(CHAT_ID)}`)) {
         return new Response(
           JSON.stringify({
@@ -342,6 +355,74 @@ describe('cancel origin wiring (P10-L / MIN-777)', () => {
     });
     await rehydrateLiveParentSubAgents(CHAT_ID);
     assert.equal(listActiveSubAgentRuns().length, 0);
+  });
+});
+
+describe('fold merge and Agent activity listing', () => {
+  beforeEach(() => {
+    resetSubAgentOrchestrator();
+    setSubAgentOpenStreamForTests(() => ({ addEventListener() {}, close() {} }));
+  });
+
+  afterEach(() => {
+    setSubAgentOpenStreamForTests(null);
+    resetSubAgentOrchestrator();
+  });
+
+  test('empty prev summary does not mask attempt.ended', () => {
+    const run = subAgentRunFromFold(
+      {
+        runId: FIXED_RUN_ID,
+        type: 'explore',
+        task: 'scan',
+        parentChatId: CHAT_ID,
+        phase: 'passed',
+        attempts: [{ ended: true, summary: FIXED_SUMMARY, outcome: 'pass' }],
+        delivered: true,
+      },
+      { summary: '', toolTurns: 0 },
+    );
+    assert.equal(run.summary, FIXED_SUMMARY);
+    assert.equal(run.status, 'completed');
+    assert.equal(run.structuredOutcome?.summary, FIXED_SUMMARY);
+  });
+
+  test('queued with zero attempts is listed; idle after a failed attempt is not', () => {
+    adoptSubAgentRunForTests({
+      ...runningRun(),
+      status: 'queued',
+      foldAttemptCount: 0,
+    });
+    assert.equal(listActiveSubAgentRuns().length, 1);
+
+    resetSubAgentOrchestrator();
+    const idle = subAgentRunFromFold(
+      {
+        runId: FIXED_RUN_ID,
+        type: 'explore',
+        task: 'scan',
+        parentChatId: CHAT_ID,
+        phase: 'idle',
+        attempts: [{ ended: true, summary: 'nope', outcome: 'no_report' }],
+        delivered: false,
+      },
+      { summary: '' },
+    );
+    assert.equal(idle.status, 'queued');
+    assert.equal(idle.foldAttemptCount, 1);
+    assert.equal(idle.summary, 'nope');
+    adoptSubAgentRunForTests(idle);
+    assert.equal(listActiveSubAgentRuns().length, 0);
+  });
+
+  test('passed, abandoned, and cancelled drop off Agent activity', () => {
+    for (const status of ['completed', 'failed', 'cancelled'] as const) {
+      resetSubAgentOrchestrator();
+      adoptSubAgentRunForTests({ ...runningRun(), status });
+      assert.equal(listActiveSubAgentRuns().length, 0, status);
+    }
+    adoptSubAgentRunForTests(runningRun());
+    assert.equal(listActiveSubAgentRuns().length, 1);
   });
 });
 

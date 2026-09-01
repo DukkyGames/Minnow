@@ -10,6 +10,7 @@ import {
   cancelSubAgent,
   getSubAgentRun,
   hydrateSubAgentRunsForParentChat,
+  hydrateSubAgentTranscript,
   listSubAgentRunsForParentChat,
 } from '../agents/orchestrator';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
@@ -346,7 +347,10 @@ function renderActiveRun(state: OverlayState, opts: { scroll: 'end' | 'sticky' }
 function setActiveRun(runId: string): void {
   if (!overlay || overlay.activeRunId === runId) return;
   overlay.activeRunId = runId;
-  renderActiveRun(overlay, { scroll: 'end' });
+  void hydrateSubAgentTranscript(runId).then(() => {
+    if (!overlay || overlay.activeRunId !== runId) return;
+    renderActiveRun(overlay, { scroll: 'end' });
+  });
 }
 
 /** Toggle inset ↔ full-column presentation. */
@@ -442,9 +446,11 @@ export function closeSubAgentDrawer(): void {
  */
 export function openSubAgentDrawer(runId: string, chatId: string): void {
   bindSubscription();
-  void hydrateSubAgentRunsForParentChat(chatId).then(() => {
-    mountSubAgentDrawer(runId, chatId);
-  });
+  void hydrateSubAgentRunsForParentChat(chatId)
+    .then(() => hydrateSubAgentTranscript(runId))
+    .then(() => {
+      mountSubAgentDrawer(runId, chatId);
+    });
 }
 
 function mountSubAgentDrawer(runId: string, chatId: string): void {

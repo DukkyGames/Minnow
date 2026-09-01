@@ -21,7 +21,7 @@
  * graph / evidence. Journal, parent-chat inject, and timers all live here.
  */
 
-import { derive, isTerminal, pendingDeliveries } from './derive.js';
+import { derive, isTerminal, lastEndedAttempt, pendingDeliveries } from './derive.js';
 import { makeEvent, validateEvent } from './events.js';
 
 /** Backstop poll while the parent is streaming or a seam call failed. */
@@ -114,6 +114,55 @@ export function defaultBuildMessage(kind, runs, extra = {}) {
       ? '[Sub-agent finished] One sub-agent run completed. Use the summary below; `get_sub_agent_status` is available for details.'
       : `[Sub-agent finished] ${runs.length} sub-agent runs completed. Summaries below.`;
   return `${header}\n\n${ids}`;
+}
+
+/**
+ * Product completion copy for the production host. Includes type, status, and
+ * the last attempt summary / abandon evidence — ids-only left the parent
+ * with nothing to resume on. Check-in copy matches {@link defaultBuildMessage}.
+ *
+ * @param {'completion' | 'check_in_nudge'} kind
+ * @param {import('./types').RunState[]} runs
+ * @param {{ elapsedSec?: number }} [extra]
+ * @returns {string}
+ */
+export function buildProductionParentMessage(kind, runs, extra = {}) {
+  if (kind === 'check_in_nudge') return defaultBuildMessage(kind, runs, extra);
+  const list = Array.isArray(runs) ? runs : [];
+  const blocks = list.map((run) => {
+    const last = lastEndedAttempt(run);
+    const status =
+      run.phase === 'passed'
+        ? 'completed'
+        : run.phase === 'cancelled'
+          ? 'cancelled'
+          : run.phase === 'abandoned'
+            ? 'failed'
+            : run.phase;
+    const summary =
+      (typeof last?.summary === 'string' && last.summary.trim() && last.summary) ||
+      (typeof run.abandonedReason === 'string' && run.abandonedReason) ||
+      '';
+    /** @type {Record<string, unknown>} */
+    const body = {
+      runId: run.runId,
+      type: run.type,
+      status,
+      summary,
+    };
+    if (typeof run.abandonedReason === 'string' && run.abandonedReason) {
+      body.error = run.abandonedReason;
+    }
+    if (run.abandonedEvidence && typeof run.abandonedEvidence === 'object') {
+      body.evidence = run.abandonedEvidence;
+    }
+    return JSON.stringify(body, null, 2);
+  });
+  const header =
+    list.length === 1
+      ? '[Sub-agent finished] One sub-agent run completed. Use the summary below; `get_sub_agent_status` is available for details.'
+      : `[Sub-agent finished] ${list.length} sub-agent runs completed. Summaries below.`;
+  return `${header}\n\n${blocks.join('\n\n---\n\n')}`;
 }
 
 /**

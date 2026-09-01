@@ -124,6 +124,12 @@ describe('sub-agent live frames isolate per run (P10-M)', () => {
     setSubAgentApiFetchForTests(async (input, init) => {
       const method = init?.method ?? 'GET';
       const url = String(input);
+      if (method === 'GET' && url.includes('/transcript')) {
+        return new Response(
+          JSON.stringify({ ok: true, events: [] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
       if (method === 'POST' && url.endsWith('/api/agents') && !url.includes('/cancel')) {
         spawns += 1;
         const runId = spawns === 1 ? RUN_A : RUN_B;
@@ -208,6 +214,40 @@ describe('sub-agent live frames isolate per run (P10-M)', () => {
     assert.equal(b?.liveCurrentToolName, 'write_file');
     assert.equal(b?.livePhase, 'thinking');
     assert.equal(b?.livePartialReasoning, 'sibling thought');
+  });
+
+  test('terminal snapshot drops the generating tail', async () => {
+    await spawnSubAgent({
+      type: 'explore',
+      task: 'scan A',
+      wait: false,
+      parentChatId: PARENT,
+      parentTurnId: 'turn-1',
+    });
+    bus.emit('live', {
+      taskId: RUN_A,
+      attemptId: ATTEMPT_A1,
+      event: { type: 'delta', text: 'streaming a summary…' },
+    });
+    assert.equal(getSubAgentRun(RUN_A)?.livePartialText, 'streaming a summary…');
+
+    bus.emit('snapshot', {
+      seq: 9,
+      parentChatId: PARENT,
+      run: {
+        ...runningSnapshot(RUN_A, [
+          { attemptId: ATTEMPT_A1, ended: true, outcome: 'pass', summary: 'done' },
+        ]).run,
+        phase: 'passed',
+        attempts: [
+          { attemptId: ATTEMPT_A1, ended: true, outcome: 'pass', summary: 'done' },
+        ],
+      },
+    });
+    const settled = getSubAgentRun(RUN_A);
+    assert.equal(settled?.status, 'completed');
+    assert.equal(settled?.livePartialText, undefined);
+    assert.equal(settled?.livePhase, undefined);
   });
 });
 
@@ -345,6 +385,35 @@ describe('live frames after cancel vs genuine end (P10-L)', () => {
     });
     assert.equal(client.getRun()?.phase, 'cancelled');
     assert.equal(client.getLive().phase, null);
+    client.close();
+  });
+
+  test('tool_call appends a message row; delta sets partialText', () => {
+    const stream = new FakeStream();
+    const client = createSubAgentRunClient(RUN_A, { openStream: () => stream });
+    client.connect();
+    stream.emit(
+      'snapshot',
+      runningSnapshot(RUN_A, [{ attemptId: ATTEMPT_A1, ended: false }]),
+    );
+    stream.emit('live', {
+      taskId: RUN_A,
+      attemptId: ATTEMPT_A1,
+      event: { type: 'tool_call', name: 'read_file', id: 'call_read', arguments: { path: 'src/a.ts' } },
+    });
+    const afterTool = client.getLive();
+    assert.equal(afterTool.messages.length, 1);
+    const row = afterTool.messages[0] as { role?: string; tool_calls?: Array<{ function?: { name?: string } }> };
+    assert.equal(row.role, 'assistant');
+    assert.equal(row.tool_calls?.[0]?.function?.name, 'read_file');
+    assert.equal(afterTool.partialText, '');
+
+    stream.emit('live', {
+      taskId: RUN_A,
+      attemptId: ATTEMPT_A1,
+      event: { type: 'delta', text: 'Here is what I found in src/.' },
+    });
+    assert.equal(client.getLive().partialText, 'Here is what I found in src/.');
     client.close();
   });
 });

@@ -141,6 +141,13 @@ export interface SubAgentRun {
   livePhase?: SubAgentLivePhase | null;
   /** Partial reasoning text while `livePhase` is `thinking` (drawer activity tail). */
   livePartialReasoning?: string;
+  /** Throttled assistant prose while `livePhase` is `generating` (drawer live tail). */
+  livePartialText?: string;
+  /**
+   * Fold attempt count. Queued-active means zero attempts (waiting for a slot).
+   * Idle between retry and abandon has attempts and must not sit in Agent activity.
+   */
+  foldAttemptCount?: number;
   /** Resolved provider for this run (set when execution starts). */
   providerId?: string;
   /** Resolved model for this run (set when execution starts). */

@@ -11,7 +11,7 @@
  * `tickAll` at process start is what re-offers work that survived a restart.
  */
 
-import { createDelivery } from './delivery.js';
+import { createDelivery, buildProductionParentMessage } from './delivery.js';
 import {
   appendEvent,
   appendEvents,
@@ -95,6 +95,7 @@ export function getProductionDelivery() {
     production = createDelivery({
       journal: diskJournal(),
       deliverToParent: productionDeliver,
+      buildMessage: buildProductionParentMessage,
       // Streaming coalesce is a renderer fact. The server retries when nobody
       // is listening; a connected view receives `event: deliver` and resumes.
       // The probe is called on every tick so a test can flip streaming without

@@ -10,6 +10,12 @@ export function parseReportForSchema(
   schemaId: string,
 ): import('../runner/run-turn').ParseReport;
 
+export function degradeNoReportIfProse(
+  result: TurnResult,
+  messages: unknown,
+  schemaId: string,
+): TurnResult;
+
 export interface SubAgentEffector {
   inspect(): Array<{ taskId: string | null; role: string; attemptId: string; cwd?: string }>;
   start(desired: {
