@@ -24,6 +24,11 @@ import {
   setSubAgentOpenStreamForTests,
   spawnSubAgent,
 } from '../../src/agents/orchestrator.ts';
+import { setStorageModeForTests } from '../../src/config/storage-mode.ts';
+import {
+  resetSubAgentConfigCache,
+  setRuntimeSubAgentOverrides,
+} from '../../src/agents/sub-agent-config.ts';
 
 const PARENT = '11111111-1111-1111-1111-222222222222';
 const RUN_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -118,6 +123,9 @@ describe('sub-agent live frames isolate per run (P10-M)', () => {
   beforeEach(() => {
     bus = new FakeStream();
     resetSubAgentOrchestrator();
+    setStorageModeForTests('localStorage');
+    resetSubAgentConfigCache();
+    setRuntimeSubAgentOverrides({});
     // One parent-scoped bus for both run EventSources — the leak P10-M closes.
     setSubAgentOpenStreamForTests(() => bus);
     let spawns = 0;
@@ -165,6 +173,9 @@ describe('sub-agent live frames isolate per run (P10-M)', () => {
     setSubAgentApiFetchForTests(null);
     setSubAgentOpenStreamForTests(null);
     resetSubAgentOrchestrator();
+    setRuntimeSubAgentOverrides(null);
+    resetSubAgentConfigCache();
+    setStorageModeForTests(null);
   });
 
   test('two concurrent runs on one parent keep their own tool names and phases', async () => {

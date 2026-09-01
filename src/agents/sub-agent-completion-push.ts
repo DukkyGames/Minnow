@@ -297,7 +297,9 @@ async function resumeDeliverFrame(frame: DeliverFrame & { parentChatId: string }
     if (run && notifyHook) notifyHook(chatId, run);
     return;
   }
-  if (normalizeModeId(chat.modeId) === 'orchestrate') return;
+  // Orchestrate-mode parents resume like any other chat. V1 boards consumed
+  // these frames; V2 boards do not use this path, but spawn_sub_agent is
+  // still allowed in orchestrate, so discarding here deleted the completion.
   const deliver = deliverHook ?? defaultDeliverResume;
   await deliver(chatId, frame.message, frame.runIds);
 }

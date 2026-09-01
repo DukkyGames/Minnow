@@ -58,15 +58,13 @@ export function resolvePanelBrowseRunTargetSeed(
 }
 
 /**
- * Resolve git-panel browse cwd from the active chat and optional board view context.
- * Board view with isolation prefers the integration worktree (MIN-464). When a board
- * task chat is open inside the orchestrate pane, follow that chat's task worktree.
+ * Resolve git-panel browse cwd from the active chat.
+ * Follows the chat's own `worktreeRoot` when set; otherwise the workspace.
+ * V1 board-task / integration-worktree lookups are gone.
  */
 export function resolvePanelBrowseCwd(input: {
   chat: Chat;
   groups?: ChatGroup[];
-  activeBoardGroup?: ChatGroup;
-  chats?: Chat[];
 }): string {
   const { chat, groups } = input;
   const worktreeRoot = resolveChatWorktreeRoot(chat, groups);

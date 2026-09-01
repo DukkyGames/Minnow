@@ -34,6 +34,11 @@ import {
   createEmptyChatObject,
   setSessionStateForTests,
 } from '../../src/state/sessions.ts';
+import { setStorageModeForTests } from '../../src/config/storage-mode.ts';
+import {
+  resetSubAgentConfigCache,
+  setRuntimeSubAgentOverrides,
+} from '../../src/agents/sub-agent-config.ts';
 import { FIXED_RUN_ID, FIXED_SUMMARY } from './test-helpers.mts';
 
 const CHAT_ID = '11111111-1111-1111-1111-222222222222';
@@ -63,6 +68,10 @@ describe('orchestrator SSE store (spawn / cancel / wait)', () => {
   beforeEach(() => {
     posts.length = 0;
     resetSubAgentOrchestrator();
+    // Pin localStorage so spawn's type-config load does not ping a live server.
+    setStorageModeForTests('localStorage');
+    resetSubAgentConfigCache();
+    setRuntimeSubAgentOverrides({});
     setSubAgentOpenStreamForTests(() => ({ addEventListener() {}, close() {} }));
     setSubAgentApiFetchForTests(async (input, init) => {
       const method = init?.method ?? 'GET';
@@ -131,6 +140,9 @@ describe('orchestrator SSE store (spawn / cancel / wait)', () => {
     setSubAgentApiFetchForTests(null);
     setSubAgentOpenStreamForTests(null);
     resetSubAgentOrchestrator();
+    setRuntimeSubAgentOverrides(null);
+    resetSubAgentConfigCache();
+    setStorageModeForTests(null);
   });
 
   test('spawn POSTs /api/agents and adopts the returned run', async () => {
@@ -218,6 +230,58 @@ describe('orchestrator SSE store (spawn / cancel / wait)', () => {
     assert.equal(body.parentChatId, CHAT_ID);
     assert.equal(body.parentTurnId, 'turn-1');
     assert.equal(body.parentToolCallId, 'call_spawn');
+  });
+
+  test('spawn binds the parent chat model when the type has no override', async () => {
+    const chat = createEmptyChatObject('chat-model');
+    chat.id = CHAT_ID;
+    chat.providerId = 'local-fake';
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    await spawnSubAgent({
+      type: 'explore',
+      task: 'scan',
+      wait: false,
+      parentChatId: CHAT_ID,
+    });
+
+    const spawn = posts.find((p) => p.method === 'POST' && p.url.endsWith('/api/agents'));
+    assert.ok(spawn);
+    const body = JSON.parse(spawn.body) as { providerId: string; modelId: string };
+    assert.equal(body.providerId, 'local-fake');
+    assert.equal(body.modelId, 'chat-model');
+  });
+
+  test('spawn keeps an explicit provider/model override', async () => {
+    const chat = createEmptyChatObject('chat-model');
+    chat.id = CHAT_ID;
+    chat.providerId = 'local-fake';
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    await spawnSubAgent({
+      type: 'explore',
+      task: 'scan',
+      wait: false,
+      parentChatId: CHAT_ID,
+      providerId: 'reviewer-provider',
+      modelId: 'reviewer-model',
+    });
+
+    const spawn = posts.find((p) => p.method === 'POST' && p.url.endsWith('/api/agents'));
+    assert.ok(spawn);
+    const body = JSON.parse(spawn.body) as { providerId: string; modelId: string };
+    assert.equal(body.providerId, 'reviewer-provider');
+    assert.equal(body.modelId, 'reviewer-model');
   });
 
   test('cancelAllForParentTurn POSTs cancel for runs indexed by that turn', async () => {

@@ -20,9 +20,6 @@ export const CAP_STUB_SNAPSHOT_UIDS = [7, 8] as const;
 /** Sub-agent id returned as still running (agents-sub-agent-control probe). */
 export const CAP_STUB_SUB_AGENT_ID = 'sub-agent-cap-42';
 
-/** Board task id the worker is told it finished (agents-board-report probe). */
-export const CAP_STUB_BOARD_TASK_ID = 'task-1';
-
 /** Thread id returned by the mail listing stub (apps-email-list probe). */
 export const CAP_STUB_THREAD_ID = 'thread-cap-9001';
 

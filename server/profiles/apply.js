@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
+import { resetSubAgentServerConfigCache } from '../sub-agents/config.js';
 import { mergeConfigMeta, normalizeSubAgentsConfig, normalizeToolConfig, validateUserRulesSettings } from '../config/validators.js';
 import { ALL_TOOL_IDS } from '../config/tool-ids.js';
 import { getMinnowHome } from '../config/home.js';
@@ -279,6 +280,9 @@ export async function applyProfileBundle(bundle) {
   };
   const { config: subNormalized } = normalizeSubAgentsConfig(subMerged);
   await writeConfigJson('sub-agents.json', subNormalized);
+  // Profile apply writes the same file Settings PUT does — drop the
+  // effector cache so the new type rows are live without a restart.
+  resetSubAgentServerConfigCache();
 
   if (bundle.rules && typeof bundle.rules === 'object') {
     const rulesExisting = validateUserRulesSettings(

@@ -15,6 +15,8 @@
 import { findChatById, getActiveChat } from '../state/sessions';
 import { getSubAgentExecutorContext } from '../tools/sub-agent-executor-context';
 import { getWorkspacePath } from '../state/workspace';
+import { getSubAgentTypeConfig } from './sub-agent-config';
+import { resolveSubAgentModelBinding } from './resolve-sub-agent-binding';
 import {
   isContextBudgetFailure,
   isMaxToolTurnFailure,
@@ -443,6 +445,22 @@ export async function spawnSubAgent(
 ): Promise<SpawnSubAgentResult | AggregateResult> {
   const parentChatId = resolveParentChatId(input);
   const cwd = resolveSpawnCwd(parentChatId);
+  // Explicit Super Plan (etc.) override wins. Otherwise bind the parent
+  // chat's model so Settings → Model routing's "effective model" is what
+  // actually runs — not Autopilot planner, not whichever chat is on screen
+  // at retry time. Server resolveAttemptModel stays the last resort when
+  // there is no parent chat at all.
+  let providerId = input.providerId?.trim() ?? '';
+  let modelId = input.modelId?.trim() ?? '';
+  if (!providerId && !modelId) {
+    const typeCfg = await getSubAgentTypeConfig(input.type);
+    if (typeCfg) {
+      const parentChat = parentChatId ? findChatById(parentChatId) : undefined;
+      const binding = resolveSubAgentModelBinding(typeCfg, parentChat);
+      providerId = binding.providerId;
+      modelId = binding.modelId;
+    }
+  }
   const body = await request('', {
     method: 'POST',
     body: JSON.stringify({
@@ -452,8 +470,8 @@ export async function spawnSubAgent(
       cwd,
       ...(input.parentTurnId ? { parentTurnId: input.parentTurnId } : {}),
       ...(input.parentToolCallId ? { parentToolCallId: input.parentToolCallId } : {}),
-      ...(input.providerId ? { providerId: input.providerId } : {}),
-      ...(input.modelId ? { modelId: input.modelId } : {}),
+      ...(providerId ? { providerId } : {}),
+      ...(modelId ? { modelId } : {}),
     }),
   });
   if (body.run && typeof body.run === 'object') adoptRaw(body.run);

@@ -99,7 +99,7 @@ describe('buildComposeContext cwd', () => {
     assert.notEqual(ctx.cwd, MAIN_REPO);
   });
 
-  it('falls back to board task worktreePath when worktreeRoot is unset', async () => {
+  it('a board task chat with no worktreeRoot resolves to the workspace', async () => {
     setSessionStateForTests({
       version: 5,
       activeId: CHAT_ID,
@@ -137,8 +137,9 @@ describe('buildComposeContext cwd', () => {
       boardTaskId: TASK_ID,
     });
     const ctx = await buildComposeContext(chat);
-    assert.equal(ctx.cwd, WORKTREE_FROM_TASK);
-    assert.notEqual(ctx.cwd, MAIN_REPO);
+    // V1 looked up leftover board-task worktreePath. That engine is gone.
+    assert.equal(ctx.cwd, MAIN_REPO);
+    assert.notEqual(ctx.cwd, WORKTREE_FROM_TASK);
   });
 
   it('uses resolveComposeCwd for a plain chat without worktree isolation', async () => {

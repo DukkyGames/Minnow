@@ -24,6 +24,7 @@ const REQUIRED_RUNTIME_PATHS = [
   'src/chat/prompts/work-agents/registry.json',
   'src/state/session-schema.mjs',
   'src/product-wiki/path-filter.mjs',
+  'src/agents/defaults/sub-agents.json',
   'src/styles/tokens.css',
   'build/icon.ico',
 ];
@@ -75,6 +76,11 @@ function collectServerRuntimeImports(dir) {
   /** @type {string[]} */
   const scripts = [];
   const importRe = /from\s+['"]((?:\.\.\/)+(?:src|scripts)\/[^'"]+)['"]/g;
+  // `new URL('../../src/...', import.meta.url)` is how server JS reads JSON
+  // that Vite never bundles (e.g. shipped sub-agent defaults). importRe
+  // misses those, so a packaged build can ENOENT a file this script said was OK.
+  const importMetaUrlRe =
+    /new\s+URL\(\s*['"]((?:\.\.\/)+(?:src|scripts)\/[^'"]+)['"]\s*,\s*import\.meta\.url\s*\)/g;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
@@ -85,13 +91,19 @@ function collectServerRuntimeImports(dir) {
     }
     if (!entry.name.endsWith('.js')) continue;
     const text = fs.readFileSync(full, 'utf8');
-    let match;
-    while ((match = importRe.exec(text)) !== null) {
+    const recordHit = (specifier) => {
       const resolved = path
-        .relative(repoRoot, path.resolve(path.dirname(full), match[1]))
+        .relative(repoRoot, path.resolve(path.dirname(full), specifier))
         .replace(/\\/g, '/');
       if (resolved.startsWith('src/')) src.push(resolved);
       else if (resolved.startsWith('scripts/')) scripts.push(resolved);
+    };
+    let match;
+    while ((match = importRe.exec(text)) !== null) {
+      recordHit(match[1]);
+    }
+    while ((match = importMetaUrlRe.exec(text)) !== null) {
+      recordHit(match[1]);
     }
   }
   return { src, scripts };

@@ -76,7 +76,6 @@ import { getActiveChat, sessionState } from '../state/sessions';
 import { listWorktrees } from '../state/worktree-service';
 
 import { getWorkspacePath } from '../state/workspace';
-import type { ChatGroup } from '../types';
 
 import {
   panelPathsEqual,
@@ -240,13 +239,6 @@ function getGitMount(): HTMLElement | null {
 /** Clear browse override so the next chat/composer sync can drive panel cwd. */
 export function clearPanelCwdUserOverride(): void {
   panelCwdUserOverride = false;
-}
-
-/** Board folder currently filling the main column in board view. */
-function getActiveBoardGroupFromSession(): ChatGroup | undefined {
-  const id = sessionState?.activeBoardGroupId?.trim();
-  if (!id) return undefined;
-  return sessionState?.groups?.find((group) => group.id === id);
 }
 
 /**
@@ -2223,9 +2215,8 @@ export function toggleGitSidePanel(): void {
 
 /**
  * Sync git panel browse cwd + file tree from the active chat's composer run-target.
- * On orchestrate board view with worktree isolation, browse roots follow the board
- * integration worktree; embedded board task chats use that chat's task worktree (MIN-464).
- * Skips when the user manually picked a worktree (browse override).
+ * Follows the chat's own worktreeRoot when set. Skips when the user manually
+ * picked a worktree (browse override).
  */
 export function syncPanelFromActiveChat(options?: { forceFileTree?: boolean }): void {
   if (!sessionState) return;
@@ -2235,8 +2226,6 @@ export function syncPanelFromActiveChat(options?: { forceFileTree?: boolean }): 
   const nextCwd = resolvePanelBrowseCwd({
     chat,
     groups: sessionState.groups,
-    activeBoardGroup: getActiveBoardGroupFromSession(),
-    chats: sessionState.chats,
   });
   const ws = getWorkspacePath().trim();
   const worktree = resolvePanelWorktreeCwd(nextCwd);
