@@ -424,9 +424,9 @@ describe('mergeConfigMeta autopilot', () => {
     assert.equal(merged.autopilot.maxTestAttempts, 3);
     assert.equal(merged.autopilot.maxBuildAttempts, 2);
     assert.equal(merged.autopilot.maxFinalTestAttempts, 3);
-    assert.equal(merged.autopilot.heartbeatIntervalMs, 10000);
-    assert.equal(merged.autopilot.progressStallMs, 300000);
-    assert.equal(merged.autopilot.heartbeatDeadMs, 90000);
+    assert.equal(merged.autopilot.heartbeatIntervalMs, undefined);
+    assert.equal(merged.autopilot.progressStallMs, undefined);
+    assert.equal(merged.autopilot.heartbeatDeadMs, undefined);
   });
 
   it('clamps autopilot numeric fields', () => {
@@ -436,18 +436,15 @@ describe('mergeConfigMeta autopilot', () => {
         maxTestAttempts: 0,
         maxBuildAttempts: 0,
         maxFinalTestAttempts: 20,
-        heartbeatIntervalMs: 500,
-        progressStallMs: 5_000,
-        heartbeatDeadMs: 600_000,
       },
     });
     assert.equal(merged.autopilot.maxConcurrentTasks, 20);
     assert.equal(merged.autopilot.maxTestAttempts, 1);
     assert.equal(merged.autopilot.maxBuildAttempts, 1);
     assert.equal(merged.autopilot.maxFinalTestAttempts, 10);
-    assert.equal(merged.autopilot.heartbeatIntervalMs, 500);
-    assert.equal(merged.autopilot.progressStallMs, 5_000);
-    assert.equal(merged.autopilot.heartbeatDeadMs, 600_000);
+    assert.equal(merged.autopilot.heartbeatIntervalMs, undefined);
+    assert.equal(merged.autopilot.progressStallMs, undefined);
+    assert.equal(merged.autopilot.heartbeatDeadMs, undefined);
   });
 
   it('validates execution and isolation mode enums', () => {
@@ -474,9 +471,6 @@ describe('mergeConfigMeta autopilot', () => {
           isolationMode: 'auto',
           maxTestAttempts: 3,
           maxFinalTestAttempts: 3,
-          heartbeatIntervalMs: 7000,
-          progressStallMs: 90000,
-          heartbeatDeadMs: 30000,
           plannerProviderId: 'p1',
           plannerModelId: 'm1',
         },

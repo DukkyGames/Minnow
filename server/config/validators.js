@@ -1485,27 +1485,6 @@ export function mergeConfigMeta(existing, patch) {
       if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
       return Math.min(10, Math.max(1, Math.round(value)));
     };
-    const clampHeartbeatIntervalMs = (value, fallback) => {
-      const n = typeof value === 'number' ? value : Number(value);
-      if (!Number.isFinite(n)) return fallback;
-      const rounded = Math.round(n);
-      if (rounded <= 0) return 0;
-      return rounded;
-    };
-    const clampProgressStallMs = (value, fallback) => {
-      const n = typeof value === 'number' ? value : Number(value);
-      if (!Number.isFinite(n)) return fallback;
-      const rounded = Math.round(n);
-      if (rounded <= 0) return 0;
-      return rounded;
-    };
-    const clampHeartbeatDeadMs = (value, fallback) => {
-      const n = typeof value === 'number' ? value : Number(value);
-      if (!Number.isFinite(n)) return fallback;
-      const rounded = Math.round(n);
-      if (rounded <= 0) return 0;
-      return rounded;
-    };
 
     const clampSelfHealRounds = (value, fallback) => {
       if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
@@ -1526,9 +1505,6 @@ export function mergeConfigMeta(existing, patch) {
       maxBuildAttempts: 2,
       maxFinalTestAttempts: 3,
       continueSmartRoute: 'conservative',
-      heartbeatIntervalMs: 10000,
-      progressStallMs: 300000,
-      heartbeatDeadMs: 90000,
       plannerProviderId: '',
       plannerModelId: '',
       selfHealMaxRounds: 2,
@@ -1565,6 +1541,12 @@ export function mergeConfigMeta(existing, patch) {
           : {}),
       });
       stripStaleAutopilotKeys(existingAutopilot);
+      delete existingAutopilot.heartbeatIntervalMs;
+      delete existingAutopilot.progressStallMs;
+      delete existingAutopilot.heartbeatDeadMs;
+      delete a.heartbeatIntervalMs;
+      delete a.progressStallMs;
+      delete a.heartbeatDeadMs;
       if (a.maxConcurrentTasks !== undefined) {
         existingAutopilot.maxConcurrentTasks = clampAutopilotConcurrency(
           a.maxConcurrentTasks,
@@ -1599,24 +1581,6 @@ export function mergeConfigMeta(existing, patch) {
         existingAutopilot.maxFinalTestAttempts = clampAutopilotAttempts(
           a.maxFinalTestAttempts,
           existingAutopilot.maxFinalTestAttempts ?? 3,
-        );
-      }
-      if (a.heartbeatIntervalMs !== undefined) {
-        existingAutopilot.heartbeatIntervalMs = clampHeartbeatIntervalMs(
-          a.heartbeatIntervalMs,
-          existingAutopilot.heartbeatIntervalMs ?? 7000,
-        );
-      }
-      if (a.progressStallMs !== undefined) {
-        existingAutopilot.progressStallMs = clampProgressStallMs(
-          a.progressStallMs,
-          existingAutopilot.progressStallMs ?? 90000,
-        );
-      }
-      if (a.heartbeatDeadMs !== undefined) {
-        existingAutopilot.heartbeatDeadMs = clampHeartbeatDeadMs(
-          a.heartbeatDeadMs,
-          existingAutopilot.heartbeatDeadMs ?? 30000,
         );
       }
       if (typeof a.plannerProviderId === 'string') {

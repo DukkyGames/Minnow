@@ -29,38 +29,19 @@
  * 1. A journal append.
  * 2. An attempt ending.
  * 3. A timer, as a safety net rather than as the mechanism.
+ *
+ * ## Graph injection (P8-B)
+ *
+ * The fold and scheduler are arguments, not imports. This file does not
+ * statically import `core/plan.js` or `core/derive.js`. Boards pass
+ * {@link boardGraph}; a second graph (sub-agents in P8-C) registers under a
+ * different journal namespace in the same process.
  */
 
-import {
-  buildIntegrationFixTask,
-  isReadyForFinalTest,
-  isRunComplete,
-  manualStart,
-  pendingAbandonments,
-  pendingEnqueues,
-  pendingSkips,
-  plan,
-  reopenTargets,
-} from './core/plan.js';
 import { makeEvent } from './core/events.js';
-import { DEFAULT_BOARD_CONCURRENCY, foldInto } from './core/derive.js';
+import { boardGraph, defaultComplete, isReadyForFinalTest } from './board-graph.js';
 import * as diskJournal from './journal.js';
 import { emitError } from './live-events.js';
-import {
-  integrationBranch,
-  liveWorktreePaths,
-  reconcileOrphanWorktrees,
-  WORKTREE_DISCARDED_TYPE,
-  BOARD_GIT_INITIALIZED_TYPE,
-} from './worktree-lifecycle.js';
-import { detectAttemptOverflow, captureWorktreeDiff } from './touches.js';
-import {
-  journalHasReport,
-  REPORT_EVENT_TYPE,
-  formatMechanicalReport,
-  writeEndOfRunReport,
-  defaultComplete,
-} from './report.js';
 
 /** How often the safety-net tick fires. */
 export const DEFAULT_TICK_MS = 5_000;
@@ -96,21 +77,6 @@ export const systemClock = {
  */
 function sameWork(a, b) {
   return a.role === b.role && (a.taskId ?? null) === (b.taskId ?? null);
-}
-
-/**
- * Roles the engine journals as task attempts.
- *
- * `merge` and `final` are engine-driven and have their own vocabulary —
- * `merge.succeeded` / `merge.conflicted` and `final.test.ended` — so they never
- * produce `task.attempt.*` lines. A merge's attempt record is synthesised by the
- * fold from `merge.enqueued`, which is already on the journal before it runs.
- *
- * @param {string} role
- * @returns {boolean}
- */
-function isAgentRole(role) {
-  return role === 'builder' || role === 'tester';
 }
 
 /**
@@ -155,6 +121,38 @@ function isAgentRole(role) {
  */
 
 /**
+ * Fold + scheduler + the small set of predicates a tick calls.
+ *
+ * Boards supply {@link boardGraph}. A second graph (sub-agents in P8-C, or the
+ * throwaway fake in the P8-B test) passes its own fold and plan; board-only
+ * hooks (`onLoad` worktree reclaim, `touches` overflow, the report writer,
+ * merge-queue event mapping) are omitted and the engine treats that as a no-op.
+ *
+ * @typedef {object} Graph
+ * @property {(state: any, events: Iterable<unknown>) => any} foldInto
+ * @property {(state: any) => Array<{ taskId: string | null, role: string, seedKind?: string, sameWorktree?: boolean }>} plan
+ * @property {(state: any) => Record<string, unknown>[]} [impliedEvents]
+ * @property {(state: any) => boolean} [isRunComplete]
+ * @property {(state: any) => Record<string, unknown>[]} [eventsForRunComplete]
+ * @property {(role: string) => boolean} [isAgentRole]
+ * @property {(state: any, attemptId: string) => boolean} [isAlreadyEnded]
+ * @property {(state: any, live: Set<string>, buffered: Set<string>) => Record<string, unknown>[]} [reapVanished]
+ * @property {(want: import('./core/types').Desired, handle: { attemptId: string, worktree?: string, discarded?: Record<string, unknown>[], gitInitialized?: Record<string, unknown> }) => Record<string, unknown>[]} [eventsForStart]
+ * @property {(result: { gitInitialized?: Record<string, unknown> } | void) => Record<string, unknown>[]} [eventsForPreflight]
+ * @property {(end: AttemptEnd, ctx: { id: string, state: any }) => Promise<Record<string, unknown>[]> | Record<string, unknown>[]} [eventsForAttemptEnd]
+ * @property {(ctx: { id: string, state: any }) => Promise<Record<string, unknown>[]>} [onLoad]
+ * @property {(ctx: { id: string, state: any, events: Record<string, unknown>[], complete: Function }) => Promise<{ relativePath: string, usedFallback: boolean } | null>} [writeReport]
+ * @property {string} [reportEventType]
+ * @property {(events: Record<string, unknown>[]) => boolean} [hasReport]
+ * @property {import('./report.js').ReportComplete} [complete]
+ * @property {(input: Record<string, unknown>) => string | Promise<string>} [formatReport]
+ * @property {(state: any, taskId: string, running?: ReadonlyArray<{ taskId: string | null, role: string }>) => { kind: string, role?: string, seedKind?: string, sameWorktree?: boolean }} [manualStart]
+ * @property {(state: any, requested?: readonly string[]) => Iterable<string>} [reopenTargets]
+ * @property {(state: any) => { task: unknown, wave?: unknown }} [buildIntegrationFixTask]
+ * @property {number} [defaultConcurrency]
+ */
+
+/**
  * @typedef {object} AttemptEnd
  * @property {string} attemptId
  * @property {string | null} taskId
@@ -171,11 +169,17 @@ function isAgentRole(role) {
  */
 
 /**
- * Create the engine for one board.
+ * Create the engine for one journaled run (a board today; a parent-chat of
+ * sub-agents in P8-C).
+ *
+ * `graph` is the fold, the scheduler, and the predicates the tick calls. Omitted
+ * `graph` is the production board graph so existing `createEngine({ boardId,
+ * effector })` call sites do not have to change.
  *
  * @param {{
  *   boardId: string,
  *   effector: Effector,
+ *   graph?: Graph,
  *   clock?: typeof systemClock,
  *   tickMs?: number,
  *   journal?: typeof diskJournal,
@@ -184,6 +188,7 @@ function isAgentRole(role) {
  */
 export function createEngine(options) {
   const { boardId, effector } = options;
+  const graph = options.graph ?? boardGraph;
   const clock = options.clock ?? systemClock;
   const tickMs = options.tickMs ?? DEFAULT_TICK_MS;
   // The store is a seam so the conformance suite can run the scheduler against
@@ -192,12 +197,27 @@ export function createEngine(options) {
   // scheduler suite nobody runs.
   const journal = options.journal ?? diskJournal;
   // Injected so tests can stub the one LLM call. Omitted `complete` is the
-  // mechanical fallback (no model) so scheduler suites stay model-free.
-  // Production `getEngine` supplies `defaultComplete`.
+  // graph's complete (boards: the mechanical fallback, no model) so scheduler
+  // suites stay model-free. Production `getEngine` supplies `defaultComplete`.
   const complete =
-    options.complete ?? (async ({ input }) => formatMechanicalReport(input));
+    options.complete ??
+    graph.complete ??
+    (async ({ input }) =>
+      graph.formatReport ? graph.formatReport(input) : '');
 
-  /** @type {import('./core/types').BoardState | null} */
+  /**
+   * Is this role a journaled attempt (vs merge/final, which have their own
+   * vocabulary)? Graphs that omit the hook keep the board default so a
+   * fold-and-plan-only injection still starts builder/tester work.
+   *
+   * @param {string} role
+   * @returns {boolean}
+   */
+  function isAgentRole(role) {
+    return graph.isAgentRole ? graph.isAgentRole(role) : role === 'builder' || role === 'tester';
+  }
+
+  /** @type {any} */
   let state = null;
   /** The journal position `state` is folded through. */
   let highestSeq = 0;
@@ -270,7 +290,7 @@ export function createEngine(options) {
       events.length === 1
         ? [await journal.appendEvent(boardId, events[0], { now: clock.now })]
         : await journal.appendEvents(boardId, events, { now: clock.now });
-    foldInto(/** @type {import('./core/types').BoardState} */ (state), stamped);
+    graph.foldInto(state, stamped);
     // Advanced with the fold, never separately: a reader that sees the new state
     // must see the seq that produced it, or an SSE snapshot can claim to be
     // current as of an event it does not contain.
@@ -284,6 +304,10 @@ export function createEngine(options) {
         }
       }
     }
+    // Sub-agent spawn is `append(run.requested)` + `tick()`, not `startBoard`.
+    // Without arming here, a failed effector.start() would never retry and a
+    // vanished attempt would never reap — the timer is the safety net.
+    if (wantsTicking()) startTimer();
     return stamped;
   }
 
@@ -298,22 +322,11 @@ export function createEngine(options) {
    * @returns {Promise<boolean>} whether anything was written
    */
   async function journalImpliedDecisions() {
+    const implied = graph.impliedEvents;
+    if (!implied) return false;
     let wroteAnything = false;
     for (let round = 0; round < 1000; round += 1) {
-      const current = /** @type {import('./core/types').BoardState} */ (state);
-      /** @type {Record<string, unknown>[]} */
-      const decisions = [];
-
-      for (const { taskId, reason, evidence } of pendingAbandonments(current)) {
-        decisions.push(makeEvent('task.abandoned', { taskId, reason, evidence }));
-      }
-      for (const { taskId, blockedBy } of pendingSkips(current)) {
-        decisions.push(makeEvent('task.skipped', { taskId, blockedBy }));
-      }
-      for (const taskId of pendingEnqueues(current)) {
-        decisions.push(makeEvent('merge.enqueued', { taskId }));
-      }
-
+      const decisions = implied(state) ?? [];
       if (decisions.length === 0) return wroteAnything;
       await append(decisions);
       wroteAnything = true;
@@ -338,7 +351,7 @@ export function createEngine(options) {
       return;
     }
 
-    const desired = plan(/** @type {import('./core/types').BoardState} */ (state));
+    const desired = graph.plan(state);
     const actual = effector.inspect();
 
     // Stop what is running and no longer wanted. In-flight work stays in
@@ -357,17 +370,9 @@ export function createEngine(options) {
       await startAttempt(want);
     }
 
-    if (state.status === 'running' && isRunComplete(state)) {
-      let merged = 0;
-      for (const task of state.tasks.values()) {
-        if (task.phase === 'merged') merged += 1;
-      }
-      const reason =
-        state.finalTest?.outcome === 'fail' || merged === 0 ? 'terminal' : 'complete';
-      await append([
-        makeEvent('run.finished', { summary: runSummary(state) }),
-        makeEvent('board.stopped', { reason }),
-      ]);
+    if (state.status === 'running' && graph.isRunComplete?.(state)) {
+      const finish = graph.eventsForRunComplete?.(state) ?? [];
+      if (finish.length > 0) await append(finish);
       stopTimer();
       // The report is terminal output. It is written after the last merge and
       // the final test, and it never feeds plan()/derive()/policy/merge.
@@ -385,20 +390,20 @@ export function createEngine(options) {
    * @returns {Promise<void>}
    */
   async function maybeWriteEndOfRunReport() {
-    if (disposed || !state) return;
+    if (disposed || !state || !graph.writeReport) return;
     const events = await journal.readEvents(boardId);
-    if (journalHasReport(events)) return;
-    const stoppedByUser = state.stopReason === 'user';
-    if (!state.finished && !stoppedByUser) return;
+    if (graph.hasReport?.(events)) return;
     try {
-      const result = await writeEndOfRunReport({
-        boardId,
+      const result = await graph.writeReport({
+        id: boardId,
         events,
         state,
         complete,
       });
+      if (!result) return;
+      const type = graph.reportEventType ?? 'run.report.written';
       await append([
-        makeEvent(REPORT_EVENT_TYPE, {
+        makeEvent(type, {
           path: result.relativePath,
           usedFallback: result.usedFallback,
         }),
@@ -431,32 +436,14 @@ export function createEngine(options) {
    * @returns {Promise<boolean>} whether anything was recorded
    */
   async function reapVanished(actual) {
-    if (!state) return false;
+    if (!state || !graph.reapVanished) return false;
     const live = new Set(actual.map((r) => r.attemptId));
-
-    /** @type {Record<string, unknown>[]} */
-    const ended = [];
-    for (const task of state.tasks.values()) {
-      for (const attempt of task.attempts) {
-        if (attempt.ended) continue;
-        if (!isAgentRole(attempt.role)) continue;
-        if (live.has(attempt.attemptId)) continue;
-        // Its real outcome is already in hand and about to be journaled.
-        if (bufferedEnds.has(attempt.attemptId)) continue;
-        ended.push(
-          makeEvent('task.attempt.ended', {
-            taskId: task.id,
-            attemptId: attempt.attemptId,
-            role: attempt.role,
-            outcome: 'crashed',
-            summary: 'the process was no longer running',
-          }),
-        );
-        journaledStarts.delete(attempt.attemptId);
-      }
+    const ended = graph.reapVanished(state, live, new Set(bufferedEnds.keys()));
+    if (!ended || ended.length === 0) return false;
+    for (const event of ended) {
+      const attemptId = typeof event.attemptId === 'string' ? event.attemptId : '';
+      if (attemptId) journaledStarts.delete(attemptId);
     }
-
-    if (ended.length === 0) return false;
     await append(ended);
     return true;
   }
@@ -469,11 +456,7 @@ export function createEngine(options) {
    */
   function isAlreadyEnded(attemptId) {
     if (!state) return false;
-    for (const task of state.tasks.values()) {
-      for (const attempt of task.attempts) {
-        if (attempt.attemptId === attemptId) return attempt.ended;
-      }
-    }
+    if (graph.isAlreadyEnded) return graph.isAlreadyEnded(state, attemptId);
     return false;
   }
 
@@ -511,28 +494,18 @@ export function createEngine(options) {
     // The process exists. Only now is there a completed side effect to record.
     if (!isAgentRole(want.role)) return;
 
-    /** @type {Record<string, unknown>[]} */
-    const events = [];
-    // Dirty trees released to make room for a fresh slot are recorded *before*
-    // the new start so the discarded path is never mistaken for this attempt.
-    if (Array.isArray(handle.discarded)) {
-      for (const payload of handle.discarded) {
-        events.push(makeEvent(WORKTREE_DISCARDED_TYPE, payload));
-      }
-    }
-    if (handle.gitInitialized) {
-      events.push(makeEvent(BOARD_GIT_INITIALIZED_TYPE, handle.gitInitialized));
-    }
-    events.push(
-      makeEvent('task.attempt.started', {
-        taskId: want.taskId,
-        attemptId: handle.attemptId,
-        role: want.role,
-        ...(handle.worktree ? { worktree: handle.worktree } : {}),
-        ...(want.seedKind ? { seedKind: want.seedKind } : {}),
-      }),
-    );
-    await append(events);
+    const events = graph.eventsForStart
+      ? graph.eventsForStart(want, handle)
+      : [
+          makeEvent('task.attempt.started', {
+            taskId: want.taskId,
+            attemptId: handle.attemptId,
+            role: want.role,
+            ...(handle.worktree ? { worktree: handle.worktree } : {}),
+            ...(want.seedKind ? { seedKind: want.seedKind } : {}),
+          }),
+        ];
+    if (events.length > 0) await append(events);
     journaledStarts.add(handle.attemptId);
 
     // If it already finished while that write was in flight, deal with it now,
@@ -576,99 +549,9 @@ export function createEngine(options) {
     }
     journaledStarts.delete(end.attemptId);
 
-    /** @type {Record<string, unknown>[]} */
-    const events = [];
-    if (isAgentRole(end.role)) {
-      const task = end.taskId ? state.tasks.get(end.taskId) : undefined;
-      const attempt = task?.attempts.find((a) => a.attemptId === end.attemptId);
-      // Diff capture is I/O. Core never does it; the bundle later copies
-      // whatever landed on this attempt's evidence (capped to a patch, not a repo).
-      let evidence = end.evidence;
-      const worktree = attempt?.worktree;
-      if (worktree) {
-        try {
-          const diff = await captureWorktreeDiff(worktree, integrationBranch(boardId));
-          if (diff) evidence = { ...(evidence ?? {}), diff };
-        } catch (err) {
-          console.warn(
-            `[orchestrator] ${boardId}: attempt diff capture failed for ${end.attemptId}:`,
-            /** @type {Error} */ (err)?.message ?? err,
-          );
-        }
-      }
-      events.push(
-        makeEvent('task.attempt.ended', {
-          taskId: end.taskId,
-          attemptId: end.attemptId,
-          role: end.role,
-          outcome: end.outcome,
-          ...(end.summary === undefined ? {} : { summary: end.summary }),
-          ...(evidence === undefined ? {} : { evidence }),
-          // The attempt's token cost, on the journal beside its outcome so a
-          // run's price is derivable from replay alone rather than from a live
-          // observer that has to be attached before the run starts.
-          ...(end.usage === undefined ? {} : { usage: end.usage }),
-        }),
-      );
-      // Overflow is evidence, not a failure. Journal it beside the pass so
-      // replay still shows a passing attempt with a recorded footprint miss.
-      if (end.outcome === 'pass' && end.role === 'builder' && end.taskId) {
-        try {
-          const overflow = await detectAttemptOverflow({
-            worktree: attempt?.worktree,
-            declared: task?.touches ?? [],
-            baseRef: integrationBranch(boardId),
-          });
-          if (overflow) {
-            events.push(
-              makeEvent('touches.overflow', {
-                taskId: end.taskId,
-                attemptId: end.attemptId,
-                declared: overflow.declared,
-                actual: overflow.actual,
-              }),
-            );
-          }
-        } catch (err) {
-          console.warn(
-            `[orchestrator] ${boardId}: touches overflow check failed for ${end.attemptId}:`,
-            /** @type {Error} */ (err)?.message ?? err,
-          );
-        }
-      }
-    } else if (end.role === 'merge') {
-      // `beforeSha` is the pre-merge integration tip the queue snapped so a
-      // failed verify can restore. Optional on the event (same source of
-      // truth as the end — not a second event type).
-      /** @type {Record<string, unknown>} */
-      const mergeExtra =
-        typeof end.beforeSha === 'string' && end.beforeSha ? { beforeSha: end.beforeSha } : {};
-      events.push(
-        end.outcome === 'pass'
-          ? makeEvent('merge.succeeded', {
-              taskId: end.taskId,
-              sha: end.sha ?? 'unknown',
-              ...mergeExtra,
-            })
-          : makeEvent('merge.conflicted', {
-              taskId: end.taskId,
-              files: end.files ?? [],
-              ...mergeExtra,
-            }),
-      );
-    } else if (end.role === 'final') {
-      events.push(
-        makeEvent('final.test.ended', {
-          outcome: end.outcome === 'pass' ? 'pass' : 'fail',
-          ...(end.runInstructions === undefined ? {} : { runInstructions: end.runInstructions }),
-          ...(end.evidence === undefined ? {} : { evidence: end.evidence }),
-        }),
-      );
-    }
-    if (end.discarded) {
-      events.push(makeEvent(WORKTREE_DISCARDED_TYPE, end.discarded));
-    }
-
+    const events = graph.eventsForAttemptEnd
+      ? await graph.eventsForAttemptEnd(end, { id: boardId, state })
+      : [];
     if (events.length > 0) await append(events);
     await tick();
   }
@@ -710,7 +593,7 @@ export function createEngine(options) {
    */
   function wantsTicking() {
     if (!state) return false;
-    return state.status === 'running' || plan(state).length > 0;
+    return state.status === 'running' || graph.plan(state).length > 0;
   }
 
   function startTimer() {
@@ -747,22 +630,16 @@ export function createEngine(options) {
       // `inspect()` until this resolves, which is what stops a tick landing in
       // the gap between "finished" and "recorded as finished".
       effector.onEnd?.((end) => handleAttemptEnd(end));
-      // Reclaim orphans *before* the first tick. Live paths come from open
-      // journal attempts; a tick that ran first would reap them as crashed and
-      // this would then delete the trees a continue retry needs.
-      try {
-        const result = await reconcileOrphanWorktrees({
-          boardId,
-          livePaths: liveWorktreePaths(state),
-        });
-        if (result.discarded.length > 0) {
-          await append(result.discarded.map((payload) => makeEvent(WORKTREE_DISCARDED_TYPE, payload)));
+      if (graph.onLoad) {
+        try {
+          const extra = await graph.onLoad({ id: boardId, state });
+          if (extra.length > 0) await append(extra);
+        } catch (err) {
+          console.warn(
+            `[orchestrator] ${boardId}: graph onLoad failed:`,
+            /** @type {Error} */ (err)?.message ?? err,
+          );
         }
-      } catch (err) {
-        console.warn(
-          `[orchestrator] ${boardId}: worktree reconcile failed:`,
-          /** @type {Error} */ (err)?.message ?? err,
-        );
       }
       if (state.status === 'running') startTimer();
     },
@@ -822,9 +699,8 @@ export function createEngine(options) {
      */
     async preflight() {
       const result = await effector.preflight?.();
-      if (result?.gitInitialized) {
-        await append([makeEvent(BOARD_GIT_INITIALIZED_TYPE, result.gitInitialized)]);
-      }
+      const extra = graph.eventsForPreflight?.(result) ?? [];
+      if (extra.length > 0) await append(extra);
     },
 
     /**
@@ -990,7 +866,9 @@ export function createEngine(options) {
       // `manualStart` decides, not the engine: a manual start is outside the
       // concurrency cap and nothing else, and which rules that means is a
       // scheduling question that belongs in the pure core with the rest of them.
-      const next = manualStart(state, taskId, effector.inspect());
+      const next = graph.manualStart
+        ? graph.manualStart(state, taskId, effector.inspect())
+        : { kind: 'none' };
       if (next.kind !== 'start') return false;
       await startAttempt({
         taskId,
@@ -1017,27 +895,30 @@ export function createEngine(options) {
      */
     async reopen(opts = {}, reason = 'user') {
       if (!state) throw new Error('engine not loaded');
-      const targets = [...reopenTargets(state, opts.taskIds)];
+      const pick = graph.reopenTargets;
+      const targets = pick ? [...pick(state, opts.taskIds)] : [];
       const events = [];
       if (targets.length === 0) {
         if (state.finalTest?.outcome !== 'fail') {
           return { ok: false, taskIds: [], reason: 'nothing-to-rerun' };
         }
-        const fix = buildIntegrationFixTask(state);
+        const fix = graph.buildIntegrationFixTask?.(state);
+        if (!fix) return { ok: false, taskIds: [], reason: 'nothing-to-rerun' };
         events.push(
           makeEvent('task.added', {
             task: fix.task,
             ...(fix.wave ? { wave: fix.wave } : {}),
           }),
         );
-        targets.push(fix.task.id);
+        targets.push(/** @type {{ id: string }} */ (fix.task).id);
       }
+      const fallbackN = graph.defaultConcurrency ?? 2;
       const concurrency =
         Number.isSafeInteger(opts.concurrency) && opts.concurrency >= 1
           ? opts.concurrency
           : Number.isSafeInteger(state.concurrency) && state.concurrency >= 1
             ? state.concurrency
-            : DEFAULT_BOARD_CONCURRENCY;
+            : fallbackN;
       events.push(
         makeEvent('board.reopened', { taskIds: targets, reason: String(reason ?? 'user') }),
         makeEvent('board.started', { concurrency }),
@@ -1068,37 +949,35 @@ export function createEngine(options) {
   };
 }
 
-/**
- * A one-line description of how the run went, for `run.finished`.
- *
- * Deliberately mechanical. The narrative report is P3-G's stateless LLM call
- * over the finished journal; nothing in the control plane writes prose.
- *
- * @param {import('./core/types').BoardState} state
- * @returns {string}
- */
-function runSummary(state) {
-  let merged = 0;
-  let abandoned = 0;
-  let skipped = 0;
-  for (const task of state.tasks.values()) {
-    if (task.phase === 'merged') merged += 1;
-    else if (task.phase === 'abandoned') abandoned += 1;
-    else if (task.phase === 'skipped') skipped += 1;
-  }
-  const parts = [`${merged} merged`];
-  if (abandoned > 0) parts.push(`${abandoned} abandoned`);
-  if (skipped > 0) parts.push(`${skipped} skipped`);
-  if (state.finalTest) parts.push(`final test ${state.finalTest.outcome}`);
-  return parts.join(', ');
-}
-
 // ---------------------------------------------------------------------------
 // Registry
 // ---------------------------------------------------------------------------
 
+/** Default namespace so existing `getEngine(boardId)` / `peekEngine(boardId)` keep working. */
+export const DEFAULT_ENGINE_NAMESPACE = 'boards';
+
 /**
- * Engines being loaded or already loaded, keyed by board.
+ * @param {string} namespace
+ * @param {string} id
+ * @returns {string}
+ */
+function engineKey(namespace, id) {
+  // Tab cannot appear in a safe journal id, so this does not collide.
+  return `${namespace}\t${id}`;
+}
+
+/**
+ * @param {string} key
+ * @returns {{ namespace: string, id: string }}
+ */
+function parseEngineKey(key) {
+  const cut = key.indexOf('\t');
+  if (cut === -1) return { namespace: DEFAULT_ENGINE_NAMESPACE, id: key };
+  return { namespace: key.slice(0, cut), id: key.slice(cut + 1) };
+}
+
+/**
+ * Engines being loaded or already loaded, keyed by `(namespace, id)`.
  *
  * The **promise** is what is registered, never the engine. Registering the
  * engine and then awaiting `load()` publishes it in the one state it must never
@@ -1121,73 +1000,103 @@ const engines = new Map();
 const ready = new Map();
 
 /**
- * The live engine for a board, created on first use.
+ * The live engine for an entry, created on first use.
+ *
+ * `options.namespace` defaults to `'boards'` so middleware.js and
+ * the runner effector keep calling `getEngine(boardId, makeEffector)` without a
+ * forced rewrite. Pass `{ namespace, graph }` to register a second graph in the
+ * same process.
  *
  * @param {string} boardId
  * @param {() => Effector} makeEffector
- * @param {{ clock?: typeof systemClock, tickMs?: number }} [options]
+ * @param {{
+ *   clock?: typeof systemClock,
+ *   tickMs?: number,
+ *   namespace?: string,
+ *   graph?: Graph,
+ *   journal?: typeof diskJournal,
+ *   complete?: import('./report.js').ReportComplete,
+ * }} [options]
  * @returns {Promise<ReturnType<typeof createEngine>>}
  */
 export function getEngine(boardId, makeEffector, options = {}) {
-  const existing = engines.get(boardId);
+  const namespace = options.namespace ?? DEFAULT_ENGINE_NAMESPACE;
+  const key = engineKey(namespace, boardId);
+  const existing = engines.get(key);
   if (existing) return existing;
 
+  // Do not spread `options` into createEngine: `namespace` is a registry key,
+  // not an engine field, and an omitted `complete` must stay the production
+  // LLM writer rather than being overwritten with `undefined`.
   const engine = createEngine({
     boardId,
     effector: makeEffector(),
-    complete: defaultComplete,
-    ...options,
+    clock: options.clock,
+    tickMs: options.tickMs,
+    journal: options.journal,
+    graph: options.graph ?? boardGraph,
+    complete: options.complete ?? defaultComplete,
   });
   const loading = engine.load().then(() => {
     // Only registered as loaded if this entry is still the current one — a
     // `disposeEngines` during the load must not resurrect it.
-    if (engines.get(boardId) === loading) ready.set(boardId, engine);
+    if (engines.get(key) === loading) ready.set(key, engine);
     return engine;
   });
-  engines.set(boardId, loading);
+  engines.set(key, loading);
 
   // A failed load must not wedge the board: drop the entry so the next request
   // gets a fresh attempt rather than the same rejection forever.
   loading.catch(() => {
-    if (engines.get(boardId) === loading) engines.delete(boardId);
+    if (engines.get(key) === loading) engines.delete(key);
   });
 
   return loading;
 }
 
 /**
- * The engine for a board **if it is already loaded**. Never one mid-load.
+ * The engine for an id **if it is already loaded**. Never one mid-load.
+ *
+ * Second argument is the namespace (default `'boards'`). Existing
+ * `peekEngine(boardId)` call sites keep working.
  *
  * @param {string} boardId
+ * @param {string} [namespace]
  * @returns {ReturnType<typeof createEngine> | undefined}
  */
-export function peekEngine(boardId) {
-  return ready.get(boardId);
+export function peekEngine(boardId, namespace = DEFAULT_ENGINE_NAMESPACE) {
+  return ready.get(engineKey(namespace, boardId));
 }
 
 /**
  * @param {string} [boardId]  all engines when omitted
+ * @param {string} [namespace]
  * @returns {void}
  */
-export function disposeEngines(boardId) {
+export function disposeEngines(boardId, namespace) {
   if (boardId === undefined) {
-    for (const id of [...engines.keys()]) disposeEngines(id);
+    for (const key of [...engines.keys()]) {
+      const parsed = parseEngineKey(key);
+      disposeEngines(parsed.id, parsed.namespace);
+    }
     engines.clear();
     ready.clear();
     return;
   }
-  ready.get(boardId)?.dispose();
+  const ns = namespace ?? DEFAULT_ENGINE_NAMESPACE;
+  const key = engineKey(ns, boardId);
+  ready.get(key)?.dispose();
   // An engine still loading has no entry in `ready` yet, so it is disposed when
   // its load settles. `dispose()` is idempotent, so doing both is safe.
-  const loading = engines.get(boardId);
+  const loading = engines.get(key);
   if (loading) {
     void loading.then(
       (engine) => engine.dispose(),
       () => {},
     );
   }
-  engines.delete(boardId);
-  ready.delete(boardId);
+  engines.delete(key);
+  ready.delete(key);
 }
 
 export { isReadyForFinalTest };

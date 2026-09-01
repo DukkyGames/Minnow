@@ -1,28 +1,641 @@
 /**
- * Sub-agent orchestrator — compatibility re-export shim (MIN-140 Phase 0).
- * Implementation lives in src/agents/controller/*; orchestrator.ts is the prompt's "controller".
+ * P8-F — SSE-backed sub-agent store (MIN-759).
+ *
+ * The renderer is a view of derived state. Spawn and cancel POST to
+ * `/api/agents`; everything else is a read. The same read API the drawer,
+ * completion-push, and `sub-agent-events` subscribers already call
+ * (`getSubAgentRun`, `listSubAgentRunsForParentChat`, `subscribeSubAgentRuns`).
+ * The controller directory is gone (P8-G / MIN-760).
+ *
+ * Nothing in this file mutates a run except by POSTing a command. Live
+ * fields (tool name, start-error counter) are overlays from `event: live`
+ * / `event: error` and are never written back.
  */
 
-export {
-  assertSubAgentRunReadableByParent,
-  buildAggregateResult,
-  buildSubAgentStatusPayload,
-  cancelAllForParentTurn,
-  cancelSubAgent,
-  deriveSubAgentTerminalReason,
-  formatAggregateResult,
-  formatSubAgentListToolResult,
-  formatSubAgentListToolResultForChat,
-  getRunToolCallFingerprint,
-  getSubAgentRun,
-  listActiveSubAgentRuns,
-  listSubAgentRunsForParentChat,
-  listSubAgentRunsForParentTurn,
-  recordToolCallForRun,
-  resetSubAgentOrchestrator,
-  restartSubAgent,
-  spawnSubAgent,
-  waitForSubAgent,
-  initControllerPersistence,
-  ensureControllerReady,
-} from './controller/controller';
+import { findChatById, getActiveChat } from '../state/sessions';
+import { getWorkspacePath } from '../state/workspace';
+import {
+  isContextBudgetFailure,
+  isMaxToolTurnFailure,
+  isSubAgentRunTerminal,
+} from './sub-agent-outcome';
+import { legacyOutcomeFromSummary } from './sub-agent-structured-outcome';
+import { DEFAULT_CONTEXT_ENFORCEMENT_POLICY } from '../chat/context-budget';
+import {
+  clearSubAgentRunListeners,
+  emitSubAgentRunUpdated,
+  subscribeSubAgentRuns,
+} from './sub-agent-events';
+import { createSubAgentRunClient, type EventStream, type DeliverFrame } from './sub-agent-client';
+import type { PersistedSubAgentRun } from '../types';
+import type {
+  AggregateResult,
+  CancelSubAgentResult,
+  SpawnSubAgentInput,
+  SpawnSubAgentResult,
+  SubAgentRun,
+  SubAgentStatus,
+  SubAgentTerminalReason,
+} from './types';
+
+export { subscribeSubAgentRuns };
+
+const AGGREGATE_MAX_BYTES = 32 * 1024;
+const STATUS_PREVIEW_MAX = 240;
+
+const runs = new Map<string, SubAgentRun>();
+const clients = new Map<string, ReturnType<typeof createSubAgentRunClient>>();
+const parentIndex = new Map<string, Set<string>>();
+const turnIndex = new Map<string, Set<string>>();
+const hydrating = new Map<string, Promise<void>>();
+const deliverListeners = new Set<(frame: DeliverFrame & { runId: string }) => void>();
+
+type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
+let apiFetch: FetchFn = (input, init) => fetch(input, init);
+
+let openStream: ((url: string) => EventStream) | undefined;
+
+/** Tests: drive HTTP without a real server. */
+export function setSubAgentApiFetchForTests(fn: FetchFn | null): void {
+  apiFetch = fn ?? ((input, init) => fetch(input, init));
+}
+
+/** Tests: drive SSE without EventSource. */
+export function setSubAgentOpenStreamForTests(
+  fn: ((url: string) => EventStream) | null,
+): void {
+  openStream = fn ?? undefined;
+}
+
+async function request(path: string, init?: RequestInit): Promise<any> {
+  const response = await apiFetch(`/api/agents${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+  });
+  const text = await response.text();
+  let body: any = null;
+  try {
+    body = text.length > 0 ? JSON.parse(text) : null;
+  } catch {
+    body = null;
+  }
+  if (!response.ok) {
+    throw new Error(body?.error ?? `${response.status} from /api/agents${path}`);
+  }
+  return body;
+}
+
+function statusFromPhase(phase: string | undefined): SubAgentStatus {
+  if (phase === 'passed') return 'completed';
+  if (phase === 'cancelled') return 'cancelled';
+  if (phase === 'abandoned') return 'failed';
+  if (phase === 'running') return 'running';
+  return 'queued';
+}
+
+function lastEnded(raw: Record<string, unknown>): Record<string, unknown> | null {
+  const attempts = Array.isArray(raw.attempts) ? raw.attempts : [];
+  for (let i = attempts.length - 1; i >= 0; i -= 1) {
+    const a = attempts[i];
+    if (a && typeof a === 'object' && (a as { ended?: boolean }).ended) {
+      return a as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+/**
+ * Map a fold run onto the product `SubAgentRun` the drawer already renders.
+ * Live overlays (tool name, start-error) ride SSE and are merged by the store.
+ */
+export function subAgentRunFromFold(
+  raw: Record<string, unknown>,
+  extra: Partial<SubAgentRun> = {},
+): SubAgentRun {
+  const last = lastEnded(raw);
+  const phase = typeof raw.phase === 'string' ? raw.phase : 'idle';
+  const status = statusFromPhase(phase);
+  const requestedAt = Number(raw.requestedAt);
+  const startedAt =
+    Number.isSafeInteger(requestedAt) && requestedAt > 0
+      ? new Date(requestedAt).toISOString()
+      : extra.startedAt ?? null;
+  const model =
+    raw.model && typeof raw.model === 'object' && !Array.isArray(raw.model)
+      ? (raw.model as { providerId?: string; id?: string })
+      : null;
+  const summary = typeof last?.summary === 'string' ? last.summary : extra.summary ?? '';
+  const error =
+    phase === 'abandoned' && typeof raw.abandonedReason === 'string'
+      ? raw.abandonedReason
+      : extra.error ?? null;
+
+  return {
+    ...extra,
+    runId: String(raw.runId ?? extra.runId ?? ''),
+    type: String(raw.type ?? extra.type ?? ''),
+    task: String(raw.task ?? extra.task ?? ''),
+    status,
+    parentChatId: typeof raw.parentChatId === 'string' ? raw.parentChatId : extra.parentChatId ?? null,
+    parentToolCallId:
+      typeof raw.parentToolCallId === 'string' ? raw.parentToolCallId : extra.parentToolCallId ?? null,
+    parentTurnId: typeof raw.parentTurnId === 'string' ? raw.parentTurnId : extra.parentTurnId ?? null,
+    summary: extra.summary ?? summary,
+    error,
+    startedAt,
+    endedAt: isSubAgentRunTerminal(status) ? extra.endedAt ?? startedAt : null,
+    toolTurns: extra.toolTurns ?? 0,
+    cancelled: status === 'cancelled',
+    messages: extra.messages ?? [],
+    delivered: raw.delivered === true,
+    providerId: model?.providerId ?? extra.providerId,
+    modelId: model?.id ?? extra.modelId,
+  };
+}
+
+function indexRun(run: SubAgentRun): void {
+  if (run.parentChatId) {
+    let set = parentIndex.get(run.parentChatId);
+    if (!set) {
+      set = new Set();
+      parentIndex.set(run.parentChatId, set);
+    }
+    set.add(run.runId);
+  }
+  if (run.parentTurnId) {
+    let set = turnIndex.get(run.parentTurnId);
+    if (!set) {
+      set = new Set();
+      turnIndex.set(run.parentTurnId, set);
+    }
+    set.add(run.runId);
+  }
+}
+
+function publish(run: SubAgentRun): void {
+  const frozen = Object.freeze({ ...run }) as SubAgentRun;
+  runs.set(run.runId, frozen);
+  indexRun(frozen);
+  emitSubAgentRunUpdated(frozen);
+}
+
+function mergeClientView(runId: string): void {
+  const client = clients.get(runId);
+  const prev = runs.get(runId);
+  const raw = client?.getRun();
+  if (!raw && !prev) return;
+  const live = client?.getLive();
+  const err = client?.getEngineError();
+  const folded = subAgentRunFromFold(raw ?? { runId, ...(prev ?? {}) }, prev ?? {});
+  const terminal = isSubAgentRunTerminal(folded.status);
+  const next = subAgentRunFromFold(raw ?? { runId, ...(prev ?? {}) }, {
+    ...(prev ?? {}),
+    // Live overlays die with the attempt. Replaying tokens onto a completed
+    // card is exactly the reload bug this store exists to close.
+    livePhase: terminal ? undefined : ((live?.phase as SubAgentRun['livePhase']) ?? prev?.livePhase),
+    liveCurrentToolName: terminal ? undefined : (live?.toolName ?? prev?.liveCurrentToolName),
+    livePartialReasoning: terminal ? undefined : (live?.thinking || prev?.livePartialReasoning),
+    startError: terminal
+      ? null
+      : err
+        ? { message: err.message, consecutive: err.consecutive }
+        : prev?.startError,
+    liveNestedToolCalls: terminal
+      ? prev?.liveNestedToolCalls
+      : live?.toolName && folded.status === 'running'
+        ? Math.max(prev?.liveNestedToolCalls ?? 0, 1)
+        : prev?.liveNestedToolCalls,
+  });
+  publish(next);
+}
+
+function ensureClient(runId: string): void {
+  if (clients.has(runId)) return;
+  const client = createSubAgentRunClient(runId, openStream ? { openStream } : {});
+  clients.set(runId, client);
+  client.subscribe(() => mergeClientView(runId));
+  client.subscribeDeliver((frame) => {
+    for (const listener of deliverListeners) {
+      try {
+        listener({ ...frame, runId });
+      } catch (err) {
+        console.error('[agents] deliver bus subscriber threw', err);
+      }
+    }
+  });
+  client.connect();
+}
+
+/**
+ * Tests: put a run in the store without opening SSE. Drawer/card DOM tests
+ * seed this so they do not need a tool server.
+ */
+export function adoptSubAgentRunForTests(run: SubAgentRun): void {
+  publish(run);
+}
+
+/** Production completion-push listens here for SSE `event: deliver`. */
+export function subscribeSubAgentDeliver(
+  listener: (frame: DeliverFrame & { runId: string }) => void,
+): () => void {
+  deliverListeners.add(listener);
+  return () => deliverListeners.delete(listener);
+}
+
+function adoptRaw(raw: Record<string, unknown>): void {
+  const prev = runs.get(String(raw.runId ?? ''));
+  publish(subAgentRunFromFold(raw, prev ?? {}));
+  ensureClient(String(raw.runId));
+}
+
+/**
+ * Load derived state for a parent chat from the server and open SSE for
+ * each run. A drawer opened after a reload must show every run in its
+ * correct state — this is that fetch.
+ */
+export async function hydrateSubAgentRunsForParentChat(parentChatId: string): Promise<void> {
+  if (!parentChatId) return;
+  const existing = hydrating.get(parentChatId);
+  if (existing) return existing;
+  const work = (async () => {
+    try {
+      const body = await request(`?parentChatId=${encodeURIComponent(parentChatId)}`);
+      const list = Array.isArray(body?.state?.runs) ? body.state.runs : [];
+      for (const raw of list) {
+        if (raw && typeof raw === 'object' && typeof raw.runId === 'string') {
+          adoptRaw(raw);
+        }
+      }
+    } catch (err) {
+      console.error('[agents] could not hydrate parent chat runs', err);
+    } finally {
+      hydrating.delete(parentChatId);
+    }
+  })();
+  hydrating.set(parentChatId, work);
+  return work;
+}
+
+export function getSubAgentRun(runId: string): SubAgentRun | undefined {
+  return runs.get(runId);
+}
+
+export function listActiveSubAgentRuns(): SubAgentRun[] {
+  return [...runs.values()].filter((r) => r.status === 'queued' || r.status === 'running');
+}
+
+export function listSubAgentRunsForParentChat(parentChatId: string | null | undefined): SubAgentRun[] {
+  if (!parentChatId) return [];
+  const ids = parentIndex.get(parentChatId);
+  if (!ids) return [];
+  return [...ids].map((id) => runs.get(id)).filter((r): r is SubAgentRun => Boolean(r));
+}
+
+export function listSubAgentRunsForParentTurn(parentTurnId: string | null | undefined): SubAgentRun[] {
+  if (!parentTurnId) return [];
+  const ids = turnIndex.get(parentTurnId);
+  if (!ids) return [];
+  return [...ids].map((id) => runs.get(id)).filter((r): r is SubAgentRun => Boolean(r));
+}
+
+function resolveParentChatId(input: SpawnSubAgentInput): string {
+  if (input.parentChatId?.trim()) return input.parentChatId.trim();
+  try {
+    return getActiveChat()?.id?.trim() ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function resolveSpawnCwd(parentChatId: string | null | undefined): string {
+  if (parentChatId) {
+    const chat = findChatById(parentChatId);
+    const fromChat = chat?.workspacePath?.trim();
+    if (fromChat) return fromChat;
+  }
+  return getWorkspacePath().trim();
+}
+
+/** Spawn a sub-agent by POSTing `/api/agents`. Never mutates local run state. */
+export async function spawnSubAgent(
+  input: SpawnSubAgentInput,
+): Promise<SpawnSubAgentResult | AggregateResult> {
+  const parentChatId = resolveParentChatId(input);
+  const cwd = resolveSpawnCwd(parentChatId);
+  const body = await request('', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: input.type,
+      task: input.task,
+      parentChatId,
+      cwd,
+      ...(input.parentTurnId ? { parentTurnId: input.parentTurnId } : {}),
+      ...(input.parentToolCallId ? { parentToolCallId: input.parentToolCallId } : {}),
+      ...(input.providerId ? { providerId: input.providerId } : {}),
+      ...(input.modelId ? { modelId: input.modelId } : {}),
+    }),
+  });
+  if (body.run && typeof body.run === 'object') adoptRaw(body.run);
+  else if (typeof body.runId === 'string') {
+    ensureClient(body.runId);
+  }
+  const result: SpawnSubAgentResult = {
+    runId: String(body.runId),
+    status: (body.status as SubAgentStatus) ?? 'queued',
+  };
+  if (input.wait === true) return waitForSubAgent(result.runId);
+  return result;
+}
+
+/** Cancel by POSTing `/api/agents/:runId/cancel`. */
+export function cancelSubAgent(runId: string, _reason = 'cancelled'): CancelSubAgentResult {
+  const prev = runs.get(runId);
+  void request(`/${encodeURIComponent(runId)}/cancel`, { method: 'POST' })
+    .then((body) => {
+      if (body?.state?.runs) {
+        for (const raw of body.state.runs) {
+          if (raw && typeof raw === 'object') adoptRaw(raw);
+        }
+      } else if (body?.status && prev) {
+        publish({ ...prev, status: body.status, cancelled: body.status === 'cancelled' });
+      }
+    })
+    .catch((err) => {
+      console.error('[agents] cancel failed', err);
+    });
+  return { ok: true, runId, status: prev?.status ?? 'cancelled' };
+}
+
+export async function restartSubAgent(
+  runId: string,
+  extra: Partial<SpawnSubAgentInput> = {},
+): Promise<SpawnSubAgentResult | AggregateResult> {
+  const prev = runs.get(runId);
+  cancelSubAgent(runId, 'restart');
+  return spawnSubAgent({
+    type: extra.type ?? prev?.type ?? 'explore',
+    task: extra.task ?? prev?.task ?? '',
+    parentChatId: extra.parentChatId ?? prev?.parentChatId,
+    parentTurnId: extra.parentTurnId ?? prev?.parentTurnId,
+    parentToolCallId: extra.parentToolCallId ?? prev?.parentToolCallId,
+    wait: extra.wait,
+  });
+}
+
+export function cancelAllForParentTurn(parentTurnId: string): void {
+  for (const run of listSubAgentRunsForParentTurn(parentTurnId)) {
+    cancelSubAgent(run.runId, 'parent_turn_abort');
+  }
+}
+
+export async function waitForSubAgent(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<AggregateResult> {
+  const initial = getSubAgentRun(runId);
+  if (initial && isSubAgentRunTerminal(initial.status)) {
+    return buildAggregateResult(initial);
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (result: AggregateResult) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(result);
+    };
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(err);
+    };
+    const onAbort = () => {
+      fail(new DOMException('Aborted', 'AbortError'));
+      cancelSubAgent(runId, 'parent_abort');
+    };
+    let unsubscribe: (() => void) | null = null;
+    const cleanup = () => {
+      signal?.removeEventListener('abort', onAbort);
+      unsubscribe?.();
+    };
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+    signal?.addEventListener('abort', onAbort, { once: true });
+    unsubscribe = subscribeSubAgentRuns((run) => {
+      if (run.runId !== runId) return;
+      if (!isSubAgentRunTerminal(run.status)) return;
+      finish(buildAggregateResult(run));
+    });
+    const latest = getSubAgentRun(runId);
+    if (latest && isSubAgentRunTerminal(latest.status)) {
+      finish(buildAggregateResult(latest));
+    }
+  });
+}
+
+/**
+ * Live tool overlay comes from SSE `event: live`. This is a no-op so callers
+ * that used the controller log still compile, and grep finds no run-state
+ * mutation outside the SSE merge path (`mergeClientView`).
+ */
+export function recordToolCallForRun(
+  _runId: string,
+  _name: string,
+  _args: Record<string, unknown>,
+): void {}
+
+export function getRunToolCallFingerprint(_runId: string): string {
+  return '';
+}
+
+export function resetSubAgentOrchestrator(): void {
+  for (const client of clients.values()) client.close();
+  clients.clear();
+  runs.clear();
+  parentIndex.clear();
+  turnIndex.clear();
+  hydrating.clear();
+  deliverListeners.clear();
+  clearSubAgentRunListeners();
+}
+
+export const resetSubAgentController = resetSubAgentOrchestrator;
+
+/** @deprecated Persistence is the journal at ~/.minnow/agents/<parentChatId>/. */
+export function initControllerPersistence(): Promise<void> {
+  return Promise.resolve();
+}
+
+/** @deprecated The SSE store is ready without a registry hydrate. */
+export function ensureControllerReady(): Promise<void> {
+  return Promise.resolve();
+}
+
+// ---------------------------------------------------------------------------
+// Parent-facing formatters (pure reads of SubAgentRun — no mutation)
+// ---------------------------------------------------------------------------
+
+function utf8ByteLength(text: string): number {
+  return new TextEncoder().encode(text).length;
+}
+
+export function deriveSubAgentTerminalReason(run: SubAgentRun): SubAgentTerminalReason | undefined {
+  if (run.status !== 'completed' && run.status !== 'failed' && run.status !== 'cancelled') {
+    return undefined;
+  }
+  if (run.status === 'cancelled') return 'cancelled';
+  if (isMaxToolTurnFailure(run.summary, run.error)) return 'max_tool_turns';
+  if (isContextBudgetFailure(run.error)) return 'context_budget';
+  if (run.status === 'failed') return 'failed';
+  return 'success';
+}
+
+function outcomeForRun(run: SubAgentRun) {
+  if (run.structuredOutcome) return run.structuredOutcome;
+  if (!isSubAgentRunTerminal(run.status)) return null;
+  return legacyOutcomeFromSummary(run.summary);
+}
+
+export function formatAggregateResult(result: AggregateResult): string {
+  let json = JSON.stringify(result, null, 2);
+  if (utf8ByteLength(json) <= AGGREGATE_MAX_BYTES) return json;
+  const suffix = '\n…[truncated]';
+  while (utf8ByteLength(json + suffix) > AGGREGATE_MAX_BYTES && json.length > 0) {
+    json = json.slice(0, Math.floor(json.length * 0.9));
+  }
+  return json + suffix;
+}
+
+export function buildAggregateResult(run: SubAgentRun): AggregateResult {
+  const outcome = run.structuredOutcome
+    ? run.structuredOutcome
+    : legacyOutcomeFromSummary(run.summary);
+  const out: AggregateResult = {
+    runId: run.runId,
+    type: run.type,
+    status: run.status,
+    summary: outcome.summary,
+    outcome,
+    startedAt: run.startedAt,
+    endedAt: run.endedAt,
+    toolTurns: run.toolTurns,
+    cancelled: run.cancelled,
+  };
+  if (run.error) out.error = run.error;
+  const terminalReason = deriveSubAgentTerminalReason(run);
+  if (terminalReason) out.terminalReason = terminalReason;
+  if (run.budgetEvents?.length) {
+    const lastEstimate = run.budgetEvents[run.budgetEvents.length - 1]?.estimatedTokens;
+    out.contextBudget = {
+      maxInputTokens: run.contextBudgetMaxInputTokens ?? 0,
+      estimatedInputTokens: lastEstimate ?? 0,
+      policy: run.contextBudgetPolicy ?? DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
+      events: run.budgetEvents.map((e) => e.label),
+    };
+  }
+  return out;
+}
+
+function lastNonSystemPreview(messages: SubAgentRun['messages']): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i] as { role?: string; content?: unknown };
+    if (!m || m.role === 'system') continue;
+    let text = '';
+    if (typeof m.content === 'string') text = m.content;
+    else if (m.content != null) text = JSON.stringify(m.content);
+    const t = text.trim();
+    if (!t) continue;
+    return t.length > STATUS_PREVIEW_MAX ? `${t.slice(0, STATUS_PREVIEW_MAX)}…` : t;
+  }
+  return '';
+}
+
+export function formatSubAgentListToolResult(parentTurnId: string | null | undefined): string {
+  const rows = listSubAgentRunsForParentTurn(parentTurnId).map((r) => ({
+    runId: r.runId,
+    type: r.type,
+    status: r.status,
+    taskPreview: r.task.length > 120 ? `${r.task.slice(0, 120)}…` : r.task,
+    startedAt: r.startedAt,
+    toolTurns: r.toolTurns,
+    liveNestedToolCalls: r.liveNestedToolCalls,
+  }));
+  return JSON.stringify({ runs: rows }, null, 2);
+}
+
+export function formatSubAgentListToolResultForChat(
+  parentChatId: string,
+  persisted: PersistedSubAgentRun[] | undefined,
+): string {
+  const live = listSubAgentRunsForParentChat(parentChatId);
+  const liveIds = new Set(live.map((r) => r.runId));
+  const rows = live.map((r) => ({
+    runId: r.runId,
+    type: r.type,
+    status: r.status,
+    taskPreview: r.task.length > 120 ? `${r.task.slice(0, 120)}…` : r.task,
+    startedAt: r.startedAt,
+    toolTurns: r.toolTurns,
+    liveNestedToolCalls: r.liveNestedToolCalls,
+  }));
+  for (const p of persisted ?? []) {
+    if (liveIds.has(p.runId)) continue;
+    rows.push({
+      runId: p.runId,
+      type: p.type,
+      status: p.status,
+      taskPreview: p.task.length > 120 ? `${p.task.slice(0, 120)}…` : p.task,
+      startedAt: p.startedAt ?? null,
+      toolTurns: p.toolTurns,
+      liveNestedToolCalls: undefined,
+    });
+  }
+  rows.sort((a, b) => String(a.startedAt ?? '').localeCompare(String(b.startedAt ?? '')));
+  return JSON.stringify({ runs: rows }, null, 2);
+}
+
+export function buildSubAgentStatusPayload(run: SubAgentRun): Record<string, unknown> {
+  const success = run.status === 'completed' && !isMaxToolTurnFailure(run.summary, run.error);
+  const outcome = outcomeForRun(run);
+  const preview = lastNonSystemPreview(run.messages);
+  const payload: Record<string, unknown> = {
+    runId: run.runId,
+    type: run.type,
+    status: run.status,
+    success,
+    summary: outcome?.summary ?? preview,
+    ...(outcome ? { outcome } : {}),
+    startedAt: run.startedAt,
+    endedAt: run.endedAt,
+    toolTurns: run.toolTurns,
+    cancelled: run.cancelled,
+    lastMessagePreview: preview,
+  };
+  if (run.error) payload.error = run.error;
+  if (run.liveNestedToolCalls != null) payload.liveNestedToolCalls = run.liveNestedToolCalls;
+  if (run.liveCurrentToolName) payload.liveCurrentToolName = run.liveCurrentToolName;
+  if (run.livePhase) payload.livePhase = run.livePhase;
+  if (run.livePartialReasoning) payload.livePartialReasoning = run.livePartialReasoning;
+  if (run.startError) payload.startError = run.startError;
+  if (run.modelId) payload.modelId = run.modelId;
+  if (run.providerId) payload.providerId = run.providerId;
+  if (run.budgetEvents?.length) payload.budgetEvents = run.budgetEvents;
+  const terminalReason = deriveSubAgentTerminalReason(run);
+  if (terminalReason) payload.terminalReason = terminalReason;
+  return payload;
+}
+
+export function assertSubAgentRunReadableByParent(
+  run: SubAgentRun | undefined,
+  ctx: { parentChatId: string; parentTurnId?: string },
+): SubAgentRun {
+  if (!run) throw new Error('Error: unknown sub-agent run');
+  if (!run.parentChatId || run.parentChatId !== ctx.parentChatId) {
+    throw new Error('Error: sub-agent run is not visible from this chat');
+  }
+  return run;
+}

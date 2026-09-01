@@ -4,7 +4,7 @@
  * Completions: server default is `postChatCompletionsInProcess` in
  * `generation-binding.js` (generations store, no HTTP hop). This file's
  * `postChatCompletionsHttp` remains for tests that POST a fake host directly.
- * The renderer adapter (`src/agents/sub-agent-runner.ts`) keeps HTTP
+ * The renderer (`src/agents/renderer-runner-deps.ts`) keeps HTTP
  * `/api/generations` via `src/providers/fetch-chat.ts`.
  * Server default for tools is `createInProcessToolDispatch` in
  * `tool-dispatch.js` (same registry as POST `/api/tools`, no HTTP hop).

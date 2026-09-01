@@ -351,10 +351,14 @@ describe('engine — one report per run', () => {
   });
 
   it('calls the writer from exactly one function in the engine', () => {
-    const source = fs.readFileSync(path.join(ORCH_DIR, 'engine.js'), 'utf8');
-    assert.match(source, /from '\.\/report\.js'/);
-    assert.equal([...source.matchAll(/\bmaybeWriteEndOfRunReport\s*\(/g)].length, 3);
-    assert.equal([...source.matchAll(/\bwriteEndOfRunReport\s*\(/g)].length, 1);
+    const engine = fs.readFileSync(path.join(ORCH_DIR, 'engine.js'), 'utf8');
+    const graph = fs.readFileSync(path.join(ORCH_DIR, 'board-graph.js'), 'utf8');
+    // P8-B: the engine talks to the injected graph hook, not report.js.
+    assert.match(engine, /graph\.writeReport/);
+    assert.equal([...engine.matchAll(/\bmaybeWriteEndOfRunReport\s*\(/g)].length, 3);
+    // Board graph is the module that imports the writer and calls it.
+    assert.match(graph, /from '\.\/report\.js'/);
+    assert.equal([...graph.matchAll(/\bwriteEndOfRunReport\s*\(/g)].length, 1);
   });
 });
 

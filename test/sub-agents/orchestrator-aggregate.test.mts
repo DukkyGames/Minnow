@@ -1,21 +1,15 @@
 import assert from 'node:assert/strict';
 import { beforeEach, describe, test } from 'node:test';
 import {
+  adoptSubAgentRunForTests,
   buildAggregateResult,
   formatAggregateResult,
+  getSubAgentRun,
   resetSubAgentOrchestrator,
-  spawnSubAgent,
 } from '../../src/agents/orchestrator.ts';
 import { resetSubAgentConfigCache } from '../../src/agents/sub-agent-config.ts';
-import {
-  resetSubAgentRunIdFactory,
-  setSubAgentRunIdFactory,
-} from '../../src/agents/sub-agent-run-id.ts';
-import {
-  resetSubAgentRunnerFactory,
-  setSubAgentRunnerFactory,
-} from '../../src/agents/sub-agent-runner.ts';
-import { createMockSubAgentRunner, FIXED_RUN_ID } from './test-helpers.mts';
+import type { SubAgentRun } from '../../src/agents/types.ts';
+import { FIXED_RUN_ID } from './test-helpers.mts';
 
 const EXPECTED_SHAPE = `{
   "runId": "11111111-1111-1111-1111-111111111111",
@@ -38,23 +32,34 @@ describe('orchestrator aggregate', () => {
   beforeEach(() => {
     resetSubAgentOrchestrator();
     resetSubAgentConfigCache();
-    resetSubAgentRunnerFactory();
-    resetSubAgentRunIdFactory();
-    setSubAgentRunIdFactory(() => FIXED_RUN_ID);
-    setSubAgentRunnerFactory(() => createMockSubAgentRunner());
   });
 
-  test('mock runner aggregate JSON static shape (timestamps nulled)', async () => {
-    const result = await spawnSubAgent({
+  test('seeded run aggregate JSON static shape (timestamps nulled)', () => {
+    const run: SubAgentRun = {
+      runId: FIXED_RUN_ID,
       type: 'explore',
       task: 'static test',
-      wait: true,
-    });
-
-    if (!('summary' in result)) {
-      assert.fail('expected aggregate');
-    }
-
+      status: 'completed',
+      parentChatId: null,
+      parentToolCallId: null,
+      parentTurnId: null,
+      summary: 'FIXED_SUMMARY',
+      error: null,
+      startedAt: null,
+      endedAt: null,
+      toolTurns: 0,
+      cancelled: false,
+      messages: [],
+      structuredOutcome: {
+        summary: 'FIXED_SUMMARY',
+        findings: [],
+        artifacts: [],
+      },
+    };
+    adoptSubAgentRunForTests(run);
+    const live = getSubAgentRun(FIXED_RUN_ID);
+    assert.ok(live);
+    const result = buildAggregateResult(live);
     const forCompare = { ...result, startedAt: null, endedAt: null };
     const json = formatAggregateResult(forCompare);
     assert.equal(json, EXPECTED_SHAPE);

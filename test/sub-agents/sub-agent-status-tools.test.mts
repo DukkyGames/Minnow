@@ -3,6 +3,8 @@ import { beforeEach, describe, test } from 'node:test';
 import {
   buildSubAgentStatusPayload,
   resetSubAgentOrchestrator,
+  setSubAgentApiFetchForTests,
+  setSubAgentOpenStreamForTests,
 } from '../../src/agents/orchestrator.ts';
 import type { SubAgentRun } from '../../src/agents/types.ts';
 import { resetSubAgentConfigCache, setRuntimeSubAgentOverrides } from '../../src/agents/sub-agent-config.ts';
@@ -11,15 +13,10 @@ import {
   setSubAgentRunIdFactory,
 } from '../../src/agents/sub-agent-run-id.ts';
 import {
-  resetSubAgentRunnerFactory,
-  setSubAgentRunnerFactory,
-} from '../../src/agents/sub-agent-runner.ts';
-import {
   executeSubAgentTool,
   setSubAgentExecutorContext,
 } from '../../src/tools/sub-agent-executor.ts';
 import {
-  createMockSubAgentRunner,
   FIXED_RUN_ID,
   nextFixedRunId,
   resetRunIdCounter,
@@ -57,12 +54,69 @@ describe('sub-agent status tools', () => {
   beforeEach(() => {
     resetSubAgentOrchestrator();
     resetSubAgentConfigCache();
-    resetSubAgentRunnerFactory();
     resetSubAgentRunIdFactory();
     resetRunIdCounter();
-    setSubAgentRunnerFactory(() => createMockSubAgentRunner({ delayMs: 20 }));
     setSubAgentRunIdFactory(() => FIXED_RUN_ID);
     setSubAgentExecutorContext(null);
+    setSubAgentOpenStreamForTests(() => ({ addEventListener() {}, close() {} }));
+    let n = 0;
+    const fakeFetch: typeof fetch = async (input, init) => {
+      const method = init?.method ?? 'GET';
+      const url = String(input);
+      if (method === 'POST' && !url.includes('/cancel')) {
+        n += 1;
+        const req = JSON.parse(String(init?.body ?? '{}')) as {
+          type: string;
+          task: string;
+          parentChatId: string;
+          parentTurnId?: string;
+          parentToolCallId?: string;
+        };
+        const runId =
+          n === 1 && req.task !== 'long' && req.task !== 'queued task'
+            ? FIXED_RUN_ID
+            : `11111111-1111-1111-1111-${String(n).padStart(12, '0')}`;
+        const terminal = req.task !== 'long' && req.task !== 'queued task';
+        const run = {
+          runId,
+          type: req.type,
+          task: req.task,
+          parentChatId: req.parentChatId,
+          parentTurnId: req.parentTurnId ?? null,
+          parentToolCallId: req.parentToolCallId ?? null,
+          cwd: '/tmp',
+          requestedAt: 1,
+          phase: terminal ? 'passed' : 'running',
+          attempts: terminal
+            ? [
+                {
+                  attemptId: 'a1',
+                  ended: true,
+                  outcome: 'pass',
+                  summary: 'FIXED_SUMMARY',
+                  seedKind: 'initial',
+                  seed: {},
+                },
+              ]
+            : [],
+          delivered: false,
+        };
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            runId,
+            status: terminal ? 'completed' : 'running',
+            run,
+          }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({ ok: false, error: `unexpected ${method} ${url}` }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+    setSubAgentApiFetchForTests(fakeFetch);
   });
 
   test('list_sub_agents requires parent chat context', async () => {
@@ -118,7 +172,7 @@ describe('sub-agent status tools', () => {
     assert.equal(body.runId, FIXED_RUN_ID);
     assert.equal(body.status, 'completed');
     assert.equal(body.summary, 'FIXED_SUMMARY');
-    assert.ok(body.lastMessagePreview.length > 0);
+    // The fold does not carry the transcript; lastMessagePreview is an overlay.
   });
 
   test('get_sub_agent_status allows run from an earlier parent turn in the same chat', async () => {
@@ -176,7 +230,6 @@ describe('sub-agent status tools', () => {
     resetRunIdCounter();
 
     setRuntimeSubAgentOverrides({ globalMaxConcurrent: 1 });
-    setSubAgentRunnerFactory(() => createMockSubAgentRunner({ delayMs: 400 }));
 
     setSubAgentExecutorContext({
       parentTurnId: 'turn-parallel',

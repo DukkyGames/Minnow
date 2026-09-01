@@ -208,37 +208,40 @@ describe('server/runner package guard', () => {
     );
   });
 
-  it('the renderer adapter does not contain the turn loop', () => {
-    const adapter = fs.readFileSync(path.join(PROJECT_ROOT, ADAPTER_ENTRY), 'utf8');
+  it('the renderer sub-agent adapter is deleted (P8-G)', () => {
     assert.equal(
-      adapter.includes('streamSubAgentTurnOnce'),
+      fs.existsSync(path.join(PROJECT_ROOT, 'src', 'agents', 'sub-agent-runner.ts')),
       false,
-      'src/agents/sub-agent-runner.ts still contains the loop',
+      'src/agents/sub-agent-runner.ts must not exist',
     );
-    assert.ok(
-      adapter.includes('createSubAgentRunner'),
-      'adapter must wire createSubAgentRunner',
+    assert.equal(
+      fs.existsSync(path.join(PROJECT_ROOT, 'src', 'agents', 'controller')),
+      false,
+      'src/agents/controller/ must not exist',
     );
   });
 
-  it('the renderer adapter does not import in-process tool dispatch', () => {
-    // P6-A extracted HTTP completions + headless batch into renderer-runner-deps.ts.
-    // Both files are renderer wiring; neither may pull Node-only adapters into Vite.
-    const adapter = fs.readFileSync(path.join(PROJECT_ROOT, ADAPTER_ENTRY), 'utf8');
-    const deps = fs.readFileSync(
-      path.join(PROJECT_ROOT, 'src', 'agents', 'renderer-runner-deps.ts'),
-      'utf8',
+  it('renderer RunnerDeps does not contain the turn loop', () => {
+    const deps = fs.readFileSync(path.join(PROJECT_ROOT, ADAPTER_ENTRY), 'utf8');
+    assert.equal(
+      deps.includes('streamSubAgentTurnOnce'),
+      false,
+      'src/agents/renderer-runner-deps.ts must not contain the loop',
     );
-    const specifiers = [...importSpecifiers(adapter), ...importSpecifiers(deps)];
+  });
+
+  it('renderer RunnerDeps does not import in-process tool dispatch', () => {
+    const deps = fs.readFileSync(path.join(PROJECT_ROOT, ADAPTER_ENTRY), 'utf8');
+    const specifiers = importSpecifiers(deps);
     assert.equal(
       specifiers.some((s) => s.includes('tool-dispatch')),
       false,
-      'adapter must not import server/runner/tool-dispatch (tools-middleware into Vite)',
+      'renderer RunnerDeps must not import server/runner/tool-dispatch (tools-middleware into Vite)',
     );
     assert.equal(
       specifiers.some((s) => s.includes('tools-middleware')),
       false,
-      'adapter must not import tools-middleware',
+      'renderer RunnerDeps must not import tools-middleware',
     );
     assert.ok(
       specifiers.some((s) => s.includes('headless-tool-batch')),
@@ -247,7 +250,7 @@ describe('server/runner package guard', () => {
     assert.equal(
       specifiers.some((s) => s.includes('runner/node')),
       false,
-      'adapter must not import server/runner/node.js (Node adapters into Vite)',
+      'renderer RunnerDeps must not import server/runner/node.js (Node adapters into Vite)',
     );
   });
 

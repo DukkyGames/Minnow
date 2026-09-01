@@ -527,9 +527,7 @@ async function mountGlobalSubAgentLimits(mount: HTMLElement): Promise<void> {
 
   const limitsHint = el('p', 'settings-field-hint');
   limitsHint.append(
-    'Default timeout is the wall-clock budget for one sub-agent run; a caller that passes its own timeout wins. Check-in nudge reminds the parent agent once while a sub-agent runs (Build, General, and Research only; 0 turns it off). Neither affects stall detection — that lives under ',
-    linkToSettingsSection('Watchdog', 'watchdog'),
-    ' → Agent supervision.',
+    'Default timeout is the wall-clock budget for one sub-agent attempt; a caller that passes its own timeout wins. A timeout is a typed exit retried by policy. Check-in nudge reminds the parent agent once while a sub-agent runs (Build, General, and Research only; 0 turns it off).',
   );
   groupBody.appendChild(limitsHint);
 

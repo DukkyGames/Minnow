@@ -13,6 +13,8 @@ export function snapshotPath(boardId: string): string;
  */
 export function readEvents(boardId: string): Promise<Record<string, unknown>[]>;
 
+export function readHighestSeq(boardId: string): Promise<number>;
+
 /**
  * Append one event, assigning `seq` and stamping `ts`. Validated before the
  * write, so an invalid event never reaches disk. Appends are serialised per
@@ -50,6 +52,8 @@ export function loadAbandonments(
 
 export function createBoard(boardId: string): Promise<void>;
 export function boardExists(boardId: string): Promise<boolean>;
+/** Remove a board and everything under it — P9-E. False when there was nothing. */
+export function deleteBoard(boardId: string): Promise<boolean>;
 export function listBoards(): Promise<string[]>;
 
 /** Drop per-process caches. For tests that move MINNOW_HOME between cases. */

@@ -79,6 +79,12 @@
   color: var(--mn-fg);
 }
 
+/* Consecutive start failures: a counter in existing card chrome, not a toast. */
+.sub-agent-card__error,
+.sub-agent-overlay__error {
+  color: var(--mn-danger);
+}
+
 .sub-agent-card__meta {
   margin-top: 6px;
   font-size: 11px;

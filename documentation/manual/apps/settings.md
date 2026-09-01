@@ -46,26 +46,18 @@ Theme family and mode — 16 themes in total, eight families each with a dark an
 | **Rules** | Standing instructions injected into every prompt, organised into groups |
 | **Agent packs** | Download a template or the built-in pack, upload a zip, manage installed packs |
 | **Autopilot** | Defaults for orchestrate boards: Running or Stopped start, git worktree isolation (not host containment), concurrency, planner model, retries, self-heal, infra provisioning |
-| **Watchdog** | Generation limits while streaming, plus agent stall, heartbeat, and loop detection |
+| **Watchdog** | Generation limits while streaming. Sub-agent crash/timeout retry is the journal reconcile — wall-clock lives under Sub-agents |
 
-**Watchdog** is the setting to reach for when a run hangs and sits there forever. It has two halves.
+**Watchdog** is the setting to reach for when a generation hangs and sits there forever.
 
 **Generation timeouts** cover the model stream itself. The idle timeout resets whenever new tokens arrive, so it catches a genuinely stalled stream without cutting off a slow one. Either limit can be set to `0` to turn it off, or use **Enable generation timeouts**.
 
-**Agent supervision** covers agents — both sub-agents and orchestrate task chats. Use **Enable agent supervision** to turn the whole policy off, or set individual thresholds to `0`:
+Sub-agents do not use a heartbeat or stall supervisor. A crashed or timed-out sub-agent is retried from the journal. Wall-clock for one attempt is Settings → Agents → Sub-agents (default timeout and per-type timeout).
 
 | Setting | Default | What it does |
 |---------|---------|--------------|
 | **Idle timeout** | 60 min | How long the model may stop sending stream data before the generation is aborted (resets on each chunk) |
 | **Max duration** | 240 min | Hard wall-clock cap on a single generation |
-| **Stall timeout** | 300 sec | How long an agent may go without producing anything visible — streamed text, reasoning, or a tool call — before it counts as stuck |
-| **Unresponsive after** | 90 sec | How long without any heartbeat before the run is treated as dead. Liveness only, not model output |
-| **Heartbeat interval** | 10 sec | How often a running agent reports in |
-| **Repeated tool limit** | 25 | How many identical tool calls (same name and arguments) may occur close together before the run counts as looping. `0` turns it off |
-
-When a run trips one of these, read-only agents are restarted from scratch, bounded by **Max self-heal rounds** under Autopilot. Agents that can write files are not auto-restarted — the task is marked blocked instead.
-
-The stall timeout is the usual culprit behind a long plan review or research pass getting cut short: a model that reasons for two minutes in one non-streaming completion produces nothing observable for that whole time. Raise it before reaching for anything else. Repeats spread across a long run no longer count as a loop — only bunched-up identical calls do — so the repeated tool limit rarely needs changing.
 
 ### Integrations
 

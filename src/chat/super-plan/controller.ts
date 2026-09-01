@@ -139,9 +139,9 @@ function stopChatTurn(chatId: string): void {
     .catch(() => undefined);
 }
 
-/** Cancel the in-flight plan-reviewer sub-agent (lazy import keeps the UI chain out of tests). */
+/** Cancel the in-flight plan-reviewer sub-agent via POST /api/agents (SSE store). */
 function cancelReviewerSubAgent(runId: string): void {
-  void import('../../agents/controller/controller')
+  void import('../../agents/orchestrator')
     .then((m) => m.cancelSubAgent(runId, 'parent_abort'))
     .catch(() => undefined);
 }

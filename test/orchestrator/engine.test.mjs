@@ -1099,6 +1099,14 @@ describe('engine — what must not be in it', () => {
       assert.equal(source.includes(banned), false, `engine.js contains ${banned}`);
     }
   });
+
+  it('does not statically import core/plan.js or core/derive.js', async () => {
+    // P8-B: the graph is an argument. A static import would weld the engine
+    // to boards and block a second graph in the same process.
+    const source = await fs.readFile(ENGINE_SOURCE, 'utf8');
+    assert.doesNotMatch(source, /from\s+['"]\.\/core\/plan\.js['"]/);
+    assert.doesNotMatch(source, /from\s+['"]\.\/core\/derive\.js['"]/);
+  });
 });
 
 describe('engine — reopen after finish', { concurrency: 1 }, () => {

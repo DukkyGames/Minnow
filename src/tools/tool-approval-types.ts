@@ -22,4 +22,9 @@ export interface ToolApprovalRequest {
   pathWarning?: string;
   subAgentType?: string;
   workAgentId?: string | null;
+  /**
+   * When aborted, the queue resolves `cancel` without executing the tool.
+   * Abort while the strip is open also dismisses it (P8-A / MIN-754).
+   */
+  signal?: AbortSignal;
 }

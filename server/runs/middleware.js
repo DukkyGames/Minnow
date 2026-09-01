@@ -1,5 +1,8 @@
 /**
- * /api/config/runs/* — controller registry + write-ahead result persistence.
+ * /api/config/runs/* — leftover registry READS only (P8-G).
+ *
+ * Existing ~/.minnow/runs/registry/ files are left in place and never imported
+ * into the journal (no last-write-wins). Writes return 410.
  */
 
 import {
@@ -7,9 +10,6 @@ import {
   listRegistryRecords,
   readCommittedResult,
   readRegistryRecord,
-  supersedeOlderRegistryAttempts,
-  writeCommittedResult,
-  writeRegistryRecord,
 } from './store.js';
 
 function readJsonBody(req) {
@@ -68,13 +68,11 @@ export async function handleRunsConfigRequest(req, res, pathname) {
         return true;
       }
       if (req.method === 'PUT') {
-        const body = await readJsonBody(req);
-        if (!body || typeof body !== 'object' || body.runId !== runId) {
-          sendJson(res, 400, { error: 'runId mismatch' });
-          return true;
-        }
-        const saved = await writeRegistryRecord(body);
-        sendJson(res, 200, { ok: true, record: saved });
+        // P8-G: the journal is the record. Leftover ~/.minnow/runs/registry/
+        // files are left in place and never imported (no last-write-wins).
+        sendJson(res, 410, {
+          error: 'sub-agent registry writes are gone; the journal is the record',
+        });
         return true;
       }
     }
@@ -92,23 +90,17 @@ export async function handleRunsConfigRequest(req, res, pathname) {
         return true;
       }
       if (req.method === 'PUT') {
-        const body = await readJsonBody(req);
-        await writeCommittedResult(key, body);
-        sendJson(res, 200, { ok: true, key });
+        sendJson(res, 410, {
+          error: 'sub-agent result writes are gone; the journal is the record',
+        });
         return true;
       }
     }
 
     if (pathname === '/api/config/runs/supersede' && req.method === 'POST') {
-      const body = await readJsonBody(req);
-      const boardTaskId = body?.boardTaskId;
-      const attempt = Number(body?.attempt);
-      if (!boardTaskId || !Number.isFinite(attempt) || attempt < 1) {
-        sendJson(res, 400, { error: 'boardTaskId and attempt required' });
-        return true;
-      }
-      const updated = await supersedeOlderRegistryAttempts(boardTaskId, attempt);
-      sendJson(res, 200, { ok: true, updated });
+      sendJson(res, 410, {
+        error: 'sub-agent registry writes are gone; the journal is the record',
+      });
       return true;
     }
 

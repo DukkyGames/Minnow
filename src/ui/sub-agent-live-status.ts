@@ -30,6 +30,7 @@ export function subAgentLiveBadgeLabel(
   }
   if (run.status === 'queued') return 'Queued';
   const active = run as SubAgentRun;
+  if (active.startError) return `Retrying (${active.startError.consecutive})`;
   const tool = active.liveCurrentToolName?.trim();
   if (tool) return 'Calling tool';
   if (active.livePhase === 'thinking') return 'Thinking';
@@ -48,6 +49,9 @@ export function subAgentLiveStatusLine(
   }
   if (run.status === 'queued') return 'Queued — waiting for a concurrency slot…';
   const active = run as SubAgentRun;
+  if (active.startError) {
+    return `${active.startError.message} (${active.startError.consecutive})`;
+  }
   const tool = active.liveCurrentToolName?.trim();
   if (tool) return `Calling ${humanizeToolName(tool)}…`;
   if (active.livePhase === 'thinking') return STREAM_LABEL_THINKING;

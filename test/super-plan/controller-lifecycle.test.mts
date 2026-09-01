@@ -25,13 +25,11 @@ mock.module('../../src/chat/super-plan/stages.ts', {
   },
 });
 
-// mock.module replaces the whole module; agents/orchestrator.ts re-exports
-// everything from this file, and something in state/sessions.ts's transitive
-// graph loads that shim, so every real export must be present here too or
-// the mock silently never takes effect (see the tools/client.ts trap note in
-// test/chat/super-plan/stages.test.mts for the mechanism).
+// mock.module replaces the whole module. Super Plan abort dynamically
+// imports agents/orchestrator.ts; every real export must be present here
+// or the mock silently never takes effect (see test/chat/super-plan/stages.test.mts).
 let cancelSubAgentCalls: Array<{ runId: string; reason: string }> = [];
-mock.module('../../src/agents/controller/controller.ts', {
+mock.module('../../src/agents/orchestrator.ts', {
   namedExports: {
     cancelSubAgent: (runId: string, reason = 'cancelled') => {
       cancelSubAgentCalls.push({ runId, reason });
@@ -58,6 +56,13 @@ mock.module('../../src/agents/controller/controller.ts', {
     waitForSubAgent: async () => ({}),
     initControllerPersistence: async () => undefined,
     ensureControllerReady: async () => undefined,
+    subscribeSubAgentRuns: () => () => undefined,
+    subscribeSubAgentDeliver: () => () => undefined,
+    hydrateSubAgentRunsForParentChat: async () => undefined,
+    adoptSubAgentRunForTests: () => undefined,
+    setSubAgentApiFetchForTests: () => undefined,
+    setSubAgentOpenStreamForTests: () => undefined,
+    subAgentRunFromFold: () => ({}),
   },
 });
 

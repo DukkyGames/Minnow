@@ -74,6 +74,12 @@ export function showToolApprovalModal(
   request: ToolApprovalRequest,
 ): Promise<ToolApprovalModalResult> {
   return new Promise((resolve) => {
+    // Aborted before paint: never show the strip (cancelled run / Stop).
+    if (request.signal?.aborted) {
+      resolve('cancel');
+      return;
+    }
+
     const host = resolveToolApprovalHost();
     if (!host) {
       resolve('cancel');
@@ -216,9 +222,11 @@ export function showToolApprovalModal(
       [btnAllowOnce, btnAlways, btnCancel].filter((el) => !el.hasAttribute('disabled'));
 
     let settled = false;
+    const onAbort = (): void => finish('cancel');
     const finish = (value: ToolApprovalModalResult): void => {
       if (settled) return;
       settled = true;
+      request.signal?.removeEventListener('abort', onAbort);
       document.removeEventListener('keydown', onDocKeyDown, true);
       panel.removeEventListener('keydown', onPanelKeyDown);
       composerShell?.classList.remove('main-column--tool-approval-pending');
@@ -279,6 +287,8 @@ export function showToolApprovalModal(
     btnAllowOnce.addEventListener('click', () => finish('allow-once'));
     btnAlways.addEventListener('click', () => finish('always-allow'));
     btnCancel.addEventListener('click', () => finish('cancel'));
+
+    request.signal?.addEventListener('abort', onAbort, { once: true });
 
     document.addEventListener('keydown', onDocKeyDown, true);
     panel.addEventListener('keydown', onPanelKeyDown);

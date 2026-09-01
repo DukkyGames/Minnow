@@ -91,14 +91,6 @@ export interface SubAgentsFile {
    * `0` disables. Default 120_000 from shipped defaults.
    */
   checkInNudgeMs?: number;
-  /** Heartbeat tick interval H (ms); observe-only until Phase 2 watchdog. */
-  heartbeatIntervalMs?: number;
-  /** Progress stall threshold P (ms); observe-only until Phase 2. */
-  progressStallMs?: number;
-  /** Heartbeat dead threshold D (ms); observe-only until Phase 2. */
-  heartbeatDeadMs?: number;
-  /** Identical tool+args calls before watchdog flags repetition; `0` disables (default 5). */
-  duplicateToolCallThreshold?: number;
   defaultMaxInputTokens?: number | null;
   defaultContextEnforcementPolicy?: ContextEnforcementPolicy;
   defaultSummarySchema?: string;
@@ -157,20 +149,13 @@ export interface SubAgentRun {
   usage?: Usage;
   /** Timing stats per turn, averaged when rolled into parent lastStats. */
   stats?: Stats;
-  /** Last heartbeat tick (ms since visibility baseline; MIN-140 Phase 1). */
-  lastHeartbeatAt?: number | null;
-  /** Last progress bump (ms since visibility baseline; MIN-140 Phase 1). */
-  lastProgressAt?: number | null;
-  /** Monotonic progress counter (tool calls, stream deltas, transcript updates). */
-  progressSeq?: number;
-  /** Dispatch attempt (1-based; Phase 3 recovery may increment). */
-  attempt?: number;
-  /** Idempotency key minted at dispatch (Phase 3 result commit). */
-  idempotencyKey?: string | null;
-  /** Committed result ref when write-ahead completes (Phase 3). */
-  committedResultRef?: string | null;
-  /** When watchdog recovery respawns this run, waiters should follow this id. */
-  supersededByRunId?: string | null;
+  /**
+   * Start precondition failing (SSE `event: error`, P9-A). Not journaled.
+   * `consecutive` is a counter — the view must not toast once per tick.
+   */
+  startError?: { message: string; consecutive: number } | null;
+  /** Folded from `result.delivered`. The completion-push adapter reads this. */
+  delivered?: boolean;
 }
 
 /** Input to spawn a sub-agent. */

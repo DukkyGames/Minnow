@@ -353,7 +353,7 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   }),
   field('agents.autopilot', 'Orchestrator autopilot', 'agents', 'autopilot', {
     keywords: ['orchestrate', 'board', 'autopilot', 'concurrency', 'isolation'],
-    description: 'Global defaults for orchestrate board concurrency, planner model, and heartbeat.',
+    description: 'Global defaults for orchestrate board concurrency, planner model, and retries.',
   }),
   field('agents.autopilot.defaultStatus', 'New boards start', 'agents', 'autopilot', {
     keywords: ['running', 'stopped', 'start', 'unattended'],
@@ -362,32 +362,19 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   field('agents.autopilot.concurrency', 'Max concurrent tasks', 'agents', 'autopilot'),
   field('agents.autopilot.plannerModel', 'Default planner model', 'agents', 'autopilot'),
   field('agents.watchdog', 'Watchdog', 'agents', 'watchdog', {
-    keywords: ['timeout', 'stall', 'generation', 'streaming', 'heartbeat', 'recovery'],
+    keywords: ['timeout', 'generation', 'streaming', 'idle'],
     description:
-      'Limits that stop a hung run: generation timeouts plus agent stall and loop detection.',
+      'Idle and max-duration limits while streaming from the model. Sub-agent wall-clock lives under Sub-agents.',
   }),
   field('agents.watchdog.generation', 'Generation timeouts', 'agents', 'watchdog', {
     keywords: ['idle timeout', 'max duration', 'streaming', 'upstream'],
     description:
       'Idle and max-duration limits while streaming from the model. Idle timeout resets when new tokens arrive.',
   }),
-  field('agents.watchdog.supervision', 'Agent supervision', 'agents', 'watchdog', {
-    keywords: [
-      'stall',
-      'progress stall',
-      'heartbeat',
-      'heartbeat dead',
-      'unresponsive',
-      'duplicate tool',
-      'repeated tool',
-      'loop',
-      'repetition',
-      'recovery',
-      'sub-agent',
-      'plan review',
-    ],
+  field('agents.watchdog.supervision', 'Sub-agent recovery', 'agents', 'watchdog', {
+    keywords: ['sub-agent', 'timeout', 'crash', 'retry', 'reconcile', 'journal'],
     description:
-      'Stall timeout, heartbeat liveness, and repeated-tool loop detection for sub-agents and orchestrate task chats.',
+      'Crashed or timed-out sub-agents retry from the journal. Wall-clock budget is Sub-agents default/per-type timeout.',
   }),
   field('agents.autopilot.selfHeal', 'Self-heal & provisioning', 'agents', 'autopilot', {
     keywords: ['self-heal', 'provision', 'quarantine', 'infra', 'worktree', 'stall'],

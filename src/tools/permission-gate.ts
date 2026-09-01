@@ -198,6 +198,7 @@ export async function maybeBlockToolForUserApproval(
           workspace,
           subAgentType: context.subAgentType,
           workAgentId: context.workAgentId,
+          signal: context.signal,
         });
 
         if (decision === 'cancel') {
@@ -295,6 +296,7 @@ async function maybeEscalateShellSandbox(
     workspace,
     subAgentType: context.subAgentType,
     workAgentId: context.workAgentId,
+    signal: context.signal,
   });
 
   if (decision === 'cancel') {

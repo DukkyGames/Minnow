@@ -3,11 +3,10 @@
  */
 
 import { normalizeModeId } from '../chat/modes/types';
-import { listActiveSubAgentRuns, getSubAgentRun } from '../agents/orchestrator';
+import { listActiveSubAgentRuns, getSubAgentRun, hydrateSubAgentRunsForParentChat, listSubAgentRunsForParentChat } from '../agents/orchestrator';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import type { SubAgentRun } from '../agents/types';
 import { initSubAgentCompletionPush } from '../agents/sub-agent-completion-push';
-import { initOrchestratorAutoReports } from '../agents/controller/report';
 import { initSubAgentSessionPersistence } from '../state/sub-agent-session-sync';
 import { getActiveChat } from '../state/sessions';
 import { legacyOutcomeFromSummary } from '../agents/sub-agent-structured-outcome';
@@ -82,7 +81,12 @@ function fillCard(
   const subtitle = document.createElement('div');
   subtitle.className = 'sub-agent-card__subtitle';
   const liveLine = live ? subAgentLiveStatusLine(run, true) : '';
-  if (liveLine) {
+  const activeRun = run as SubAgentRun;
+  if (live && activeRun.startError) {
+    // Consecutive start failures are a counter, not one toast per tick (P9-A).
+    subtitle.className = 'sub-agent-card__subtitle sub-agent-card__error';
+    subtitle.textContent = `${activeRun.startError.message} (${activeRun.startError.consecutive})`;
+  } else if (liveLine) {
     subtitle.textContent = liveLine;
   } else {
     const outcome =
@@ -100,7 +104,6 @@ function fillCard(
   hint.className = 'sub-agent-card__hint';
   hint.textContent = 'Click to view details';
 
-  const activeRun = run as SubAgentRun;
   const nested =
     activeRun.liveNestedToolCalls != null && activeRun.liveNestedToolCalls > 0
       ? `${activeRun.liveNestedToolCalls} nested tool call(s)`
@@ -209,6 +212,13 @@ export function renderPersistedSubAgentCardsForChat(chat: Chat): void {
       upsertSubAgentCardForRun(run, chat.id);
     }
   }
+  // Reload source of truth: fold state from the server, including runs that
+  // completed while this chat was not painted.
+  void hydrateSubAgentRunsForParentChat(chat.id).then(() => {
+    for (const run of listSubAgentRunsForParentChat(chat.id)) {
+      upsertSubAgentCardForRun(run, chat.id);
+    }
+  });
 }
 
 /**
@@ -217,8 +227,13 @@ export function renderPersistedSubAgentCardsForChat(chat: Chat): void {
 export function initSubAgentUi(): void {
   initSubAgentSessionPersistence();
   initSubAgentCompletionPush();
-  initOrchestratorAutoReports();
   initSubAgentDrawerLiveUpdates();
+  try {
+    const chat = getActiveChat();
+    if (chat?.id) void hydrateSubAgentRunsForParentChat(chat.id);
+  } catch {
+    // Boot can run before a session exists.
+  }
   if (liveSubscriptionBound) return;
   liveSubscriptionBound = true;
   subscribeSubAgentRuns((run) => {

@@ -5,8 +5,8 @@
  * overlays around `runTurn`. Import from `server/runner/index.js` (isomorphic).
  * Never import `node.js` or `tool-dispatch.js`.
  *
- * Sub-agents still spawn *within* a turn via `src/agents/controller/` — Phase 8
- * owns that deletion. This file is not a second SSE/tool loop.
+ * Sub-agents spawn *within* a turn via POST `/api/agents` (P8-F store).
+ * This file is not a second SSE/tool loop.
  */
 
 import { runTurn } from '../../server/runner/index.js';

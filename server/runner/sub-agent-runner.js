@@ -2,8 +2,8 @@
  * Isolated sub-agent completion + tool loop (MIN-698).
  *
  * I/O is injected via createSubAgentRunner so this module never imports src/,
- * the session store, or a board. There is one implementation; the renderer
- * adapter is src/agents/sub-agent-runner.ts.
+ * the session store, or a board. There is one implementation. Renderer wiring
+ * is `src/agents/renderer-runner-deps.ts` (HTTP generations + headless tools).
  */
 import {
   extractAssistantCompletionText,
@@ -912,7 +912,42 @@ function createSubAgentRunner(deps) {
           }
         };
         let turnResult;
-        turnResult = await runSubTurnWithThinkingBudget();
+        try {
+          turnResult = await runSubTurnWithThinkingBudget();
+        } catch (streamErr) {
+          // Abort is a real cancel — do not mint a degraded complete.
+          if (input.signal?.aborted) throw streamErr;
+          const errName = streamErr instanceof Error ? streamErr.name : "";
+          if (errName === "AbortError" || errName === "TimeoutError") throw streamErr;
+          const prose = streamingAssistant.trim();
+          const hasPartial =
+            toolTurns > 0 ||
+            prose.length > 0 ||
+            messages.some((m) => m.role === "assistant");
+          // Empty first-turn HTTP still throws so board `runTurn` maps it to
+          // `crashed`. Mid-run failure keeps the transcript instead of discarding it.
+          if (!hasPartial) throw streamErr;
+          if (prose) {
+            messages.push({ role: "assistant", content: prose });
+          }
+          emitProgress(void 0, true);
+          const reason = streamErr instanceof Error ? streamErr.message : String(streamErr);
+          const legacy = legacyOutcomeFromSummary(prose || reason);
+          logSubAgentDebug("stream_error_partial_transcript", {
+            reason,
+            proseLen: prose.length,
+            toolTurns
+          });
+          return {
+            summary: legacy.summary,
+            structuredOutcome: legacy,
+            toolTurns,
+            messages,
+            budgetEvents: budgetEvents.length ? budgetEvents : void 0,
+            usage: usageSegments.length ? sumUsageSegments(usageSegments) : void 0,
+            stats: statsSegments.length ? averageStatsSegments(statsSegments) : void 0
+          };
+        }
         const subFinishReason = turnResult.finishReason || (turnResult.toolCalls.length > 0 ? "tool_calls" : void 0);
         const subStreamEnd = classifyStreamEnd({
           finishReason: subFinishReason,
@@ -1086,7 +1121,9 @@ function createSubAgentRunner(deps) {
           const firstFinal = await requestStructuredOutcome(false);
           const finalized = firstFinal.ok ? firstFinal : await requestStructuredOutcome(true);
           if (finalized.ok === false) {
-            if (prose.trim() && toolTurns > 0) {
+            // Real prose is enough: ask/research runs often call zero tools
+            // and used to settle `failed` on a JSON miss (P8-A / MIN-754).
+            if (prose.trim()) {
               return returnProseFallbackOutcome();
             }
             const parseError = finalized.parseError;
@@ -1112,7 +1149,7 @@ function createSubAgentRunner(deps) {
             stats: statsSegments.length ? averageStatsSegments(statsSegments) : void 0
           };
         } catch (finalErr) {
-          if (prose.trim() && toolTurns > 0) {
+          if (prose.trim()) {
             logSubAgentDebug("finalization_error_prose_fallback", {
               proseLen: prose.length,
               toolTurns,

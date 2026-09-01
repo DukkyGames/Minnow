@@ -1,15 +1,27 @@
 /**
- * Shared helpers for sub-agent orchestrator tests.
+ * Shared helpers for sub-agent store and runner tests (P8-G).
+ *
+ * The renderer adapter (`src/agents/sub-agent-runner.ts`) is gone. Runner
+ * unit tests wire `createSubAgentRunner(createRendererRunnerDeps())` here.
  */
 
-import { getSubAgentRun } from '../../src/agents/orchestrator.ts';
 import { isSubAgentRunTerminal } from '../../src/agents/sub-agent-outcome.ts';
-import { cloneSubAgentMessages } from '../../src/agents/sub-agent-runner.ts';
+import { createRendererRunnerDeps } from '../../src/agents/renderer-runner-deps.ts';
+import { getSubAgentRun } from '../../src/agents/orchestrator.ts';
 import type { SubAgentRunner } from '../../src/agents/types.ts';
 import type { ApiMessage } from '../../src/types.ts';
+import {
+  cloneSubAgentMessages,
+  createSubAgentRunner,
+} from '../../server/runner/index.js';
+
+export { cloneSubAgentMessages };
 
 export const FIXED_RUN_ID = '11111111-1111-1111-1111-111111111111';
 export const FIXED_SUMMARY = 'FIXED_SUMMARY';
+
+/** Same wiring the deleted renderer adapter used: HTTP generations + headless tools. */
+export const defaultSubAgentRunner = createSubAgentRunner(createRendererRunnerDeps());
 
 let runIdCounter = 0;
 
@@ -22,7 +34,7 @@ export function resetRunIdCounter(): void {
   runIdCounter = 0;
 }
 
-/** Poll until a sub-agent run reaches a terminal status (controller startup can be slow). */
+/** Poll until a sub-agent run in the SSE store reaches a terminal status. */
 export async function waitForSubAgentRunTerminal(
   runId: string,
   timeoutMs = 10_000,
@@ -39,7 +51,7 @@ export async function waitForSubAgentRunTerminal(
   );
 }
 
-/** Deterministic mock runner for unit tests. */
+/** Deterministic mock runner for unit tests that still inject a local loop. */
 export function createMockSubAgentRunner(
   options?: { summary?: string; delayMs?: number },
 ): SubAgentRunner {

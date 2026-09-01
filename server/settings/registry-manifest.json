@@ -1294,7 +1294,7 @@
   {
     "key": "agents.autopilot",
     "label": "Orchestrator autopilot",
-    "description": "Global defaults for orchestrate board concurrency, planner model, and heartbeat.",
+    "description": "Global defaults for orchestrate board concurrency, planner model, and retries.",
     "keywords": [
       "orchestrate",
       "board",
@@ -1387,14 +1387,12 @@
   {
     "key": "agents.watchdog",
     "label": "Watchdog",
-    "description": "Limits that stop a hung run: generation timeouts plus agent stall and loop detection.",
+    "description": "Idle and max-duration limits while streaming from the model. Sub-agent wall-clock lives under Sub-agents.",
     "keywords": [
       "timeout",
-      "stall",
       "generation",
       "streaming",
-      "heartbeat",
-      "recovery"
+      "idle"
     ],
     "category": "agents",
     "area": "watchdog",
@@ -1429,21 +1427,15 @@
   },
   {
     "key": "agents.watchdog.supervision",
-    "label": "Agent supervision",
-    "description": "Stall timeout, heartbeat liveness, and repeated-tool loop detection for sub-agents and orchestrate task chats.",
+    "label": "Sub-agent recovery",
+    "description": "Crashed or timed-out sub-agents retry from the journal. Wall-clock budget is Sub-agents default/per-type timeout.",
     "keywords": [
-      "stall",
-      "progress stall",
-      "heartbeat",
-      "heartbeat dead",
-      "unresponsive",
-      "duplicate tool",
-      "repeated tool",
-      "loop",
-      "repetition",
-      "recovery",
       "sub-agent",
-      "plan review"
+      "timeout",
+      "crash",
+      "retry",
+      "reconcile",
+      "journal"
     ],
     "category": "agents",
     "area": "watchdog",

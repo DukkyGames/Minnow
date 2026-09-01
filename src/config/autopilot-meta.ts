@@ -6,11 +6,6 @@
  */
 
 import {
-  clampHeartbeatDeadMs,
-  clampHeartbeatIntervalMs,
-  clampProgressStallMs,
-} from '../agents/sub-agent-config';
-import {
   foldAutopilotDefaultStatus,
 } from '../lib/leftover-autonomy.mjs';
 import { detectConfigServer } from './storage-mode';
@@ -36,12 +31,6 @@ export interface AutopilotMeta {
   maxFinalTestAttempts: number;
   /** When Continue should auto-route to a fresh summarized chat instead of nudging. */
   continueSmartRoute: AutopilotContinueSmartRoute;
-  /** @deprecated Read-only legacy fallback — see config/supervision-thresholds. */
-  heartbeatIntervalMs: number;
-  /** @deprecated Read-only legacy fallback — see config/supervision-thresholds. */
-  progressStallMs: number;
-  /** @deprecated Read-only legacy fallback — see config/supervision-thresholds. */
-  heartbeatDeadMs: number;
   plannerProviderId: string;
   plannerModelId: string;
   /** Max self-heal infra rounds before unconditional quarantine. */
@@ -72,9 +61,6 @@ export const DEFAULT_AUTOPILOT_META: AutopilotMeta = {
   maxBuildAttempts: FALLBACK_MAX_BUILD_ATTEMPTS,
   maxFinalTestAttempts: FALLBACK_MAX_FINAL_TEST_ATTEMPTS,
   continueSmartRoute: 'conservative',
-  heartbeatIntervalMs: 10_000,
-  progressStallMs: 300_000,
-  heartbeatDeadMs: 90_000,
   plannerProviderId: '',
   plannerModelId: '',
   selfHealMaxRounds: 4,
@@ -189,18 +175,6 @@ export function parseAutopilotMeta(raw: unknown): AutopilotMeta {
       DEFAULT_AUTOPILOT_META.maxFinalTestAttempts,
     ),
     continueSmartRoute: parseContinueSmartRoute(block.continueSmartRoute),
-    heartbeatIntervalMs: clampHeartbeatIntervalMs(
-      block.heartbeatIntervalMs,
-      DEFAULT_AUTOPILOT_META.heartbeatIntervalMs,
-    ),
-    progressStallMs: clampProgressStallMs(
-      block.progressStallMs,
-      DEFAULT_AUTOPILOT_META.progressStallMs,
-    ),
-    heartbeatDeadMs: clampHeartbeatDeadMs(
-      block.heartbeatDeadMs,
-      DEFAULT_AUTOPILOT_META.heartbeatDeadMs,
-    ),
     plannerProviderId: parseStringField(block.plannerProviderId),
     plannerModelId: parseStringField(block.plannerModelId),
     selfHealMaxRounds: clampSelfHealRounds(

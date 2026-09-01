@@ -1,5 +1,5 @@
 /**
- * Settings → Autopilot: global orchestrate board defaults (execution, retries, heartbeat, planner).
+ * Settings → Autopilot: global orchestrate board defaults (execution, retries, planner).
  */
 
 import '../styles/settings-general.css';
@@ -97,7 +97,9 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
 
   const lead = el('p', 'settings-section-lead');
   lead.append(
-    'Global defaults for orchestrate boards: concurrency, Running or Stopped start, git worktree isolation (not host containment), test retries, and planner model fallback. Per-board overrides stay on the board header. Stall and heartbeat thresholds live under ',
+    'Global defaults for orchestrate boards: concurrency, Running or Stopped start, git worktree isolation (not host containment), test retries, and planner model fallback. Per-board overrides stay on the board header. Sub-agent wall-clock lives under ',
+    linkToSettingsSection('Sub-agents', 'sub-agents'),
+    '; generation stream limits under ',
     linkToSettingsSection('Watchdog', 'watchdog'),
     '; work agents under ',
     linkToSettingsSection('Agents', 'agent-center'),
@@ -252,16 +254,6 @@ export async function renderAutopilotSettingsSection(mount: HTMLElement): Promis
         'When Continue would bloat a derailed build chat, hand off to a fresh summarized chat instead.',
     }).row,
   );
-
-  const heartbeatBody = appendSettingsGroup(
-    content,
-    'Heartbeat & stall',
-    'Stall and heartbeat thresholds now live on the Watchdog page — they apply to sub-agents and task chats alike.',
-    'agents.autopilot.heartbeat',
-  );
-  const heartbeatMoved = el('p', 'settings-field-hint');
-  heartbeatMoved.append('Open ', linkToSettingsSection('Watchdog', 'watchdog'), ' → Agent supervision.');
-  heartbeatBody.appendChild(heartbeatMoved);
 
   const plannerBody = appendSettingsGroup(
     content,

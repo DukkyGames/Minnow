@@ -1,44 +1,43 @@
 /**
- * Event-driven delivery of sub-agent results to the parent chat (non-orchestrate modes).
- * Coalesces completions while the parent is streaming; retries on transport errors.
+ * Parent-completion adapter (P8-E / P8-F / MIN-758 / MIN-759).
  *
- * A completion is only ever dropped from the queue once it is *known delivered*
- * (MIN-639). Every other outcome — a guard bailing out, a transport failure, a
- * parent that is still streaming — leaves the run pending and schedules another
- * attempt. When the parent can never accept the resume (chat deleted or
- * switched to orchestrate) the summary is surfaced as a notification and
- * persisted onto the chat instead of vanishing.
+ * The durable queue is the server journal fold (`pendingDeliveries` /
+ * `result.delivered` / `run.nudged`). Production does **not** keep a
+ * renderer-side memory journal — that was the P8-E interim until `/api/agents`
+ * existed. Completions now arrive as SSE `event: deliver` (never journaled);
+ * the server appends `result.delivered` after the notify returns.
+ *
+ * Session-local coalesce: if the parent is streaming when the frame arrives,
+ * delay the resume until stream end. The server cannot see streaming, so a
+ * reload during that delay is a known gap (document, do not invent a second
+ * queue).
+ *
+ * Tests may still inject a `DeliveryHandle` (`setSubAgentDeliveryHandleForTests`)
+ * so delivery.js can be driven without SSE. Production never installs one.
  */
 
 import { normalizeModeId } from '../chat/modes/types';
 import { buildSubAgentParentResumeMessage } from './sub-agent-resume-message';
-import {
-  isChatStreaming,
-  notifyChatStreamEnded,
-  subscribeChatStreamEnd,
-} from '../chat/streaming-state';
+import { isChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state';
 import { reportBackgroundError } from '../boot/report-background-error';
 import { findChatById } from '../state/sessions';
 import type { PersistedSubAgentRun } from '../types';
-import { getSubAgentRun, listSubAgentRunsForParentChat } from './orchestrator';
+import {
+  getSubAgentRun,
+  subscribeSubAgentDeliver,
+} from './orchestrator';
 import { isSubAgentRunTerminal } from './sub-agent-outcome';
 import { subscribeSubAgentRuns } from './sub-agent-events';
 import type { SubAgentRun } from './types';
-
-const pendingCompletionByChat = new Map<string, Set<string>>();
-const deliveredRunIds = new Set<string>();
-const nudgedRunIds = new Set<string>();
-const resumeInFlightByChat = new Set<string>();
-const retryTimerByChat = new Map<string, ReturnType<typeof setTimeout>>();
-
-/**
- * Backstop poll for a queue that no event will drain on its own: the parent
- * stream ended before the run settled, or delivery failed mid-flight. Cheap
- * because it only exists while something is actually pending.
- */
-const RETRY_DELAY_MS = 5_000;
+import { createDelivery, createMemoryJournal } from '../../server/sub-agents/delivery.js';
+import { derive, isTerminal, lastEndedAttempt } from '../../server/sub-agents/derive.js';
+import { makeEvent } from '../../server/sub-agents/events.js';
+import type { DeliveryHandle, ParentStatus } from '../../server/sub-agents/delivery.js';
+import type { RunState } from '../../server/sub-agents/types';
+import type { DeliverFrame } from './sub-agent-client';
 
 let pushInitialized = false;
+let ingestChain: Promise<void> = Promise.resolve();
 
 type CompletionDeliverFn = (
   chatId: string,
@@ -51,6 +50,124 @@ type CompletionNotifyFn = (chatId: string, run: SubAgentRun) => void;
 let deliverHook: CompletionDeliverFn | null = null;
 let notifyHook: CompletionNotifyFn | null = null;
 
+/**
+ * Test-only journal handle. Production is `null` — the server journal + SSE
+ * is the source of truth. Creating a memory journal here is what made a reload
+ * drop MIN-639's queue.
+ */
+let delivery: DeliveryHandle | null = null;
+
+/** Session-local delay while the parent streams. Not durable. */
+const delayedByChat = new Map<string, Array<DeliverFrame & { parentChatId: string }>>();
+
+function createAdapterDelivery(): DeliveryHandle {
+  const journal = createMemoryJournal();
+  return createDelivery({
+    journal,
+    retryDelayMs: 5_000,
+    sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+    parentStatus: adapterParentStatus,
+    buildMessage: adapterBuildMessage,
+    notifyUndeliverable: adapterNotify,
+    deliverToParent: adapterDeliver,
+    onDeliverError: (err) => reportBackgroundError('sub-agent-completion-push', err),
+  });
+}
+
+function adapterParentStatus(chatId: string): ParentStatus {
+  const chat = findChatById(chatId);
+  if (!chat) return { streaming: false, skip: 'missing_chat' };
+  if (normalizeModeId(chat.modeId) === 'orchestrate') {
+    return { streaming: false, skip: 'orchestrate' };
+  }
+  return { streaming: isChatStreaming(chatId), skip: null };
+}
+
+function foldRunToSubAgentRun(run: RunState): SubAgentRun {
+  const last = lastEndedAttempt(run);
+  const status =
+    run.phase === 'passed' ? 'completed' : run.phase === 'cancelled' ? 'cancelled' : 'failed';
+  return {
+    runId: run.runId,
+    type: run.type,
+    task: run.task,
+    status,
+    parentChatId: run.parentChatId,
+    parentToolCallId: null,
+    parentTurnId: null,
+    summary: last?.summary ?? '',
+    error: null,
+    startedAt: run.requestedAt != null ? new Date(run.requestedAt).toISOString() : null,
+    endedAt: null,
+    toolTurns: 0,
+    cancelled: run.phase === 'cancelled',
+    messages: [],
+  };
+}
+
+function adapterBuildMessage(
+  kind: 'completion' | 'check_in_nudge',
+  runs: RunState[],
+  extra?: { elapsedSec?: number },
+): string {
+  const live = runs.map((r) => getSubAgentRun(r.runId) ?? foldRunToSubAgentRun(r));
+  if (kind === 'check_in_nudge') {
+    const run = live[0];
+    return buildSubAgentParentResumeMessage('check_in_nudge', run ? [run] : [], {
+      run: run ?? foldRunToSubAgentRun(runs[0]),
+      elapsedSec: extra?.elapsedSec ?? 0,
+    });
+  }
+  return buildSubAgentParentResumeMessage('completion', live);
+}
+
+async function adapterDeliver(
+  chatId: string,
+  message: string,
+  meta: { kind: string; runIds: string[] },
+): Promise<void> {
+  const deliver = deliverHook ?? defaultDeliverResume;
+  await deliver(chatId, message, meta.runIds);
+}
+
+function adapterNotify(chatId: string, run: RunState): void {
+  const live = getSubAgentRun(run.runId) ?? foldRunToSubAgentRun(run);
+  if (notifyHook) {
+    notifyHook(chatId, live);
+    return;
+  }
+  void import('../state/sub-agent-session-sync')
+    .then((m) => m.persistSubAgentRunSnapshot(live))
+    .catch((err) => reportBackgroundError('sub-agent-completion-persist', err));
+
+  void import('../notifications/push')
+    .then(({ pushNotification }) => {
+      const summary = live.summary?.trim() || live.error?.trim() || '';
+      pushNotification({
+        kind: live.status === 'completed' ? 'sub_agent_complete' : 'sub_agent_failed',
+        title: `Background ${live.type} ${live.status}`,
+        preview: summary.slice(0, 280) || 'Finished with no summary',
+        chatId,
+        appId: 'code',
+        dedupeKey: `sub-agent-completion:${live.runId}`,
+      });
+    })
+    .catch((err) => reportBackgroundError('sub-agent-completion-notify', err));
+}
+
+async function defaultDeliverResume(
+  chatId: string,
+  message: string,
+  _runIdsToMark: string[],
+): Promise<void> {
+  const chat = findChatById(chatId);
+  if (!chat) return;
+  const { ensureChatHistoryLoaded } = await import('../state/sessions');
+  await ensureChatHistoryLoaded(chatId);
+  const { resumeParentChatWithMessage } = await import('../chat/run-turn-chat');
+  await resumeParentChatWithMessage(chat, message, { suppressUserEcho: true });
+}
+
 /** Tests: capture delivery without running the full chat loop. */
 export function setSubAgentCompletionDeliverHook(fn: CompletionDeliverFn | null): void {
   deliverHook = fn;
@@ -61,117 +178,178 @@ export function setSubAgentCompletionNotifyHook(fn: CompletionNotifyFn | null): 
   notifyHook = fn;
 }
 
-function isOrchestrateChat(chatId: string): boolean {
-  const chat = findChatById(chatId);
-  return Boolean(chat && normalizeModeId(chat.modeId) === 'orchestrate');
+/**
+ * Tests: replace the handle so a disk journal can back the adapter.
+ * Production never installs one — the server journal is the queue.
+ */
+export function setSubAgentDeliveryHandleForTests(handle: DeliveryHandle | null): void {
+  delivery = handle;
+}
+
+function parseRequestedAt(run: SubAgentRun): number {
+  if (!run.startedAt) return 0;
+  const ms = Date.parse(run.startedAt);
+  return Number.isSafeInteger(ms) ? ms : 0;
 }
 
 /**
- * Why a resume can never land on this chat, or `null` when it can.
- *
- * Split out from the old boolean so the enqueue path can treat `orchestrate`
- * (the board owns delivery — nothing was lost) differently from a chat that has
- * gone away underneath a queued completion.
+ * Bridge a store `SubAgentRun` onto a test journal. Production spawn
+ * POSTs `/api/agents` and never takes this path.
  */
-type PushSkipReason = 'missing_chat' | 'orchestrate';
+async function ingestControllerRun(run: SubAgentRun): Promise<void> {
+  if (!delivery) return;
+  const chatId = run.parentChatId?.trim();
+  if (!chatId) return;
+  const journal = delivery.journal;
+  const state = await journal.loadState(chatId);
+  let rec = state.runs.get(run.runId);
 
-function pushSkipReason(chatId: string): PushSkipReason | null {
-  const chat = findChatById(chatId);
-  if (!chat) return 'missing_chat';
-  // Orchestrate / V2 boards own delivery via the journal; leftover V1
-  // user-stopped-on-incomplete-board skip is gone (MIN-714).
-  if (normalizeModeId(chat.modeId) === 'orchestrate') return 'orchestrate';
-  return null;
-}
+  if (!rec) {
+    await journal.appendEvent(
+      chatId,
+      makeEvent('run.requested', {
+        runId: run.runId,
+        agentType: run.type,
+        task: run.task ?? '',
+        parentChatId: chatId,
+        cwd: findChatById(chatId)?.workspacePath ?? '',
+        requestedAt: parseRequestedAt(run),
+      }),
+    );
+    rec = (await journal.loadState(chatId)).runs.get(run.runId);
+  }
+  if (!rec) return;
 
-function shouldSkipPushForChat(chatId: string): boolean {
-  return pushSkipReason(chatId) !== null;
-}
-
-function cancelRetryFlush(chatId: string): void {
-  const timer = retryTimerByChat.get(chatId);
-  if (timer === undefined) return;
-  clearTimeout(timer);
-  retryTimerByChat.delete(chatId);
-}
-
-/** Re-attempt a queue that still holds work after this pass (idempotent per chat). */
-function scheduleRetryFlush(chatId: string): void {
-  if (retryTimerByChat.has(chatId)) return;
-  const timer = setTimeout(() => {
-    retryTimerByChat.delete(chatId);
-    void flushPendingCompletions(chatId);
-  }, RETRY_DELAY_MS);
-  // Never hold a node test run (or an app quit) open on a backstop poll.
-  (timer as unknown as { unref?: () => void }).unref?.();
-  retryTimerByChat.set(chatId, timer);
-}
-
-/**
- * Last resort for a completion the parent chat can never accept: surface it in
- * the inbox and keep the transcript recoverable on the chat blob.
- */
-function notifyUndeliverableCompletion(chatId: string, run: SubAgentRun): void {
-  if (notifyHook) {
-    notifyHook(chatId, run);
+  if (isSubAgentRunTerminal(run.status) && !isTerminal(rec)) {
+    if (run.status === 'cancelled') {
+      await journal.appendEvent(chatId, makeEvent('run.cancelled', { runId: run.runId, reason: 'user' }));
+      return;
+    }
+    if (run.status === 'completed') {
+      const attemptId = rec.attempts[0]?.attemptId ?? `ingest-${run.runId}`;
+      if (rec.attempts.length === 0) {
+        await journal.appendEvent(
+          chatId,
+          makeEvent('attempt.started', { runId: run.runId, attemptId, seed: { kind: 'initial' } }),
+        );
+      }
+      const open = (await journal.loadState(chatId)).runs.get(run.runId);
+      const id = open?.attempts.find((a) => !a.ended)?.attemptId ?? attemptId;
+      await journal.appendEvent(
+        chatId,
+        makeEvent('attempt.ended', {
+          runId: run.runId,
+          attemptId: id,
+          outcome: 'pass',
+          summary: run.summary ?? '',
+        }),
+      );
+      return;
+    }
+    await journal.appendEvent(
+      chatId,
+      makeEvent('run.abandoned', { runId: run.runId, reason: 'failed' }),
+    );
     return;
   }
-  // `persistSubAgentRunSnapshot` no-ops when the chat is gone, which is exactly
-  // the deleted-chat case — the notification is then the only surface left.
-  void import('../state/sub-agent-session-sync')
-    .then((m) => m.persistSubAgentRunSnapshot(run))
-    .catch((err) => reportBackgroundError('sub-agent-completion-persist', err));
 
-  void import('../notifications/push')
-    .then(({ pushNotification }) => {
-      const summary = run.summary?.trim() || run.error?.trim() || '';
-      pushNotification({
-        kind: run.status === 'completed' ? 'sub_agent_complete' : 'sub_agent_failed',
-        title: `Background ${run.type} ${run.status}`,
-        preview: summary.slice(0, 280) || 'Finished with no summary',
-        chatId,
-        appId: 'code',
-        dedupeKey: `sub-agent-completion:${run.runId}`,
-      });
-    })
-    .catch((err) => reportBackgroundError('sub-agent-completion-notify', err));
-}
-
-/** Mark ids delivered-by-fallback so nothing retries or double-reports them. */
-function fallbackDeliverCompletions(chatId: string, runIds: Iterable<string>): void {
-  for (const runId of runIds) {
-    if (deliveredRunIds.has(runId)) continue;
-    const run = getSubAgentRun(runId);
-    deliveredRunIds.add(runId);
-    if (!run || !isSubAgentRunTerminal(run.status)) continue;
-    notifyUndeliverableCompletion(chatId, run);
+  if (
+    (run.status === 'running' || run.status === 'queued') &&
+    !isTerminal(rec) &&
+    !rec.attempts.some((a) => !a.ended)
+  ) {
+    await journal.appendEvent(
+      chatId,
+      makeEvent('attempt.started', {
+        runId: run.runId,
+        attemptId: `ingest-${run.runId}`,
+        seed: { kind: 'initial' },
+      }),
+    );
   }
 }
 
-function clearPendingForChat(chatId: string): void {
-  pendingCompletionByChat.delete(chatId);
-  cancelRetryFlush(chatId);
+function follow(work: () => Promise<void>): Promise<void> {
+  ingestChain = ingestChain.then(work, work);
+  return ingestChain;
 }
 
-function pendingSet(chatId: string): Set<string> {
-  let set = pendingCompletionByChat.get(chatId);
-  if (!set) {
-    set = new Set();
-    pendingCompletionByChat.set(chatId, set);
-  }
-  return set;
+async function ingestAndTick(run: SubAgentRun): Promise<void> {
+  await ingestControllerRun(run);
+  const chatId = run.parentChatId?.trim();
+  if (chatId && delivery) await delivery.tick(chatId);
 }
 
-function runsForDelivery(chatId: string, runIds: Iterable<string>): SubAgentRun[] {
-  const out: SubAgentRun[] = [];
-  for (const runId of runIds) {
-    if (deliveredRunIds.has(runId)) continue;
-    const live = getSubAgentRun(runId);
-    if (live && live.parentChatId === chatId && isSubAgentRunTerminal(live.status)) {
-      out.push(live);
-    }
+function onSubAgentRunUpdated(run: SubAgentRun): void {
+  // Production does not ingest into a renderer journal. Tests that inject a
+  // handle still need this bridge for unit coverage of coalesce / retry.
+  if (!delivery) return;
+  if (!run.parentChatId) return;
+  if (!isSubAgentRunTerminal(run.status)) return;
+  void follow(() => ingestAndTick(run));
+}
+
+async function resumeDeliverFrame(frame: DeliverFrame & { parentChatId: string }): Promise<void> {
+  const chatId = frame.parentChatId;
+  const chat = findChatById(chatId);
+  if (!chat) {
+    const run = getSubAgentRun(frame.runIds[0] ?? '');
+    if (run && notifyHook) notifyHook(chatId, run);
+    return;
   }
-  return out;
+  if (normalizeModeId(chat.modeId) === 'orchestrate') return;
+  const deliver = deliverHook ?? defaultDeliverResume;
+  await deliver(chatId, frame.message, frame.runIds);
+}
+
+function onDeliverFrame(frame: DeliverFrame & { runId: string }): void {
+  const parentChatId =
+    (frame as DeliverFrame & { parentChatId?: string }).parentChatId ??
+    getSubAgentRun(frame.runId)?.parentChatId ??
+    '';
+  if (!parentChatId) return;
+  const packed = { ...frame, parentChatId };
+  if (isChatStreaming(parentChatId)) {
+    const queued = delayedByChat.get(parentChatId) ?? [];
+    queued.push(packed);
+    delayedByChat.set(parentChatId, queued);
+    return;
+  }
+  void follow(() => resumeDeliverFrame(packed));
+}
+
+async function flushDelayed(chatId: string): Promise<void> {
+  const queued = delayedByChat.get(chatId) ?? [];
+  delayedByChat.delete(chatId);
+  for (const frame of queued) await resumeDeliverFrame(frame);
+}
+
+/**
+ * Drain every queued chat — called on chat switch, where a parent that was
+ * streaming when its sub-agent settled becomes deliverable again.
+ */
+export function flushAllPendingSubAgentCompletions(): void {
+  void follow(async () => {
+    for (const chatId of [...delayedByChat.keys()]) await flushDelayed(chatId);
+    if (delivery) await delivery.tickAll();
+  });
+}
+
+/** Fire a single check-in nudge for a long-running sub-agent (test helper). */
+export function fireSubAgentCheckInNudge(runId: string): Promise<void> {
+  const run = getSubAgentRun(runId);
+  if (!run?.parentChatId) return Promise.resolve();
+  if (run.status !== 'running' && run.status !== 'queued') return Promise.resolve();
+  if (!delivery) return Promise.resolve();
+  const handle = delivery;
+  return follow(async () => {
+    await ingestControllerRun(run);
+    await handle.offerNudge({
+      parentChatId: run.parentChatId as string,
+      runId,
+      elapsedSec: elapsedSeconds(run),
+    });
+  });
 }
 
 function elapsedSeconds(run: SubAgentRun): number {
@@ -181,175 +359,7 @@ function elapsedSeconds(run: SubAgentRun): number {
   return Math.max(0, Math.round((Date.now() - start) / 1000));
 }
 
-async function attemptDeliver(
-  chatId: string,
-  message: string,
-  runIdsToMark: string[],
-): Promise<void> {
-  const deliver = deliverHook ?? defaultDeliverResume;
-  await deliver(chatId, message, runIdsToMark);
-  for (const id of runIdsToMark) {
-    deliveredRunIds.add(id);
-  }
-}
-
-/**
- * Returns true only when the resume actually landed. Every `false` — guard bail
- * or failure — is a signal to the caller to keep the runs queued (MIN-639).
- */
-async function deliverResume(
-  chatId: string,
-  message: string,
-  runIdsToMark: string[],
-): Promise<boolean> {
-  if (resumeInFlightByChat.has(chatId)) return false;
-  const chat = findChatById(chatId);
-  if (!chat || shouldSkipPushForChat(chatId)) return false;
-  if (isChatStreaming(chatId)) return false;
-
-  resumeInFlightByChat.add(chatId);
-  try {
-    await attemptDeliver(chatId, message, runIdsToMark);
-    return true;
-  } catch (err) {
-    const messageText = err instanceof Error ? err.message : String(err);
-    const transient =
-      messageText.includes('Failed to fetch') || messageText.includes('NetworkError');
-    if (transient) {
-      await new Promise((r) => setTimeout(r, 1500));
-      try {
-        await attemptDeliver(chatId, message, runIdsToMark);
-        return true;
-      } catch (retryErr) {
-        reportBackgroundError('sub-agent-completion-push', retryErr);
-        return false;
-      }
-    }
-    reportBackgroundError('sub-agent-completion-push', err);
-    return false;
-  } finally {
-    resumeInFlightByChat.delete(chatId);
-  }
-}
-
-async function defaultDeliverResume(
-  chatId: string,
-  message: string,
-  _runIdsToMark: string[],
-): Promise<void> {
-  const chat = findChatById(chatId);
-  if (!chat) return;
-  // Category-3: hydrate before resume mutates history (runChatTurn also awaits).
-  const { ensureChatHistoryLoaded } = await import('../state/sessions');
-  await ensureChatHistoryLoaded(chatId);
-  const { resumeParentChatWithMessage } = await import('../chat/run-turn-chat');
-  await resumeParentChatWithMessage(chat, message, { suppressUserEcho: true });
-}
-
-async function flushPendingCompletions(chatId: string): Promise<void> {
-  const pending = pendingCompletionByChat.get(chatId);
-  if (!pending?.size) return;
-
-  if (shouldSkipPushForChat(chatId)) {
-    // The parent can never take this resume — hand it to the inbox rather than
-    // clearing the queue into the void.
-    fallbackDeliverCompletions(chatId, [...pending]);
-    clearPendingForChat(chatId);
-    return;
-  }
-  if (isChatStreaming(chatId)) {
-    // The stream-end listener normally wins the race; the timer covers the case
-    // where the stream ended before this run settled and nothing fires again.
-    scheduleRetryFlush(chatId);
-    return;
-  }
-
-  // Anything already delivered by another pass is done, queue or not.
-  for (const id of [...pending]) {
-    if (deliveredRunIds.has(id)) pending.delete(id);
-  }
-
-  const runs = runsForDelivery(chatId, [...pending]);
-  if (!runs.length) {
-    // Nothing left resolves to a live terminal run; it never will, so stop
-    // retrying rather than leaking the ids forever.
-    clearPendingForChat(chatId);
-    return;
-  }
-
-  const runIds = runs.map((r) => r.runId);
-  const body = buildSubAgentParentResumeMessage('completion', runs);
-  await deliverResume(chatId, body, runIds);
-
-  // Only ids that actually landed leave the queue.
-  for (const id of runIds) {
-    if (deliveredRunIds.has(id)) pending.delete(id);
-  }
-  if (pending.size === 0) {
-    clearPendingForChat(chatId);
-  } else {
-    scheduleRetryFlush(chatId);
-  }
-}
-
-function enqueueCompletion(run: SubAgentRun): void {
-  const chatId = run.parentChatId?.trim();
-  if (!chatId || !isSubAgentRunTerminal(run.status)) return;
-  if (deliveredRunIds.has(run.runId)) return;
-
-  const skip = pushSkipReason(chatId);
-  // Orchestrate boards deliver results themselves — staying quiet there is
-  // correct. Every other skip reason means this result has no other home.
-  if (skip === 'orchestrate') return;
-  if (skip) {
-    fallbackDeliverCompletions(chatId, [run.runId]);
-    return;
-  }
-
-  pendingSet(chatId).add(run.runId);
-  if (isChatStreaming(chatId)) {
-    scheduleRetryFlush(chatId);
-    return;
-  }
-  void flushPendingCompletions(chatId);
-}
-
-/**
- * Drain every queued chat — called on chat switch, where a parent that was
- * streaming when its sub-agent settled becomes deliverable again.
- */
-export function flushAllPendingSubAgentCompletions(): void {
-  for (const chatId of [...pendingCompletionByChat.keys()]) {
-    void flushPendingCompletions(chatId);
-  }
-}
-
-/** Fire a single check-in nudge for a long-running sub-agent (orchestrator timer). */
-export function fireSubAgentCheckInNudge(runId: string): void {
-  const run = getSubAgentRun(runId);
-  if (!run?.parentChatId) return;
-  if (run.status !== 'running' && run.status !== 'queued') return;
-  if (nudgedRunIds.has(runId)) return;
-  if (shouldSkipPushForChat(run.parentChatId)) return;
-  if (isChatStreaming(run.parentChatId)) return;
-
-  nudgedRunIds.add(runId);
-  const body = buildSubAgentParentResumeMessage('check_in_nudge', [run], {
-    run,
-    elapsedSec: elapsedSeconds(run),
-  });
-  void deliverResume(run.parentChatId, body, []);
-}
-
-function onSubAgentRunUpdated(run: SubAgentRun): void {
-  if (!run.parentChatId) return;
-  if (isSubAgentRunTerminal(run.status)) {
-    enqueueCompletion(run);
-    return;
-  }
-}
-
-/** Subscribe once: push completions and listen for parent stream end to flush batches. */
+/** Subscribe once: SSE deliver frames, plus the test ingest path when a handle is set. */
 export function initSubAgentCompletionPush(): void {
   if (pushInitialized) return;
   pushInitialized = true;
@@ -358,27 +368,34 @@ export function initSubAgentCompletionPush(): void {
     onSubAgentRunUpdated(run);
   });
 
+  subscribeSubAgentDeliver((frame) => {
+    onDeliverFrame(frame);
+  });
+
   subscribeChatStreamEnd((chatId) => {
-    void flushPendingCompletions(chatId);
+    void follow(async () => {
+      await flushDelayed(chatId);
+      if (delivery) await delivery.tick(chatId);
+    });
   });
 }
 
-/** Test reset. */
+/** Test reset. Installs a memory journal so existing unit tests keep working. */
 export function resetSubAgentCompletionPushForTests(): void {
   pushInitialized = false;
   deliverHook = null;
   notifyHook = null;
-  for (const timer of retryTimerByChat.values()) clearTimeout(timer);
-  retryTimerByChat.clear();
-  pendingCompletionByChat.clear();
-  deliveredRunIds.clear();
-  nudgedRunIds.clear();
-  resumeInFlightByChat.clear();
+  ingestChain = Promise.resolve();
+  delayedByChat.clear();
+  delivery?.reset();
+  delivery = createAdapterDelivery();
 }
 
 /** Tests: flush pending completions for a chat (after mocking streaming idle). */
 export async function flushSubAgentCompletionPushForChat(chatId: string): Promise<void> {
-  await flushPendingCompletions(chatId);
+  await ingestChain;
+  await flushDelayed(chatId);
+  if (delivery) await delivery.tick(chatId);
 }
 
 /** Resolve a run for parent tools: live orchestrator row or persisted session snapshot. */
@@ -418,4 +435,12 @@ function persistedRowToSubAgentRun(
     category: row.category,
     boardTaskId: row.boardTaskId,
   };
+}
+
+/** Tests: inspect the adapter fold without reaching into Sets. */
+export async function adapterDeliveryStateForTests(parentChatId: string) {
+  if (!delivery?.journal.readEvents) {
+    return derive([]);
+  }
+  return derive((await delivery.journal.readEvents(parentChatId)) ?? []);
 }

@@ -24,11 +24,14 @@ export interface ToolApprovalContext {
   extraPathRoots?: string[];
   /** Benchmark runs proceed without approval or path-ack modals. */
   benchmarkAutonomous?: boolean;
+  /** Cancels this approval (and dismisses the strip if it is showing). */
+  signal?: AbortSignal;
 }
 
 interface Queued {
   request: ToolApprovalRequest;
   resolve: (decision: ToolApprovalDecision) => void;
+  settled: boolean;
 }
 
 const queue: Queued[] = [];
@@ -39,12 +42,32 @@ export function hasPendingToolApproval(): boolean {
   return draining || queue.length > 0;
 }
 
+function settle(item: Queued, decision: ToolApprovalDecision): void {
+  if (item.settled) return;
+  item.settled = true;
+  item.resolve(decision);
+}
+
 /**
- * Queues a modal request. Resolves when the user chooses an action or closes the dialog.
+ * Queues a modal request. Resolves when the user chooses an action, closes the
+ * dialog, or the request's AbortSignal fires (`cancel`).
  */
 export function enqueueToolApproval(request: ToolApprovalRequest): Promise<ToolApprovalDecision> {
   return new Promise((resolve) => {
-    queue.push({ request, resolve });
+    if (request.signal?.aborted) {
+      resolve('cancel');
+      return;
+    }
+    const item: Queued = { request, resolve, settled: false };
+    const onAbort = (): void => {
+      const idx = queue.indexOf(item);
+      if (idx >= 0) {
+        queue.splice(idx, 1);
+      }
+      settle(item, 'cancel');
+    };
+    request.signal?.addEventListener('abort', onAbort, { once: true });
+    queue.push(item);
     void drainQueue();
   });
 }
@@ -55,14 +78,24 @@ async function drainQueue(): Promise<void> {
   if (!next) return;
   draining = true;
   try {
+    if (next.settled || next.request.signal?.aborted) {
+      settle(next, 'cancel');
+      return;
+    }
     const decision = await showToolApprovalModal(next.request);
-    next.resolve(decision);
+    settle(next, decision);
   } catch {
-    next.resolve('cancel');
+    settle(next, 'cancel');
   } finally {
     draining = false;
     if (queue.length > 0) {
       void drainQueue();
     }
   }
+}
+
+/** Drop queued entries so tests do not leak across cases. */
+export function resetApprovalQueueForTests(): void {
+  queue.length = 0;
+  draining = false;
 }

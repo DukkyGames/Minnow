@@ -9,7 +9,7 @@ isProject: true
 **Date:** 2026-08-28
 **Goal:** Replace the V1 board engine with a server-side journal + reconcile engine whose state is a pure fold, so multi-agent runs are as reliable as today's sequential single-agent path.
 **PRD:** [`orchestrator-v2.md`](./orchestrator-v2.md) — read it first. This document plans the build; it does not restate the design.
-**Linear:** [Orchestrator V2](https://linear.app/minnowai/project/orchestrator-v2-97ced8c22ad8) (team Minnow AI) — 8 phase parents, `MIN-677`–`MIN-683` plus `MIN-727`, with sub-issues `MIN-684`–`MIN-726` and `MIN-728`–`MIN-731`. Each sub-issue carries its own full plan. Phase 9 is filed as `MIN-741` with sub-issues `MIN-742`–`MIN-750`. Phase 8 is planned below but **not yet filed** — its ids are proposals.
+**Linear:** [Orchestrator V2](https://linear.app/minnowai/project/orchestrator-v2-97ced8c22ad8) (team Minnow AI) — phase parents `MIN-677`–`MIN-683`, `MIN-727`, `MIN-741`, `MIN-753`. Phase 8 is filed as `MIN-753` with sub-issues `MIN-754`–`MIN-761`. Phase 9 is `MIN-741` with `MIN-742`–`MIN-750`. Each sub-issue carries its own full plan.
 
 ## Context
 
@@ -510,7 +510,7 @@ Orchestration was from worktree `Orchestrator-V2-7b4e9c2a` on detached `HEAD` `9
 
 **Known findings (do not re-discover):** `parseReport`, `systemPrompt`, `AskCapability` / `askTimeoutMs`, `seedKind: 'continue'` / `messages`, `injectReportTool`, `nudgeToolUse` / `finalizeStructuredOutcome`, `TurnEvent.tool_streaming`, resume as a `postChatCompletions` wrap (not a `runTurn` option), SSE `\n\n` framing on `subscribeToGenerationRaw`. Boards still inject `report_outcome` and pass `ask: null`. No `isBoard` in `server/runner/`.
 
-**Phase 8 is not filed.** The sub-agent controller is **kept** (spawn-from-within-a-turn). P8-G deletes it.
+**Phase 8 is filed** as [MIN-753](https://linear.app/minnowai/issue/MIN-753) (`MIN-754`–`MIN-761`). The sub-agent controller is **kept** until P8-G. Orchestration started 2026-08-31 from worktree `Orchestrator-V2-a7f3c291` on detached `HEAD` `6cd75c0a` (Phases 0–7 and 9 Done in Linear).
 
 **Open sibling:** MIN-752 (workspace switch leak) is In Progress on this branch; not folded into Phase 6.
 
@@ -613,23 +613,124 @@ Full research plan: [`chat-stream-ui-lag.md`](./chat-stream-ui-lag.md). Phases 1
 ### Phase 8 — Sub-agents adopt the runner
 *Proves: the journal + reconcile that fixed boards fixes every background agent. Blocked only on Phase 2, which is done — this can start now, and should land before Phase 6.*
 
-**MIN-732 (to file)** · P8-A Stabilize the client loop · P8-B Engine + journal over an injected graph shape · P8-C Sub-agent graph — events, fold, `plan`, policy · P8-D Sub-agent effector over `runTurn()` · P8-E Parent delivery becomes a fold · P8-F Renderer as view · P8-G Delete the controller · P8-H E2E + reliability proof
+**[MIN-753](https://linear.app/minnowai/issue/MIN-753)** · [MIN-754](https://linear.app/minnowai/issue/MIN-754) P8-A Stabilize the client loop · [MIN-755](https://linear.app/minnowai/issue/MIN-755) P8-B Engine + journal over an injected graph shape · [MIN-756](https://linear.app/minnowai/issue/MIN-756) P8-C Sub-agent graph — events, fold, `plan`, policy · [MIN-757](https://linear.app/minnowai/issue/MIN-757) P8-D Sub-agent effector over `runTurn()` · [MIN-758](https://linear.app/minnowai/issue/MIN-758) P8-E Parent delivery becomes a fold · [MIN-759](https://linear.app/minnowai/issue/MIN-759) P8-F Renderer as view · [MIN-760](https://linear.app/minnowai/issue/MIN-760) P8-G Delete the controller · [MIN-761](https://linear.app/minnowai/issue/MIN-761) P8-H E2E + reliability proof
 
-- **P8-A — Stabilize the client loop (interim, ships to `main`).** Blocked on nothing; superseded by P8-G except the last item, which normal chat needs too. Reset the dispatch timeout on progress instead of firing on wall-clock (`armRunTimers`, `src/agents/controller/registry.ts`). Drop the `toolTurns > 0` condition on the prose fallback (`sub-agent-runner.ts:1318`) so a JSON parse failure with real prose completes degraded instead of `failed`. Retry non-ok HTTP with backoff and return the partial transcript on terminal failure (`sub-agent-runner.ts:337`). Give `enqueueToolApproval` an `AbortSignal` (`src/tools/approval-queue.ts`) so a cancelled run cannot execute its tool when the modal is answered minutes later.
+#### Phase 8 status
+
+Orchestration started 2026-08-31. Worktree: `C:\Users\dukky\.cursor\worktrees\Orchestrator-V2-a7f3c291` on detached `HEAD` `6cd75c0a`. **Phase 8 complete** (all eight sub-issues verify PASS 2026-08-31). Not committed. Not pushed.
+
+| Todo | Issue | Depends on | Status |
+| ---- | ----- | ---------- | ------ |
+| P8-A Stabilize the client loop | [MIN-754](https://linear.app/minnowai/issue/MIN-754) | — | **done** (verify PASS 2026-08-31) |
+| P8-B Engine + journal over an injected graph | [MIN-755](https://linear.app/minnowai/issue/MIN-755) | — | **done** (verify PASS 2026-08-31) |
+| P8-C Sub-agent graph | [MIN-756](https://linear.app/minnowai/issue/MIN-756) | P8-B | **done** (verify PASS 2026-08-31) |
+| P8-D Sub-agent effector | [MIN-757](https://linear.app/minnowai/issue/MIN-757) | P8-C | **done** (verify PASS 2026-08-31) |
+| P8-E Parent delivery as a fold | [MIN-758](https://linear.app/minnowai/issue/MIN-758) | P8-C | **done** (verify PASS 2026-08-31) |
+| P8-F Renderer as view | [MIN-759](https://linear.app/minnowai/issue/MIN-759) | P8-D, P8-E | **done** (verify PASS 2026-08-31) |
+| P8-G Delete the controller | [MIN-760](https://linear.app/minnowai/issue/MIN-760) | P8-F | **done** (verify PASS 2026-08-31) |
+| P8-H E2E + reliability | [MIN-761](https://linear.app/minnowai/issue/MIN-761) | P8-G | **done** (verify PASS 2026-08-31) |
+
+- **P8-A — Stabilize the client loop (interim, ships to `main`).** Blocked on nothing; superseded by P8-G except the last item, which normal chat needs too.
+  - [x] Reset the dispatch timeout on progress instead of firing on wall-clock (`armRunTimers`, `src/agents/controller/registry.ts`). Check-in nudge stays one-shot.
+  - [x] Drop the `toolTurns > 0` condition on the prose fallback (`server/runner/sub-agent-runner.js`) so a JSON parse failure with real prose completes degraded instead of `failed`.
+  - [x] Retry non-ok HTTP with backoff (`server/runner/transient-fetch-retry.js`) and return the partial transcript on terminal failure.
+  - [x] Give `enqueueToolApproval` an `AbortSignal` (`src/tools/approval-queue.ts`) so a cancelled run cannot execute its tool when the modal is answered minutes later.
 
 - **P8-B — Engine + journal over an injected graph shape.** `engine.js` statically imports `plan` from `core/plan.js` and `foldInto` from `core/derive.js`; `journal.js` is pathed on `boardDir(boardId)`. Both take `{ fold, plan }` and a journal namespace as arguments instead. Pure refactor — `BoardState` is untouched and the Phase 1 conformance suite is the regression test.
+  - [x] `createEngine` graph injection; `engine.js` has no static import from `core/plan.js` or `core/derive.js`
+  - [x] Journal namespace (`entryDir`); boards thin binding keeps `boardDir` / `journalPath` / `loadState` and `~/.minnow/boards/<id>/journal.jsonl`
+  - [x] `live-events.js` opaque subscribe key (`key ?? boardId`); payload `boardId` stays for the board SSE contract
+  - [x] Engine registry keyed on `(namespace, id)`; default namespace `'boards'` so `peekEngine(boardId)` still works
+  - [x] Throwaway two-event fake graph ticks through the same `createEngine` (`test/orchestrator/p8b-injected-graph.test.mjs`)
+  - [x] `.d.ts` files move with their modules
 
-- **P8-C — Sub-agent graph: events, fold, `plan`, policy.** Runs are independent: no `dependsOn`, no waves, no `touches`, no merge queue. Six events (`run.requested`, `attempt.started`, `attempt.ended`, `run.abandoned`, `run.cancelled`, `result.delivered`), one journal per parent chat at `~/.minnow/agents/<parentChatId>/journal.jsonl`. `plan()` is three rules: a non-terminal run with nothing in flight should be running, respect the concurrency cap, never two attempts on one run. The policy table takes the outcomes that kill runs today — `crashed | timeout | no_report` retry with a continue seed; `fail` past the cap abandons with evidence.
+- **P8-C — Sub-agent graph: events, fold, `plan`, policy.** Runs are independent: no `dependsOn`, no waves, no `touches`, no merge queue. Seven events (`run.requested`, `attempt.started`, `attempt.ended`, `run.abandoned`, `run.cancelled`, `result.delivered`, `run.nudged` — the last added in P8-E), one journal per parent chat at `~/.minnow/agents/<parentChatId>/journal.jsonl`. `plan()` is three rules: a non-terminal run with nothing in flight should be running, respect the concurrency cap, never two attempts on one run. The policy table takes the outcomes that kill runs today — `crashed | timeout | no_report` retry with a continue seed; `fail` past the cap abandons with evidence.
+  - [x] `server/sub-agents/*.js` + `*.d.ts` — events, fold, `plan`, policy, evidence, Graph object. Envelope matches P0-B (`v`, seq, ts, unknown types tolerated); payload union is new and is **not** in board `EVENT_SCHEMAS`. Product type is `agentType` on `run.requested` because envelope `type` is the discriminant.
+  - [x] Fold is a pure function of the event list — replay twice is byte-identical (`serializeState`). Attempt counts are a journal filter; no retry counter field.
+  - [x] `plan(state, caps)` — two caps as arguments (global default 3, per-type default 2). Core never reads `sub-agents.json`. Caps gate **starting**, not continuing; lowering mid-run does not kill in-flight work.
+  - [x] Worker role is `'sub-agent'` (`isAgentRole`); type names live on the run record. `eventsForStart` / `eventsForAttemptEnd` map to `attempt.started` / `attempt.ended`. Board-only hooks omitted.
+  - [x] Policy table is data (`POLICY_TABLE`), not a chain of ifs. `decide()` is last-attempt-only; the caller attaches the evidence bundle (full attempt list, never truncated; last transcript tail).
+  - [x] `result.delivered` is declared and folded so pending vs delivered is derivable. P8-E owns the write.
+  - [x] Purity guard `test/sub-agents/core-purity.test.mjs` — zero `node:fs` / `node:path` / `server/runner/`, no `Date.now` / `Math.random` / `fetch`.
+  - [x] Conformance `test/sub-agents/conformance.test.mjs` — generated spawn/cancel/end + cap moves, start-gate invariant after every `plan()`; fetch trap; `createEngine` + memory journal smoke.
 
 - **P8-D — Sub-agent effector over `runTurn()`.** Same shape as `effector-runner.js`. `sub-agents.json` stops being read by a client controller and becomes effector arguments: the per-type allow-list is `tools`, `summarySchema` is `parseReport`, the type prompt is `systemPrompt`, and `cwd` is finally passed — closing the gap where a sub-agent was never told which workspace it was in. `limits.wallClockMs` replaces the `setTimeout` kill, so a timeout is a typed exit routed through the policy table rather than a cancel that discards the work.
 
-- **P8-E — Parent delivery becomes a fold.** `sub-agent-completion-push.ts` holds `pendingCompletionByChat`, `deliveredRunIds`, and `nudgedRunIds` in renderer memory, so a reload loses the delivery queue MIN-639 built to never drop a result. Delivery becomes `result.delivered` in the journal: MIN-639's property is kept, and now survives restarts.
+#### P8-D (MIN-757) — in progress (implementer)
+
+- [x] `server/sub-agents/effector-runner.js` + `.d.ts` — `inspect` / `start` / `stop` / `onEnd`; `start()` resolves as soon as the attempt is in the live map
+- [x] Inspect-until-onEnd-resolved contract
+- [x] Map `sub-agents.json` onto `runTurn()` (tools once per type, `parseReport`, `systemPrompt`, `limits.wallClockMs`, context-budget deps, sampler/thinking)
+- [x] `cwd` required from `run.requested` (spawning workspace; no worktree; no silent default)
+- [x] Wall clock via `attempt-limits.js`; timeout is a typed exit, retryable with continue seed + transcript
+- [x] `headlessToolIdsForRole('sub-agent')` then per-type allow/deny; no `browser_drive_*`; spawn tools denied
+- [x] `ask: null` (MIN-724 on a background surface); no `isBoard` / `isSubAgent` in `server/runner/`; documented in `server/runner/README.md`
+- [x] Model binding server-side; live `onEvent` on opaque-keyed live channel; tokens never journaled
+- [x] Uncaught throw → `crashed`; `inspect()` empty at boot; `cancelOrphanedSubAgentGenerations` does not steal board `r-` ids
+- [x] `TurnResult.usage` on `attempt.ended`
+- [x] Engine wiring via `createEngine` / `getEngine(..., { namespace: 'agents', graph })` — **`engine.js` unmodified**
+- [x] Server config `config.js` (shipped JSON + `~/.minnow/sub-agents.json`); journal thin binding `journal.js`
+- [x] Tests in `test/sub-agents/effector-runner.test.mjs` against the fake model host
+- [x] No `runTurn` signature change (Phase 6 finding: none)
+
+- **P8-E — Parent delivery becomes a fold.** `sub-agent-completion-push.ts` held `pendingCompletionByChat`, `deliveredRunIds`, and `nudgedRunIds` in renderer memory, so a reload lost the delivery queue MIN-639 built to never drop a result. Delivery is now `result.delivered` / `run.nudged` in the journal: MIN-639's property is kept, and now survives restarts.
+
+#### P8-E (MIN-758) — in progress (implementer)
+
+- [x] Queue lives in the journal fold: pending = terminal without `result.delivered`; delivered = has one; nudged = `run.nudged` (added to the vocabulary + fold)
+- [x] `result.delivered` appended AFTER inject resolves, never before (same rule as `attempt.started`)
+- [x] Idempotency: `deliverToParent` once per `(runId, parentChatId)` per fold state
+- [x] Product behaviour kept: coalesce while parent streams, retry backoff, notify-and-persist when the parent can never accept a resume
+- [x] `buildSubAgentParentResumeMessage` copy unchanged
+- [x] Skip / undeliverable parent reaches a terminal journal state (`result.delivered` + `skipReason`)
+- [x] Server module `server/sub-agents/delivery.js` — injectable `deliverToParent` seam; boot `tickAll` re-offers pending
+- [x] Renderer `sub-agent-completion-push.ts` is a thin adapter (Sets removed; fold is the source of truth)
+- [x] Purity skip for `delivery.js`; not imported by derive / plan / policy
+- [x] Tests in `test/sub-agents/delivery.test.mjs` (journal, not a Set)
 
 - **P8-F — Renderer as view.** `/api/agents/*` REST + SSE mirroring `/api/boards/*`; the sub-agent drawer and run cards render derived state; spawn and cancel are POSTs. Live tokens ride the parallel `event: live` channel from P2-F and are never journaled.
 
+#### P8-F (MIN-759) — done (implementer)
+
+- [x] `server/sub-agents/middleware.js` ROUTES table + MUTATING_ROUTES; wired in `server/runtime/middlewares.js`
+- [x] POST spawn preflight (P9-A): unresolvable model is 400 at the spawn site
+- [x] SSE journal frames with `seq`; `event: live` / `error` / `deliver` never journaled; Last-Event-ID resume
+- [x] `src/agents/orchestrator.ts` SSE-backed store; same read API; spawn/cancel POST
+- [x] Drawer/cards/live-status render derived state; start-error is a counter
+- [x] Production completion-push uses server journal + SSE `event: deliver` (no `createMemoryJournal` in production); `bootAgentsRuntime()` ticks at boot
+- [x] HTTP tests `test/sub-agents/api.test.mjs`; DOM card states; grep gate `renderer-view-purity.test.mjs`
+- [x] `documentation/context.md` + this plan
+
 - **P8-G — Delete the controller.** `src/agents/controller/` (3,089 lines — watchdog, heartbeats, timers, registry mirror, boot reconcile) and the client `src/agents/sub-agent-runner.ts` (1,375). `sub-agent-config.ts` stays; it is configuration, and the effector reads it.
 
-- **P8-H — E2E + reliability proof.** Mirrors P2-G: spawn from a real chat with the UI closed, reload mid-run, restart mid-run, induce `fail` / `blocked` / killed host, record a 10-run reliability file. The gate is that a sub-agent survives what kills one today.
+#### P8-G (MIN-760) — done (implementer)
+
+- [x] `src/agents/controller/` deleted (controller, persistence, report, watchdog, wrapper, registry, scheduler, types)
+- [x] `src/agents/sub-agent-runner.ts` deleted (`server/runner/sub-agent-runner.js` stays)
+- [x] Super Plan abort POSTs cancel via `src/agents/orchestrator.ts` (no dynamic import of the controller)
+- [x] Dead config removed: `heartbeatIntervalMs`, `heartbeatDeadMs`, `progressStallMs`, `duplicateToolCallThreshold`. Keep `defaultTimeoutMs` / per-type `timeoutMs` as `limits.wallClockMs`
+- [x] Settings Watchdog copy describes journal reconcile + Sub-agents wall-clock, not heartbeat/stall
+- [x] Registry decision: **leave** existing `~/.minnow/runs/registry/` files. Do not import (no last-write-wins). Journal is the record. PUT/POST return 410; `writeRegistryRecord` is gone
+- [x] Controller-only tests retired; spawn/cancel/wait ported to `test/sub-agents/orchestrator-store.test.mts`; runner tests wire `createSubAgentRunner(createRendererRunnerDeps())`
+- [x] `grep -rn "lastHeartbeatAt\|tier1Attempted\|progressStallMs" src/` returns nothing
+- [x] `documentation/context.md` + this plan
+
+- **P8-H — E2E + reliability proof.** Mirrors P2-G: spawn from a real chat with the UI closed, reload mid-run, restart mid-run, induce `fail` / `blocked` / killed host, record a 10-run reliability file. The gate is that a sub-agent survives what kills one today. Leftover from P8-G: leftover registry files stay on disk until a user deletes them.
+
+#### P8-H (MIN-761) — in progress (implementer)
+
+- [x] HTTP `/api/agents/*` drive, UI closed, **zero renderer** in [`test/sub-agents/p8h-e2e.test.mjs`](../../test/sub-agents/p8h-e2e.test.mjs)
+- [x] Reload: GET state mid-run equals `derive(journal)`; run finishes
+- [x] Server restart: `vanishAll` (p5d `kill-server` analogue) → `inspect()` empty → tick reaps `crashed` → continue seed → completes
+- [x] Killed model host → `crashed` → retry
+- [x] `wallClockMs` → typed `timeout` → retry with continue seed (work is not discarded)
+- [x] `fail` past the cap → `run.abandoned` with the full evidence bundle
+- [x] Cancel while a tool waits on `AbortSignal` → the tool does not execute (P8-A re-asserted)
+- [x] Completion while parent is streaming, then reload → `result.delivered`
+- [x] Two runs at once exercise `globalMaxConcurrent` and the per-type cap against the live effector
+- [x] Ten-run reliability at [`test/sub-agents/p8h-reliability.json`](../../test/sub-agents/p8h-reliability.json) — ceiling stated in-file; live provider recorded separately (skipped when unreachable, never faked)
+- [x] No `runTurn` signature change (Phase 6 finding: none)
+- [x] `grep lastHeartbeatAt|tier1Attempted|progressStallMs src/` re-asserted empty
 
 Ordering note: this belongs *before* Phase 6, not after. Sub-agents force `ask_question` as an injected capability (MIN-724) on a background surface instead of on the composer, and they give `runTurn()` real non-board traffic before normal chat bets on it. Signature changes found here are recorded as Phase 6 findings, on the same list P2-E and P2-F write to — one interface, one findings log.
 
@@ -672,13 +773,13 @@ Ordering note: **before Phase 4.** Phase 4 deletes `orchestrate-board.ts` and it
 - [ ] An overnight AFK run finishes, reports once, and stalls on nothing (Phase 5 gate)
 - [x] A normal chat turn runs through `runTurn()`; `src/tools/loop.ts` is deleted; `ask_question` is injection-only (Phase 6 gate)
 - [x] Cloud and local streams leave composer/scroll/clicks responsive; local tok/s not regressed (Phase 7 gate — **automated half:** tsc + ticker + markdown + P7-B/C tests PASS. **Live half deferred:** Chromium / tok/s / mid-stream typing on cloud+local; worktree cannot steal port 9473 from the main-checkout Electron)
-- [ ] A sub-agent spawned from a chat survives a renderer reload and a server restart, and finishes (Phase 8 gate)
-- [ ] A sub-agent that runs past its wall-clock limit is retried by policy, not cancelled with its work discarded (Phase 8 gate)
+- [x] A sub-agent spawned from a chat survives a renderer reload and a server restart, and finishes (Phase 8 gate)
+- [x] A sub-agent that runs past its wall-clock limit is retried by policy, not cancelled with its work discarded (Phase 8 gate)
 - [x] Starting a board with no model bound fails at the button with a readable message, and never enters a silent retry loop (Phase 9 gate)
 - [x] Every failure that stops work from starting is visible on the board without opening a server log (Phase 9 gate)
 - [x] Tasks render as waves × kanban columns, and no column a card sits in is written by the renderer (Phase 9 gate)
 - [x] A failed task's attempt transcript is readable from the board (Phase 9 gate)
-- [ ] `grep -rn "lastHeartbeatAt\|tier1Attempted\|progressStallMs" src/` returns nothing (Phase 8 gate)
+- [x] `grep -rn "lastHeartbeatAt\|tier1Attempted\|progressStallMs" src/` returns nothing (Phase 8 gate)
 
 ## Notes for Build Agents
 

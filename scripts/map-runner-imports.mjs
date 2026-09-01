@@ -3,9 +3,9 @@
  * P2-A — reproducible import graph of the shared runner.
  *
  * Do not eyeball the closure. Default entry is the extracted loop
- * (`server/runner/sub-agent-runner.js`). Pass `--adapter` to walk the renderer
- * adapter instead (`src/agents/sub-agent-runner.ts`), which should only hit
- * inject seams plus `server/runner/`.
+ * (`server/runner/sub-agent-runner.js`). Pass `--adapter` to walk renderer
+ * RunnerDeps (`src/agents/renderer-runner-deps.ts`) instead of the deleted
+ * P2-A adapter (`src/agents/sub-agent-runner.ts`, removed in P8-G).
  *
  * Usage:
  *   node scripts/map-runner-imports.mjs
@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const SHARED_RUNNER_ENTRY = 'server/runner/sub-agent-runner.js';
-export const ADAPTER_ENTRY = 'src/agents/sub-agent-runner.ts';
+export const ADAPTER_ENTRY = 'src/agents/renderer-runner-deps.ts';
 
 /**
  * Import specifiers (resolved posix paths from repo root) that the extract

@@ -9,7 +9,8 @@ import {
   buildSubAgentStatusPayload,
   cancelSubAgent,
   getSubAgentRun,
-  listActiveSubAgentRuns,
+  hydrateSubAgentRunsForParentChat,
+  listSubAgentRunsForParentChat,
 } from '../agents/orchestrator';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import type { SubAgentRun } from '../agents/types';
@@ -93,15 +94,19 @@ function taskPreview(task: string, max = 90): string {
   return t.length > max ? `${t.slice(0, max)}…` : t;
 }
 
-/** All runs for a chat (persisted + live), de-duped, ordered by start time. */
+/** All runs for a chat (persisted + live store), de-duped, ordered by start time. */
 function listChatRuns(chatId: string): Array<{ run: AnyRun; live: boolean }> {
   const byId = new Map<string, { run: AnyRun; live: boolean }>();
   const chat = findChatById(chatId);
   for (const row of chat?.subAgentRuns ?? []) {
     byId.set(row.runId, { run: row, live: false });
   }
-  for (const run of listActiveSubAgentRuns()) {
-    if (run.parentChatId === chatId) byId.set(run.runId, { run, live: true });
+  // The store is the reload source of truth — include completed runs, not
+  // only in-flight ones. A run that finished with the drawer closed must
+  // still appear when it is next opened.
+  for (const run of listSubAgentRunsForParentChat(chatId)) {
+    const live = run.status === 'running' || run.status === 'queued';
+    byId.set(run.runId, { run, live });
   }
   return [...byId.values()].sort(
     (a, b) => timeKey(a.run.startedAt) - timeKey(b.run.startedAt),
@@ -262,7 +267,13 @@ function renderActiveRun(state: OverlayState, opts: { scroll: 'end' | 'sticky' }
 
   state.sheet.setAttribute('aria-label', `Sub-agent ${run.type}, ${label}`);
   state.headingType.textContent = run.type;
-  state.statusText.textContent = label;
+  const liveRunHeader = run as SubAgentRun;
+  if (live && liveRunHeader.startError) {
+    // Consecutive start failures are a counter, not one toast per tick (P9-A).
+    state.statusText.textContent = `Start failed (${liveRunHeader.startError.consecutive})`;
+  } else {
+    state.statusText.textContent = label;
+  }
   state.statusDot.className = `sub-agent-overlay__dot sub-agent-overlay__dot--${tone}`;
   state.runIdEl.textContent = run.runId;
 
@@ -285,6 +296,14 @@ function renderActiveRun(state: OverlayState, opts: { scroll: 'end' | 'sticky' }
 
   renderStructuredBlock(state.structuredRoot, run, live);
 
+  const liveRun = run as SubAgentRun;
+  if (live && liveRun.startError) {
+    const err = document.createElement('p');
+    err.className = 'sub-agent-overlay__error';
+    err.textContent = `${liveRun.startError.message} (${liveRun.startError.consecutive})`;
+    state.structuredRoot.appendChild(err);
+  }
+
   const hasStructured = Boolean(resolveOutcome(run, live));
   state.transcriptDetails.open = !hasStructured || !isTerminal(run.status);
   renderTranscriptView(
@@ -300,7 +319,10 @@ function renderActiveRun(state: OverlayState, opts: { scroll: 'end' | 'sticky' }
   if (cancellable) {
     const line = document.createElement('span');
     line.className = 'sub-agent-overlay__footer-status';
-    line.textContent = liveStatusLine(run as SubAgentRun) || 'Working…';
+    line.textContent =
+      (run as SubAgentRun).startError
+        ? `${(run as SubAgentRun).startError!.message} (${(run as SubAgentRun).startError!.consecutive})`
+        : liveStatusLine(run as SubAgentRun) || 'Working…';
     const cancelBtn = document.createElement('button');
     cancelBtn.type = 'button';
     cancelBtn.className = 'sub-agent-overlay__cancel';
@@ -416,9 +438,16 @@ export function closeSubAgentDrawer(): void {
 
 /**
  * Opens the overlay for one sub-agent run (live or persisted on the given chat).
+ * Hydrates from the server first so a reload shows every run in its fold state.
  */
 export function openSubAgentDrawer(runId: string, chatId: string): void {
   bindSubscription();
+  void hydrateSubAgentRunsForParentChat(chatId).then(() => {
+    mountSubAgentDrawer(runId, chatId);
+  });
+}
+
+function mountSubAgentDrawer(runId: string, chatId: string): void {
   const returnFocus = (document.activeElement as HTMLElement | null) ?? null;
   closeSubAgentDrawer();
   if (!resolveRunSnapshot(runId, chatId)) return;

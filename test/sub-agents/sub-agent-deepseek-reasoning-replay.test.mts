@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { defaultSubAgentRunner } from '../../src/agents/sub-agent-runner.ts';
+import { defaultSubAgentRunner } from './test-helpers.mts';
 import {
   resetSubAgentConfigCache,
   setRuntimeSubAgentOverrides,

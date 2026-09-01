@@ -1277,6 +1277,9 @@ export async function switchChat(id: string): Promise<void> {
   void import('../agents/sub-agent-completion-push')
     .then((m) => m.flushAllPendingSubAgentCompletions())
     .catch((err) => reportBackgroundError('sub-agent-completion-flush', err));
+  void import('../agents/orchestrator')
+    .then((m) => m.hydrateSubAgentRunsForParentChat(id))
+    .catch((err) => reportBackgroundError('sub-agent-hydrate', err));
   if (isOrchestrateHubMounted()) {
     teardownOrchestrateHub();
   }

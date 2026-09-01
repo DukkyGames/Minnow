@@ -3,8 +3,7 @@
  */
 
 import { abortByChatId, streamingChatIds } from '../app-state';
-import { listActiveSubAgentRuns } from '../agents/orchestrator';
-import { cancelSubAgent } from '../agents/controller/controller';
+import { cancelSubAgent, listActiveSubAgentRuns } from '../agents/orchestrator';
 import { listMainTurnActivity } from './main-turn-activity';
 import { isChatStreaming } from './streaming-state';
 import { cancelSuperPlan, isSuperPlanAdvancing } from './super-plan/controller';

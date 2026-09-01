@@ -59,7 +59,7 @@ Answering "you decide" to everything produces a plan where the model decided eve
 
 **Plan granularity** — large, medium or small — lives in the same section and controls how finely the resulting plan is split into tasks. That directly shapes the board you get next.
 
-If a review pass keeps getting cut short, the review timeout is only half the story: the watchdog also stops a reviewer that goes quiet for too long. See [Settings → Agents → Watchdog](../apps/settings.md) → Agent supervision for the stall timeout and repeated-tool limit.
+If a review pass keeps getting cut short, raise the reviewer timeout under Settings → Agents → Sub-agents (plan-reviewer type). Generation idle and max-duration limits live under [Settings → Agents → Watchdog](../apps/settings.md).
 
 ## What you end up with
 

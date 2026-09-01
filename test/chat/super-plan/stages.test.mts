@@ -95,6 +95,14 @@ mock.module('../../../src/agents/orchestrator.ts', {
     restartSubAgent: async () => ({ runId: '', status: 'queued' }),
     initControllerPersistence: async () => undefined,
     ensureControllerReady: async () => undefined,
+    subscribeSubAgentRuns: () => () => undefined,
+    subscribeSubAgentDeliver: () => () => undefined,
+    hydrateSubAgentRunsForParentChat: async () => undefined,
+    adoptSubAgentRunForTests: () => undefined,
+    setSubAgentApiFetchForTests: () => undefined,
+    setSubAgentOpenStreamForTests: () => undefined,
+    subAgentRunFromFold: () => ({}),
+    resetSubAgentController: () => undefined,
   },
 });
 

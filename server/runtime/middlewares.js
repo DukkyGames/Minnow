@@ -53,6 +53,15 @@ import {
   cancelOrphanedRunnerGenerations,
   createRunnerEffector,
 } from '../orchestrator/effector-runner.js';
+import {
+  createAgentsMiddleware,
+  setAgentsEffectorFactory,
+} from '../sub-agents/middleware.js';
+import {
+  cancelOrphanedSubAgentGenerations,
+  createSubAgentEffector,
+} from '../sub-agents/effector-runner.js';
+import { bootAgentsRuntime } from '../sub-agents/runtime.js';
 import { createBoardTestingMiddleware } from '../orchestrate/board-testing/middleware.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
 import { createToolsMiddleware } from './tools-middleware.js';
@@ -73,6 +82,11 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   // has an empty generations store; this is a no-op on a real boot.
   cancelOrphanedRunnerGenerations();
   setEffectorFactory((boardId) => createRunnerEffector({ boardId }));
+  // P8-F: sub-agents are a view of /api/agents. Spawn/cancel are POSTs;
+  // delivery tickAll re-offers pending completions after a restart.
+  cancelOrphanedSubAgentGenerations();
+  setAgentsEffectorFactory((parentChatId) => createSubAgentEffector({ parentChatId }));
+  void bootAgentsRuntime();
   connectApp.use(createAuthMiddleware());
   connectApp.use(createAuthRoutesMiddleware());
   connectApp.use(createDiagnosticsMiddleware());
@@ -87,6 +101,7 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createWorktreeMiddleware());
   connectApp.use(createOrchestrateMiddleware());
   connectApp.use(createBoardsMiddleware());
+  connectApp.use(createAgentsMiddleware());
   connectApp.use(createBoardTestingMiddleware());
   connectApp.use(createChatsWorkspaceMiddleware());
   connectApp.use(createDesktopWorkspaceMiddleware());

@@ -316,6 +316,44 @@ describe('runTurn without a successful report', () => {
     );
   });
 
+  test('P8-A: failed report parse is not no_report at the tool boundary; inner prose fallback does not mint a board pass', { timeout: 20_000 }, async () => {
+    // Shared runner also serves sub-agents. Dropping `toolTurns > 0` on the
+    // prose fallback must not let assistant text become a board `pass`.
+    // A rejected report is an Error: tool result the model can retry; only a
+    // later successful report_outcome is pass/fail/blocked. No successful
+    // report → no_report, even when the inner loop degrades to prose.
+    await withFake(
+      [
+        {
+          match: { nth: 0 },
+          emit: functionCallChunks(DEFAULT_REPORT_TOOL_NAME, { outcome: 'pass' }),
+        },
+        { emit: proseSseChunks('Here is a long research answer with no JSON report.') },
+      ],
+      async (baseUrl) => {
+        const events = [];
+        const result = await runTurn({
+          chatId: CHAT_UUID,
+          seed: 'Finish up.',
+          tools: [],
+          model: { providerId: 'local-fake', id: 'fake-model' },
+          onEvent: (event) => events.push(event),
+          deps: stubDeps(baseUrl),
+        });
+        assert.deepEqual(result, { outcome: 'no_report' });
+        assert.ok(
+          events.some(
+            (event) =>
+              event.type === 'tool_result' &&
+              event.name === DEFAULT_REPORT_TOOL_NAME &&
+              String(event.content).startsWith('Error:'),
+          ),
+          'the rejected call must surface an Error: tool result, not end the turn as no_report',
+        );
+      },
+    );
+  });
+
   test('malformed report can be retried inside the turn', { timeout: 20_000 }, async () => {
     const valid = {
       outcome: 'pass',

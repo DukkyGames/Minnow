@@ -5,7 +5,6 @@ import { appAlert, appConfirm, appPrompt } from './app-dialog';
 
 import { fetchWorkAgentsList } from '../agents/work-agent-prompt-api';
 import {
-  clampDuplicateToolCallThreshold,
   getSubAgentUserOverridesSync,
   loadSubAgentConfig,
   saveSubAgentConfigToServer,
@@ -1124,7 +1123,6 @@ async function renderSubAgentsSection(): Promise<void> {
         | 'globalMaxConcurrent'
         | 'defaultTimeoutMs'
         | 'checkInNudgeMs'
-        | 'duplicateToolCallThreshold'
         | 'defaultContextEnforcementPolicy'
       >
     >,
@@ -1173,21 +1171,6 @@ async function renderSubAgentsSection(): Promise<void> {
   nudgeWrap.appendChild(nudgeInput);
   nudgeWrap.appendChild(el('span', 'settings-kv-suffix', 'sec'));
 
-  const duplicateToolInput = document.createElement('input');
-  duplicateToolInput.type = 'number';
-  duplicateToolInput.className = 'settings-select settings-kv-input';
-  duplicateToolInput.min = '0';
-  duplicateToolInput.max = '256';
-  duplicateToolInput.step = '1';
-  duplicateToolInput.value = String(
-    config.duplicateToolCallThreshold ??
-      clampDuplicateToolCallThreshold(undefined),
-  );
-  duplicateToolInput.setAttribute(
-    'aria-label',
-    'Identical tool calls before watchdog flags repetition (0 disables)',
-  );
-
   const globalPolicySel = createGlobalContextPolicySelect(
     config.defaultContextEnforcementPolicy ?? 'summarize',
   );
@@ -1198,14 +1181,13 @@ async function renderSubAgentsSection(): Promise<void> {
     { term: 'Max concurrent', value: maxInput },
     { term: 'Default timeout', value: timeoutWrap },
     { term: 'Check-in nudge', value: nudgeWrap },
-    { term: 'Duplicate tool limit', value: duplicateToolInput },
     { term: 'Global context policy', value: globalPolicySel },
   ]);
 
   const globalBody = appendSettingsGroup(
     mount,
     'Global limits',
-    'While a sub-agent runs, remind the parent agent once after the check-in interval (Build, General, and Research only; not Orchestrate). Set 0 to turn off. Duplicate tool limit is how many identical tool calls (same name and arguments) trigger watchdog repetition recovery; set 0 to disable.',
+    'While a sub-agent runs, remind the parent agent once after the check-in interval (Build, General, and Research only; not Orchestrate). Set 0 to turn off. Default timeout is the wall-clock budget for one attempt; a timeout is a typed exit retried by policy.',
   );
   globalBody.appendChild(summary);
 
@@ -1284,14 +1266,6 @@ async function renderSubAgentsSection(): Promise<void> {
       rawSec <= 0 ? 0 : Math.min(1_800, Math.max(10, rawSec));
     nudgeInput.value = String(seconds);
     void persistGlobal({ checkInNudgeMs: secondsToMs(seconds) });
-  });
-
-  duplicateToolInput.addEventListener('change', () => {
-    const value = clampDuplicateToolCallThreshold(
-      Number(duplicateToolInput.value),
-    );
-    duplicateToolInput.value = String(value);
-    void persistGlobal({ duplicateToolCallThreshold: value });
   });
 
   globalPolicySel.addEventListener('change', () => {
@@ -1450,7 +1424,7 @@ async function renderWatchdogSection(): Promise<void> {
 
   const lead = el('p', 'settings-section-lead');
   lead.textContent =
-    'Limits that stop a run when it hangs: how long the model may stream without output, and how long an agent may go without visible progress before the watchdog recovers or blocks it. Applies to the next run; no restart needed.';
+    'Limits that stop a generation when the model stream hangs: idle (no tokens) and max duration. Sub-agent wall-clock and crash retry live under Sub-agents — there is no heartbeat supervisor.';
   shell.appendChild(lead);
 
   const content = el('div', 'settings-general__content');

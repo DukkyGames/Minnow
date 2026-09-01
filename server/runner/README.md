@@ -1,6 +1,7 @@
 # `server/runner` — shared headless turn loop
 
-Extract of `src/agents/sub-agent-runner.ts` (MIN-698 / P2-A). Plain `.js` + `.d.ts`
+Extract of the isolated sub-agent turn loop (MIN-698 / P2-A; originally
+`src/agents/sub-agent-runner.ts`, deleted in P8-G). Plain `.js` + `.d.ts`
 so the Node server can import it without a transpile step.
 
 The package does not know what a board is. Completions, tools, and transcripts
@@ -147,9 +148,10 @@ Default fallback role is `sub-agent` (agent family, not `utility` /
 specific type (`turn`, `explore`, …); those stay as-is. Aborting the `signal`
 calls `cancel(state)` so the upstream request stops.
 
-The renderer adapter (`src/agents/sub-agent-runner.ts`) keeps HTTP
-`/api/generations` via `src/providers/fetch-chat.ts`. `postChatCompletionsHttp`
-remains for tests that POST a fake host without the generations store.
+The renderer wires HTTP `/api/generations` via
+`src/agents/renderer-runner-deps.ts` (`src/providers/fetch-chat.ts`).
+`postChatCompletionsHttp` remains for tests that POST a fake host without
+the generations store.
 
 ## Tools — in-process dispatch (MIN-701 / P2-D)
 
@@ -182,3 +184,17 @@ Default unattended tool ids: `DEFAULT_HEADLESS_TOOL_IDS`. Renderer-only tools
 are enumerated in [`tool-set.md`](./tool-set.md) (port vs exclude). The default
 set contains none of them. The runner still does not know what a board is —
 the list is an argument.
+
+## Phase 8 — P8-D sub-agent effector (MIN-757)
+
+**No `runTurn` signature change.** Sub-agents are the second consumer of the
+existing options (`parseReport`, `systemPrompt`, `ask`, `seedKind: 'continue'`,
+`summarySchema`). The mapping lives in
+[`server/sub-agents/effector-runner.js`](../sub-agents/effector-runner.js).
+
+**MIN-724 on a background surface:** the sub-agent effector passes `ask: null`,
+the same as the board effector. `ask_question` is therefore absent from the
+resolved list. Unattended/headless has no human to answer; a fabricated call
+is an immediate tool error. A parent-injected `AskCapability` later is an
+**options argument on the effector** (default `null`), not an `isSubAgent`
+branch in this package. Do not add one.

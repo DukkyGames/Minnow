@@ -299,7 +299,7 @@ Per type: enabled, max concurrent, timeout, max input tokens, context policy, su
 |-------|----------|
 | Board defaults | Execution mode (`manual`/`sequential`/`auto`/`afk`), isolation (`auto`/`off`/`per-task`/`per-wave`), max concurrent tasks |
 | Test & build retries | Per-task test/build attempts, final test attempts, continue smart-route (`off`/`conservative`/`aggressive`) |
-| Heartbeat & stall | Moved to **Watchdog → Agent supervision** (the legacy `autopilot.heartbeatIntervalMs` / `progressStallMs` / `heartbeatDeadMs` keys are still read as a fallback, never written) |
+| Heartbeat & stall | Removed in P8-G. Leftover `autopilot.heartbeatIntervalMs` / `progressStallMs` / `heartbeatDeadMs` keys are stripped on save and are not read |
 | Planner model fallback | Provider + model |
 | Self-heal & provisioning | Max self-heal rounds, infra provision timeout, auto-provision infra, auto-restart stalled tasks, guard `cd` outside worktree |
 
@@ -318,18 +318,9 @@ Settings → **Agents → Watchdog**.
 
 Idle timeout resets when new tokens arrive; applies to the next generation without restart. Either limit may be set to `0` to disable it.
 
-**Agent supervision** (`sub-agents.json`) — one policy covering sub-agents *and* orchestrate task chats. Both write the same `heartbeatConfig` singleton in `agents/controller/wrapper`, so they must resolve from one store; `config/supervision-thresholds.ts` is that resolver.
+**Sub-agent recovery** is journal reconcile, not a heartbeat/stall watchdog. `heartbeatIntervalMs`, `heartbeatDeadMs`, `progressStallMs`, and `duplicateToolCallThreshold` were removed from `sub-agents.json`. Wall-clock for one attempt is `defaultTimeoutMs` / per-type `timeoutMs` (P8-D `limits.wallClockMs`). Crash/timeout retry is the policy table.
 
-| Setting | Key | Default |
-|---------|-----|-------|
-| Stall timeout | `progressStallMs` | 300 s (`0` = off) |
-| Unresponsive after | `heartbeatDeadMs` | 90 s (`0` = off) |
-| Heartbeat interval | `heartbeatIntervalMs` | 10 s (`0` = off) |
-| Repeated tool limit | `duplicateToolCallThreshold` | 25 (`0` = off) |
-
-Progress is bumped by streamed messages, live activity, and tool calls — a model that reasons for longer than the stall timeout in one non-streaming completion trips it. Repeated-tool detection uses a sliding window (`4x` the threshold, min 12 recent calls), so identical calls spread across a long run are ignored.
-
-On a trip: read-only agent types are restarted from scratch (tier 1) until `autopilot.selfHealMaxRounds` dispatches are used; write-capable types go straight to blocked (tier 2), except on running AFK/auto boards where they are re-dispatched under the same cap.
+Existing `~/.minnow/runs/registry/` files are **left in place** and never imported into the journal (no last-write-wins). The journal at `~/.minnow/agents/<parentChatId>/journal.jsonl` is the record. Registry PUT/POST return 410.
 
 ---
 

@@ -5,7 +5,8 @@
 import '../styles/code-overview.css';
 import { iconHtml } from './icon';
 
-import { loadRegistry, type PersistedRunRecord } from '../agents/controller/persistence';
+import { listActiveSubAgentRuns } from '../agents/orchestrator';
+import type { SubAgentRun } from '../agents/types';
 import { fetchBrainCodeStatus, fetchBrainStatus } from '../brain/client';
 import { fetchHardware } from '../models/hardware-client';
 import {
@@ -44,13 +45,6 @@ const MAIN_COLUMN_CLASS = 'main-column--code-overview';
 const POLL_RUNS_MS = 3000;
 const POLL_SLOW_MS = 10000;
 const RECENT_SESSION_LIMIT = 8;
-
-const TERMINAL_LIFECYCLES = new Set([
-  'completed',
-  'failed',
-  'cancelled',
-  'interrupted',
-]);
 
 let initialized = false;
 let returnChatId: string | null = null;
@@ -107,9 +101,8 @@ function formatElapsed(startedAt: string | null): string {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
-function isRunActive(record: PersistedRunRecord): boolean {
-  if (TERMINAL_LIFECYCLES.has(record.lifecycle)) return false;
-  return record.status === 'running' || record.status === 'queued';
+function isRunActive(run: SubAgentRun): boolean {
+  return run.status === 'queued' || run.status === 'running';
 }
 
 function sumWorkspaceTokens(workspacePath: string): number {
@@ -371,12 +364,7 @@ async function refreshPulseBand(): Promise<void> {
   const boardGroups = groups.filter((g) => g.orchestrateBoard);
   const boardsActive = boardGroups.filter((g) => isLeftoverBoardRunning(g)).length;
 
-  let agentCount = 0;
-  try {
-    agentCount = (await loadRegistry()).filter(isRunActive).length;
-  } catch {
-    agentCount = 0;
-  }
+  const agentCount = listActiveSubAgentRuns().filter(isRunActive).length;
 
   const tps = readStripText('stripTPS');
   const ctx = readStripText('stripCtx');
@@ -423,34 +411,34 @@ async function refreshPulseBand(): Promise<void> {
   }
 }
 
-function renderRunRow(record: PersistedRunRecord): HTMLButtonElement {
+function renderRunRow(run: SubAgentRun): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'code-overview__row is-entering';
   const dot = document.createElement('span');
-  dot.className = `code-overview__status-dot ${record.status === 'running' ? 'ok' : 'warn'}`;
+  dot.className = `code-overview__status-dot ${run.status === 'running' ? 'ok' : 'warn'}`;
   dot.setAttribute('aria-hidden', 'true');
 
   const main = document.createElement('div');
   main.className = 'code-overview__row-main';
   const label = document.createElement('div');
   label.className = 'code-overview__row-label';
-  label.textContent = record.task.trim() || record.type || record.runId;
+  label.textContent = run.task.trim() || run.type || run.runId;
   const sub = document.createElement('div');
   sub.className = 'code-overview__row-sub';
-  sub.textContent = `attempt ${record.attempt} · ${formatElapsed(record.startedAt)}`;
+  sub.textContent = `${run.status} · ${formatElapsed(run.startedAt)}`;
   main.append(label, sub);
 
   const aside = document.createElement('div');
   aside.className = 'code-overview__row-aside';
   const chip = document.createElement('span');
   chip.className = 'code-overview__chip mode';
-  chip.textContent = record.type || 'agent';
+  chip.textContent = run.type || 'agent';
   aside.appendChild(chip);
 
   btn.append(dot, main, aside);
   btn.addEventListener('click', () => {
-    void drillToRun(record);
+    void drillToRun(run);
   });
   return btn;
 }
@@ -530,9 +518,9 @@ function renderSessionRow(chat: Chat): HTMLButtonElement {
   return btn;
 }
 
-async function drillToRun(record: PersistedRunRecord): Promise<void> {
-  if (record.parentChatId) {
-    switchChat(record.parentChatId);
+async function drillToRun(run: SubAgentRun): Promise<void> {
+  if (run.parentChatId) {
+    switchChat(run.parentChatId);
   }
   const { toggleAgentActivityPanel, isAgentActivityPanelOpen } = await import('./agent-activity-panel');
   if (!isAgentActivityPanelOpen()) toggleAgentActivityPanel();
@@ -553,17 +541,11 @@ async function refreshRunningPanel(): Promise<void> {
   const groups = sessionState ? getGroupsForWorkspace(workspacePath) : [];
   const boardGroups = groups.filter((g) => g.orchestrateBoard);
 
-  let records: PersistedRunRecord[] = [];
-  try {
-    records = (await loadRegistry()).filter(isRunActive);
-  } catch {
-    renderError(host, 'Could not load agent runs.', () => void refreshRunningPanel());
-    return;
-  }
+  const runs = listActiveSubAgentRuns().filter(isRunActive);
 
   const rows: HTMLElement[] = [];
-  for (const record of records.slice(0, 12)) {
-    rows.push(renderRunRow(record));
+  for (const run of runs.slice(0, 12)) {
+    rows.push(renderRunRow(run));
   }
   for (const group of boardGroups.filter((g) => isLeftoverBoardRunning(g)).slice(0, 6)) {
     rows.push(renderBoardRow(group));

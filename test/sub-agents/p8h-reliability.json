@@ -1,0 +1,108 @@
+{
+  "runs": 10,
+  "completed": 10,
+  "failed": 0,
+  "retries": 0,
+  "abandonments": 0,
+  "attemptDistribution": {
+    "count": 10,
+    "open": 0,
+    "p50Ms": 61,
+    "p90Ms": 62,
+    "p99Ms": 62,
+    "maxMs": 62
+  },
+  "tokenCost": {
+    "prompt_tokens": 110,
+    "completion_tokens": 70,
+    "total_tokens": 180,
+    "wasted": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    },
+    "attemptsWithUsage": 10,
+    "attemptsWithoutUsage": 0,
+    "complete": true
+  },
+  "perRun": [
+    {
+      "n": 1,
+      "finished": true,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 118
+    },
+    {
+      "n": 2,
+      "finished": true,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 108
+    },
+    {
+      "n": 3,
+      "finished": true,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 97
+    },
+    {
+      "n": 4,
+      "finished": true,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 107
+    },
+    {
+      "n": 5,
+      "finished": true,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 109
+    },
+    {
+      "n": 6,
+      "finished": true,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 109
+    },
+    {
+      "n": 7,
+      "finished": true,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 108
+    },
+    {
+      "n": 8,
+      "finished": true,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 111
+    },
+    {
+      "n": 9,
+      "finished": true,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 111
+    },
+    {
+      "n": 10,
+      "finished": true,
+      "retries": 0,
+      "abandoned": 0,
+      "ms": 108
+    }
+  ],
+  "realProvider": {
+    "skipped": true,
+    "reason": "no live LM Studio/provider reachable from this worktree (fetch failed)"
+  },
+  "recordedAt": "2026-08-31",
+  "host": "scripts/fake-model-server.mjs",
+  "ceiling": "10/10 is the deterministic-host ceiling, not a measurement that agents never retry. Do not quote this as a live-LLM result.",
+  "note": "Deterministic fake host emitting report_outcome pass. A fake-host 10/10 is the host ceiling, not a live-LLM measurement — Phase 8 should not treat it as “agents never retry.”"
+}

@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
-import { defaultSubAgentRunner } from '../../src/agents/sub-agent-runner.ts';
+import { defaultSubAgentRunner } from './test-helpers.mts';
 import {
   resetSubAgentConfigCache,
   setRuntimeSubAgentOverrides,
@@ -176,6 +176,73 @@ describe('sub-agent finalization prose fallback', () => {
     });
 
     assert.equal(out.toolTurns, 1);
+    assert.equal(out.structuredOutcome?.summary, WORK_PROSE);
+    assert.equal(out.summary, WORK_PROSE);
+  });
+
+  test('returns work-turn prose when finalization fails with zero tool calls', async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.includes('/api/config/ping')) {
+        return Response.json({ ok: true, home: '.minnow', homeResolved: true });
+      }
+      if (url.includes('/api/config/meta')) {
+        return Response.json({ toolCalls: { useConstrainedDecoding: false } });
+      }
+      if (url.includes('/api/config/sub-agents')) {
+        return Response.json({});
+      }
+      if (url.includes('/api/providers') && !url.includes('/capabilities')) {
+        return Response.json({
+          providers: [
+            {
+              id: PROVIDER_ID,
+              label: 'OpenCode Go',
+              baseUrl: 'https://opencode.ai/zen/go',
+              apiKind: 'openai-v1',
+              enabled: true,
+              hasApiKey: true,
+              hasBearer: false,
+            },
+          ],
+          activeProviderId: PROVIDER_ID,
+        });
+      }
+      if (url.includes('/capabilities')) {
+        return Response.json(CAPS);
+      }
+      if (url.includes('/api/generations') && init?.method === 'POST' && !url.includes('/stream')) {
+        generationPosts += 1;
+        const genId = generationPosts === 1 ? GEN_PROSE : GEN_FINAL;
+        return Response.json({ generationId: genId });
+      }
+      if (url.includes(GEN_PROSE) && url.includes('/stream')) {
+        return proseSse(WORK_PROSE);
+      }
+      if (url.includes(GEN_FINAL) && url.includes('/stream')) {
+        return proseSse('{this is not valid structured outcome json');
+      }
+
+      return new Response('not found', { status: 404 });
+    }) as typeof fetch;
+
+    const out = await defaultSubAgentRunner.run({
+      runId: 'run-finalization-fallback-zero-tools',
+      type: 'explore',
+      task: 'What is this repo for?',
+      systemPrompt: 'You are a sub-agent.',
+      tools: [],
+      providerId: PROVIDER_ID,
+      modelId: MODEL_ID,
+      summarySchema: 'minnow.sub-agent.v1',
+      modelContextLimit: null,
+      signal: AbortSignal.timeout(15_000),
+      executeTool: async () => ({ content: 'ok' }),
+    });
+
+    assert.equal(out.toolTurns, 0);
+    assert.equal(out.structuredOutcomeParseError, undefined);
     assert.equal(out.structuredOutcome?.summary, WORK_PROSE);
     assert.equal(out.summary, WORK_PROSE);
   });
