@@ -10,6 +10,7 @@ import '../styles/issues.css';
 
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
 import { canExpandIssueWithAgent } from '../chat/issues/expand-task';
+import { canExpandIssueDraft } from '../chat/issues/expand-issue-guards';
 import {
   canInvestigateIssue,
   canRunIssueWorkflow,
@@ -111,6 +112,13 @@ import {
   openIssueDetail,
   refreshIssueDetailIfOpen,
 } from './issues-detail';
+import {
+  closeIssueExpandOverlay,
+  createIssueExpandButton,
+  isIssueDraftExpanding,
+  isIssueExpandOverlayOpen,
+  startIssueExpandFromUi,
+} from './issues-expand-controls';
 import { createIssuesLabelsField } from './issues-labels-field';
 import {
   ariaSortValue,
@@ -887,10 +895,20 @@ function buildIssueRowMenuItems(
     },
   ];
 
-  if (singleTarget && canExpandIssueWithAgent(issue)) {
+  if (singleTarget && canExpandIssueDraft(issue)) {
     items.push({
       id: 'expand',
-      label: isIssueExpanding(issue.id) ? 'Expanding…' : 'Expand',
+      label: isIssueDraftExpanding(issue.id) ? 'Expanding…' : 'Expand',
+      hint: 'Fill title and description from this card',
+      onSelect: () => void startIssueExpandFromUi(issue.id),
+    });
+  }
+
+  if (singleTarget && canExpandIssueWithAgent(issue)) {
+    items.push({
+      id: 'expand-agent',
+      label: isIssueExpanding(issue.id) ? 'Expanding with agent…' : 'Expand with agent',
+      hint: 'Research the workspace and write the card',
       disabled: isIssueExpanding(issue.id),
       onSelect: () => void expandIssueFromUi(issue.id).then(() => renderIssuesPanel()),
     });
@@ -1580,7 +1598,11 @@ function renderBoard(mount: HTMLElement, issues: IssueCard[]): void {
       const id = document.createElement('div');
       id.className = 'issues-card__id';
       id.textContent = issue.id;
-      cardHead.append(id);
+      if (canExpandIssueDraft(issue)) {
+        cardHead.append(id, createIssueExpandButton(issue, 'board'));
+      } else {
+        cardHead.append(id);
+      }
 
       const title = document.createElement('h4');
       title.className = 'issues-card__title';
@@ -1612,19 +1634,6 @@ function renderBoard(mount: HTMLElement, issues: IssueCard[]): void {
       }
 
       card.append(cardHead, title, meta);
-      if (canExpandIssueWithAgent(issue)) {
-        const expandBtn = document.createElement('button');
-        expandBtn.type = 'button';
-        expandBtn.className = 'issues-btn issues-card__expand';
-        expandBtn.textContent = isIssueExpanding(issue.id) ? '…' : 'Expand';
-        expandBtn.disabled = isIssueExpanding(issue.id);
-        expandBtn.title = 'Expand';
-        expandBtn.addEventListener('click', (event) => {
-          event.stopPropagation();
-          void expandIssueFromUi(issue.id).then(() => renderIssuesPanel());
-        });
-        card.appendChild(expandBtn);
-      }
       card.addEventListener('click', (event) => {
         onIssueItemClick(event, issue, boardOrderedIssues, boardIndex);
       });
@@ -2304,6 +2313,7 @@ async function openIssueAgentChat(issueId: string): Promise<void> {
  * Y — accept triage (backlog + triagedAt)
  * N or Backspace — decline triage when the focused card is unreviewed
  * C — new issue
+ * E — expand focused issue (sparkles rewrite)
  * Alt+↑/↓ — rank within the group/column
  * Shift+←/→ — move board column (status)
  */
@@ -2311,6 +2321,13 @@ function onIssuesKeydown(event: KeyboardEvent): void {
   if (!isIssuesPageOpen()) return;
   if (isTypingTarget(event.target)) return;
   if (isContextMenuOpen() || isAppDialogOpen()) return;
+  if (isIssueExpandOverlayOpen()) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeIssueExpandOverlay();
+    }
+    return;
+  }
   if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
     event.preventDefault();
     moveRank(event.key === 'ArrowUp' ? -1 : 1);
@@ -2405,6 +2422,12 @@ function onIssuesKeydown(event: KeyboardEvent): void {
     setNewFormOpen(true);
     return;
   }
+  if (event.key === 'e' || event.key === 'E') {
+    event.preventDefault();
+    const issue = focusedIssue();
+    if (issue) void startIssueExpandFromUi(issue.id);
+    return;
+  }
 }
 
 function openBulkMenu(
@@ -2435,6 +2458,10 @@ function bindIssuesCommands(): void {
         goToFocused: () => {
           const issue = focusedIssue();
           if (issue) navigateToIssueDetail(issue.id);
+        },
+        expandFocused: () => {
+          const issue = focusedIssue();
+          if (issue) void startIssueExpandFromUi(issue.id);
         },
         acceptTriage: acceptFocusedTriage,
         declineTriage: declineFocusedTriage,

@@ -23,6 +23,7 @@ const BOARD_STATE_KEYS = [
   'boardId',
   'name',
   'planPath',
+  'workspacePath',
   'waves',
   'status',
   'concurrency',

@@ -23,14 +23,26 @@ function resolveCwd(cwd) {
   return cwd && String(cwd).trim() ? String(cwd).trim() : getWorkspaceRoot();
 }
 
-/** Run `gh` with paging and colour disabled. Exported for forge-issue-ops.js. */
+/** Run `gh` with paging and colour disabled. Exported for forge-issue-ops.js.
+ *  Never rejects — timeout and missing-binary become a non-zero result so a
+ *  forge call cannot take down `/api/git` (MIN-660). */
 export async function gh(args, cwd, timeout = GH_TIMEOUT_MS) {
-  return runProcess('gh', args, {
-    cwd,
-    timeout,
-    // gh paginates and colorizes when it thinks it owns a terminal.
-    env: { GH_PAGER: 'cat', PAGER: 'cat', NO_COLOR: '1', CLICOLOR: '0' },
-  });
+  try {
+    return await runProcess('gh', args, {
+      cwd,
+      timeout,
+      // gh paginates and colorizes when it thinks it owns a terminal.
+      env: { GH_PAGER: 'cat', PAGER: 'cat', NO_COLOR: '1', CLICOLOR: '0' },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      code: 1,
+      stdout: '',
+      stderr: message,
+      timedOut: /timed out/i.test(message),
+    };
+  }
 }
 
 /** Combined stdout/stderr, trimmed, for error surfaces. */
@@ -109,14 +121,30 @@ async function readRemoteUrl(cwd) {
 export async function forgeStatus({ cwd, refresh } = {}) {
   const root = resolveCwd(cwd);
 
-  if (!refresh) {
-    const hit = statusCache.get(root);
-    if (hit && Date.now() - hit.at < STATUS_TTL_MS) return hit.value;
-  }
+  try {
+    if (!refresh) {
+      const hit = statusCache.get(root);
+      if (hit && Date.now() - hit.at < STATUS_TTL_MS) return hit.value;
+    }
 
-  const value = await probeForgeStatus(root);
-  statusCache.set(root, { at: Date.now(), value });
-  return value;
+    const value = await probeForgeStatus(root);
+    statusCache.set(root, { at: Date.now(), value });
+    return value;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      host: 'none',
+      hostname: '',
+      remoteUrl: '',
+      repo: '',
+      supported: false,
+      cliInstalled: false,
+      cliVersion: '',
+      authenticated: false,
+      reason: message || 'Pull requests are unavailable here',
+    };
+  }
 }
 
 async function probeForgeStatus(root) {

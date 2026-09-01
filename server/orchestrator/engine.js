@@ -42,6 +42,7 @@ import { makeEvent } from './core/events.js';
 import { boardGraph, defaultComplete, isReadyForFinalTest } from './board-graph.js';
 import * as diskJournal from './journal.js';
 import { emitError } from './live-events.js';
+import { holdBoardResume, shouldHoldBoardResume } from './resume-gate.js';
 
 /** How often the safety-net tick fires. */
 export const DEFAULT_TICK_MS = 5_000;
@@ -226,6 +227,11 @@ export function createEngine(options) {
   let ticking = false;
   let dirty = false;
   let disposed = false;
+  /**
+   * `load()` found this board `running` but the boot resume gate is armed, so
+   * the tick timer was not started. Cleared by `resumeAfterGate()`.
+   */
+  let heldAtLoad = false;
 
   /** @type {Set<(event: Record<string, unknown>) => void>} */
   const subscribers = new Set();
@@ -641,7 +647,13 @@ export function createEngine(options) {
           );
         }
       }
-      if (state.status === 'running') startTimer();
+      if (state.status === 'running') {
+        // A board that was running when the process died would otherwise resume
+        // here, unprompted, on whatever request happened to build this engine.
+        // The gate holds it until the user answers; `getEngine` registers it.
+        if (shouldHoldBoardResume(boardId)) heldAtLoad = true;
+        else startTimer();
+      }
     },
 
     /**
@@ -940,6 +952,29 @@ export function createEngine(options) {
       return () => subscribers.delete(handler);
     },
 
+    /**
+     * True when `load()` skipped `startTimer()` for the boot resume gate.
+     *
+     * @returns {boolean}
+     */
+    wasHeldAtLoad() {
+      return heldAtLoad;
+    },
+
+    /**
+     * Start the timer `load()` skipped, once the user has said Resume.
+     *
+     * Not `startBoard`: the board is already `running` in the journal, and
+     * appending a second `board.started` would rewrite its concurrency.
+     *
+     * @returns {void}
+     */
+    resumeAfterGate() {
+      if (!heldAtLoad) return;
+      heldAtLoad = false;
+      if (state?.status === 'running') startTimer();
+    },
+
     /** @returns {void} */
     dispose() {
       disposed = true;
@@ -1041,6 +1076,17 @@ export function getEngine(boardId, makeEffector, options = {}) {
     // Only registered as loaded if this entry is still the current one — a
     // `disposeEngines` during the load must not resurrect it.
     if (engines.get(key) === loading) ready.set(key, engine);
+    // Boot resume gate: `load()` withheld the timer, so publish the board as
+    // pending. Registered here rather than inside `load()` because the decline
+    // path is `stopBoard`, which only exists on the built engine.
+    if (engine.wasHeldAtLoad()) {
+      holdBoardResume({
+        boardId,
+        resume: () => engine.resumeAfterGate(),
+        decline: () => engine.stopBoard('user'),
+        peek: () => engine.getState(),
+      });
+    }
     return engine;
   });
   engines.set(key, loading);

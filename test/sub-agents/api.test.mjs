@@ -363,8 +363,48 @@ describe('/api/agents routes', () => {
     assert.equal(matchRoute('GET', '/api/agents')?.name, 'list');
     assert.equal(matchRoute('GET', '/api/agents/r1/events')?.name, 'events');
     assert.equal(matchRoute('GET', '/api/agents/r1/journal')?.name, 'journal');
+    assert.equal(matchRoute('GET', '/api/agents/r1/transcript')?.name, 'transcript');
     assert.equal(matchRoute('POST', '/api/agents/r1/cancel')?.name, 'cancel');
     assert.equal(matchRoute('GET', '/api/agents/r1')?.name, 'get');
     assert.equal(matchRoute('PUT', '/api/agents/r1'), null);
+  });
+});
+
+describe('GET /api/agents/:runId/transcript', () => {
+  it('returns recorded tool_call lines for the latest attempt', async () => {
+    const { recordTranscriptEvent } = await import('../../server/orchestrator/transcripts.js');
+    const { agentsDir } = await import('../../server/sub-agents/journal.js');
+    const spawned = await spawnOk();
+    const attemptId =
+      spawned.run?.attempts?.[0]?.attemptId ??
+      (await call('GET', `/api/agents/${spawned.runId}`)).body.run?.attempts?.[0]?.attemptId;
+    assert.equal(typeof attemptId, 'string');
+    recordTranscriptEvent({
+      entryDir: agentsDir(PARENT),
+      attemptId,
+      taskId: spawned.runId,
+      role: 'sub-agent',
+      event: {
+        type: 'tool_call',
+        name: 'read_file',
+        id: 'call_read',
+        arguments: { path: 'src/a.ts' },
+      },
+    });
+    const transcript = await call('GET', `/api/agents/${spawned.runId}/transcript`);
+    assert.equal(transcript.status, 200, JSON.stringify(transcript.body));
+    assert.equal(transcript.body.ok, true);
+    assert.equal(transcript.body.attemptId, attemptId);
+    const types = (transcript.body.events ?? []).map((row) => row.type);
+    assert.equal(types.includes('tool_call'), true);
+    const callRow = transcript.body.events.find((row) => row.type === 'tool_call');
+    assert.equal(callRow.name, 'read_file');
+  });
+
+  it('returns an empty transcript when no attempt has been recorded', async () => {
+    const spawned = await spawnOk();
+    const transcript = await call('GET', `/api/agents/${spawned.runId}/transcript?attemptId=never-written`);
+    assert.equal(transcript.status, 200);
+    assert.deepEqual(transcript.body.events, []);
   });
 });

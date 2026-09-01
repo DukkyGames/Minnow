@@ -188,6 +188,63 @@ export async function resolveLlamaServer() {
   return { path: null, source: null };
 }
 
+/** PE `Machine` for AMD64 / ARM64 Windows images. */
+const PE_MACHINE_AMD64 = 0x8664;
+const PE_MACHINE_ARM64 = 0xaa64;
+
+/**
+ * Read the COFF machine type from a Windows PE, or null when the file is not a PE
+ * (test stubs plant a text file named llama-server.exe).
+ * @param {string} exePath
+ * @returns {number | null}
+ */
+export function readWindowsPeMachine(exePath) {
+  if (process.platform !== 'win32' || !exePath) return null;
+  let fd;
+  try {
+    fd = fs.openSync(exePath, 'r');
+    const dos = Buffer.alloc(64);
+    if (fs.readSync(fd, dos, 0, 64, 0) < 64) return null;
+    if (dos.toString('ascii', 0, 2) !== 'MZ') return null;
+    const peOff = dos.readUInt32LE(60);
+    const pe = Buffer.alloc(6);
+    if (fs.readSync(fd, pe, 0, 6, peOff) < 6) return null;
+    if (pe.toString('ascii', 0, 4) !== 'PE\0\0') return null;
+    return pe.readUInt16LE(4);
+  } catch {
+    return null;
+  } finally {
+    if (fd != null) fs.closeSync(fd);
+  }
+}
+
+/**
+ * True when a managed llama-server.exe is a Windows PE for the other CPU.
+ * Non-PE files (tests) are not a mismatch.
+ * @param {string | null | undefined} exePath
+ */
+export function llamaServerPeArchMismatch(exePath) {
+  const machine = readWindowsPeMachine(exePath);
+  if (machine == null) return false;
+  const want = process.arch === 'arm64' ? PE_MACHINE_ARM64 : PE_MACHINE_AMD64;
+  return machine !== want;
+}
+
+/**
+ * Refuse to spawn / record an install whose PE cannot run on this host.
+ * @param {string} exePath
+ */
+export function assertLlamaServerMatchesHostArch(exePath) {
+  if (!llamaServerPeArchMismatch(exePath)) return;
+  const machine = readWindowsPeMachine(exePath);
+  const got =
+    machine === PE_MACHINE_ARM64 ? 'arm64' : machine === PE_MACHINE_AMD64 ? 'x64' : `0x${machine.toString(16)}`;
+  const need = process.arch === 'arm64' ? 'arm64' : 'x64';
+  throw new Error(
+    `Installed llama-server.exe is ${got}, but this Minnow host is ${need}. Reinstall llama.cpp from Settings → Servers.`,
+  );
+}
+
 /** True when this host can auto-download a prebuilt llama.cpp binary. */
 export function isLlamaRuntimeInstallable() {
   const { platform, arch } = process;
@@ -283,11 +340,14 @@ export async function getLlamaRuntimeStatus() {
   const pinnedVersion = LLAMA_CPP_RELEASE_TAG;
   // Offer upgrade only for a managed tree we actually installed — PATH/vendor
   // binaries are not something Settings can replace with the pin.
-  const managedInstallExists = Boolean(findBinaryInDir(getManagedLlamaRoot()));
+  const managedBinary = findBinaryInDir(getManagedLlamaRoot());
+  const managedInstallExists = Boolean(managedBinary);
+  // Wrong-arch PE (b10448 cuda-13 picker took ARM64 on AMD64) is as stale as
+  // an old tag — Settings must offer Upgrade even when version === pin.
   const upgradeAvailable =
     managedInstallExists &&
-    installedVersion != null &&
-    !llamaReleaseTagsEqual(installedVersion, pinnedVersion);
+    ((installedVersion != null && !llamaReleaseTagsEqual(installedVersion, pinnedVersion)) ||
+      llamaServerPeArchMismatch(managedBinary));
 
   const assets = await fetchReleaseAssetList();
   const installableVariants = listInstallableVariants(assets);
@@ -641,6 +701,8 @@ async function installManagedLlamaServer(opts) {
     if (!installed) {
       throw new Error('llama-server install completed but binary is missing');
     }
+    // Catch a host-arch picker miss before meta.json claims the pin is ready.
+    assertLlamaServerMatchesHostArch(installed);
 
     await fsp.writeFile(
       getManagedLlamaMetaPath(),

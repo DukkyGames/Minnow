@@ -33,11 +33,18 @@ export declare class InlineContentThinkingRouter {
     private finalizing;
     /** Latched once a buffered opener is released, so it is never re-buffered. */
     private openTagAbandoned;
+    /**
+     * Candidate second (or later) think span after visible prose, including its opener.
+     * Held until a matching close arrives so a code sample that merely mentions
+     * `<think>` is not committed as reasoning.
+     */
+    private midStreamThinkBuffer;
     constructor(options?: {
         thinkingModel?: boolean;
     });
     feed(text: string): RoutedContentPart[];
     flush(): RoutedContentPart[];
+    private drainMidStreamThink;
     private routeChunk;
 }
 /** Route gpt-oss harmony channels without leaking control tokens into user prose. */

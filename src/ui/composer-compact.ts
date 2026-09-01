@@ -11,6 +11,7 @@
  * never keep the dense row.
  */
 
+import { scheduleAnimationFrame } from '../lib/schedule-animation-frame';
 import { closeModeSelectorMenu } from './mode-selector';
 import { closeComposerRunTargetMenus } from './composer-run-target';
 import { closeComposerToolsPopover } from './composer-tools-popover';
@@ -614,6 +615,9 @@ function measureAndSync(): void {
   syncComposerCompactFromWidth(row.clientWidth);
 }
 
+/** Defer compact class/parking so the observer does not mutate layout in-cycle. */
+const scheduleMeasureAndSync = scheduleAnimationFrame(measureAndSync);
+
 function onOverflowButtonClick(event: MouseEvent): void {
   event.stopPropagation();
   toggleOverflowPopover();
@@ -657,7 +661,7 @@ export function initComposerCompact(): void {
   }
 
   rowObserver = new ResizeObserver(() => {
-    measureAndSync();
+    scheduleMeasureAndSync();
   });
   rowObserver.observe(row);
   measureAndSync();

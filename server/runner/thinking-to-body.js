@@ -1,4 +1,4 @@
-import { isQwen38ModelId } from "./reasoning-effort.js";
+import { isGlm53ModelId, isQwen38ModelId } from "./reasoning-effort.js";
 const LM_STUDIO_BEST_EFFORT = {
   bestEffort: true,
   message: "LM Studio may ignore API reasoning controls and use per-model Inference settings instead."
@@ -11,6 +11,30 @@ const LOCAL_TEMPLATE_THINKING_OFF = {
 function mapHighEffortForQwen38(effort, modelId) {
   if (effort === "high" && isQwen38ModelId(modelId)) return "xhigh";
   return effort;
+}
+function glm53WireEffort(effort) {
+  if (effort === "high") return "high";
+  if (effort === "max") return "max";
+  if (effort === "low") return "low";
+  if (effort === "on") return "max";
+  return "low";
+}
+function glm53CompletionPatch(effort, apiKind, budgetTokens, modelId) {
+  const wireEffort = glm53WireEffort(effort);
+  const body = {
+    thinking: { type: "enabled" },
+    reasoning_effort: wireEffort,
+    reasoning: { effort: wireEffort }
+  };
+  if (budgetTokens != null && budgetTokens > 0) {
+    body.thinking_budget_tokens = budgetTokens;
+  }
+  applyLocalTemplateThinkingOn(body, apiKind, wireEffort, modelId);
+  if (apiKind !== "openai-v1") {
+    body.enable_thinking = true;
+    return { body, hint: LM_STUDIO_BEST_EFFORT };
+  }
+  return { body };
 }
 function templateKwargsOf(body) {
   return body.chat_template_kwargs && typeof body.chat_template_kwargs === "object" ? { ...body.chat_template_kwargs } : {};
@@ -47,6 +71,9 @@ function effortForResolved(mode) {
 }
 function isLevelEffort(effort) {
   return effort === "low" || effort === "medium" || effort === "high";
+}
+function isWireLevelEffort(effort) {
+  return isLevelEffort(effort) || effort === "max";
 }
 function reasoningBlocked(effort, modelCapabilities) {
   if (effort === "off") return false;
@@ -93,6 +120,9 @@ function anthropicThinkingPatch(thinking, effort, explicitBudget) {
   };
 }
 function reasoningEffortToCompletionBody(effort, apiKind, modelCapabilities, budgetTokens, modelId) {
+  if (isGlm53ModelId(modelId)) {
+    return glm53CompletionPatch(effort, apiKind, budgetTokens, modelId);
+  }
   if (reasoningBlocked(effort, modelCapabilities)) {
     return { body: {} };
   }
@@ -133,11 +163,11 @@ function reasoningEffortToCompletionBody(effort, apiKind, modelCapabilities, bud
     if (budgetTokens != null && budgetTokens > 0) {
       body2.thinking_budget_tokens = budgetTokens;
     }
-    if (isLevelEffort(effort)) {
+    if (isWireLevelEffort(effort)) {
       const wireEffort2 = mapHighEffortForQwen38(effort, modelId);
       body2.reasoning_effort = wireEffort2;
       const allowed = modelCapabilities?.reasoningAllowedOptions;
-      if (allowed?.some((option) => isLevelEffort(option))) {
+      if (allowed?.some((option) => isWireLevelEffort(option))) {
         body2.reasoning = { effort: wireEffort2 };
       }
       if (enabledValue === "adaptive") {
@@ -181,13 +211,14 @@ function reasoningEffortToCompletionBody(effort, apiKind, modelCapabilities, bud
   return { body, hint: LM_STUDIO_BEST_EFFORT };
 }
 function thinkingToCompletionBody(resolved, apiKind, modelCapabilities, budgetTokens, modelId) {
+  if (isGlm53ModelId(modelId)) {
+    return glm53CompletionPatch(resolved, apiKind, budgetTokens, modelId);
+  }
   const allowed = modelCapabilities?.reasoningAllowedOptions;
   if (allowed && allowed.length > 0) {
     const target = resolved;
     if (!allowed.includes(target)) {
-      const hasLevels = allowed.some(
-        (option) => option === "low" || option === "medium" || option === "high"
-      );
+      const hasLevels = allowed.some((option) => isWireLevelEffort(option));
       if (target === "on" && hasLevels) {
         const fallback = isQwen38ModelId(modelId) ? "high" : "medium";
         return reasoningEffortToCompletionBody(

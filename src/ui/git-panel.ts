@@ -64,14 +64,18 @@ import {
   type GitGraphContextMenuCtx,
 } from './git-graph-context-menu';
 
-import { applyFileSidebarVisuals, isMobileLayout, openMobileFileSidebar } from './file-layout';
+import {
+  applyFileSidebarVisuals,
+  isMobileLayout,
+  openMobileFileSidebar,
+  syncFileSidebarFilesPaneButton,
+} from './file-layout';
 
 import { getActiveChat, sessionState } from '../state/sessions';
 
 import { listWorktrees } from '../state/worktree-service';
 
 import { getWorkspacePath } from '../state/workspace';
-import type { ChatGroup } from '../types';
 
 import {
   panelPathsEqual,
@@ -103,7 +107,7 @@ import { showToast } from './toast';
 
 import {
   closeGitPanelNamePopover,
-  openGitPanelNamePopover,
+  openGitRefNamePopover,
 } from './git-panel-name-popover';
 import { decorateGitSourceControlButton } from './git-source-control-icons';
 import {
@@ -235,13 +239,6 @@ function getGitMount(): HTMLElement | null {
 /** Clear browse override so the next chat/composer sync can drive panel cwd. */
 export function clearPanelCwdUserOverride(): void {
   panelCwdUserOverride = false;
-}
-
-/** Board folder currently filling the main column in board view. */
-function getActiveBoardGroupFromSession(): ChatGroup | undefined {
-  const id = sessionState?.activeBoardGroupId?.trim();
-  if (!id) return undefined;
-  return sessionState?.groups?.find((group) => group.id === id);
 }
 
 /**
@@ -389,11 +386,12 @@ function syncMergeToMainButton(
 }
 
 function openAddBranchPopover(anchor: HTMLButtonElement): void {
-  openGitPanelNamePopover({
+  openGitRefNamePopover({
     anchor,
     title: 'New branch',
-    label: 'Branch name',
-    placeholder: 'feature/my-branch',
+    kind: 'branch',
+    defaultPath: getEffectiveCwdArg() || getWorkspacePath(),
+    reserved: [currentBranchName, 'main', 'master'],
     onSubmit: async (branch) => {
       await runGitOp(
         () => gitCheckout({ branch, create: true, cwd: getEffectiveCwdArg() }),
@@ -446,11 +444,12 @@ async function handleDeleteBranch(): Promise<void> {
 }
 
 function openAddWorktreePopover(anchor: HTMLButtonElement): void {
-  openGitPanelNamePopover({
+  openGitRefNamePopover({
     anchor,
     title: 'Add worktree',
-    label: 'Branch name',
-    placeholder: 'feature/my-worktree',
+    kind: 'worktree',
+    defaultPath: getEffectiveCwdArg() || getWorkspacePath(),
+    reserved: [currentBranchName, 'main', 'master'],
     onSubmit: async (branch) => {
       const cwd = getEffectiveCwdArg();
       const addResult = await gitWorktreeAdd({ branch, cwd });
@@ -462,7 +461,7 @@ function openAddWorktreePopover(anchor: HTMLButtonElement): void {
       }
 
       setStatus('');
-      showToast('Worktree added', 'success');
+      showToast(`Worktree ${addResult.branch ?? branch} added`, 'success');
       if (addResult.path) {
         panelCwd = addResult.path;
       }
@@ -2119,13 +2118,15 @@ function syncToggleButtonState(): void {
 
   const toggleBtn = document.getElementById('btnGitPanelToggle');
 
-  if (!toggleBtn) return;
-
   const open = isGitSidePanelOpen();
 
-  toggleBtn.classList.toggle('is-active', open);
+  if (toggleBtn) {
+    toggleBtn.classList.toggle('is-active', open);
+    toggleBtn.setAttribute('aria-pressed', open ? 'true' : 'false');
+  }
 
-  toggleBtn.setAttribute('aria-pressed', open ? 'true' : 'false');
+  // Keep Files highlight in lockstep with Source Control (MIN-655).
+  syncFileSidebarFilesPaneButton({ gitOpen: open });
 
 }
 
@@ -2214,9 +2215,8 @@ export function toggleGitSidePanel(): void {
 
 /**
  * Sync git panel browse cwd + file tree from the active chat's composer run-target.
- * On orchestrate board view with worktree isolation, browse roots follow the board
- * integration worktree; embedded board task chats use that chat's task worktree (MIN-464).
- * Skips when the user manually picked a worktree (browse override).
+ * Follows the chat's own worktreeRoot when set. Skips when the user manually
+ * picked a worktree (browse override).
  */
 export function syncPanelFromActiveChat(options?: { forceFileTree?: boolean }): void {
   if (!sessionState) return;
@@ -2226,8 +2226,6 @@ export function syncPanelFromActiveChat(options?: { forceFileTree?: boolean }): 
   const nextCwd = resolvePanelBrowseCwd({
     chat,
     groups: sessionState.groups,
-    activeBoardGroup: getActiveBoardGroupFromSession(),
-    chats: sessionState.chats,
   });
   const ws = getWorkspacePath().trim();
   const worktree = resolvePanelWorktreeCwd(nextCwd);

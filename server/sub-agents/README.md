@@ -79,6 +79,12 @@ never from renderer TS. Mapping onto `runTurn()`:
 (no silent workspace-root default, no worktree). A timeout is a typed exit
 routed through P8-C policy (retry with continue seed + transcript), not a cancel.
 
+Lossy attempt transcripts land next to the journal (`attempts/*.jsonl`, same
+P9-D recorder as boards). High-frequency `delta` / `stream_meta` stay off disk.
+`runTurn` `no_report` with real assistant prose is a degraded pass here
+(`degradeNoReportIfProse`) — boards stay on `report_outcome`; the runner has
+no `isSubAgent` branch.
+
 **`ask_question` (MIN-724).** Unattended/headless: `ask: null`, same as boards,
 so the tool is stripped. Do not add an `isBoard` / `isSubAgent` branch inside
 `server/runner/`. A parent-injected `AskCapability` later is an options argument
@@ -118,6 +124,7 @@ of derived state — it never writes a run except by POSTing a command.
 | GET | `/api/agents/:runId` | one run |
 | GET | `/api/agents/:runId/events` | SSE: journal frames with `seq`, plus `event: live` / `error` / `deliver` (no `seq`) |
 | GET | `/api/agents/:runId/journal` | raw parent journal (debug) |
+| GET | `/api/agents/:runId/transcript` | lossy attempt transcript (P9-D JSONL; latest attempt, or `?attemptId=`) |
 | POST | `/api/agents/:runId/cancel` | cancel |
 
 Live tokens ride `live-events.js` (opaque key = parent chat id) and are never
@@ -127,5 +134,6 @@ counter, not one toast per tick.
 [`runtime.js`](./runtime.js) is the production delivery host: disk journal,
 `deliverToParent` = `emitDeliver` (throws `'no delivery listener'` when the
 count is 0 so the fold stays pending), `bootAgentsRuntime()` → `tickAll()`.
-Connecting `GET /api/agents/:runId/events` subscribes then ticks so a pending
-completion can land.
+That miss is idle, not a failure: no warn, no 5s retry. Connecting
+`GET /api/agents/:runId/events` subscribes then ticks so a pending completion
+can land.

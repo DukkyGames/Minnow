@@ -21,11 +21,14 @@ describe('shell-profiles', () => {
     const ids = profiles.map((p) => p.id);
     assert.ok(ids.includes('zsh'));
     assert.ok(ids.includes('bash'));
+    const zsh = profiles.find((p) => p.id === 'zsh');
+    assert.deepEqual(zsh?.args, ['-il']);
   });
 
   it('linux includes bash', () => {
     const profiles = resolveProfiles('linux', {});
     assert.equal(profiles[0].id, 'bash');
+    assert.deepEqual(profiles[0].args, ['-il']);
   });
 
   it('win32 adds per-distro WSL profiles when wsl option true', () => {

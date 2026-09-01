@@ -10,19 +10,34 @@ export declare const REASONING_EFFORT_OPTIONS: readonly ReasoningEffortOption[];
 /** Composer / send options for Qwen3.8 (`xhigh` is mapped to High). */
 export declare const QWEN38_REASONING_OPTIONS: readonly ReasoningEffortOption[];
 /**
+ * GLM-5.3 family: thinking is always on. Z.ai accepts `low` | `high` | `max` only
+ * (no off / medium / xhigh). Default on the wire is `max`.
+ */
+export declare const GLM53_REASONING_OPTIONS: readonly ReasoningEffortOption[];
+/**
  * Qwen3.8 ids (`qwen3.8` / `qwen3_8`) — not Qwen3-8B (`qwen3-8b`).
  * Used for 262K defaults, wire `xhigh`, and `preserve_thinking`.
  */
 export declare function isQwen38ModelId(modelId: string | null | undefined): boolean;
-/** Map LM Studio / Qwen `xhigh` onto the composer `high` option; `none` onto Off. */
-export declare function normalizeReasoningCatalogValue(value: unknown): ReasoningEffortOption | undefined;
+/**
+ * GLM-5.3 / GLM-5.3-Flash ids (`glm-5.3`, `z-ai/glm-5.3-flash`, GGUF names).
+ * Does not match GLM-4.x, GLM-5, GLM-5.1, or GLM-5.2.
+ */
+export declare function isGlm53ModelId(modelId: string | null | undefined): boolean;
+/** True when `value` is a composer effort level (not off/on). */
+export declare function isComposerReasoningLevel(value: unknown): value is ReasoningEffortOption;
+/**
+ * Map catalog aliases onto composer options.
+ * Qwen `xhigh` -> High; GLM-5.3 `xhigh` / `extra_high` -> Max; `none` -> Off.
+ */
+export declare function normalizeReasoningCatalogValue(value: unknown, modelId?: string | null): ReasoningEffortOption | undefined;
 /** Type guard for upstream catalog / session values. */
 export declare function isReasoningEffortOption(value: unknown): value is ReasoningEffortOption;
 /** Filter and validate upstream `allowed_options`; preserve canonical order. */
-export declare function normalizeReasoningAllowedOptions(raw: unknown[]): ReasoningEffortOption[];
+export declare function normalizeReasoningAllowedOptions(raw: unknown[], modelId?: string | null): ReasoningEffortOption[];
 /** True when the header reasoning effort dropdown should be shown. */
 export declare function modelHasSelectableReasoningEffort(caps?: ModelCapabilities | null): boolean;
-/** True when allowed options include low / medium / high effort levels. */
+/** True when allowed options include low / medium / high / max effort levels. */
 export declare function modelHasReasoningEffortLevels(caps?: ModelCapabilities | null): boolean;
 /**
  * Composer shows a level dropdown (not the brain toggle) when effort levels are available.
@@ -30,6 +45,11 @@ export declare function modelHasReasoningEffortLevels(caps?: ModelCapabilities |
 export declare function modelUsesComposerReasoningDropdown(caps?: ModelCapabilities | null): boolean;
 /** Composer shows the brain on/off toggle when model offers off/on without level options. */
 export declare function modelUsesComposerThinkingToggle(caps?: ModelCapabilities | null): boolean;
+/**
+ * True when thinking cannot be turned off (GLM-5.3: Low / High / Max, no Off).
+ * Driven by the forced catalog, not a leftover off/on probe row.
+ */
+export declare function modelUsesAlwaysOnReasoning(caps?: ModelCapabilities | null): boolean;
 /** True when the composer brain icon should be shown (level dropdown and/or off/on models). */
 export declare function modelShowsComposerBrainToggle(caps?: ModelCapabilities | null): boolean;
 /** Level options for the composer effort dropdown (excludes off/on). */
@@ -62,6 +82,11 @@ export declare function inferReasoningOptionsFromModelId(modelId: string, apiKin
  * or My Models rows have no catalog reasoning block.
  */
 export declare function ensureQwen38ReasoningAllowedOptions(modelId: string | null | undefined, allowed: ReasoningEffortOption[]): ReasoningEffortOption[];
+/**
+ * GLM-5.3 always offers Low/High/Max. Catalog off/on or low/medium/high rows
+ * still 400 on Z.ai, so this replacement always wins.
+ */
+export declare function ensureGlm53ReasoningAllowedOptions(modelId: string | null | undefined, allowed: ReasoningEffortOption[]): ReasoningEffortOption[];
 /**
  * Merge chat override, inherited thinking mode, catalog default, and fallbacks into one effort.
  * Resolution order: chat override → inherited on → catalog default → inherited off → first allowed.

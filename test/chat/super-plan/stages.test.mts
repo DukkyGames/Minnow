@@ -68,10 +68,10 @@ mock.module('../../../src/tools/client.ts', {
   },
 });
 
-// Same trap as tools/client.ts above: orchestrator.ts is a re-export shim with
-// ~20 exports (tools/loop.ts needs cancelAllForParentTurn, etc.) — an incomplete
-// namedExports set here silently falls back to the real module instead of
-// erroring, so every export must be listed.
+// mock.module replaces the whole module. An incomplete namedExports set
+// throws (SyntaxError: does not provide an export named '…') — it does not
+// silently fall back to the real module. Every export the import graph
+// reads must be listed.
 mock.module('../../../src/agents/orchestrator.ts', {
   namedExports: {
     spawnSubAgent: (input: Record<string, unknown>) => spawnSubAgentImpl(input),
@@ -98,6 +98,10 @@ mock.module('../../../src/agents/orchestrator.ts', {
     subscribeSubAgentRuns: () => () => undefined,
     subscribeSubAgentDeliver: () => () => undefined,
     hydrateSubAgentRunsForParentChat: async () => undefined,
+    hydrateSubAgentTranscript: async () => undefined,
+    honestTerminalSummary: () => '',
+    lastNonSystemPreview: () => '',
+    rehydrateLiveParentSubAgents: async () => undefined,
     adoptSubAgentRunForTests: () => undefined,
     setSubAgentApiFetchForTests: () => undefined,
     setSubAgentOpenStreamForTests: () => undefined,

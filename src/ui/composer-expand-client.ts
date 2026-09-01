@@ -130,7 +130,7 @@ function thinkingOffPatch(
   const capabilities =
     modelRow?.capabilities ??
     (modelRow ? catalogCapabilitiesFromRow(modelRow) : undefined);
-  const { body } = thinkingToCompletionBody('off', providerApiKind, capabilities);
+  const { body } = thinkingToCompletionBody('off', providerApiKind, capabilities, null, modelId);
   return body as Record<string, unknown>;
 }
 

@@ -52,10 +52,7 @@ describe('panel worktree cwd helpers', () => {
   });
 });
 
-describe('panel browse cwd follows board state (MIN-619)', () => {
-  const WT_INTEGRATION = 'C:/wt/board-1/integration';
-  const WT_TASK = 'C:/wt/board-1/task-a';
-
+describe('panel browse cwd follows the chat worktree, not leftover board state', () => {
   function makePlanner(): Chat {
     return {
       id: 'planner-1',
@@ -80,7 +77,7 @@ describe('panel browse cwd follows board state (MIN-619)', () => {
       plannerChatId: 'planner-1',
       orchestrateBoard: {
         planPath: 'documentation/plans/x.md',
-        tasks: [{ id: 't1', worktreePath: WT_TASK }],
+        tasks: [{ id: 't1', worktreePath: WT_A }],
         waves: [],
         startedAt: 1,
         lastUpdatedAt: 1,
@@ -90,31 +87,21 @@ describe('panel browse cwd follows board state (MIN-619)', () => {
     } as unknown as ChatGroup;
   }
 
-  test('planner falls back to the workspace until board state is committed', () => {
+  test('planner resolves the workspace when no board group is active', () => {
     setWorkspaceFromServer({ path: WS, label: 'repo', isDefault: false });
     const planner = makePlanner();
-    const group = makeGroup();
 
-    // What `switchChat` used to see: board view not yet activated.
-    assert.equal(
-      resolvePanelBrowseCwd({ chat: planner, groups: [group], chats: [planner] }),
-      WS,
-    );
+    assert.equal(resolvePanelBrowseCwd({ chat: planner, groups: [] }), WS);
   });
 
-  test('planner resolves the integration worktree once board state is active', () => {
+  test('planner still resolves the workspace when a leftover board group is present', () => {
     setWorkspaceFromServer({ path: WS, label: 'repo', isDefault: false });
     const planner = makePlanner();
     const group = makeGroup();
 
     assert.equal(
-      resolvePanelBrowseCwd({
-        chat: planner,
-        groups: [group],
-        activeBoardGroup: group,
-        chats: [planner],
-      }),
-      WT_INTEGRATION,
+      resolvePanelBrowseCwd({ chat: planner, groups: [group] }),
+      WS,
     );
   });
 });

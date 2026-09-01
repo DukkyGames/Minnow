@@ -7,6 +7,7 @@
 import { getChatAbort, setChatStopReason } from '../app-state.ts';
 import { reportBackgroundError } from '../boot/report-background-error.ts';
 import { normalizeOrchestratePlanPath } from '../chat/plans/plan-path.ts';
+import { syncOrchestratorPlannerChatTitle } from '../chat/plans/planner-chat-title.ts';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, ChatGroup } from '../types';
 import { getChatLastMessageAt } from './session-workspace-scope';
@@ -419,6 +420,8 @@ export function linkPlannerChatToBoardFolder(plannerChat: Chat, group: ChatGroup
   if (plannerChat.orchestratePlanPath && !group.orchestratePlanPath) {
     group.orchestratePlanPath = plannerChat.orchestratePlanPath;
   }
+  // Keep the sidebar on "Orchestrator - <plan>" until the user renames it.
+  syncOrchestratorPlannerChatTitle(plannerChat);
   touchChat(plannerChat);
   persistGroupChange(group.id);
 }

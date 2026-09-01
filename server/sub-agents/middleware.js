@@ -13,6 +13,7 @@
  * | GET    | `/api/agents/:runId`              | one run                              |
  * | GET    | `/api/agents/:runId/events`       | SSE: journal frames + live + error   |
  * | GET    | `/api/agents/:runId/journal`      | raw parent journal (debug)           |
+ * | GET    | `/api/agents/:runId/transcript`   | lossy attempt transcript (P9-D)      |
  * | POST   | `/api/agents/:runId/cancel`       | cancel                               |
  *
  * Live tokens ride `event: live` (opaque key, P8-B) and are never journaled.
@@ -25,11 +26,12 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { AGENTS_NAMESPACE, isTerminal, stateToJSON } from './derive.js';
+import { AGENTS_NAMESPACE, isTerminal, lastEndedAttempt, stateToJSON } from './derive.js';
 import { makeEvent } from './events.js';
 import { createSubAgentGraph } from './graph.js';
 import { getSubAgentTypeRow, loadSubAgentFile } from './config.js';
 import {
+  agentsDir,
   listEntries,
   loadState,
   readEvents,
@@ -45,6 +47,7 @@ import {
 } from '../orchestrator/live-events.js';
 import { getProductionDelivery } from './runtime.js';
 import { safeSegment } from '../orchestrator/journal-store.js';
+import { flushTranscripts, readTranscript } from '../orchestrator/transcripts.js';
 
 /** Heartbeat cadence. Intermediaries close idle streams without it. */
 const HEARTBEAT_MS = 15_000;
@@ -215,6 +218,7 @@ export const ROUTES = [
   { method: 'GET', pattern: /^\/api\/agents$/, name: 'list' },
   { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/events$/, name: 'events' },
   { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/journal$/, name: 'journal' },
+  { method: 'GET', pattern: /^\/api\/agents\/([^/]+)\/transcript$/, name: 'transcript' },
   { method: 'POST', pattern: /^\/api\/agents\/([^/]+)\/cancel$/, name: 'cancel' },
   { method: 'GET', pattern: /^\/api\/agents\/([^/]+)$/, name: 'get' },
 ];
@@ -343,6 +347,9 @@ async function dispatch(route, req, res) {
 
     case 'events':
       return streamEvents(req, res, runId);
+
+    case 'transcript':
+      return readRunTranscript(req, res, runId);
 
     case 'cancel': {
       const found = await findRun(runId);
@@ -482,6 +489,66 @@ async function spawnRun(req, res) {
     status: run ? statusFromPhase(run) : 'queued',
     run: run ? runToJSON(run) : null,
     state: stateToJSON(state),
+  });
+}
+
+/**
+ * Latest attempt transcript for a run (or `?attemptId=`).
+ *
+ * Mirrors GET `/api/boards/:id/attempts/:attemptId`. A missing file is an
+ * empty transcript, not a 404 — an attempt that has not called a tool yet
+ * has nothing to show.
+ *
+ * @param {import('node:http').IncomingMessage} req
+ * @param {import('node:http').ServerResponse} res
+ * @param {string} runId
+ * @returns {Promise<void>}
+ */
+async function readRunTranscript(req, res, runId) {
+  const found = await findRun(runId);
+  if (!found) return json(res, 404, { ok: false, error: 'no such run' });
+  const query = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+  const wanted = (query.get('attemptId') ?? '').trim();
+  const limit = Number(query.get('limit'));
+  const attempts = Array.isArray(found.run.attempts) ? found.run.attempts : [];
+  let attemptId = wanted;
+  if (attemptId) {
+    try {
+      safeSegment(attemptId, 'attempt');
+    } catch (err) {
+      return json(res, 400, {
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  } else {
+    const open = attempts.find((row) => row && row.ended !== true);
+    const last = lastEndedAttempt(found.run);
+    attemptId = open?.attemptId ?? last?.attemptId ?? attempts.at(-1)?.attemptId ?? '';
+  }
+  if (!attemptId) {
+    return json(res, 200, {
+      ok: true,
+      runId,
+      parentChatId: found.parentChatId,
+      attemptId: null,
+      events: [],
+      truncated: false,
+      capped: false,
+    });
+  }
+  const entryDir = agentsDir(found.parentChatId);
+  await flushTranscripts(found.parentChatId, attemptId, { entryDir });
+  const transcript = await readTranscript(found.parentChatId, attemptId, {
+    entryDir,
+    ...(Number.isSafeInteger(limit) && limit > 0 ? { limit } : {}),
+  });
+  return json(res, 200, {
+    ok: true,
+    runId,
+    parentChatId: found.parentChatId,
+    attemptId,
+    ...transcript,
   });
 }
 

@@ -40,6 +40,7 @@ import { AGENTS_NAMESPACE } from '../../server/sub-agents/derive.js';
 import {
   cancelOrphanedSubAgentGenerations,
   createSubAgentEffector,
+  degradeNoReportIfProse,
   resolveSubAgentToolIds,
 } from '../../server/sub-agents/effector-runner.js';
 
@@ -813,7 +814,7 @@ describe('sub-agent runner effector', { concurrency: false }, () => {
     assert.equal(typeof cancelOrphanedSubAgentGenerations, 'function');
   });
 
-  test('fake model never calls report tool → no_report', { timeout: 20_000 }, async () => {
+  test('fake model prose without report tool is a degraded pass', { timeout: 20_000 }, async () => {
     const silent = createFakeModelServer({
       scenario: [{ emit: proseSseChunks('I finished but I will not call the tool.') }],
     });
@@ -838,11 +839,10 @@ describe('sub-agent runner effector', { concurrency: false }, () => {
       seedKind: 'initial',
     });
     await waitFor(() => ended !== null);
-    assert.equal(
-      ended.outcome,
-      'no_report',
-      `expected no_report, got ${ended.outcome}: ${String(ended.summary ?? '')}`,
-    );
+    // runTurn still returns no_report; the effector maps real prose onto a
+    // degraded pass so the parent is not abandoned with an empty summary.
+    assert.equal(ended.outcome, 'pass');
+    assert.equal(ended.summary, 'I finished but I will not call the tool.');
     } finally {
       await silent.close();
       await restoreFake();
@@ -874,5 +874,148 @@ describe('sub-agent runner effector', { concurrency: false }, () => {
       await hang.close().catch(() => {});
       await restoreFake();
     }
+  });
+
+  test(
+    'prose-only no_report is a degraded pass (effector, not runTurn)',
+    { timeout: 20_000 },
+    async () => {
+      const parentChatId = 'chat-p8d-prose-fallback';
+      const cwd = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'p8d-prose-'));
+      const journal = createMemoryAgentsJournal();
+      const box = { engine: /** @type {ReturnType<typeof createEngine> | null} */ (null) };
+      const deps = stubDeps();
+      const prose = 'Here is what I found in src/.';
+      const effector = makeEffector({
+        parentChatId,
+        getState: () => box.engine.getState(),
+        deps,
+        runTurn: async (options) => {
+          options.deps.transcriptStore.append(options.chatId, {
+            role: 'assistant',
+            content: prose,
+          });
+          return { outcome: 'no_report' };
+        },
+      });
+      const engine = createEngine({
+        boardId: parentChatId,
+        effector,
+        journal,
+        graph: subAgentGraph,
+        tickMs: 100_000,
+      });
+      box.engine = engine;
+      await engine.load();
+      try {
+        await engine.append([runRequested(parentChatId, cwd)]);
+        await engine.tick();
+        await waitFor(() => {
+          const run = engine.getState().runs.get('run-1');
+          return run?.phase === 'passed';
+        }, 15_000);
+        const ended = journal.readEventsSync().filter((event) => event.type === 'attempt.ended');
+        assert.equal(ended.length, 1);
+        assert.equal(ended[0].outcome, 'pass');
+        assert.equal(ended[0].summary, prose);
+      } finally {
+        engine.dispose();
+      }
+    },
+  );
+
+  test(
+    'empty no_report is not a degraded pass',
+    { timeout: 20_000 },
+    async () => {
+      const parentChatId = 'chat-p8d-empty-noreport';
+      const cwd = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'p8d-empty-nr-'));
+      const journal = createMemoryAgentsJournal();
+      const box = { engine: /** @type {ReturnType<typeof createEngine> | null} */ (null) };
+      let turns = 0;
+      const effector = makeEffector({
+        parentChatId,
+        getState: () => box.engine.getState(),
+        runTurn: async () => {
+          turns += 1;
+          return { outcome: 'no_report' };
+        },
+      });
+      const engine = createEngine({
+        boardId: parentChatId,
+        effector,
+        journal,
+        graph: subAgentGraph,
+        tickMs: 100_000,
+      });
+      box.engine = engine;
+      await engine.load();
+      try {
+        await engine.append([runRequested(parentChatId, cwd)]);
+        await engine.tick();
+        await waitFor(() => {
+          const ended = journal.readEventsSync().filter((event) => event.type === 'attempt.ended');
+          return ended.length >= 1 && ended[0].outcome === 'no_report';
+        }, 15_000);
+        const first = journal.readEventsSync().find((event) => event.type === 'attempt.ended');
+        assert.equal(first.outcome, 'no_report');
+        assert.equal(turns >= 1, true);
+      } finally {
+        engine.dispose();
+      }
+    },
+  );
+});
+
+describe('degradeNoReportIfProse (effector-only)', () => {
+  const SCHEMA = 'minnow.sub-agent.v1';
+
+  test('maps assistant prose onto a degraded pass', () => {
+    const out = degradeNoReportIfProse(
+      { outcome: 'no_report' },
+      [{ role: 'assistant', content: 'Here is what I found in src/.' }],
+      SCHEMA,
+    );
+    assert.equal(out.outcome, 'pass');
+    assert.equal(out.summary, 'Here is what I found in src/.');
+  });
+
+  test('empty no_report stays no_report', () => {
+    const out = degradeNoReportIfProse({ outcome: 'no_report' }, [], SCHEMA);
+    assert.equal(out.outcome, 'no_report');
+  });
+
+  test('thinking-only rows are not a summary', () => {
+    const out = degradeNoReportIfProse(
+      { outcome: 'no_report' },
+      [{ role: 'assistant', content: '', thinking: ['hmm'] }],
+      SCHEMA,
+    );
+    assert.equal(out.outcome, 'no_report');
+  });
+
+  test('tool-call-only rows are not a summary', () => {
+    const out = degradeNoReportIfProse(
+      { outcome: 'no_report' },
+      [
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'read_file' } }],
+        },
+      ],
+      SCHEMA,
+    );
+    assert.equal(out.outcome, 'no_report');
+  });
+
+  test('does not rewrite a typed fail', () => {
+    const out = degradeNoReportIfProse(
+      { outcome: 'fail', summary: 'blocked' },
+      [{ role: 'assistant', content: 'Here is what I found in src/.' }],
+      SCHEMA,
+    );
+    assert.equal(out.outcome, 'fail');
+    assert.equal(out.summary, 'blocked');
   });
 });

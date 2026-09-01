@@ -15,6 +15,8 @@
 import { findChatById, getActiveChat } from '../state/sessions';
 import { getSubAgentExecutorContext } from '../tools/sub-agent-executor-context';
 import { getWorkspacePath } from '../state/workspace';
+import { getSubAgentTypeConfig } from './sub-agent-config';
+import { resolveSubAgentModelBinding } from './resolve-sub-agent-binding';
 import {
   isContextBudgetFailure,
   isMaxToolTurnFailure,
@@ -27,7 +29,9 @@ import {
   emitSubAgentRunUpdated,
   subscribeSubAgentRuns,
 } from './sub-agent-events';
+import { withSessionToken } from '../api/session-token';
 import { createSubAgentRunClient, type EventStream, type DeliverFrame } from './sub-agent-client';
+import { countToolCalls, turnEventsToMessages } from '../../server/orchestrator/transcript-messages.js';
 import type { PersistedSubAgentRun } from '../types';
 import type {
   AggregateResult,
@@ -94,6 +98,22 @@ function statusFromPhase(phase: string | undefined): SubAgentStatus {
   return 'queued';
 }
 
+/** Fold string wins over a sticky empty client overlay. */
+function preferNonEmptyString(fold: unknown, prev: unknown): string {
+  if (typeof fold === 'string' && fold.trim()) return fold;
+  if (typeof prev === 'string' && prev.trim()) return prev;
+  if (typeof fold === 'string') return fold;
+  if (typeof prev === 'string') return prev;
+  return '';
+}
+
+function pickMessages(live: unknown[] | undefined, prev: unknown[] | undefined): SubAgentRun['messages'] {
+  const a = Array.isArray(live) ? live : [];
+  const b = Array.isArray(prev) ? prev : [];
+  const chosen = a.length >= b.length ? a : b;
+  return chosen as SubAgentRun['messages'];
+}
+
 function lastEnded(raw: Record<string, unknown>): Record<string, unknown> | null {
   const attempts = Array.isArray(raw.attempts) ? raw.attempts : [];
   for (let i = attempts.length - 1; i >= 0; i -= 1) {
@@ -125,11 +145,20 @@ export function subAgentRunFromFold(
     raw.model && typeof raw.model === 'object' && !Array.isArray(raw.model)
       ? (raw.model as { providerId?: string; id?: string })
       : null;
-  const summary = typeof last?.summary === 'string' ? last.summary : extra.summary ?? '';
+  const summary = preferNonEmptyString(last?.summary, extra.summary);
   const error =
     phase === 'abandoned' && typeof raw.abandonedReason === 'string'
       ? raw.abandonedReason
       : extra.error ?? null;
+  const foldAttemptCount = Array.isArray(raw.attempts)
+    ? raw.attempts.length
+    : extra.foldAttemptCount ?? 0;
+  const messages = extra.messages ?? [];
+  const toolTurns =
+    messages.length > 0 ? countToolCalls(messages) : extra.toolTurns ?? 0;
+  const structuredOutcome =
+    extra.structuredOutcome ??
+    (summary.trim() ? legacyOutcomeFromSummary(summary) : undefined);
 
   return {
     ...extra,
@@ -141,16 +170,18 @@ export function subAgentRunFromFold(
     parentToolCallId:
       typeof raw.parentToolCallId === 'string' ? raw.parentToolCallId : extra.parentToolCallId ?? null,
     parentTurnId: typeof raw.parentTurnId === 'string' ? raw.parentTurnId : extra.parentTurnId ?? null,
-    summary: extra.summary ?? summary,
+    summary,
     error,
     startedAt,
     endedAt: isSubAgentRunTerminal(status) ? extra.endedAt ?? startedAt : null,
-    toolTurns: extra.toolTurns ?? 0,
+    toolTurns,
     cancelled: status === 'cancelled',
-    messages: extra.messages ?? [],
+    messages,
     delivered: raw.delivered === true,
     providerId: model?.providerId ?? extra.providerId,
     modelId: model?.id ?? extra.modelId,
+    foldAttemptCount,
+    ...(structuredOutcome ? { structuredOutcome } : {}),
   };
 }
 
@@ -187,11 +218,18 @@ function mergeClientView(runId: string): void {
   if (!raw && !prev) return;
   const live = client?.getLive();
   const err = client?.getEngineError();
-  const folded = subAgentRunFromFold(raw ?? { runId, ...(prev ?? {}) }, prev ?? {});
+  const liveMessages = live?.messages;
+  const messages = pickMessages(liveMessages, prev?.messages);
+  const folded = subAgentRunFromFold(raw ?? { runId, ...(prev ?? {}) }, {
+    ...(prev ?? {}),
+    messages,
+  });
   const terminal = isSubAgentRunTerminal(folded.status);
   const stopping = raw?.phase === 'cancelling';
   const next = subAgentRunFromFold(raw ?? { runId, ...(prev ?? {}) }, {
     ...(prev ?? {}),
+    messages,
+    toolTurns: messages.length > 0 ? countToolCalls(messages) : prev?.toolTurns ?? 0,
     // Live overlays die with the attempt. Replaying tokens onto a completed
     // card is exactly the reload bug this store exists to close. Cancelling
     // maps to product `running` so the card stays live, but the overlay is
@@ -203,6 +241,7 @@ function mergeClientView(runId: string): void {
         : ((live?.phase as SubAgentRun['livePhase']) ?? prev?.livePhase),
     liveCurrentToolName: terminal ? undefined : (live?.toolName ?? prev?.liveCurrentToolName),
     livePartialReasoning: terminal ? undefined : (live?.thinking || prev?.livePartialReasoning),
+    livePartialText: terminal ? undefined : (live?.partialText || prev?.livePartialText),
     startError: terminal
       ? null
       : err
@@ -217,9 +256,21 @@ function mergeClientView(runId: string): void {
   publish(next);
 }
 
+/**
+ * `EventSource` cannot send `X-Minnow-Token`, so the per-boot session token
+ * goes in the query string — the same split as boards: the client stays
+ * token-free so tests inject a plain stream, and production binds auth here.
+ */
+function openAuthenticatedStream(url: string): EventStream {
+  return new EventSource(withSessionToken(url)) as EventStream;
+}
+
 function ensureClient(runId: string): void {
   if (clients.has(runId)) return;
-  const client = createSubAgentRunClient(runId, openStream ? { openStream } : {});
+  // Tests inject `setSubAgentOpenStreamForTests`; production always tokens the URL.
+  const client = createSubAgentRunClient(runId, {
+    openStream: openStream ?? openAuthenticatedStream,
+  });
   clients.set(runId, client);
   client.subscribe(() => mergeClientView(runId));
   client.subscribeDeliver((frame) => {
@@ -254,6 +305,13 @@ function adoptRaw(raw: Record<string, unknown>): void {
   const prev = runs.get(String(raw.runId ?? ''));
   publish(subAgentRunFromFold(raw, prev ?? {}));
   ensureClient(String(raw.runId));
+  const runId = String(raw.runId ?? '');
+  const next = runs.get(runId);
+  // A terminal run with no live rows still needs the disk transcript so
+  // reopening the overlay is not an empty Complete pane.
+  if (next && isSubAgentRunTerminal(next.status) && (next.messages?.length ?? 0) === 0) {
+    void hydrateSubAgentTranscript(runId);
+  }
 }
 
 /**
@@ -284,12 +342,49 @@ export async function hydrateSubAgentRunsForParentChat(parentChatId: string): Pr
   return work;
 }
 
+/**
+ * Load the lossy attempt transcript into the store so a finished (or
+ * mid-flight) drawer is not an empty Complete pane after reload.
+ */
+export async function hydrateSubAgentTranscript(runId: string): Promise<void> {
+  if (!runId) return;
+  try {
+    const body = await request(`/${encodeURIComponent(runId)}/transcript`);
+    const events = Array.isArray(body?.events) ? body.events : [];
+    const mapped = turnEventsToMessages(events);
+    if (mapped.length === 0) return;
+    const client = clients.get(runId);
+    if (client) {
+      client.seedMessages(mapped);
+      mergeClientView(runId);
+      return;
+    }
+    const prev = runs.get(runId);
+    if (!prev) return;
+    if ((prev.messages?.length ?? 0) >= mapped.length) return;
+    publish({
+      ...prev,
+      messages: mapped as SubAgentRun['messages'],
+      toolTurns: countToolCalls(mapped),
+    });
+  } catch (err) {
+    console.error('[agents] could not hydrate run transcript', err);
+  }
+}
+
 export function getSubAgentRun(runId: string): SubAgentRun | undefined {
   return runs.get(runId);
 }
 
+function isListedActiveSubAgentRun(run: SubAgentRun): boolean {
+  if (run.status === 'running') return true;
+  // Queued means "no attempt yet". Idle between retry and abandon is not
+  // an active Agent activity row.
+  return run.status === 'queued' && (run.foldAttemptCount ?? 0) === 0;
+}
+
 export function listActiveSubAgentRuns(): SubAgentRun[] {
-  return [...runs.values()].filter((r) => r.status === 'queued' || r.status === 'running');
+  return [...runs.values()].filter(isListedActiveSubAgentRun);
 }
 
 /**
@@ -299,9 +394,7 @@ export function listActiveSubAgentRuns(): SubAgentRun[] {
  */
 export async function rehydrateLiveParentSubAgents(parentChatId: string): Promise<void> {
   if (!parentChatId) return;
-  const live = listSubAgentRunsForParentChat(parentChatId).filter(
-    (r) => r.status === 'queued' || r.status === 'running',
-  );
+  const live = listSubAgentRunsForParentChat(parentChatId).filter(isListedActiveSubAgentRun);
   if (live.length === 0) return;
   await hydrateSubAgentRunsForParentChat(parentChatId);
 }
@@ -352,6 +445,22 @@ export async function spawnSubAgent(
 ): Promise<SpawnSubAgentResult | AggregateResult> {
   const parentChatId = resolveParentChatId(input);
   const cwd = resolveSpawnCwd(parentChatId);
+  // Explicit Super Plan (etc.) override wins. Otherwise bind the parent
+  // chat's model so Settings → Model routing's "effective model" is what
+  // actually runs — not Autopilot planner, not whichever chat is on screen
+  // at retry time. Server resolveAttemptModel stays the last resort when
+  // there is no parent chat at all.
+  let providerId = input.providerId?.trim() ?? '';
+  let modelId = input.modelId?.trim() ?? '';
+  if (!providerId && !modelId) {
+    const typeCfg = await getSubAgentTypeConfig(input.type);
+    if (typeCfg) {
+      const parentChat = parentChatId ? findChatById(parentChatId) : undefined;
+      const binding = resolveSubAgentModelBinding(typeCfg, parentChat);
+      providerId = binding.providerId;
+      modelId = binding.modelId;
+    }
+  }
   const body = await request('', {
     method: 'POST',
     body: JSON.stringify({
@@ -361,8 +470,8 @@ export async function spawnSubAgent(
       cwd,
       ...(input.parentTurnId ? { parentTurnId: input.parentTurnId } : {}),
       ...(input.parentToolCallId ? { parentToolCallId: input.parentToolCallId } : {}),
-      ...(input.providerId ? { providerId: input.providerId } : {}),
-      ...(input.modelId ? { modelId: input.modelId } : {}),
+      ...(providerId ? { providerId } : {}),
+      ...(modelId ? { modelId } : {}),
     }),
   });
   if (body.run && typeof body.run === 'object') adoptRaw(body.run);
@@ -532,10 +641,31 @@ export function deriveSubAgentTerminalReason(run: SubAgentRun): SubAgentTerminal
   return 'success';
 }
 
+/**
+ * Honest terminal copy when the fold has no prose. Must never be the
+ * placeholder from `legacyOutcomeFromSummary('')` — that string is painted
+ * as a fake structured answer and collapses Activity.
+ */
+export function honestTerminalSummary(run: { status: string; error?: string | null }): string {
+  const err = typeof run.error === 'string' ? run.error.trim() : '';
+  if (err) return err;
+  if (run.status === 'cancelled') return 'Cancelled.';
+  if (run.status === 'failed') return 'The sub-agent failed without a written summary.';
+  return 'The sub-agent finished without a written summary.';
+}
+
+/**
+ * Prefer a real structured outcome, then a trimmed fold summary, then the
+ * last non-system message. Never call `legacyOutcomeFromSummary` on blank.
+ */
 function outcomeForRun(run: SubAgentRun) {
   if (run.structuredOutcome) return run.structuredOutcome;
+  const trimmed = typeof run.summary === 'string' ? run.summary.trim() : '';
+  if (trimmed) return legacyOutcomeFromSummary(trimmed);
   if (!isSubAgentRunTerminal(run.status)) return null;
-  return legacyOutcomeFromSummary(run.summary);
+  const preview = lastNonSystemPreview(run.messages);
+  if (preview) return legacyOutcomeFromSummary(preview);
+  return null;
 }
 
 export function formatAggregateResult(result: AggregateResult): string {
@@ -549,9 +679,8 @@ export function formatAggregateResult(result: AggregateResult): string {
 }
 
 export function buildAggregateResult(run: SubAgentRun): AggregateResult {
-  const outcome = run.structuredOutcome
-    ? run.structuredOutcome
-    : legacyOutcomeFromSummary(run.summary);
+  const outcome =
+    outcomeForRun(run) ?? legacyOutcomeFromSummary(honestTerminalSummary(run));
   const out: AggregateResult = {
     runId: run.runId,
     type: run.type,
@@ -578,7 +707,8 @@ export function buildAggregateResult(run: SubAgentRun): AggregateResult {
   return out;
 }
 
-function lastNonSystemPreview(messages: SubAgentRun['messages']): string {
+export function lastNonSystemPreview(messages: unknown[] | undefined | null): string {
+  if (!Array.isArray(messages) || messages.length === 0) return '';
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i] as { role?: string; content?: unknown };
     if (!m || m.role === 'system') continue;
@@ -658,6 +788,7 @@ export function buildSubAgentStatusPayload(run: SubAgentRun): Record<string, unk
   if (run.liveCurrentToolName) payload.liveCurrentToolName = run.liveCurrentToolName;
   if (run.livePhase) payload.livePhase = run.livePhase;
   if (run.livePartialReasoning) payload.livePartialReasoning = run.livePartialReasoning;
+  if (run.livePartialText) payload.livePartialText = run.livePartialText;
   if (run.startError) payload.startError = run.startError;
   if (run.modelId) payload.modelId = run.modelId;
   if (run.providerId) payload.providerId = run.providerId;

@@ -6,10 +6,12 @@
  */
 
 import {
-  buildSubAgentStatusPayload,
   cancelSubAgent,
   getSubAgentRun,
+  honestTerminalSummary,
   hydrateSubAgentRunsForParentChat,
+  hydrateSubAgentTranscript,
+  lastNonSystemPreview,
   listSubAgentRunsForParentChat,
 } from '../agents/orchestrator';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
@@ -124,17 +126,20 @@ function resolveRunSnapshot(
   return persisted ? { run: persisted, live: false } : null;
 }
 
-/** Resolve structured outcome (live status payload or persisted). */
-function resolveOutcome(run: AnyRun, live: boolean): SubAgentStructuredOutcome | null {
+/**
+ * Real structured answer only — same rule as spawn cards.
+ * A blank fold summary must not become the placeholder outcome; that
+ * string was painted as the answer and collapsed Activity.
+ */
+export function resolveOutcome(run: AnyRun, _live = false): SubAgentStructuredOutcome | null {
   if (run.structuredOutcome) return run.structuredOutcome;
-  if (live) {
-    const snap = buildSubAgentStatusPayload(run as SubAgentRun);
-    if (snap.outcome && typeof snap.outcome === 'object') {
-      return snap.outcome as SubAgentStructuredOutcome;
-    }
-  }
   if (run.summary?.trim()) return legacyOutcomeFromSummary(run.summary);
   return null;
+}
+
+/** Activity stays open unless a real fold outcome exists on a terminal run. */
+export function shouldExpandSubAgentActivity(run: AnyRun): boolean {
+  return !resolveOutcome(run) || !isTerminal(run.status);
 }
 
 /** Live status line when a structured outcome is not ready yet. */
@@ -147,7 +152,12 @@ function renderStructuredBlock(root: HTMLElement, run: AnyRun, live: boolean): v
   root.replaceChildren();
   const outcome = resolveOutcome(run, live);
   if (!outcome) {
-    const line = live ? liveStatusLine(run as SubAgentRun) : '';
+    // In-flight: live status. Terminal: message preview or fold error — never the placeholder.
+    const line = !isTerminal(run.status)
+      ? live
+        ? liveStatusLine(run as SubAgentRun)
+        : ''
+      : lastNonSystemPreview(run.messages) || honestTerminalSummary(run);
     if (line) {
       const p = document.createElement('p');
       p.className = 'sub-agent-overlay__summary';
@@ -304,8 +314,7 @@ function renderActiveRun(state: OverlayState, opts: { scroll: 'end' | 'sticky' }
     state.structuredRoot.appendChild(err);
   }
 
-  const hasStructured = Boolean(resolveOutcome(run, live));
-  state.transcriptDetails.open = !hasStructured || !isTerminal(run.status);
+  state.transcriptDetails.open = shouldExpandSubAgentActivity(run);
   renderTranscriptView(
     state.transcriptBody,
     run.messages as unknown[],
@@ -346,7 +355,10 @@ function renderActiveRun(state: OverlayState, opts: { scroll: 'end' | 'sticky' }
 function setActiveRun(runId: string): void {
   if (!overlay || overlay.activeRunId === runId) return;
   overlay.activeRunId = runId;
-  renderActiveRun(overlay, { scroll: 'end' });
+  void hydrateSubAgentTranscript(runId).then(() => {
+    if (!overlay || overlay.activeRunId !== runId) return;
+    renderActiveRun(overlay, { scroll: 'end' });
+  });
 }
 
 /** Toggle inset ↔ full-column presentation. */
@@ -440,11 +452,11 @@ export function closeSubAgentDrawer(): void {
  * Opens the overlay for one sub-agent run (live or persisted on the given chat).
  * Hydrates from the server first so a reload shows every run in its fold state.
  */
-export function openSubAgentDrawer(runId: string, chatId: string): void {
+export async function openSubAgentDrawer(runId: string, chatId: string): Promise<void> {
   bindSubscription();
-  void hydrateSubAgentRunsForParentChat(chatId).then(() => {
-    mountSubAgentDrawer(runId, chatId);
-  });
+  await hydrateSubAgentRunsForParentChat(chatId);
+  await hydrateSubAgentTranscript(runId);
+  mountSubAgentDrawer(runId, chatId);
 }
 
 function mountSubAgentDrawer(runId: string, chatId: string): void {

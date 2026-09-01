@@ -15,7 +15,7 @@ import type {
 import type { ThinkingResolvedMode, ThinkingTriState } from './agents/thinking-types';
 
 /** Per-model / per-chat reasoning effort level for header dropdown and send path. */
-export type ReasoningEffortOption = 'off' | 'on' | 'low' | 'medium' | 'high';
+export type ReasoningEffortOption = 'off' | 'on' | 'low' | 'medium' | 'high' | 'max';
 
 /** Persisted session blob schema version (`minnow-sessions-v1` key; version inside JSON). */
 export const SESSION_SCHEMA_VERSION = 6 as const;
@@ -1119,6 +1119,12 @@ export interface Chat {
   viewMode?: 'chat' | 'board';
   /** Backend-owned generation id for in-flight main chat completion (reload re-subscribe). */
   currentGenerationId?: string;
+  /**
+   * Persisted when a main-chat turn is in flight so the boot resume gate can still
+   * prompt after a graceful Quit (which cancels generations and clears
+   * {@link currentGenerationId}) or a crash mid-tools.
+   */
+  resumeInterrupted?: boolean;
   /** Queued steering correction for the in-flight turn (push-now; cleared on consume or stop). */
   pendingSteerMessage?: string;
   /** Follow-up messages queued while this chat is streaming (MIN-200). */
@@ -1191,6 +1197,31 @@ export interface Chat {
     summaryPreview?: string;
     at?: number;
   };
+  /**
+   * Durable file/URL chips pinned on this chat (MIN-630). Survive reload and
+   * are distinct from this-turn composer attachments.
+   */
+  links?: ChatLink[];
+}
+
+/** Kind of standing link chip pinned on a chat. */
+export type ChatLinkKind = 'file' | 'url';
+
+/**
+ * One pinned chat link: a workspace file (editor tab) or an http(s) URL
+ * (in-app browser tab). Same chip family as composer/transcript `.code-ref-link`.
+ */
+export interface ChatLink {
+  id: string;
+  kind: ChatLinkKind;
+  /** Workspace-relative path when {@link kind} is `file`. */
+  path?: string;
+  /** Absolute http(s) URL when {@link kind} is `url`. */
+  url?: string;
+  /** Chip label (basename or host). */
+  label: string;
+  /** Epoch ms when the link was pinned. */
+  addedAt: number;
 }
 
 export type {

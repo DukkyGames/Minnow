@@ -2,7 +2,7 @@ import { PLACEHOLDER_CHAT_NAME, SAVE_DEBOUNCE_MS, STORAGE_KEY } from '../constan
 import { abortChatTitleGeneration } from '../chat/titles/inflight';
 import { cleanupChatWorktreeOnDelete } from './chat-worktree';
 import { isPlaceholderChatName } from '../chat/titles/placeholder';
-import { setSaveTimer, saveTimer } from '../app-state';
+import { setSaveTimer, saveTimer, streamingChatIds } from '../app-state';
 import {
   flushSessionsOnShutdown,
   getChatHistory,
@@ -2029,6 +2029,20 @@ export function registerSessionPersistenceShutdownHandler(): void {
   if (sessionPersistenceShutdownRegistered || typeof window === 'undefined') return;
   sessionPersistenceShutdownRegistered = true;
   window.addEventListener('pagehide', () => {
+    // Browser / renderer teardown: stamp in-flight chats before the keepalive flush.
+    // Electron also runs markInterruptedChatsForShutdown via __minnowPrepareForShutdown
+    // before generations are cancelled; this covers tab close and racey exits.
+    if (sessionState) {
+      for (const chat of sessionState.chats) {
+        const inFlight =
+          chat.resumeInterrupted === true ||
+          Boolean(chat.currentGenerationId?.trim()) ||
+          streamingChatIds.has(chat.id);
+        if (!inFlight) continue;
+        chat.resumeInterrupted = true;
+        touchChat(chat);
+      }
+    }
     flushPendingSessionSaveOnShutdown();
   });
 }

@@ -121,10 +121,6 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
     refreshAreas: ['appearance'],
     writable: false,
   }),
-  'appearance.wallpaper': browser('wallpaper', 'string', {
-    refreshAreas: ['appearance'],
-    writable: false,
-  }),
   'appearance.fonts': section(['appearance']),
   'appearance.customColors': section(['appearance']),
 
@@ -201,6 +197,7 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'agents.rules.enabled': resource('rules', 'enabled', 'boolean', { refreshAreas: ['rules'] }),
   'agents.rules.items': section(['rules']),
   'agents.rules.addGroup': section(['rules']),
+  'agents.rules.deleteGroup': section(['rules']),
 
   // —— Integrations ——
   'integrations.search': section(['search']),
@@ -231,6 +228,12 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'integrations.skills': section(['skills']),
   'integrations.webhooks': section(['webhooks']),
   'integrations.tools.cache': resource('tools', 'toolCache.enabled', 'boolean', {
+    refreshAreas: ['tools'],
+  }),
+  'integrations.tools.outputCap': resource('tools', 'toolOutput.enabled', 'boolean', {
+    refreshAreas: ['tools'],
+  }),
+  'integrations.tools.outputCap.maxChars': resource('tools', 'toolOutput.maxChars', 'number', {
     refreshAreas: ['tools'],
   }),
   'integrations.browser': meta('browser.enabled', 'boolean', { refreshAreas: ['browser'] }),

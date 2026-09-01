@@ -33,7 +33,7 @@ describe('benchmark test catalog coverage', () => {
 
   test('capability-matrix suite resolves every catalog testId', () => {
     const tests = listExpectedTestsForSuites(['capability-matrix']);
-    assert.equal(tests.length, 59);
+    assert.equal(tests.length, 56);
     for (const t of tests) {
       assertCatalogCovers(t.testId, t.suite, t.label);
     }
@@ -59,7 +59,7 @@ describe('benchmark test catalog coverage', () => {
   test('all registered suites include capability-matrix beyond full preset', () => {
     const all = listAllExpectedBenchmarkTests();
     const presetOnly = listExpectedTestsForSuites(PRESET_BENCHMARK_SUITE_IDS);
-    assert.equal(all.length, presetOnly.length + 59);
+    assert.equal(all.length, presetOnly.length + 56);
     assert.deepEqual(ALL_BENCHMARK_SUITE_IDS.length, PRESET_BENCHMARK_SUITE_IDS.length + 1);
   });
 });

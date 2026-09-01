@@ -209,4 +209,40 @@ describe('composeSystemPrompt mode part', () => {
     });
     assert.doesNotMatch(out, /Sub-agent delegation/);
   });
+
+  test('orchestrate has no default work agent, so the mode body survives', async () => {
+    // V2 deleted the `orchestrator` work-agent (prompts and registry entry) —
+    // the server engine owns board execution now. With no default agent for the
+    // mode there is nothing carrying deliverable instructions, so suppressing
+    // the mode body would leave the turn with no operating instructions at all.
+    assert.equal(
+      shouldSuppressModePart({
+        modeId: 'orchestrate',
+        workAgentId: 'orchestrator',
+      } as never),
+      false,
+    );
+    registerPromptFilesFromRaw(await loadBaseAndModeFixtures());
+    const out = composeSystemPrompt({
+      profile: 'full',
+      cwd: '/test',
+      modeId: 'orchestrate',
+      expertId: null,
+      workAgentId: null,
+      skillBody: null,
+      memoryBlock: null,
+      enabledToolIds: ['read_file'],
+      infoPresetId: null,
+      orchestratePlanPath: 'documentation/plans/fixture-plan.md',
+    });
+    assert.match(out, /Operating mode: Orchestrate/);
+  });
+
+  test('a mode with a default work agent still suppresses its mode body', async () => {
+    // The suppression rule itself is unchanged; only orchestrate lost its agent.
+    assert.equal(
+      shouldSuppressModePart({ modeId: 'build', workAgentId: 'builder' } as never),
+      true,
+    );
+  });
 });

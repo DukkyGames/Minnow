@@ -270,11 +270,25 @@
 }
 
 .msg.assistant.msg--failed .msg-failed-chip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--mn-danger, var(--mn-fg-muted));
   margin-bottom: 4px;
+}
+
+/*
+ * Continue/Clear sit on this chip, which is the same top row ⋮ occupies. The
+ * inset that used to be needed here is now the general `--msg-actions-lane` in
+ * message-actions.css, so only the chip's own type overrides remain.
+ */
+.msg.assistant.msg--failed .msg-failed-chip .msg-error-recover-actions {
+  text-transform: none;
+  letter-spacing: 0.02em;
 }
 
 .msg.assistant.msg--truncated .msg-truncated-chip {
@@ -433,6 +447,12 @@
   gap: 8px;
 }
 
+.msg-error-recover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .msg-error-recover-btn {
   font: inherit;
   font-size: 0.85rem;
@@ -444,8 +464,18 @@
   cursor: pointer;
 }
 
+.msg-error-recover-btn--continue {
+  color: var(--mn-fg);
+  background: var(--mn-bg-elevated);
+  border-color: var(--mn-border);
+}
+
 .msg-error-recover-btn:hover:not(:disabled) {
   background: color-mix(in srgb, var(--mn-danger) 12%, var(--mn-bg));
+}
+
+.msg-error-recover-btn--continue:hover:not(:disabled) {
+  background: var(--mn-bg-hover);
 }
 
 .msg-error-recover-btn:disabled {
@@ -1078,6 +1108,13 @@ html[data-theme$='-light'] .msg-bubble.msg-bubble--md pre .hljs-selector-tag {
 
 .tool-start-indicator__label {
   letter-spacing: 0.01em;
+}
+
+.tool-start-indicator__detail {
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--mn-fg-muted);
 }
 
 /* ── Expanded body ──────────────────────────────────────────────────────── */

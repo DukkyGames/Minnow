@@ -46,10 +46,30 @@ import { emitLive } from '../orchestrator/live-events.js';
 import { shouldEmitSubAgentLiveTurnEvent } from '../runner/turn-event.js';
 import { resolveAttemptModel } from '../orchestrator/model-binding.js';
 import { peekEngine } from '../orchestrator/engine.js';
+import {
+  flushTranscripts,
+  readTranscript,
+  recordTranscriptEnd,
+  recordTranscriptEvent,
+} from '../orchestrator/transcripts.js';
+import { turnEventsToMessages } from '../orchestrator/transcript-messages.js';
 import { SUB_AGENT_ROLE } from './events.js';
-import { AGENTS_NAMESPACE } from './derive.js';
+import { AGENTS_NAMESPACE, lastEndedAttempt } from './derive.js';
+import { agentsDir } from './journal.js';
 import { getSubAgentTypeRow, loadSubAgentFile } from './config.js';
 import { loadSubAgentSystemPrompt } from './prompts.js';
+
+/** Throttle live `delta` frames so the drawer can show a tail without a token flood. */
+const LIVE_DELTA_MS = 80;
+/** Same cap idea as `livePartialReasoning` on the client (last N chars). */
+const LIVE_PARTIAL_CAP = 400;
+
+/**
+ * Pending cumulative assistant text per attempt, flushed on a timer.
+ *
+ * @type {Map<string, { text: string, timer: ReturnType<typeof setTimeout> | null, parentChatId: string, runId: string, attemptId: string }>}
+ */
+const liveDeltaByAttempt = new Map();
 
 /**
  * Attempt-id prefix so orphan cancel does not steal board live-attempt ids
@@ -109,6 +129,150 @@ export function cancelOrphanedSubAgentGenerations() {
 function errorMessage(err) {
   if (err instanceof Error && err.message) return err.message;
   return String(err ?? 'unknown error');
+}
+
+/**
+ * Last committed assistant prose on a memory transcript.
+ * Tool-call-only rows are skipped — those are not a summary.
+ *
+ * @param {unknown} messages
+ * @returns {string}
+ */
+function lastAssistantProse(messages) {
+  if (!Array.isArray(messages)) return '';
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const row = messages[i];
+    if (!row || typeof row !== 'object') continue;
+    if (/** @type {{ role?: string }} */ (row).role !== 'assistant') continue;
+    const toolCalls = /** @type {{ tool_calls?: unknown }} */ (row).tool_calls;
+    if (Array.isArray(toolCalls) && toolCalls.length > 0) continue;
+    const text =
+      typeof /** @type {{ content?: unknown }} */ (row).content === 'string'
+        ? /** @type {{ content: string }} */ (row).content.trim()
+        : '';
+    if (text) return text;
+  }
+  return '';
+}
+
+/**
+ * Boards stay on the report tool. Sub-agents that stream real prose (or a
+ * valid structured JSON blob) without calling `report_outcome` used to land as
+ * `no_report` → retry → abandon with an empty parent message. Map that to a
+ * degraded pass here, not inside `runTurn`.
+ *
+ * @param {import('../runner/run-turn').TurnResult} result
+ * @param {unknown} messages
+ * @param {string} schemaId
+ * @returns {import('../runner/run-turn').TurnResult}
+ */
+export function degradeNoReportIfProse(result, messages, schemaId) {
+  if (!result || result.outcome !== 'no_report') return result;
+  const prose = lastAssistantProse(messages);
+  if (!prose) return result;
+  try {
+    const parsed = JSON.parse(prose);
+    const structured = validateStructuredOutcomeForPreset(
+      parsed,
+      resolveSummarySchemaPreset(schemaId),
+    );
+    if (structured) {
+      return { ...result, outcome: 'pass', summary: structured.summary };
+    }
+  } catch {
+    // Not JSON — the prose itself is the degraded summary.
+  }
+  return { ...result, outcome: 'pass', summary: prose };
+}
+
+/**
+ * Resume a continue-seed from the lossy disk transcript after a process
+ * restart (in-memory `transcriptByRun` does not survive).
+ *
+ * @param {string} parentChatId
+ * @param {import('./types').RunState} run
+ * @returns {Promise<unknown[] | undefined>}
+ */
+async function loadContinuePriorFromDisk(parentChatId, run) {
+  const last = lastEndedAttempt(run);
+  if (!last?.attemptId) return undefined;
+  const entryDir = agentsDir(parentChatId);
+  try {
+    await flushTranscripts(parentChatId, last.attemptId, { entryDir });
+    const { events } = await readTranscript(parentChatId, last.attemptId, { entryDir });
+    const mapped = turnEventsToMessages(events);
+    if (mapped.length === 0) return undefined;
+    const hasUser = mapped.some(
+      (row) => row && typeof row === 'object' && /** @type {{ role?: string }} */ (row).role === 'user',
+    );
+    if (hasUser) return mapped;
+    return [{ role: 'user', content: run.task }, ...mapped];
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * @param {{ parentChatId: string, runId: string, attemptId: string, text: string }} buf
+ * @returns {void}
+ */
+function emitPartialDelta(buf) {
+  if (!buf.text) return;
+  emitLive({
+    key: buf.parentChatId,
+    boardId: buf.parentChatId,
+    attemptId: buf.attemptId,
+    taskId: buf.runId,
+    role: SUB_AGENT_ROLE,
+    event: { type: 'delta', text: buf.text.slice(-LIVE_PARTIAL_CAP) },
+  });
+}
+
+/**
+ * Coalesce cumulative `delta` text and emit at most every {@link LIVE_DELTA_MS}.
+ *
+ * @param {{ parentChatId: string, runId: string, attemptId: string }} meta
+ * @param {string} text
+ * @returns {void}
+ */
+function noteLiveDelta(meta, text) {
+  let buf = liveDeltaByAttempt.get(meta.attemptId);
+  if (!buf) {
+    buf = { text: '', timer: null, ...meta };
+    liveDeltaByAttempt.set(meta.attemptId, buf);
+  }
+  buf.text = text;
+  if (buf.timer) return;
+  buf.timer = setTimeout(() => {
+    buf.timer = null;
+    emitPartialDelta(buf);
+  }, LIVE_DELTA_MS);
+  buf.timer.unref?.();
+}
+
+/**
+ * Flush a pending delta so the last tokens are not stuck in the timer.
+ *
+ * @param {string} attemptId
+ * @returns {void}
+ */
+function flushLiveDelta(attemptId) {
+  const buf = liveDeltaByAttempt.get(attemptId);
+  if (!buf) return;
+  if (buf.timer) {
+    clearTimeout(buf.timer);
+    buf.timer = null;
+  }
+  emitPartialDelta(buf);
+}
+
+/**
+ * @param {string} attemptId
+ * @returns {void}
+ */
+function clearLiveDelta(attemptId) {
+  flushLiveDelta(attemptId);
+  liveDeltaByAttempt.delete(attemptId);
 }
 
 /**
@@ -596,13 +760,20 @@ export function createSubAgentEffector(options = {}) {
       });
 
       const seedKind = desired.seedKind === 'continue' ? 'continue' : 'initial';
-      const prior = seedKind === 'continue' ? transcriptByRun.get(runId) : undefined;
       const seed =
         seedKind === 'continue'
           ? 'Continue. The previous attempt ended without a verdict. Resume from the transcript.'
           : run.task;
 
       void (async () => {
+        /** @type {unknown[] | undefined} */
+        let prior = seedKind === 'continue' ? transcriptByRun.get(runId) : undefined;
+        // In-memory continue seed is lost on process restart. The lossy disk
+        // transcript is the only prior we still have — fold it back into API
+        // messages so the retry is not a cold start.
+        if (seedKind === 'continue' && (!Array.isArray(prior) || prior.length === 0) && parentChatId) {
+          prior = await loadContinuePriorFromDisk(parentChatId, run);
+        }
         /** @type {import('../runner/run-turn').TurnResult} */
         let result;
         try {
@@ -650,12 +821,27 @@ export function createSubAgentEffector(options = {}) {
             ...(prior ? { messages: prior, seedKind: 'continue' } : seedKind === 'continue' ? { seedKind: 'continue' } : {}),
             onEvent: (event) => {
               if (!parentChatId) return;
-              // Opaque key (P8-B). Tokens never journaled — the live bus is
-              // the only path they take, same as boards. Disk transcripts
-              // still drop `phase` via isHighFrequencyTurnEvent (P10-B).
-              // Live SSE forwards `phase` so cards leave "Generating
-              // response…" before the first tool (P10-L / MIN-777).
+              // Disk is lossy and drops high-frequency types (same recorder
+              // as boards). Live SSE is a separate sink: phase/tools already
+              // ride shouldEmitSubAgentLiveTurnEvent; throttled deltas get
+              // their own emit so the drawer is not an empty generating row.
+              recordTranscriptEvent({
+                entryDir: agentsDir(parentChatId),
+                attemptId,
+                taskId: runId,
+                role: SUB_AGENT_ROLE,
+                event: /** @type {Record<string, unknown>} */ (
+                  /** @type {unknown} */ (event)
+                ),
+              });
+              if (event?.type === 'delta' && typeof event.text === 'string') {
+                noteLiveDelta({ parentChatId, runId, attemptId }, event.text);
+                return;
+              }
               if (!shouldEmitSubAgentLiveTurnEvent(event?.type)) return;
+              if (event?.type === 'tool_call' || event?.type === 'round_end') {
+                flushLiveDelta(attemptId);
+              }
               emitLive({
                 key: parentChatId,
                 boardId: parentChatId,
@@ -676,6 +862,37 @@ export function createSubAgentEffector(options = {}) {
           transcriptByRun.set(runId, rec.messages);
         }
 
+        // Effector-only: prose (or valid structured JSON) without report_outcome
+        // is a degraded pass. True empty no_report still retries then abandons.
+        // Do not promote raw thinking to a pass — lastAssistantProse skips it.
+        const incomingOutcome = result?.outcome;
+        result = degradeNoReportIfProse(result, rec?.messages, schemaId);
+        clearLiveDelta(attemptId);
+        if (parentChatId) {
+          // Delta-only turns never write round_end. Record the in-memory prose
+          // so GET hydrate is not empty after degradeNoReportIfProse.
+          if (
+            incomingOutcome === 'no_report' &&
+            result.outcome === 'pass' &&
+            typeof result.summary === 'string' &&
+            result.summary.trim()
+          ) {
+            recordTranscriptEvent({
+              entryDir: agentsDir(parentChatId),
+              attemptId,
+              taskId: runId,
+              role: SUB_AGENT_ROLE,
+              event: { type: 'round_end', text: result.summary },
+            });
+          }
+          recordTranscriptEnd({
+            entryDir: agentsDir(parentChatId),
+            attemptId,
+            outcome: result.outcome,
+            ...(typeof result.summary === 'string' ? { summary: result.summary } : {}),
+          });
+        }
+
         if (entry.stopped) return;
         await deliverEnd(entry, toAttemptEnd(attemptId, runId, result));
       })();
@@ -694,6 +911,7 @@ export function createSubAgentEffector(options = {}) {
       entry.controller.abort();
       running.delete(attemptId);
       liveAttemptIds.delete(attemptId);
+      clearLiveDelta(attemptId);
     },
 
     /**
@@ -722,6 +940,7 @@ export function createSubAgentEffector(options = {}) {
       for (const entry of running.values()) {
         entry.stopped = true;
         liveAttemptIds.delete(entry.attemptId);
+        clearLiveDelta(entry.attemptId);
       }
       running.clear();
     },

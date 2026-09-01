@@ -13,14 +13,19 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import {
   adoptSubAgentRunForTests,
+  buildSubAgentStatusPayload,
   cancelAllForParentTurn,
   cancelSubAgent,
+  getSubAgentRun,
+  hydrateSubAgentRunsForParentChat,
+  hydrateSubAgentTranscript,
   listActiveSubAgentRuns,
   rehydrateLiveParentSubAgents,
   resetSubAgentOrchestrator,
   setSubAgentApiFetchForTests,
   setSubAgentOpenStreamForTests,
   spawnSubAgent,
+  subAgentRunFromFold,
   waitForSubAgent,
 } from '../../src/agents/orchestrator.ts';
 import type { SubAgentRun } from '../../src/agents/types.ts';
@@ -29,6 +34,11 @@ import {
   createEmptyChatObject,
   setSessionStateForTests,
 } from '../../src/state/sessions.ts';
+import { setStorageModeForTests } from '../../src/config/storage-mode.ts';
+import {
+  resetSubAgentConfigCache,
+  setRuntimeSubAgentOverrides,
+} from '../../src/agents/sub-agent-config.ts';
 import { FIXED_RUN_ID, FIXED_SUMMARY } from './test-helpers.mts';
 
 const CHAT_ID = '11111111-1111-1111-1111-222222222222';
@@ -58,11 +68,21 @@ describe('orchestrator SSE store (spawn / cancel / wait)', () => {
   beforeEach(() => {
     posts.length = 0;
     resetSubAgentOrchestrator();
+    // Pin localStorage so spawn's type-config load does not ping a live server.
+    setStorageModeForTests('localStorage');
+    resetSubAgentConfigCache();
+    setRuntimeSubAgentOverrides({});
     setSubAgentOpenStreamForTests(() => ({ addEventListener() {}, close() {} }));
     setSubAgentApiFetchForTests(async (input, init) => {
       const method = init?.method ?? 'GET';
       const url = String(input);
       posts.push({ method, url, body: String(init?.body ?? '') });
+      if (method === 'GET' && url.includes('/transcript')) {
+        return new Response(
+          JSON.stringify({ ok: true, events: [] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
       if (method === 'POST' && url.endsWith('/api/agents') && !url.includes('/cancel')) {
         return new Response(
           JSON.stringify({
@@ -120,6 +140,9 @@ describe('orchestrator SSE store (spawn / cancel / wait)', () => {
     setSubAgentApiFetchForTests(null);
     setSubAgentOpenStreamForTests(null);
     resetSubAgentOrchestrator();
+    setRuntimeSubAgentOverrides(null);
+    resetSubAgentConfigCache();
+    setStorageModeForTests(null);
   });
 
   test('spawn POSTs /api/agents and adopts the returned run', async () => {
@@ -209,6 +232,58 @@ describe('orchestrator SSE store (spawn / cancel / wait)', () => {
     assert.equal(body.parentToolCallId, 'call_spawn');
   });
 
+  test('spawn binds the parent chat model when the type has no override', async () => {
+    const chat = createEmptyChatObject('chat-model');
+    chat.id = CHAT_ID;
+    chat.providerId = 'local-fake';
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    await spawnSubAgent({
+      type: 'explore',
+      task: 'scan',
+      wait: false,
+      parentChatId: CHAT_ID,
+    });
+
+    const spawn = posts.find((p) => p.method === 'POST' && p.url.endsWith('/api/agents'));
+    assert.ok(spawn);
+    const body = JSON.parse(spawn.body) as { providerId: string; modelId: string };
+    assert.equal(body.providerId, 'local-fake');
+    assert.equal(body.modelId, 'chat-model');
+  });
+
+  test('spawn keeps an explicit provider/model override', async () => {
+    const chat = createEmptyChatObject('chat-model');
+    chat.id = CHAT_ID;
+    chat.providerId = 'local-fake';
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    await spawnSubAgent({
+      type: 'explore',
+      task: 'scan',
+      wait: false,
+      parentChatId: CHAT_ID,
+      providerId: 'reviewer-provider',
+      modelId: 'reviewer-model',
+    });
+
+    const spawn = posts.find((p) => p.method === 'POST' && p.url.endsWith('/api/agents'));
+    assert.ok(spawn);
+    const body = JSON.parse(spawn.body) as { providerId: string; modelId: string };
+    assert.equal(body.providerId, 'reviewer-provider');
+    assert.equal(body.modelId, 'reviewer-model');
+  });
+
   test('cancelAllForParentTurn POSTs cancel for runs indexed by that turn', async () => {
     adoptSubAgentRunForTests(runningRun());
     cancelAllForParentTurn('turn-1');
@@ -271,6 +346,16 @@ describe('cancel origin wiring (P10-L / MIN-777)', () => {
     assert.equal(/waitForSubAgent\(result\.runId\s*,/.test(source), false);
   });
 
+  test('production ensureClient defaults EventSource through withSessionToken', () => {
+    const source = fs.readFileSync(
+      path.join(PROJECT_ROOT, 'src', 'agents', 'orchestrator.ts'),
+      'utf8',
+    );
+    assert.match(source, /function openAuthenticatedStream\(url: string\): EventStream/);
+    assert.match(source, /new EventSource\(withSessionToken\(url\)\)/);
+    assert.match(source, /openStream: openStream \?\? openAuthenticatedStream/);
+  });
+
   test('executeSubAgentTool does not take the parent chat signal', () => {
     const source = fs.readFileSync(
       path.join(PROJECT_ROOT, 'src', 'tools', 'sub-agent-executor.ts'),
@@ -314,6 +399,12 @@ describe('cancel origin wiring (P10-L / MIN-777)', () => {
     assert.equal(listActiveSubAgentRuns().length, 1);
     setSubAgentApiFetchForTests(async (input) => {
       const url = String(input);
+      if (url.includes('/transcript')) {
+        return new Response(
+          JSON.stringify({ ok: true, events: [] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
       if (url.includes(`parentChatId=${encodeURIComponent(CHAT_ID)}`)) {
         return new Response(
           JSON.stringify({
@@ -342,6 +433,151 @@ describe('cancel origin wiring (P10-L / MIN-777)', () => {
     });
     await rehydrateLiveParentSubAgents(CHAT_ID);
     assert.equal(listActiveSubAgentRuns().length, 0);
+  });
+});
+
+describe('fold merge and Agent activity listing', () => {
+  beforeEach(() => {
+    resetSubAgentOrchestrator();
+    setSubAgentOpenStreamForTests(() => ({ addEventListener() {}, close() {} }));
+  });
+
+  afterEach(() => {
+    setSubAgentOpenStreamForTests(null);
+    resetSubAgentOrchestrator();
+  });
+
+  test('empty prev summary does not mask attempt.ended', () => {
+    const run = subAgentRunFromFold(
+      {
+        runId: FIXED_RUN_ID,
+        type: 'explore',
+        task: 'scan',
+        parentChatId: CHAT_ID,
+        phase: 'passed',
+        attempts: [{ ended: true, summary: FIXED_SUMMARY, outcome: 'pass' }],
+        delivered: true,
+      },
+      { summary: '', toolTurns: 0 },
+    );
+    assert.equal(run.summary, FIXED_SUMMARY);
+    assert.equal(run.status, 'completed');
+    assert.equal(run.structuredOutcome?.summary, FIXED_SUMMARY);
+  });
+
+  test('queued with zero attempts is listed; idle after a failed attempt is not', () => {
+    adoptSubAgentRunForTests({
+      ...runningRun(),
+      status: 'queued',
+      foldAttemptCount: 0,
+    });
+    assert.equal(listActiveSubAgentRuns().length, 1);
+
+    resetSubAgentOrchestrator();
+    const idle = subAgentRunFromFold(
+      {
+        runId: FIXED_RUN_ID,
+        type: 'explore',
+        task: 'scan',
+        parentChatId: CHAT_ID,
+        phase: 'idle',
+        attempts: [{ ended: true, summary: 'nope', outcome: 'no_report' }],
+        delivered: false,
+      },
+      { summary: '' },
+    );
+    assert.equal(idle.status, 'queued');
+    assert.equal(idle.foldAttemptCount, 1);
+    assert.equal(idle.summary, 'nope');
+    adoptSubAgentRunForTests(idle);
+    assert.equal(listActiveSubAgentRuns().length, 0);
+  });
+
+  test('passed, abandoned, and cancelled drop off Agent activity', () => {
+    for (const status of ['completed', 'failed', 'cancelled'] as const) {
+      resetSubAgentOrchestrator();
+      adoptSubAgentRunForTests({ ...runningRun(), status });
+      assert.equal(listActiveSubAgentRuns().length, 0, status);
+    }
+    adoptSubAgentRunForTests(runningRun());
+    assert.equal(listActiveSubAgentRuns().length, 1);
+  });
+});
+
+describe('transcript hydrate fills Activity without the empty placeholder', () => {
+  const PLACEHOLDER = 'Sub-agent completed with no text output.';
+
+  beforeEach(() => {
+    resetSubAgentOrchestrator();
+    setSubAgentOpenStreamForTests(() => ({ addEventListener() {}, close() {} }));
+  });
+
+  afterEach(() => {
+    setSubAgentOpenStreamForTests(null);
+    resetSubAgentOrchestrator();
+  });
+
+  test('GET transcript with thinking + attempt_end + tools fills messages and a real summary', async () => {
+    setSubAgentApiFetchForTests(async (input) => {
+      const url = String(input);
+      if (url.includes('/transcript')) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            events: [
+              { type: 'thinking', text: 'I should look at src/ next.' },
+              {
+                type: 'tool_call',
+                name: 'read_file',
+                id: 'call_read',
+                arguments: { path: 'src/a.ts' },
+              },
+              { type: 'tool_result', id: 'call_read', content: 'export const a = 1;' },
+              { type: 'attempt_end', name: 'pass', summary: 'Here is what I found in src/.' },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (url.includes(`parentChatId=${encodeURIComponent(CHAT_ID)}`)) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            state: {
+              runs: [
+                {
+                  runId: FIXED_RUN_ID,
+                  type: 'explore',
+                  task: 'scan',
+                  parentChatId: CHAT_ID,
+                  phase: 'passed',
+                  attempts: [{ ended: true, summary: '', outcome: 'pass' }],
+                  delivered: true,
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({ ok: false, error: `unexpected ${url}` }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    await hydrateSubAgentRunsForParentChat(CHAT_ID);
+    await hydrateSubAgentTranscript(FIXED_RUN_ID);
+    const run = getSubAgentRun(FIXED_RUN_ID);
+    assert.ok(run);
+    assert.ok((run.messages?.length ?? 0) >= 3);
+    const hasTool = run.messages.some(
+      (row) => row && typeof row === 'object' && (row as { role?: string }).role === 'tool',
+    );
+    assert.equal(hasTool, true);
+    const payload = buildSubAgentStatusPayload(run);
+    assert.equal(payload.summary, 'Here is what I found in src/.');
+    assert.notEqual(payload.summary, PLACEHOLDER);
   });
 });
 

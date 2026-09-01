@@ -69,6 +69,7 @@ export interface SubAgentTranscriptLive {
   phase?: SubAgentLivePhase | null;
   currentToolName?: string | null;
   partialReasoning?: string;
+  partialText?: string;
 }
 
 /** Build live tail props from a run snapshot. */
@@ -83,5 +84,6 @@ export function subAgentTranscriptLiveFromRun(
     phase: active.livePhase ?? (run.status === 'queued' ? null : 'generating'),
     currentToolName: active.liveCurrentToolName ?? null,
     partialReasoning: active.livePartialReasoning,
+    partialText: active.livePartialText,
   };
 }

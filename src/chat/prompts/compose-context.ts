@@ -19,6 +19,7 @@ import { resolveChatToolWorkspaceRoot } from '../../state/chat-worktree';
 import { getExpertAwareToolNamesForChat } from '../experts/expert-tool-policy';
 import { loadToolConfig } from '../../tools/config';
 import type { Chat } from '../../types';
+import { formatChatLinksPromptBlock } from '../links';
 import { retrieveMemoryBlock } from '../../memory/client';
 import { shouldInjectMemory } from '../../memory/config';
 import { shouldInjectCodeMap } from '../../brain/code-injection-config';
@@ -211,6 +212,7 @@ export async function buildComposeContext(
     codeMapInjectionEnabled: injectCodeMap,
     contextDocumentsBlock,
     contextDocumentsInjectionEnabled: injectContextDocuments,
+    chatLinksBlock: formatChatLinksPromptBlock(chat.links),
     injectionsReplayed,
     enabledToolIds,
     infoPresetId,

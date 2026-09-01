@@ -77,7 +77,7 @@ export const DEFAULT_APPEARANCE_FONTS: AppearanceFonts = {
 };
 
 /** IndexedDB asset kinds for appearance uploads. */
-export type AppearanceAssetKind = 'font' | 'wallpaper';
+export type AppearanceAssetKind = 'font';
 
 export interface AppearanceAssetRecord {
   id: string;

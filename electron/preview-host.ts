@@ -30,6 +30,10 @@ import {
   previewNavigateAwait,
 } from './preview-guest-actions.js';
 import { PreviewInstanceRegistry, DEFAULT_PREVIEW_INSTANCE_ID } from './preview-instance-registry.js';
+import {
+  resolvePreviewGuestAttachMode,
+  shouldKeepPreviewGuestVisibleAfterCapture,
+} from './preview-guest-reveal.js';
 import { configurePreviewSession, PREVIEW_SESSION_PARTITION } from './preview-session.js';
 import { enableCdpPicking, type CdpPickSession } from './preview-cdp-pick.js';
 import {
@@ -81,7 +85,7 @@ const wiredWindowIds = new Set<number>();
 /** webContents.id → live CDP picking session (MIN-370). At most one per guest. */
 const cdpPickSessions = new Map<number, CdpPickSession>();
 
-/** Last renderer-supplied bounds per (window, instance) — reused when navigating without a fresh show(). */
+/** Last renderer-supplied bounds per (window, instance) — reused for layout while already visible, never to auto-reveal. */
 const lastBoundsByInstance = new Map<string, PreviewBounds>();
 
 /** Per-window DevTools dock preference (renderer sets via IPC). */
@@ -747,13 +751,24 @@ function showActiveTab(win: BrowserWindow, bounds?: PreviewBounds, instanceId?: 
   const tabId = resolveTabId(win, state.activeTabId ?? undefined, id);
   if (!tabId) return null;
   const entry = getOrCreateTab(win, tabId, id);
+  // Capture paint state before detach — tab switch must keep showing when the pane is already open.
+  const instanceAlreadyVisible =
+    previewInstances.isVisible(win.id, id) ||
+    [...state.tabs.values()].some((tab) => tab.visible);
   detachAllTabViews(win, id);
   const key = boundsKey(win.id, id);
-  const effectiveBounds = isValidPreviewBounds(bounds) ? bounds : lastBoundsByInstance.get(key);
-  const hasBounds = isValidPreviewBounds(effectiveBounds);
-  if (hasBounds) {
-    applyPreviewViewBounds(entry, effectiveBounds!, hostZoomFactor(win), resolveDevToolsDock(win));
-    rememberPreviewBounds(win, effectiveBounds!, id);
+  const explicitBoundsValid = isValidPreviewBounds(bounds);
+  const attachMode = resolvePreviewGuestAttachMode({
+    explicitBoundsValid,
+    instanceAlreadyVisible,
+  });
+  const layoutBounds = explicitBoundsValid ? bounds : lastBoundsByInstance.get(key);
+  const hasLayout = isValidPreviewBounds(layoutBounds);
+  // Paint only with explicit show(bounds) or while already visible. lastBounds must not auto-reveal.
+  const shouldPaint = attachMode === 'paint' && hasLayout;
+  if (shouldPaint) {
+    applyPreviewViewBounds(entry, layoutBounds!, hostZoomFactor(win), resolveDevToolsDock(win));
+    rememberPreviewBounds(win, layoutBounds!, id);
   } else {
     entry.visible = false;
     entry.view.setVisible(false);
@@ -771,7 +786,7 @@ function showActiveTab(win: BrowserWindow, bounds?: PreviewBounds, instanceId?: 
     }
   }
   state.activeTabId = tabId;
-  previewInstances.setVisible(win.id, id, hasBounds);
+  previewInstances.setVisible(win.id, id, shouldPaint);
   return entry;
 }
 
@@ -828,6 +843,7 @@ export function registerPreviewHostIpc(): void {
     const state = windowState(win, instanceId);
     if (!state.tabs.has(tabId)) getOrCreateTab(win, tabId, instanceId);
     state.activeTabId = tabId;
+    // Activate without bounds: navigation while hidden; do not restore lastBounds.
     showActiveTab(win, undefined, instanceId);
   });
 
@@ -920,10 +936,8 @@ export function registerPreviewHostIpc(): void {
       }
       try {
         await loadSourceInGuest(entry.view.webContents, payload);
-        const bounds = lastBoundsByInstance.get(boundsKey(win.id, instance));
-        if (isValidPreviewBounds(bounds)) {
-          showActiveTab(win, bounds, instanceId);
-        }
+        // Attach for navigation while hidden; renderer show(bounds) is the only reveal path.
+        showActiveTab(win, undefined, instanceId);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         const id = resolveTabId(win, tabId, instanceId) ?? 'unknown';
@@ -949,10 +963,8 @@ export function registerPreviewHostIpc(): void {
       try {
         await entry.view.webContents.loadURL(url);
         if (win) {
-          const bounds = lastBoundsByInstance.get(boundsKey(win.id, instance));
-          if (isValidPreviewBounds(bounds)) {
-            showActiveTab(win, bounds, instanceId);
-          }
+          // Attach for navigation while hidden; do not restore lastBounds as a reveal.
+          showActiveTab(win, undefined, instanceId);
         }
       } catch (err) {
         if (!win) return;
@@ -1009,8 +1021,10 @@ export function registerPreviewHostIpc(): void {
         }
         return;
       }
-      applyPreviewViewBounds(entry, bounds, hostZoomFactor(win), resolveDevToolsDock(win));
       rememberPreviewBounds(win, bounds, instanceId);
+      // setBounds must not turn a hidden guest on — only preview.show(bounds) reveals.
+      if (!entry.visible) return;
+      applyPreviewViewBounds(entry, bounds, hostZoomFactor(win), resolveDevToolsDock(win));
     },
   );
 
@@ -1033,7 +1047,9 @@ export function registerPreviewHostIpc(): void {
       if (!entry) {
         throw new Error('Preview guest is not available');
       }
-      if (win && !entry.visible) {
+      const wasVisible = entry.visible;
+      let temporarilyShown = false;
+      if (win && !wasVisible) {
         const id = PreviewInstanceRegistry.resolveInstanceId(instanceId);
         const bounds = lastBoundsByInstance.get(boundsKey(win.id, id));
         if (isValidPreviewBounds(bounds)) {
@@ -1051,10 +1067,21 @@ export function registerPreviewHostIpc(): void {
               /* already attached */
             }
           }
-          previewInstances.setVisible(win.id, id, true);
+          temporarilyShown = true;
         }
       }
-      return previewCapturePageBase64(entry.view.webContents);
+      try {
+        return await previewCapturePageBase64(entry.view.webContents);
+      } finally {
+        // Do not leave a capture restore painted over Issues / other apps.
+        if (temporarilyShown && !shouldKeepPreviewGuestVisibleAfterCapture(wasVisible)) {
+          hidePreviewHostEntry(entry);
+          if (win && !win.isDestroyed()) {
+            const id = PreviewInstanceRegistry.resolveInstanceId(instanceId);
+            previewInstances.setVisible(win.id, id, false);
+          }
+        }
+      }
     },
   );
 
@@ -1081,6 +1108,7 @@ export function registerPreviewHostIpc(): void {
       }
       if (win && tabId && typeof tabId === 'string') {
         windowState(win, instanceId).activeTabId = tabId;
+        // Attach for navigation; stay hidden unless the renderer already showed this instance.
         showActiveTab(win, undefined, instanceId);
       }
       if (typeof url !== 'string') {

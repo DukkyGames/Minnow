@@ -45,13 +45,6 @@
     "cancel_sub_agent": false,
     "list_sub_agents": false,
     "get_sub_agent_status": false,
-    "board_init": false,
-    "board_update_task": false,
-    "board_set_autonomy": false,
-    "board_get_state": false,
-    "board_report": false,
-    "board_provision_infra": false,
-    "delegate_tasks": false,
     "issue_add": false,
     "issue_update": false,
     "issue_link": false,
@@ -154,13 +147,6 @@
       "cancel_sub_agent": "off",
       "list_sub_agents": "off",
       "get_sub_agent_status": "off",
-      "board_init": "off",
-      "board_update_task": "off",
-      "board_set_autonomy": "off",
-      "board_get_state": "off",
-      "board_report": "off",
-      "board_provision_infra": "off",
-      "delegate_tasks": "off",
       "issue_add": "off",
       "issue_update": "off",
       "issue_link": "off",
@@ -224,6 +210,10 @@
   "webSearchProvider": "duckduckgo",
   "toolCache": {
     "enabled": true
+  },
+  "toolOutput": {
+    "enabled": true,
+    "maxChars": 128000
   },
   "plugins": {}
 }

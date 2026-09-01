@@ -27,6 +27,8 @@ If the ring shows no cap, the model did not report a context length. Minnow will
 
 The ring is a guide, not a wall. Some providers truncate silently when you overflow and some fail outright.
 
+**Tool result size** is a different setting. Settings → Integrations → Tools caps how much text each file read, search, or shell command **returns in the first place**. Context policy only acts on history that is already in the chat. See [Tools and permissions](tools-and-permissions.md).
+
 ### Context policy for agents
 
 Agents that run unattended — board tasks, sub-agents, scheduled jobs — cannot ask you to start a new chat, so they need a rule for what to do when they hit their cap. **Settings → Agents → Context policy** sets the global default:
@@ -68,7 +70,7 @@ Managing it is in [the Brain app](../apps/brain.md): browse the graph, edit page
 
 Rules are standing instructions injected into every system prompt. "Always use TypeScript strict mode." "Never commit without running tests." "Answer in British English."
 
-**Settings → Agents → Rules.** Rules are off by default and organised into groups you can enable or disable together — a "Work" group and a "Personal" group, say, without rewriting the text each time.
+**Settings → Agents → Rules.** Rules are off by default and organised into groups you can enable or disable together — a "Work" group and a "Personal" group, say, without rewriting the text each time. Empty groups can be deleted from that page. A group that still has rules stays until those rules are moved or deleted.
 
 Keep them short and testable. Rules cost context on every single turn, so a page of them is a page you pay for constantly. If something applies to one project only, a memory page is usually better than a global rule.
 

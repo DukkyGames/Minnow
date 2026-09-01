@@ -12,8 +12,8 @@ import {
 } from '../../src/benchmark/capabilities/groups.ts';
 
 describe('capability catalog', () => {
-  test('has 59 capabilities in spreadsheet order', () => {
-    assert.equal(CAPABILITY_CATALOG.length, 59);
+  test('has 56 capabilities in spreadsheet order', () => {
+    assert.equal(CAPABILITY_CATALOG.length, 56);
     const ids = CAPABILITY_CATALOG.map((c) => c.id);
     assert.deepEqual(new Set(ids).size, ids.length);
   });
@@ -35,7 +35,7 @@ describe('capability catalog', () => {
   test('auto capabilities have probe specs; manual have reasons', () => {
     const auto = CAPABILITY_CATALOG.filter((c) => c.scoreMode === 'auto');
     const manual = CAPABILITY_CATALOG.filter((c) => c.scoreMode === 'manual');
-    assert.equal(auto.length, 55);
+    assert.equal(auto.length, 52);
     assert.equal(manual.length, 4);
     for (const cap of auto) {
       assert.ok(cap.probe, `${cap.id}: missing probe`);
@@ -75,6 +75,6 @@ describe('capability catalog', () => {
 
   test('first and last entries match spreadsheet columns', () => {
     assert.equal(CAPABILITY_CATALOG[0].id, 'core-streaming');
-    assert.equal(CAPABILITY_CATALOG[58].id, 'features-markdown');
+    assert.equal(CAPABILITY_CATALOG[55].id, 'features-markdown');
   });
 });

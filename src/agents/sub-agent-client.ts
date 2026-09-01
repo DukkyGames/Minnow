@@ -11,6 +11,7 @@
 
 import { foldInto, emptyState } from '../../server/sub-agents/derive.js';
 import type { RunState } from '../../server/sub-agents/types';
+import { applyTurnEventToMessages } from '../../server/orchestrator/transcript-messages.js';
 
 /** The bit of EventSource this client uses. Tests inject a fake; Node has none. */
 export interface EventStream {
@@ -120,7 +121,14 @@ export interface SubAgentRunClient {
   getRun(): Record<string, unknown> | null;
   getSeq(): number;
   getEngineError(): EngineError | null;
-  getLive(): { phase: string | null; toolName: string | null; thinking: string };
+  getLive(): {
+    phase: string | null;
+    toolName: string | null;
+    thinking: string;
+    partialText: string;
+    messages: unknown[];
+  };
+  seedMessages(messages: unknown[]): void;
   subscribe(listener: () => void): () => void;
   /** Parent-inject frames. Not journaled; the fold records `result.delivered` after they land. */
   subscribeDeliver(listener: (frame: DeliverFrame) => void): () => void;
@@ -145,6 +153,8 @@ export function createSubAgentRunClient(
   let livePhase: string | null = null;
   let liveTool: string | null = null;
   let liveThinking = '';
+  let livePartialText = '';
+  let liveMessages: unknown[] = [];
   let source: EventStream | null = null;
   let pending: Record<string, unknown>[] = [];
   const listeners = new Set<() => void>();
@@ -163,7 +173,15 @@ export function createSubAgentRunClient(
   const applyEvent = (event: Record<string, unknown>): boolean => {
     const eventSeq = Number(event.seq);
     if (Number.isSafeInteger(eventSeq) && eventSeq <= seq) return false;
-    if (event.type === 'attempt.started') engineError = null;
+    if (event.type === 'attempt.started') {
+      engineError = null;
+      // A new attempt must not keep the previous attempt's tool rows or tail.
+      liveMessages = [];
+      livePartialText = '';
+      liveThinking = '';
+      livePhase = null;
+      liveTool = null;
+    }
     const state = emptyState();
     if (raw) {
       const existing = foldRun(raw);
@@ -222,7 +240,15 @@ export function createSubAgentRunClient(
         seq?: unknown;
         taskId?: unknown;
         attemptId?: unknown;
-        event?: { type?: string; name?: string; text?: string; phase?: string };
+        event?: {
+          type?: string;
+          name?: string;
+          text?: string;
+          phase?: string;
+          id?: string;
+          arguments?: unknown;
+          content?: string;
+        };
       };
       // Drop replayed frames (stale seq / genuine attempt end), not because
       // the fold is terminal. A live frame for an open attempt after
@@ -230,9 +256,8 @@ export function createSubAgentRunClient(
       if (!shouldPaintLiveFrame(payload, runId, raw)) return;
       const inner = payload.event;
       if (!inner?.type) return;
-      // Tokens are unbounded; a reconnect must not replay them. Keep only the
-      // "what is it doing" signal the cards already show — plus `phase` so
-      // the pre-tool window is not stuck on the generating fallback.
+      // Accumulate tool/round rows onto messages so the drawer is not empty
+      // while tools run. Throttled `delta` is a live tail only.
       if (inner.type === 'phase') {
         const next = inner.phase;
         if (next === 'thinking' || next === 'generating' || next === 'tools') {
@@ -242,15 +267,33 @@ export function createSubAgentRunClient(
         }
         return;
       }
+      if (inner.type === 'delta') {
+        livePhase = 'generating';
+        if (typeof inner.text === 'string') livePartialText = inner.text.slice(-400);
+        emit();
+        return;
+      }
       if (inner.type === 'tool_call' || inner.type === 'tool_streaming') {
         livePhase = 'tools';
         liveTool = typeof inner.name === 'string' ? inner.name : liveTool;
+        livePartialText = '';
+        if (inner.type === 'tool_call') {
+          liveMessages = applyTurnEventToMessages(liveMessages, inner);
+        }
         emit();
         return;
       }
       if (inner.type === 'tool_result') {
         liveTool = null;
         livePhase = 'generating';
+        liveMessages = applyTurnEventToMessages(liveMessages, inner);
+        emit();
+        return;
+      }
+      if (inner.type === 'round_end') {
+        livePartialText = '';
+        livePhase = 'generating';
+        liveMessages = applyTurnEventToMessages(liveMessages, inner);
         emit();
         return;
       }
@@ -288,7 +331,21 @@ export function createSubAgentRunClient(
     getRun: () => raw,
     getSeq: () => seq,
     getEngineError: () => engineError,
-    getLive: () => ({ phase: livePhase, toolName: liveTool, thinking: liveThinking }),
+    getLive: () => ({
+      phase: livePhase,
+      toolName: liveTool,
+      thinking: liveThinking,
+      partialText: livePartialText,
+      messages: liveMessages,
+    }),
+    seedMessages(messages) {
+      // Hydrate from disk only when live SSE has not already painted rows.
+      // A late GET must not clobber an in-flight accumulation.
+      if (liveMessages.length > 0) return;
+      if (!Array.isArray(messages) || messages.length === 0) return;
+      liveMessages = messages.slice();
+      emit();
+    },
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

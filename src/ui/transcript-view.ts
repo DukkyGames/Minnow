@@ -181,7 +181,16 @@ function createTranscriptToolIndicator(toolName: string): HTMLElement {
   return indicatorEl;
 }
 
-/** Append thinking / generating / tool indicators below committed transcript rows. */
+/** Append a throttled generating tail so "Generating response…" is never an empty row. */
+function appendGeneratingPartial(tail: HTMLElement, live: SubAgentTranscriptLive): void {
+  const partial = live.partialText?.trim();
+  if (!partial) return;
+  const row = document.createElement('div');
+  row.className = 'transcript-view__assistant transcript-view__assistant--partial';
+  row.textContent = partial;
+  tail.appendChild(row);
+}
+
 export function appendTranscriptLiveTail(
   body: HTMLElement,
   live: SubAgentTranscriptLive | undefined,
@@ -212,10 +221,12 @@ export function appendTranscriptLiveTail(
     }
   } else if (phase === 'generating') {
     tail.appendChild(createTranscriptStreamStatus('generating'));
+    appendGeneratingPartial(tail, live);
   } else if (phase === 'tools' && toolName) {
     tail.appendChild(createTranscriptToolIndicator(toolName));
   } else if (live.isLive) {
     tail.appendChild(createTranscriptStreamStatus('generating'));
+    appendGeneratingPartial(tail, live);
   }
 
   if (tail.childNodes.length > 0) {

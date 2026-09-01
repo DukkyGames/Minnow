@@ -4,9 +4,14 @@
  * this path no longer asks a model to initialize the board (MIN-715).
  */
 
-import { GIT_SETUP_SKILL_ID } from '../skills/git-setup-client';
+import {
+  normalizeOrchestratePlanPath,
+  resolveEffectiveOrchestratePlanPath,
+} from '../chat/plans/plan-path';
 import { isActiveChatStreaming } from '../chat/streaming-state';
+import { GIT_SETUP_SKILL_ID } from '../skills/git-setup-client';
 import { formatHistoryWithSkillTag } from '../skills/parse-slash';
+import { getBoardGroupForChat } from '../state/chat-groups';
 import { getWorkspaceGitStatus } from '../state/git-workspace';
 import { initializeWorkspaceGit } from '../state/initialize-git';
 import { getActiveChat } from '../state/sessions';
@@ -29,8 +34,28 @@ import { setStatus } from './status';
 export const BOARD_ONBOARDING_KICKOFF_MESSAGE =
   'Parse the selected plan and initialize the board with each task\'s build and test spec and category. Do not start any tasks.';
 
+/**
+ * Substring present in every board-init kickoff: the pathless constant, path-named
+ * builder output, and older transcripts that used the bare constant.
+ */
+export const BOARD_ONBOARDING_KICKOFF_MARKER =
+  "each task's build and test spec and category. Do not start any tasks.";
+
 /** Legacy alias for onboarding kickoff (historical transcripts / init-split detection). */
 export const BOARD_BUILD_KICKOFF_MESSAGE = BOARD_ONBOARDING_KICKOFF_MESSAGE;
+
+/**
+ * Build the board-init kickoff user turn. When a plan path is already bound, name it
+ * so the model does not invent an ask_question plan picker.
+ */
+export function buildBoardOnboardingKickoffMessage(planPath?: string | null): string {
+  const normalized = normalizeOrchestratePlanPath(planPath ?? '');
+  if (!normalized) return BOARD_ONBOARDING_KICKOFF_MESSAGE;
+  return (
+    `Parse the selected plan at \`${normalized}\` and initialize the board with each task's ` +
+    'build and test spec and category. Do not start any tasks. Do not ask which plan to use.'
+  );
+}
 
 /** Skip a second kickoff when launch or onboarding already posted the init message. */
 export function shouldSkipDuplicateBoardOnboardingKickoff(chat: {
@@ -42,7 +67,7 @@ export function shouldSkipDuplicateBoardOnboardingKickoff(chat: {
     const msg = chat.history[i];
     if (msg.role !== 'user') continue;
     const text = typeof msg.content === 'string' ? msg.content : '';
-    return text.includes(BOARD_ONBOARDING_KICKOFF_MESSAGE);
+    return text.includes(BOARD_ONBOARDING_KICKOFF_MARKER);
   }
   return false;
 }
@@ -164,7 +189,10 @@ export async function kickoffOrchestrateBoardBuild(): Promise<void> {
       }
     }
 
-    sendBoardMessage(BOARD_ONBOARDING_KICKOFF_MESSAGE);
+    // V2 has no chat/group write-back sync: POST /api/boards reads the plan path
+    // itself and the server owns board state, so resolving is all this needs.
+    const planPath = resolveEffectiveOrchestratePlanPath(chat, getBoardGroupForChat(chat));
+    sendBoardMessage(buildBoardOnboardingKickoffMessage(planPath));
     setBoardOnboardingAwaitingInit(true);
   } finally {
     setBoardKickoffInProgress(false);

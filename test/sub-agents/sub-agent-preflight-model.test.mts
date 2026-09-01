@@ -12,7 +12,9 @@ import {
 } from '../../src/agents/orchestrator.ts';
 import {
   resetSubAgentConfigCache,
+  setRuntimeSubAgentOverrides,
 } from '../../src/agents/sub-agent-config.ts';
+import { setStorageModeForTests } from '../../src/config/storage-mode.ts';
 import {
   resetSubAgentRunIdFactory,
   setSubAgentRunIdFactory,
@@ -22,7 +24,9 @@ import { FIXED_RUN_ID } from './test-helpers.mts';
 describe('sub-agent preflight model binding', () => {
   beforeEach(() => {
     resetSubAgentOrchestrator();
+    setStorageModeForTests('localStorage');
     resetSubAgentConfigCache();
+    setRuntimeSubAgentOverrides({});
     resetSubAgentRunIdFactory();
     setSubAgentRunIdFactory(() => FIXED_RUN_ID);
     setSubAgentOpenStreamForTests(() => ({ addEventListener() {}, close() {} }));

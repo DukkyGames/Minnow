@@ -84,7 +84,8 @@ describe('orchestrator aggregate', () => {
       messages: [],
     });
     assert.equal(agg.error, 'boom');
-    assert.equal(agg.outcome.summary, 'Sub-agent completed with no text output.');
+    assert.equal(agg.outcome.summary, 'boom');
+    assert.notEqual(agg.outcome.summary, 'Sub-agent completed with no text output.');
     assert.deepEqual(agg.outcome.findings, []);
   });
 });

@@ -859,7 +859,7 @@
 }
 
 .ov2-task__id {
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
   color: var(--mn-fg-muted);
 }
@@ -877,7 +877,7 @@
   margin: 0;
   padding: 0 2px;
   color: var(--mn-fg-muted);
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -978,7 +978,7 @@
 .ov2-detail__id {
   display: block;
   margin-bottom: 3px;
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -1066,7 +1066,7 @@
 }
 
 .ov2-facts__value--mono {
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10.5px;
 }
 
@@ -1116,7 +1116,7 @@
 }
 
 .ov2-alert__detail--mono {
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11.5px;
 }
 
@@ -1166,7 +1166,7 @@
   display: inline-flex;
   align-items: baseline;
   gap: 5px;
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -1312,7 +1312,7 @@
   align-items: baseline;
   gap: 5px;
   padding-left: 8px;
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -1388,7 +1388,7 @@
   flex: 0 0 auto;
   width: 15px;
   color: var(--mn-fg-subtle);
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10.5px;
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -1528,7 +1528,7 @@
 
 .ov2-log__label {
   color: var(--mn-fg-muted);
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 9.5px;
   font-weight: 600;
   letter-spacing: 0.07em;
@@ -1568,7 +1568,7 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 8px;
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11.5px;
   line-height: 1.5;
 }
@@ -1609,7 +1609,7 @@
   border-radius: 6px;
   background: var(--mn-surface-1);
   color: var(--mn-fg-muted);
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -1760,7 +1760,7 @@
   padding: 1px 4px;
   border-radius: 4px;
   background: var(--mn-surface-2);
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11.5px;
 }
 
@@ -1845,7 +1845,7 @@
 }
 
 .ov2-queue__id {
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 /* ── Journal ───────────────────────────────────────────────────────────── */
@@ -1890,7 +1890,7 @@
   grid-template-columns: 44px 160px 1fr;
   gap: 10px;
   padding: 2px 0;
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -2014,7 +2014,7 @@ select.ov2-create__input {
 
 .ov2-create__parse-loc {
   color: var(--mn-fg-muted);
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
 }
 
@@ -2069,7 +2069,7 @@ select.ov2-create__input {
 }
 
 .ov2-errors__what {
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
 }
 
@@ -2235,7 +2235,7 @@ select.ov2-create__input {
 }
 
 .ov2-report__task-id {
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
   color: var(--mn-fg-muted);
 }
@@ -2357,7 +2357,7 @@ select.ov2-create__input {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 6px 10px;
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
 }
 
 .ov2-report-screen__stat {
@@ -2439,7 +2439,7 @@ select.ov2-create__input {
 }
 
 .ov2-report-screen__issue-id {
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 11px;
   color: var(--mn-fg-muted);
 }
@@ -2587,7 +2587,7 @@ select.ov2-create__input {
   border-radius: 8px;
   background: var(--mn-surface-1);
   color: var(--mn-fg);
-  font-family: var(--mn-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
   font-size: 12px;
   line-height: 1.55;
   white-space: pre-wrap;

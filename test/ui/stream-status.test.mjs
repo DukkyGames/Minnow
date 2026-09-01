@@ -114,4 +114,17 @@ test('setThinkingElapsed shows suffix in thinking phase', () => {
 
   handle.dispose();
 });
+
+test('setRuntimeDetail paints beside the loading-model label', () => {
+  setupDom();
+  const wrap = document.createElement('div');
+  wrap.innerHTML = '<div class="msg-label"></div><div class="msg-bubble"></div>';
+  const handle = attachStreamStatus(wrap);
+  handle.setPhase('loading_model');
+  handle.setRuntimeDetail('37%');
+  const detail = wrap.querySelector('.stream-status__detail');
+  assert.equal(detail?.textContent?.trim(), '37%');
+  assert.equal(detail?.hidden, false);
+  handle.dispose();
+});
 });

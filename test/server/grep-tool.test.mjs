@@ -17,6 +17,7 @@ import {
   runGrepSearch,
   truncateRipgrepOutput,
 } from '../../server/tools/grep.js';
+import { DEFAULT_MAX_OUTPUT_CHARS } from '../../server/tools/output-cap.js';
 import { pathAccessStore, resolveSafePath } from '../../server/runtime/path-access.js';
 
 const fixtureRoot = path.join(
@@ -93,7 +94,7 @@ describe('grep helpers', () => {
   });
 
   it('capGrepOutput caps per-line length', () => {
-    const longLine = 'x'.repeat(500);
+    const longLine = 'x'.repeat(GREP_MAX_LINE_CHARS + 50);
     const { text } = capGrepOutput(longLine, { headLimit: 1 });
     const emitted = text.split('\n')[0];
     assert.ok(emitted.length <= GREP_MAX_LINE_CHARS);
@@ -132,12 +133,13 @@ describe('grep helpers', () => {
   });
 });
 
-describe('grep constants (MIN-196)', () => {
-  it('uses conservative default and max head limits', () => {
-    assert.equal(GREP_DEFAULT_HEAD_LIMIT, 200);
-    assert.equal(GREP_MAX_HEAD_LIMIT, 200);
-    assert.equal(GREP_MAX_OUTPUT_CHARS, 32000);
-    assert.equal(GREP_MAX_LINE_CHARS, 400);
+describe('grep constants (MIN-667)', () => {
+  it('uses raised default and max head limits so raising head_limit is not a no-op', () => {
+    assert.equal(GREP_DEFAULT_HEAD_LIMIT, 500);
+    assert.equal(GREP_MAX_HEAD_LIMIT, 2000);
+    assert.ok(GREP_DEFAULT_HEAD_LIMIT < GREP_MAX_HEAD_LIMIT);
+    assert.equal(GREP_MAX_OUTPUT_CHARS, DEFAULT_MAX_OUTPUT_CHARS);
+    assert.equal(GREP_MAX_LINE_CHARS, 2000);
   });
 });
 
@@ -304,5 +306,26 @@ describe('runFindFilesSearch fixture workspace', () => {
     const out = await findFilesInFixture({ pattern: '**/*.ts', path: 'src/nested' });
     assert.match(out, /deep\.ts/);
     assert.doesNotMatch(out, /visible\.ts/);
+  });
+});
+
+describe('grep result-cap policy (MIN-667)', () => {
+  it('ignores the automatic head cap when applyResultCap is false', () => {
+    const sample = Array.from({ length: 600 }, (_, i) => `${i}:match`).join('\n');
+    const { text, truncated, lineCount } = capGrepOutput(sample, { applyResultCap: false });
+    assert.equal(truncated, false);
+    assert.equal(lineCount, 600);
+    assert.doesNotMatch(text, /truncated at/);
+  });
+
+  it('still honors an explicit head_limit when applyResultCap is false', () => {
+    const sample = Array.from({ length: 40 }, (_, i) => `${i}:match`).join('\n');
+    const { lineCount, truncated } = capGrepOutput(sample, {
+      applyResultCap: false,
+      explicitHeadLimit: true,
+      headLimit: 10,
+    });
+    assert.equal(lineCount, 10);
+    assert.equal(truncated, true);
   });
 });

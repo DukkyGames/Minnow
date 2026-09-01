@@ -19,6 +19,8 @@ import {
   WEB_RAG_EXCERPT_LIMIT,
   WEB_TEXT_MAX_BYTES,
 } from '../lib/fetch-web-content.mjs';
+import { loadToolConfig } from './config';
+import { resolveOutputCapPolicy } from '../../server/tools/output-cap.js';
 import {
   toolGetAppearance,
   toolUpdateAppearance,
@@ -27,6 +29,13 @@ import {
 import { toolLaunchMinnowApp } from './os-launch-tool';
 import { toolRecallChatContext } from './recall-chat-context';
 import { toolRecallTurnFull } from './recall-turn-full';
+
+/** Browser-fallback fetch cap: same policy as the Node /api/tools path. */
+function capFetchedWebText(text: string, args: Record<string, unknown>): string {
+  const policy = resolveOutputCapPolicy(loadToolConfig().toolOutput, args);
+  if (!policy.applyResultCap) return text;
+  return truncateUtf8(text, WEB_TEXT_MAX_BYTES);
+}
 
 /** Allowed characters for safe math evaluation (digits, operators, whitespace, commas). */
 const SAFE_CALC_CHARS = /^[0-9+\-*/().%\s,]+$/;
@@ -334,7 +343,7 @@ async function toolFetchWebContent(args: Record<string, unknown>): Promise<strin
     return fetchResult;
   }
 
-  return truncateUtf8(fetchResult, WEB_TEXT_MAX_BYTES);
+  return capFetchedWebText(fetchResult, args);
 }
 
 /** Fetches a page and returns sentences most relevant to the query. */
@@ -354,7 +363,7 @@ async function toolRagWebContent(args: Record<string, unknown>): Promise<string>
     return fetchResult;
   }
 
-  const capped = truncateUtf8(fetchResult, WEB_TEXT_MAX_BYTES);
+  const capped = capFetchedWebText(fetchResult, args);
   const snippets = rankWebContentByQuery(capped, query, WEB_RAG_EXCERPT_LIMIT);
 
   if (snippets.length === 0) {

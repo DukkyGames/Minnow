@@ -53,6 +53,34 @@ describe('llama variant', () => {
     assert.equal(resolved.assetNames.length, 2);
   });
 
+  test('cuda-13 picker stays on the host arch when a newer other-arch zip exists', () => {
+    if (process.platform !== 'win32') return;
+    // b10448 published 13.3 for x64 and a newer 13.4 only for arm64. A global
+    // cuda-13* sort() installed the ARM64 zip on AMD64 and left a 0-byte serve log.
+    const resolved = resolveLlamaAssets({
+      variant: 'cuda-13',
+      tag: 'b10448',
+      assets: [
+        { name: 'llama-b10448-bin-win-cuda-13.3-x64.zip' },
+        { name: 'llama-b10448-bin-win-cuda-13.4-arm64.zip' },
+        { name: 'cudart-llama-bin-win-cuda-13.3-x64.zip' },
+        { name: 'cudart-llama-bin-win-cuda-13.4-arm64.zip' },
+        { name: 'llama-b10448-bin-ubuntu-x64-cuda-13.4.tar.gz' },
+      ],
+    });
+    const hostArch = process.arch === 'arm64' ? 'arm64' : 'x64';
+    assert.match(resolved.mainZip, new RegExp(`${hostArch}\\.zip$`));
+    assert.equal(resolved.mainZip.includes('arm64'), hostArch === 'arm64');
+    assert.equal(resolved.companionZip?.includes(hostArch), true);
+    if (hostArch === 'x64') {
+      assert.equal(resolved.mainZip, 'llama-b10448-bin-win-cuda-13.3-x64.zip');
+      assert.equal(resolved.companionZip, 'cudart-llama-bin-win-cuda-13.3-x64.zip');
+    } else {
+      assert.equal(resolved.mainZip, 'llama-b10448-bin-win-cuda-13.4-arm64.zip');
+      assert.equal(resolved.companionZip, 'cudart-llama-bin-win-cuda-13.4-arm64.zip');
+    }
+  });
+
   test('listInstallableVariants filters by manifest', () => {
     const variants = listInstallableVariants(MOCK_ASSETS);
     assert.ok(variants.includes('cpu'));

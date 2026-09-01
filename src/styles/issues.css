@@ -516,6 +516,94 @@
   gap: 8px;
 }
 
+/* Sparkles expander review overlay — same shell as New issue, description is a textarea. */
+.issues-expand-form {
+  gap: 12px;
+}
+
+.issues-expand-form__heading {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.issues-expand-form__hint,
+.issues-expand-form__status {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
+}
+
+.issues-expand-form__status[hidden] {
+  display: none;
+}
+
+.issues-expand-form__title,
+.issues-expand-form__desc {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.issues-expand-form textarea {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.45;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--mn-border);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  width: 100%;
+  min-height: 12rem;
+  resize: vertical;
+}
+
+.issues-expand-form.is-expanding input,
+.issues-expand-form.is-expanding textarea {
+  caret-color: transparent;
+}
+
+.issues-expand-btn {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.issues-card__head .issues-card__expand-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+.issues-card__expand-btn .composer-expand-btn__icon {
+  --mn-icon-size: 14px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .issues-card__expand-btn:not(:disabled):not(.composer-expand-btn--busy):hover {
+    color: var(--mn-accent);
+    background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
+  }
+}
+
 /* ---------- body layout ---------- */
 
 .issues-body {
@@ -773,12 +861,6 @@
 .issues-row.is-focused {
   outline: 2px solid var(--mn-accent);
   outline-offset: -2px;
-}
-
-.issues-card__expand {
-  min-height: 28px;
-  padding: 4px 8px;
-  font-size: 11px;
 }
 
 .issues-row__id {

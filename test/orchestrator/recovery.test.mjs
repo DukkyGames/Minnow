@@ -382,7 +382,12 @@ describe('recovery — there is no recovery code', () => {
     const engine = createEngine({ boardId, effector: createScriptedEffector({}) });
     await engine.load();
     try {
+      // The boot resume gate is the one sanctioned exception: it does not
+      // recover anything, it releases the tick timer `load()` withheld until
+      // the user answered the prompt. Everything else still fails this.
+      const BOOT_GATE_SURFACE = new Set(['wasHeldAtLoad', 'resumeAfterGate']);
       for (const name of Object.keys(engine)) {
+        if (BOOT_GATE_SURFACE.has(name)) continue;
         assert.doesNotMatch(
           name,
           /resume|wake|recover|repair|reconcile|heal|stall|watchdog|nudge/i,

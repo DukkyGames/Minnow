@@ -79,7 +79,21 @@ function parseSseEventBlock(block, onChunk) {
   const dataLines = [];
   for (const line of normalizeSseText(block).split("\n")) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith(":")) continue;
+    if (!trimmed) continue;
+    if (trimmed.startsWith(":")) {
+      const keepalive = parseKeepaliveComment(trimmed);
+      if (keepalive) {
+        onChunk({
+          prompt_progress: {
+            processed: keepalive.processed,
+            total: keepalive.total,
+            cache: 0,
+            time_ms: 0
+          }
+        });
+      }
+      continue;
+    }
     if (trimmed.startsWith("data:")) {
       dataLines.push(trimmed.slice(5).trim());
     }
@@ -87,6 +101,14 @@ function parseSseEventBlock(block, onChunk) {
   if (!dataLines.length) return;
   const payload = dataLines.join("\n");
   parseOpenAiChunkPayload(payload, onChunk);
+}
+function parseKeepaliveComment(line) {
+  const match = /^:\s*keepalive\s+(\d+)\s*\/\s*(\d+)\s*$/i.exec(String(line).trim());
+  if (!match) return null;
+  const processed = Number(match[1]);
+  const total = Number(match[2]);
+  if (!(processed >= 0) || !(total > 0)) return null;
+  return { processed, total };
 }
 function createSseEventBuffer() {
   return { buffer: "" };
@@ -191,6 +213,7 @@ export {
   looksLikeHtmlErrorPage,
   normalizeSseText,
   parseCompletionResponseBody,
+  parseKeepaliveComment,
   parseSseEventBlock,
   parseSsePayloads
 };

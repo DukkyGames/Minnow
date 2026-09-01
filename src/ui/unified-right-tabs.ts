@@ -19,6 +19,7 @@ import {
 } from './right-pane-slot-tabs';
 import {
   getActiveViewerTabPath,
+  isAttachmentViewerPath,
   listViewerTabs,
   onViewerTabStoreChange,
   reorderViewerTab,
@@ -32,6 +33,12 @@ import {
 import type { PaneSlotId } from '../state/file-panel';
 import { createFileTypeIconElement } from './file-type-icons';
 import { iconHtml } from './icon';
+import {
+  endTabDrag,
+  setPreviewTabDragData,
+  setViewerTabDragData,
+} from '../attachments/tab-drag';
+import { WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
 
 const PREVIEW_TAB_ICON = iconHtml('globe', { size: 14 });
 
@@ -236,12 +243,20 @@ function appendFileTab(
   });
 
   tabEl.addEventListener('dragstart', (e) => {
-    e.dataTransfer?.setData('text/plain', `file:${tab.path}`);
-    e.dataTransfer!.effectAllowed = 'move';
+    const transfer = e.dataTransfer;
+    if (!transfer) return;
+    transfer.setData('text/plain', `file:${tab.path}`);
+    transfer.effectAllowed = 'copyMove';
+    // Attachment snapshots are not workspace files; skip chat-link MIME.
+    if (!isAttachmentViewerPath(tab.path)) {
+      setViewerTabDragData(transfer, { path: tab.path, label: tab.displayName });
+      transfer.setData(WORKSPACE_FILE_MIME, tab.path);
+    }
     tabEl.classList.add('unified-tab--dragging');
   });
 
   tabEl.addEventListener('dragend', () => {
+    endTabDrag();
     tabEl.classList.remove('unified-tab--dragging');
     clearDropIndicator(container, 'unified-tab--drop-before');
   });
@@ -329,12 +344,20 @@ function appendPreviewTab(
   });
 
   tabEl.addEventListener('dragstart', (e) => {
-    e.dataTransfer?.setData('text/plain', `preview:${tab.id}`);
-    e.dataTransfer!.effectAllowed = 'move';
+    const transfer = e.dataTransfer;
+    if (!transfer) return;
+    transfer.setData('text/plain', `preview:${tab.id}`);
+    transfer.effectAllowed = 'copyMove';
+    setPreviewTabDragData(transfer, {
+      id: tab.id,
+      title: tab.title,
+      source: tab.source,
+    });
     tabEl.classList.add('unified-tab--dragging');
   });
 
   tabEl.addEventListener('dragend', () => {
+    endTabDrag();
     tabEl.classList.remove('unified-tab--dragging');
     clearDropIndicator(container, 'unified-tab--drop-before');
   });

@@ -87,6 +87,19 @@ const FIXTURES = [
     retryable: false,
   },
   {
+    code: 'wrong_runtime_arch',
+    log: '',
+    // Windows ERROR_EXE_MACHINE_TYPE_MISMATCH — ARM64 PE on AMD64.
+    exitCode: 216,
+    retryable: false,
+  },
+  {
+    code: 'wrong_runtime_arch',
+    log: 'Installed llama-server.exe is arm64, but this Minnow host is x64. Reinstall llama.cpp from Settings → Servers.',
+    exitCode: 1,
+    retryable: false,
+  },
+  {
     code: 'missing_runtime_lib',
     log: '',
     // Windows STATUS_DLL_NOT_FOUND — 0xC0000135.

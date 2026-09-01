@@ -23,6 +23,14 @@ export declare function forEachJsonValueInText(text: string, onSlice: (jsonSlice
  * Joins multiple `data:` lines per the SSE spec before JSON.parse.
  */
 export declare function parseSseEventBlock(block: string, onChunk: (chunk: ChatCompletionChunk) => void): void;
+/**
+ * mlx-lm SSE comment: `: keepalive 128/4096`. Extra whitespace is tolerated.
+ * Returns null for unrelated comments (`: ping`, `: connected`, ...).
+ */
+export declare function parseKeepaliveComment(line: string): {
+    processed: number;
+    total: number;
+} | null;
 /** Incremental buffer: feed UTF-8 text; emits complete SSE events. */
 export interface SseEventBuffer {
     buffer: string;

@@ -344,13 +344,17 @@ function wireShellWindowVisibility(win: BrowserWindow): void {
   win.webContents.on('did-finish-load', emit);
 }
 
-/** Ask the renderer to system-pause running boards before tearing down the server. */
+/**
+ * Ask the renderer to stamp interrupted chats and system-pause boards before
+ * tearing down generations / the HTTP server. Prefer the combined prepare hook
+ * so Quit Minnow still leaves a boot resume candidate after generations die.
+ */
 async function pauseOrchestrateBoardsInRenderer(win: BrowserWindow): Promise<void> {
   if (win.isDestroyed()) return;
   try {
     win.webContents.send(channels.BOARD_PAUSE_FOR_SHUTDOWN);
     await win.webContents.executeJavaScript(
-      'typeof globalThis.__minnowPauseBoardsForShutdown==="function"&&globalThis.__minnowPauseBoardsForShutdown()',
+      '(typeof globalThis.__minnowPrepareForShutdown==="function"&&globalThis.__minnowPrepareForShutdown())||(typeof globalThis.__minnowPauseBoardsForShutdown==="function"&&globalThis.__minnowPauseBoardsForShutdown())',
       true,
     );
   } catch {

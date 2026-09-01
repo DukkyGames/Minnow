@@ -38,6 +38,7 @@ import {
   BROWSER_DRIVER_TOOL_DEFINITIONS,
   BROWSER_DRIVER_TOOL_IDS,
 } from '../../server/tools/browser-driver-tool-defs.js';
+import { DEFAULT_MAX_OUTPUT_CHARS } from '../../server/tools/output-cap.js';
 import {
   BROWSER_BLOCKED_PREFIX,
   BROWSER_UNAVAILABLE_PREFIX,
@@ -291,13 +292,18 @@ describe('allowlist', () => {
 
 describe('output caps', () => {
   test('a large DOM read is truncated and says so', async () => {
-    const huge = `<html><body>${'x'.repeat(200_000)}</body></html>`;
+    // Sized from the configured cap: MIN-667 raised the default to 128k, and a
+    // literal that no longer exceeds it would stop testing truncation at all.
+    const huge = `<html><body>${'x'.repeat(DEFAULT_MAX_OUTPUT_CHARS * 2)}</body></html>`;
     setBrowserToolLauncher(launcherFor(fakeSession({ async html() { return huge; } })));
     await callTool('browser_drive_navigate', { url: 'http://localhost:5173/' });
 
     const content = await callTool('browser_drive_read_page', { mode: 'dom' });
     assert.match(content, /\[truncated — \d+ of \d+ chars;/);
-    assert.ok(content.length < huge.length / 4, `expected a capped read, got ${content.length}`);
+    assert.ok(
+      content.length < DEFAULT_MAX_OUTPUT_CHARS * 1.05,
+      `expected a capped read, got ${content.length}`,
+    );
     // Page-controlled text is fenced: a page can carry instructions aimed at
     // the agent reading it, exactly like a fetched URL.
     assert.match(content, /UNTRUSTED_SOURCE_DATA/);

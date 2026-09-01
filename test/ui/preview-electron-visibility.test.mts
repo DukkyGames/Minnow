@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, test, beforeEach, afterEach } from 'node:test';
 import {
+  canAgentRevealPreviewPanel,
   isFullscreenOverlayObscuringWorkspace,
+  isNonCodeOsAppLayerActive,
   isProductWikiOverlayVisible,
   isPreviewPaneDomVisible,
   isChromePopoverOpen,
@@ -26,7 +28,11 @@ import { WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID } from '../../src/ui/preview-desig
 describe('preview-electron-visibility', () => {
   const originalDocument = globalThis.document;
   const originalWindow = globalThis.window;
-  const elements = new Map<string, { classList: Set<string> }>();
+  const elements = new Map<string, {
+    classList: Set<string>;
+    dataset?: { osApp?: string };
+    contains?: (child: unknown) => boolean;
+  }>();
   let showCalls = 0;
   let hideCalls = 0;
   let lastBounds: { x: number; y: number; width: number; height: number } | null = null;
@@ -61,10 +67,21 @@ describe('preview-electron-visibility', () => {
     Object.defineProperty(globalThis, 'document', {
       value: {
         documentElement: { dataset: docElDataset },
+        querySelectorAll: (selector: string) => {
+          if (selector !== '.mn-os-app-layer.is-active') return [];
+          const matches: Array<{ dataset: { osApp?: string } }> = [];
+          for (const entry of elements.values()) {
+            if (entry.classList.has('mn-os-app-layer') && entry.classList.has('is-active')) {
+              matches.push({ dataset: entry.dataset ?? {} });
+            }
+          }
+          return matches;
+        },
         getElementById: (id: string) => {
           const entry = elements.get(id);
           if (!entry) return null;
           return {
+            dataset: entry.dataset ?? {},
             classList: {
               contains: (cls: string) => entry.classList.has(cls),
               add: (cls: string) => entry.classList.add(cls),
@@ -196,6 +213,81 @@ describe('preview-electron-visibility', () => {
     elements.get('previewPane')!.classList.delete('hidden');
     elements.get('issuesView')!.classList.add('is-open');
     assert.equal(shouldShowElectronPreviewHost(), false);
+  });
+
+  test('shouldShowElectronPreviewHost is false when Issues is-open even if Code is marked foreground', () => {
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+    });
+    elements.get('previewPane')!.classList.delete('hidden');
+    enableCodeForeground();
+    elements.get('issuesView')!.classList.add('is-open');
+    assert.equal(shouldShowElectronPreviewHost(), false);
+    assert.equal(canAgentRevealPreviewPanel(), false);
+  });
+
+  test('shouldShowElectronPreviewHost is false when data-os-app is a non-Code app', () => {
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+    });
+    elements.get('previewPane')!.classList.delete('hidden');
+    elements.get('appBody')!.classList.delete('hidden');
+    docElDataset.osApp = 'issues';
+    assert.equal(shouldShowElectronPreviewHost(), false);
+    assert.equal(canAgentRevealPreviewPanel(), false);
+  });
+
+  test('shouldShowElectronPreviewHost is false when Models app is open', () => {
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+    });
+    elements.get('previewPane')!.classList.delete('hidden');
+    enableCodeForeground();
+    elements.set('modelsView', { classList: new Set(['is-open']) });
+    assert.equal(isFullscreenOverlayObscuringWorkspace(), true);
+    assert.equal(shouldShowElectronPreviewHost(), false);
+  });
+
+  test('isNonCodeOsAppLayerActive detects an active non-Code OS layer', () => {
+    elements.set('issuesView', {
+      classList: new Set(['mn-os-app-layer', 'is-active', 'is-open']),
+      dataset: { osApp: 'issues' },
+    });
+    assert.equal(isNonCodeOsAppLayerActive(), true);
+    assert.equal(isFullscreenOverlayObscuringWorkspace(), true);
+  });
+
+  test('canAgentRevealPreviewPanel is true on Code with no overlay', () => {
+    enableCodeForeground();
+    assert.equal(canAgentRevealPreviewPanel(), true);
+  });
+
+  test('canAgentRevealPreviewPanel is false when the product wiki overlay is open', () => {
+    enableCodeForeground();
+    elements.set('productWikiOverlay', { classList: new Set() });
+    assert.equal(canAgentRevealPreviewPanel(), false);
+  });
+
+  test('syncElectronPreviewHostLayout hides when Issues is-open with Code foreground', async () => {
+    setFilePanelState({
+      ...DEFAULT_FILE_PANEL_STATE,
+      rightPaneMode: 'preview',
+      viewerOpen: true,
+    });
+    elements.get('previewPane')!.classList.delete('hidden');
+    enableCodeForeground();
+    elements.get('issuesView')!.classList.add('is-open');
+
+    await syncElectronPreviewHostLayout();
+
+    assert.equal(showCalls, 0);
+    assert.equal(hideCalls, 1);
   });
 
   test('isChromePopoverOpen tracks register and unregister', () => {

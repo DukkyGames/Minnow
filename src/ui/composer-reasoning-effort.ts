@@ -1,6 +1,7 @@
 /**
- * Composer reasoning effort dropdown — low / medium / high beside the brain toggle.
+ * Composer reasoning effort dropdown — low / medium / high / max beside the brain toggle.
  * Off/on-only models use the brain toggle alone (see composer-thinking.ts).
+ * Always-on models (GLM-5.3) hide the brain and keep the level dropdown visible.
  */
 
 import { resolveThinkingMode } from '../agents/resolve-thinking';
@@ -8,6 +9,8 @@ import { isActiveChatStreaming } from '../chat/streaming-state';
 import {
   formatReasoningEffortLabel,
   getComposerReasoningLevelOptions,
+  isComposerReasoningLevel,
+  modelUsesAlwaysOnReasoning,
   modelUsesComposerReasoningLevelDropdown,
   normalizeReasoningAllowedOptions,
   resolveEffectiveReasoningEffort,
@@ -47,13 +50,17 @@ function getLevelOptions(): EffortOption[] {
   return getComposerReasoningLevelOptions(getAllowedOptions());
 }
 
-/** Drop saved effort when the active model no longer allows it (except explicit off). */
+/** Drop saved effort when the active model no longer allows it. */
 function validateAndClearInvalidEffort(): void {
   const chat = getActiveChat();
-  if (chat.reasoningEffort === 'off') return;
-  const levels = getLevelOptions();
   if (!chat.reasoningEffort) return;
-  if (levels.includes(chat.reasoningEffort)) return;
+  const caps = effectiveCapabilities();
+  const levels = getLevelOptions();
+  // Always-on models (GLM-5.3) cannot persist Off or Medium from a previous model.
+  if (chat.reasoningEffort === 'off' && !modelUsesAlwaysOnReasoning(caps)) return;
+  if (isComposerReasoningLevel(chat.reasoningEffort) && levels.includes(chat.reasoningEffort)) {
+    return;
+  }
   delete chat.reasoningEffort;
   touchChat(chat);
   scheduleSaveSessions();
@@ -135,6 +142,8 @@ function onSelectChange(): void {
 function isLevelDropdownVisible(): boolean {
   const caps = effectiveCapabilities();
   if (!modelUsesComposerReasoningLevelDropdown(caps)) return false;
+  // Always-on models have no Off — keep Low/High/Max visible.
+  if (modelUsesAlwaysOnReasoning(caps)) return true;
   return getActiveChat().reasoningEffort !== 'off';
 }
 

@@ -23,6 +23,8 @@
   font-weight: 600;
   color: var(--mn-fg-muted);
   letter-spacing: -0.04em;
+  display: inline-flex;
+  align-items: center;
 }
 
 .code-ref-link__name {

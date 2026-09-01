@@ -7,15 +7,19 @@
  * tokens off it because a six-hour run would make replay and storage unbounded,
  * and the same argument applies to every tool call inside it.
  *
- * So transcripts live *beside* the journal, one file per attempt:
+ * So transcripts live *beside* the journal, one file per attempt. The directory
+ * is injected so two namespaces can share this recorder:
  *
  * ```
  * ~/.minnow/boards/<boardId>/attempts/<attemptId>.jsonl
+ * ~/.minnow/agents/<parentChatId>/attempts/<attemptId>.jsonl
  * ```
  *
- * Deleting the whole directory must change nothing except what the detail panel
- * can show. Nothing derives from these files, nothing replays them, and the fold
- * has never heard of them — which is the property that lets them be lossy.
+ * Callers that omit `entryDir` keep the boards path (`boardDir(boardId)`), so
+ * every P9-D test and the board effector stay unchanged. Deleting the attempts
+ * directory must change nothing except what the detail panel / drawer can show.
+ * Nothing derives from these files, nothing replays them, and the fold has
+ * never heard of them — which is the property that lets them be lossy.
  *
  * ## Lossy on purpose
  *
@@ -43,11 +47,21 @@ export const MAX_LINES = 5_000;
 const MAX_LINE_BYTES = 8_000;
 
 /**
+ * Attempts folder under an already-resolved journal directory.
+ *
+ * @param {string} entryDir
+ * @returns {string}
+ */
+export function attemptsDirFrom(entryDir) {
+  return path.join(entryDir, 'attempts');
+}
+
+/**
  * @param {string} boardId
  * @returns {string}
  */
 export function attemptsDir(boardId) {
-  return path.join(boardDir(boardId), 'attempts');
+  return attemptsDirFrom(boardDir(boardId));
 }
 
 /**
@@ -66,12 +80,34 @@ function safeAttemptId(attemptId) {
 }
 
 /**
+ * @param {string} entryDir
+ * @param {string} attemptId
+ * @returns {string}
+ */
+export function transcriptPathFor(entryDir, attemptId) {
+  return path.join(attemptsDirFrom(entryDir), `${safeAttemptId(attemptId)}.jsonl`);
+}
+
+/**
  * @param {string} boardId
  * @param {string} attemptId
  * @returns {string}
  */
 export function transcriptPath(boardId, attemptId) {
-  return path.join(attemptsDir(boardId), `${safeAttemptId(attemptId)}.jsonl`);
+  return transcriptPathFor(boardDir(boardId), attemptId);
+}
+
+/**
+ * Resolve the journal directory for a write/read. `entryDir` wins so agents
+ * can pass `agentsDir(parentChatId)` without this module importing that graph.
+ *
+ * @param {string | undefined} id
+ * @param {{ entryDir?: string }} [options]
+ * @returns {string}
+ */
+function resolveEntryDir(id, options = {}) {
+  if (typeof options.entryDir === 'string' && options.entryDir) return options.entryDir;
+  return boardDir(String(id ?? ''));
 }
 
 /**
@@ -96,14 +132,14 @@ const COALESCING_TYPES = new Set(['thinking']);
  * line the reader has to throw away.
  *
  * @type {Map<string, { chain: Promise<unknown>, lines: number, capped: boolean,
- *                      pending: { boardId: string, line: Record<string, unknown> } | null }>}
+ *                      pending: { entryDir: string, line: Record<string, unknown> } | null }>}
  */
 const writers = new Map();
 
 /**
  * @param {string} key
  * @returns {{ chain: Promise<unknown>, lines: number, capped: boolean,
- *             pending: { boardId: string, line: Record<string, unknown> } | null }}
+ *             pending: { entryDir: string, line: Record<string, unknown> } | null }}
  */
 function writerFor(key) {
   let entry = writers.get(key);
@@ -129,11 +165,11 @@ function clip(value) {
  * Queue one already-built line for append, counting it against the cap.
  *
  * @param {string} file
- * @param {string} boardId
+ * @param {string} entryDir
  * @param {Record<string, unknown>} line
  * @returns {void}
  */
-function appendLine(file, boardId, line) {
+function appendLine(file, entryDir, line) {
   const writer = writerFor(file);
   if (writer.capped) return;
   writer.lines += 1;
@@ -144,7 +180,7 @@ function appendLine(file, boardId, line) {
   const text = `${JSON.stringify(line)}\n`;
   writer.chain = writer.chain
     .then(async () => {
-      await fs.mkdir(attemptsDir(boardId), { recursive: true });
+      await fs.mkdir(attemptsDirFrom(entryDir), { recursive: true });
       await fs.appendFile(file, text, 'utf8');
     })
     .catch(() => {
@@ -166,7 +202,7 @@ function flushPending(file) {
   const pending = writer?.pending;
   if (!writer || !pending) return;
   writer.pending = null;
-  appendLine(file, pending.boardId, pending.line);
+  appendLine(file, pending.entryDir, pending.line);
 }
 
 /**
@@ -187,13 +223,19 @@ function flushPending(file) {
  * far, so the newest one supersedes the pending one whenever it extends it, and
  * only starts a second line when the model began a genuinely new block.
  *
- * @param {{ boardId: string, attemptId: string, taskId?: string | null, role?: string,
+ * @param {{ boardId?: string, entryDir?: string, attemptId: string, taskId?: string | null, role?: string,
  *          event: Record<string, unknown> }} entry
  * @returns {void}
  */
 export function recordTranscriptEvent(entry) {
-  const { boardId, attemptId, event } = entry;
-  if (!boardId || !attemptId || !event) return;
+  const { attemptId, event } = entry;
+  const entryDir =
+    typeof entry.entryDir === 'string' && entry.entryDir
+      ? entry.entryDir
+      : entry.boardId
+        ? boardDir(entry.boardId)
+        : '';
+  if (!entryDir || !attemptId || !event) return;
   const type = typeof event.type === 'string' ? event.type : '';
   // High-frequency types are classified next to TurnEvent so this recorder
   // cannot drift into a second exclusion list (P10-B / MIN-767). stream_meta
@@ -203,7 +245,7 @@ export function recordTranscriptEvent(entry) {
   /** @type {string} */
   let file;
   try {
-    file = transcriptPath(boardId, attemptId);
+    file = transcriptPathFor(entryDir, attemptId);
   } catch {
     return; // an id that cannot be a path is not worth failing an attempt over
   }
@@ -236,7 +278,7 @@ export function recordTranscriptEvent(entry) {
 
   if (!COALESCING_TYPES.has(type) || typeof line.text !== 'string') {
     flushPending(file);
-    appendLine(file, boardId, line);
+    appendLine(file, entryDir, line);
     return;
   }
 
@@ -253,18 +295,19 @@ export function recordTranscriptEvent(entry) {
     if (previous.startsWith(next)) return;
   }
   flushPending(file);
-  writer.pending = { boardId, line };
+  writer.pending = { entryDir, line };
 }
 
 /**
  * Record how an attempt ended, as the transcript's last line.
  *
- * @param {{ boardId: string, attemptId: string, outcome: string, summary?: string }} end
+ * @param {{ boardId?: string, entryDir?: string, attemptId: string, outcome: string, summary?: string }} end
  * @returns {void}
  */
 export function recordTranscriptEnd(end) {
   recordTranscriptEvent({
     boardId: end.boardId,
+    entryDir: end.entryDir,
     attemptId: end.attemptId,
     event: {
       type: 'attempt_end',
@@ -280,13 +323,16 @@ export function recordTranscriptEnd(end) {
  * For tests and for the read endpoint, which would otherwise race the very
  * writes that produced the attempt it is being asked about.
  *
- * @param {string} boardId
+ * @param {string} [id] board id, or unused when `options.entryDir` is set
  * @param {string} [attemptId] all attempts when omitted
+ * @param {{ entryDir?: string }} [options]
  * @returns {Promise<void>}
  */
-export async function flushTranscripts(boardId, attemptId) {
+export async function flushTranscripts(id, attemptId, options = {}) {
   if (attemptId) {
-    const file = transcriptPath(boardId, attemptId);
+    const entryDir = resolveEntryDir(id, options);
+    if (!entryDir) return;
+    const file = transcriptPathFor(entryDir, attemptId);
     flushPending(file);
     await writers.get(file)?.chain;
     return;
@@ -302,13 +348,14 @@ export async function flushTranscripts(boardId, attemptId) {
  * called a tool yet has nothing to show, and so does an attempt from a build
  * before this existed.
  *
- * @param {string} boardId
+ * @param {string} [id] board id, or unused when `options.entryDir` is set
  * @param {string} attemptId
- * @param {{ limit?: number }} [options]
+ * @param {{ limit?: number, entryDir?: string }} [options]
  * @returns {Promise<{ events: Record<string, unknown>[], truncated: boolean, capped: boolean }>}
  */
-export async function readTranscript(boardId, attemptId, options = {}) {
-  const file = transcriptPath(boardId, attemptId);
+export async function readTranscript(id, attemptId, options = {}) {
+  const entryDir = resolveEntryDir(id, options);
+  const file = transcriptPathFor(entryDir, attemptId);
   // Await the queue, but leave the pending reasoning block *in* the buffer: a
   // reader watching a running attempt should see the block as it stands, and
   // writing it out here would strand a prefix on disk that the finished block

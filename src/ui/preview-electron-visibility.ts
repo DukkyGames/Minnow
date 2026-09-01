@@ -9,6 +9,7 @@ import { isDesignModeUsingIframeGuest } from './preview-design-mode-guest';
 import { getFilePanelState } from '../state/file-panel';
 import { isRightPaneSplitActive } from './right-pane-split';
 
+/** Full-screen app layer roots that cover the Code workspace when `is-open`. */
 const FULLSCREEN_OVERLAY_IDS = [
   'issuesView',
   'settingsView',
@@ -16,6 +17,12 @@ const FULLSCREEN_OVERLAY_IDS = [
   'expertsView',
   'researchView',
   'chatView',
+  'modelsView',
+  'brainView',
+  'schedulerView',
+  'compareView',
+  'calendarView',
+  'emailView',
 ] as const;
 
 const MAX_LAYOUT_STABLE_FRAMES = 6;
@@ -49,13 +56,29 @@ function usesElectronPreview(): boolean {
   return Boolean(typeof window !== 'undefined' && window.minnow?.preview);
 }
 
+/**
+ * True when a non-Code OS app layer is the active fullscreen surface.
+ * Complements the `is-open` id list so Models / Brain / Scheduler (and future apps)
+ * hide the guest even if their root id is missing from FULLSCREEN_OVERLAY_IDS.
+ */
+export function isNonCodeOsAppLayerActive(): boolean {
+  if (typeof document === 'undefined') return false;
+  if (typeof document.querySelectorAll !== 'function') return false;
+  const layers = document.querySelectorAll('.mn-os-app-layer.is-active');
+  for (const node of layers) {
+    const appId = (node as HTMLElement).dataset?.osApp;
+    if (appId && appId !== 'code') return true;
+  }
+  return false;
+}
+
 /** True when a full-screen app covers the workspace (Issues, settings, etc.). */
 export function isFullscreenOverlayObscuringWorkspace(): boolean {
   for (const id of FULLSCREEN_OVERLAY_IDS) {
     const el = document.getElementById(id);
     if (el?.classList.contains('is-open')) return true;
   }
-  return false;
+  return isNonCodeOsAppLayerActive();
 }
 
 /** True when the Minnow wiki overlay (#/wiki) covers the workspace. */
@@ -125,6 +148,16 @@ export function isPreviewPaneDomVisible(): boolean {
 function isPreviewSurfaceActive(): boolean {
   if (isDesktopBrowserSurfaceActive()) return true;
   return isCodeWorkspaceForeground();
+}
+
+/**
+ * Whether agent browser_navigate may open the preview split and later paint the guest.
+ * The pane may still be closed; distinct from shouldShowElectronPreviewHost (needs layout).
+ */
+export function canAgentRevealPreviewPanel(): boolean {
+  if (isProductWikiOverlayVisible()) return false;
+  if (isFullscreenOverlayObscuringWorkspace()) return false;
+  return isPreviewSurfaceActive();
 }
 
 function isDesktopBrowserSurfaceActive(): boolean {

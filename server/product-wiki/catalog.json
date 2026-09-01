@@ -54,7 +54,7 @@
         "Related"
       ],
       "section": "Get started",
-      "hash": "d5bbe1367870018c7c76f16b32a08b4b98b9dcd40b0029d8147b5426db1a04ab"
+      "hash": "5ffb28861b628764840c413f77e1103c40021e318b95c9e8966cd75810222624"
     },
     {
       "path": "documentation/manual/get-started/first-chat.md",
@@ -120,12 +120,13 @@
         "The workspace boundary",
         "Content the model reads is data, not instructions",
         "Caching",
+        "How much of a result the model sees",
         "Tools that are not built in",
         "Practical setups",
         "Related"
       ],
       "section": "Core concepts",
-      "hash": "a771fa572ea3fe70122155f433b2cfd83621af171034f38a3db68b8906e2fbc1"
+      "hash": "374d09179b2af494fac9e702bfaa53b7fd285e234226820e5daca20308be0773"
     },
     {
       "path": "documentation/manual/concepts/context-and-memory.md",
@@ -143,7 +144,7 @@
         "Related"
       ],
       "section": "Core concepts",
-      "hash": "27e1aae9bd66be2dd8ac600a25228d0e7307c875a20e16dff7ec0ee87022d117"
+      "hash": "c66a17361af01e987b23d9e29ee9c9a0fe97d77576566afdf5f99413f4d5e950"
     },
     {
       "path": "documentation/manual/chat/chatting.md",
@@ -152,6 +153,7 @@
       "headings": [
         "The composer",
         "While the model is working",
+        "When a turn fails",
         "Watching what agents do",
         "Undoing a turn",
         "Branches",
@@ -161,7 +163,7 @@
         "Related"
       ],
       "section": "Chat",
-      "hash": "31185998633239930463c63c3f17c48ab4daa3b1470509c1f63fa9f093e12ad0"
+      "hash": "c8e8c3f8be6c0f83c5ddab581f919e1c3dcef52a2c396b785483afeeebc2fdb9"
     },
     {
       "path": "documentation/manual/chat/skills-and-commands.md",
@@ -215,7 +217,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "20e5814134fd2b832d706ca7d55a12669f92c23ef86928425a5dd436381062b6"
+      "hash": "c8ccf53ebf0577a9a936a460599b85d6e25ee04514d8be1cae946fe578ef146f"
     },
     {
       "path": "documentation/manual/apps/research.md",
@@ -254,6 +256,7 @@
       "title": "Models",
       "summary": "This is where you set up what the agents run on: what your machine can handle, what you have downloaded, what is serving, which endpoints Minnow talks to, which model does which job, and what it all costs. You come here to configure, then go back to Code and work. Open it from th",
       "headings": [
+        "Local Server",
         "Recommendations",
         "Library and Installed",
         "MLX on Apple Silicon",
@@ -268,7 +271,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "97704b3175fa0f815d7b5e07ad552f1254d67461a57d47a935c0750733e31956"
+      "hash": "23427027d6503c919b4716d125a8592088f4f53e0e93aa4eef6c2f9a64e641dd"
     },
     {
       "path": "documentation/manual/apps/issues.md",
@@ -284,7 +287,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "48bebf8bfc47dbc226ac851b8531bcc4354a70ef52a963a59dfcd5ca10a30253"
+      "hash": "897042de27d5638432fc61807fdc3cd232768ccf690e9e3050ae23ba483bc8b0"
     },
     {
       "path": "documentation/manual/apps/scheduler.md",
@@ -321,7 +324,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "2be9972799f0aa67f8c0c8c2f876d557a35a259ea4ee6001587901d40e2d5318"
+      "hash": "34058f1833c70be2397d55c648bf74d774d0ae9b01591467f816bb6e325a713f"
     },
     {
       "path": "documentation/manual/orchestrate/boards.md",
@@ -446,7 +449,7 @@
         "Related"
       ],
       "section": "Reference",
-      "hash": "e94cc2177e86aa634cbc8b96e373b038a6c2f91ee006d9fc92086895d556f2d2"
+      "hash": "5d24d1ec15e336e181a7e0a8cf017bacc2e6e280f408efd69700d25ecc668e4f"
     },
     {
       "path": "documentation/manual/reference/configuration.md",

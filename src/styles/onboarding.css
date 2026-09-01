@@ -213,7 +213,7 @@ html.onboarding-active .mn-os-shell {
 
 .mn-onboarding__progress-label,
 .mn-onboarding__mobile-progress-label {
-  font: 500 12px/1 var(--mn-font-mono, var(--font-mono, monospace));
+  font: 500 12px/1 var(--font-mono);
   color: var(--mn-fg-muted, var(--text-muted));
   letter-spacing: 0.02em;
 }
@@ -362,7 +362,7 @@ html.onboarding-active .mn-os-shell {
 .mn-onboarding-step-eyebrow {
   display: block;
   margin-bottom: 8px;
-  font: 500 12px/1 var(--mn-font-mono, var(--font-mono, monospace));
+  font: 500 12px/1 var(--font-mono);
   letter-spacing: 0.04em;
   color: var(--mn-fg-muted, var(--text-muted));
 }
@@ -525,7 +525,7 @@ html.onboarding-active .mn-os-shell {
 }
 
 .mn-onboarding-welcome__sign-role {
-  font: 500 11px/1.3 var(--mn-font-mono, var(--font-mono, monospace));
+  font: 500 11px/1.3 var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--mn-fg-muted, var(--text-muted));
@@ -543,7 +543,7 @@ html.onboarding-active .mn-os-shell {
 }
 
 .mn-onboarding-welcome__plan-label {
-  font: 500 12px/1 var(--mn-font-mono, var(--font-mono, monospace));
+  font: 500 12px/1 var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--mn-fg-muted, var(--text-muted));
@@ -578,7 +578,7 @@ html.onboarding-active .mn-os-shell {
   height: 26px;
   border-radius: 50%;
   border: 1px solid var(--mn-accent-border, color-mix(in oklch, var(--mn-accent, var(--accent)) 40%, transparent));
-  font: 600 12px/1 var(--mn-font-mono, var(--font-mono, monospace));
+  font: 600 12px/1 var(--font-mono);
   font-variant-numeric: tabular-nums;
   color: var(--mn-accent-ink, var(--mn-accent, var(--accent)));
 }
@@ -724,7 +724,7 @@ html.onboarding-active .mn-os-shell {
 }
 
 .mn-onboarding-choice__badge {
-  font: 600 10px/1 var(--mn-font-mono, var(--font-mono, monospace));
+  font: 600 10px/1 var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 3px 6px;
@@ -741,7 +741,7 @@ html.onboarding-active .mn-os-shell {
 }
 
 .mn-onboarding-choice__tag {
-  font: 600 10px/1 var(--mn-font-mono, var(--font-mono, monospace));
+  font: 600 10px/1 var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--mn-accent-ink, var(--mn-accent, var(--accent)));
@@ -765,10 +765,6 @@ html.onboarding-active .mn-os-shell {
   margin: 0 0 4px;
 }
 
-.mn-onboarding-step--theme .settings-appearance-wallpaper-grid {
-  margin-top: 8px;
-}
-
 /* Theme family cards reuse Settings styles; keep hover neutral and selection opaque */
 .mn-onboarding-step--theme .settings-theme-family:hover:not(.is-active) {
   border-color: var(--mn-border-strong);
@@ -780,7 +776,6 @@ html.onboarding-active .mn-os-shell {
   background: color-mix(in srgb, var(--mn-accent) 12%, var(--mn-surface-1));
 }
 
-.mn-onboarding-wallpaper-row,
 .mn-onboarding-chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -865,7 +860,7 @@ html.onboarding-active .mn-os-shell {
 
 .mn-onboarding-status {
   display: inline-block;
-  font: 600 11px/1 var(--mn-font-mono, var(--font-mono, monospace));
+  font: 600 11px/1 var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 4px 8px;
@@ -1021,7 +1016,7 @@ html.onboarding-active .mn-os-shell {
 .mn-onboarding-model-row__name {
   flex: 1;
   min-width: 0;
-  font: 500 14px/1.3 var(--mn-font-mono, var(--font-mono, monospace));
+  font: 500 14px/1.3 var(--font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1033,7 +1028,7 @@ html.onboarding-active .mn-os-shell {
 }
 
 .mn-onboarding-chip {
-  font: 600 9px/1 var(--mn-font-mono, var(--font-mono, monospace));
+  font: 600 9px/1 var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 3px 6px;
@@ -1197,7 +1192,7 @@ html.onboarding-active .mn-os-shell {
 
 .mn-onboarding-hardware-line {
   margin: 0;
-  font: 500 14px/1.45 var(--mn-font-mono, monospace);
+  font: 500 14px/1.45 var(--font-mono);
 }
 
 .mn-onboarding-recommend-card {
@@ -1224,12 +1219,12 @@ html.onboarding-active .mn-os-shell {
 }
 
 .mn-onboarding-managed-model-row__meta {
-  font: 400 12px/1.35 var(--mn-font-mono, monospace);
+  font: 400 12px/1.35 var(--font-mono);
   color: var(--mn-fg-muted, var(--text-muted));
 }
 
 .mn-onboarding-fit-badge {
-  font: 600 9px/1 var(--mn-font-mono, var(--font-mono, monospace));
+  font: 600 9px/1 var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 3px 6px;
@@ -1319,7 +1314,7 @@ html.onboarding-active .mn-os-shell {
 }
 
 .mn-onboarding-extra-row__status {
-  font: 600 9px/1 var(--mn-font-mono, monospace);
+  font: 600 9px/1 var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -1362,14 +1357,14 @@ html.onboarding-active .mn-os-shell {
 }
 
 .mn-onboarding-install-console__title {
-  font: 600 11px/1 var(--mn-font-mono, var(--font-mono, monospace));
+  font: 600 11px/1 var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--mn-fg-muted, var(--text-muted));
 }
 
 .mn-onboarding-install-console__status {
-  font: 600 11px/1 var(--mn-font-mono, var(--font-mono, monospace));
+  font: 600 11px/1 var(--font-mono);
   color: var(--mn-fg, var(--text));
   font-variant-numeric: tabular-nums;
 }
@@ -1390,7 +1385,7 @@ html.onboarding-active .mn-os-shell {
   max-height: min(280px, 32vh);
   overflow: auto;
   padding: 8px 0;
-  font-family: var(--mn-font-mono, var(--font-mono, monospace));
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.45;
 }
@@ -1414,7 +1409,7 @@ html.onboarding-active .mn-os-shell {
 }
 
 .mn-onboarding-install-console__source {
-  font: 600 9px/1 var(--mn-font-mono, var(--font-mono, monospace));
+  font: 600 9px/1 var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--mn-fg-muted, var(--text-muted));

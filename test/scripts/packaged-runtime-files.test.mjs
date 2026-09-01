@@ -21,6 +21,14 @@ describe('packaged runtime files', () => {
     );
   });
 
+  it('lists src/agents/defaults/sub-agents.json in electron-builder files', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+    assert.ok(
+      pkg.build.files.includes('src/agents/defaults/sub-agents.json'),
+      'server/sub-agents/config.js reads shipped defaults via new URL(..., import.meta.url)',
+    );
+  });
+
   it('passes validate-packaged-runtime-files', () => {
     const result = spawnSync(process.execPath, ['scripts/validate-packaged-runtime-files.mjs'], {
       cwd: repoRoot,

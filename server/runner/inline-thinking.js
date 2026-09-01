@@ -300,6 +300,22 @@ function completeThinkOpenAtStart(text) {
   }
   return null;
 }
+const STANDALONE_THINK_OPEN_RE = new RegExp(
+  `(^|[\r\n])[ \t]*(<${THINK_TAG}(?:\s+[^>]*)?>)`,
+  "i"
+);
+function findStandaloneThinkOpen(text) {
+  const match = STANDALONE_THINK_OPEN_RE.exec(text);
+  if (!match || match.index === void 0) {
+    return null;
+  }
+  const tag = match[2];
+  return { index: match.index + match[0].length - tag.length, length: tag.length };
+}
+function startsWithStandaloneThinkOpen(text) {
+  const open = findStandaloneThinkOpen(text);
+  return Boolean(open && text.slice(0, open.index).trim() === "");
+}
 function findReasoningProseSplit(text) {
   const trimmed = text.trimStart();
   if (!startsWithReasoningPrefix(trimmed) && !THINKING_PREFIX_RE.test(trimmed)) {
@@ -394,6 +410,12 @@ class InlineContentThinkingRouter {
   finalizing = false;
   /** Latched once a buffered opener is released, so it is never re-buffered. */
   openTagAbandoned = false;
+  /**
+   * Candidate second (or later) think span after visible prose, including its opener.
+   * Held until a matching close arrives so a code sample that merely mentions
+   * `<think>` is not committed as reasoning.
+   */
+  midStreamThinkBuffer = "";
   constructor(options) {
     this.thinkingModel = options?.thinkingModel ?? false;
   }
@@ -423,6 +445,13 @@ class InlineContentThinkingRouter {
       this.openTagBuffer = "";
       out.push(...this.routeChunk(buffered));
     }
+    if (this.midStreamThinkBuffer) {
+      const buffered = this.midStreamThinkBuffer;
+      this.midStreamThinkBuffer = "";
+      if (buffered) {
+        out.push([buffered, false]);
+      }
+    }
     if (this.inReasoningProse && this.proseBuffer) {
       const split = findReasoningProseSplit(this.proseBuffer);
       if (split) {
@@ -437,7 +466,29 @@ class InlineContentThinkingRouter {
     this.finalizing = false;
     return out;
   }
+  drainMidStreamThink() {
+    const close = findThinkClose(this.midStreamThinkBuffer);
+    if (!close) {
+      return [];
+    }
+    const openLen = completeThinkOpenAtStart(this.midStreamThinkBuffer);
+    const thinkPart = this.midStreamThinkBuffer.slice(openLen ?? 0, close.index);
+    const regularPart = this.midStreamThinkBuffer.slice(close.index + close.length);
+    this.midStreamThinkBuffer = "";
+    const out = [];
+    if (thinkPart) {
+      out.push([thinkPart, true]);
+    }
+    if (regularPart) {
+      out.push(...this.routeChunk(regularPart));
+    }
+    return out;
+  }
   routeChunk(content) {
+    if (this.midStreamThinkBuffer) {
+      this.midStreamThinkBuffer += content;
+      return this.drainMidStreamThink();
+    }
     const out = [];
     let chunk = content;
     const stripped = chunk.trimStart();
@@ -484,12 +535,15 @@ class InlineContentThinkingRouter {
         }
         const regularPart = chunk.slice(close.index + close.length);
         this.inThinkTag = false;
+        this.thinkOpenStripped = false;
         if (thinkPart) {
           out.push([thinkPart, true]);
         }
         if (regularPart) {
-          this.firstContentSent = true;
-          out.push([regularPart, false]);
+          if (!startsWithStandaloneThinkOpen(regularPart)) {
+            this.firstContentSent = true;
+          }
+          out.push(...this.routeChunk(regularPart));
         }
       } else {
         if (!this.thinkOpenStripped) {
@@ -524,6 +578,18 @@ class InlineContentThinkingRouter {
         this.firstContentSent = true;
       }
       return out;
+    }
+    if (this.thinkingModel && this.firstContentSent && !this.inThinkTag && !this.inReasoningProse) {
+      const open = findStandaloneThinkOpen(chunk);
+      if (open) {
+        const before = chunk.slice(0, open.index);
+        if (before) {
+          out.push([before, false]);
+        }
+        this.midStreamThinkBuffer = chunk.slice(open.index);
+        out.push(...this.drainMidStreamThink());
+        return out;
+      }
     }
     this.firstContentSent = true;
     out.push([chunk, false]);

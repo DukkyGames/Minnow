@@ -1493,8 +1493,28 @@ html.mn-super-plan-open #sidebarBackdrop {
     align-items: start;
   }
 
+  /*
+   * The pipeline holds still while the ledger scrolls past it, and scrolls on
+   * its own once it outgrows the pane.
+   *
+   * It sticks under .sp-runhead rather than at 0: that header is sticky in the
+   * same scroller and it is opaque, so an aside pinned at 0 would slide beneath
+   * it. Both offsets come from --sp-runhead-h / --sp-runbody-h, published by a
+   * ResizeObserver in super-plan-page.ts, because the header grows when the
+   * prompt unfolds. The 26px is .sp-body's own top padding, so the column does
+   * not jump on the first pixel of scroll.
+   *
+   * Only at this width step: below it the layout stacks and the pipeline reads
+   * as the section after the run, where sticking would be wrong.
+   */
   .sp-cols__aside {
     margin-top: 0;
+    position: sticky;
+    top: calc(var(--sp-runhead-h, 0px) + 26px);
+    max-height: calc(var(--sp-runbody-h, 100vh) - var(--sp-runhead-h, 0px) - 52px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
   }
 
   .sp-cols__aside .sp-sec {

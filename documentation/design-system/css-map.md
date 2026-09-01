@@ -25,7 +25,7 @@
 | `composer-overflow.css` | Compact overflow cog + settings sheet |
 | `composer-model-trigger.css` | Model chip |
 | `composer-pinned-skill.css` | Pinned slash skill |
-| `composer-message-queue.css` | Queued messages |
+| `composer-message-queue.css` | Queued messages (composer strip + transcript bubbles) |
 | `composer-tools-popover.css` | Tool picker |
 | `mode-selector.css` | [`mode-selector.ts`](../../src/ui/mode-selector.ts) |
 | `mode-icons.css` | Mode masks |

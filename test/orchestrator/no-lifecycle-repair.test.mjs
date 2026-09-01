@@ -35,6 +35,7 @@ const ALLOWED_PLANS_FILES = [
   'plan-from-history.ts',
   'plan-path.ts',
   'plan-preview.ts',
+  'planner-chat-title.ts',
   'stats-math.ts',
 ];
 

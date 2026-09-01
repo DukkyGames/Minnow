@@ -13,7 +13,6 @@ import {
   prClose,
   prCreate,
   prList,
-  prMerge,
   prReady,
   prView,
   type ForgeStatus,
@@ -22,7 +21,13 @@ import {
 } from '../state/forge-api';
 import { gitBranches } from '../state/git-api';
 import { resolveTrunkBranchName } from '../lib/git-trunk-branch';
+import { getPrReview, subscribePrReviews } from '../state/pr-review-store';
+import { matchPrForBranch, prReviewKey } from '../chat/review/pr-review-target';
+import { startPrReview } from '../chat/review/run-pr-review';
+import { confirmAndMergePr, mergeReviewedPr, sendPrReviewToBuilder } from '../chat/review/review-actions';
+import { renderPrReviewPanel, unmountPrReviewPanel } from './pr-review-panel';
 import { showToast } from './toast';
+import { switchChat } from './sidebar';
 import {
   button,
   chip,
@@ -39,6 +44,14 @@ import {
   type SccContext,
   type SccView,
 } from './scc-shared';
+
+/** Palette / command-palette can ask the next refresh to select this PR. */
+let pendingSelectNumber: number | null = null;
+
+/** Select this PR number the next time the pulls list loads. */
+export function requestPullsSelection(number: number): void {
+  pendingSelectNumber = number;
+}
 
 type PrFilter = 'open' | 'all';
 
@@ -66,6 +79,14 @@ export function createPullsView(
   let filter: PrFilter = 'open';
   let selectedNumber: number | null = null;
   let cache: PullRequestSummary[] = [];
+  let reviewHost: HTMLElement | null = null;
+
+  const unsubReviews = subscribePrReviews(() => {
+    if (destroyed || !selectedNumber) return;
+    const wrap = detailCol.querySelector('.scc-prdetail');
+    if (!wrap || !reviewHost) return;
+    paintReview(selectedNumber);
+  });
 
   const filterToggle = button({
     label: 'Open only',
@@ -116,6 +137,14 @@ export function createPullsView(
     cache = result.prs ?? [];
     const openCount = cache.filter((pr) => pr.state === 'open').length;
     ctx.setBadge('pulls', openCount > 0 ? { kind: 'count', value: openCount } : null);
+
+    if (pendingSelectNumber && cache.some((pr) => pr.number === pendingSelectNumber)) {
+      selectedNumber = pendingSelectNumber;
+      pendingSelectNumber = null;
+    } else if (!selectedNumber) {
+      const branchPr = matchPrForBranch(cache, ctx.getBranch());
+      if (branchPr) selectedNumber = branchPr.number;
+    }
 
     renderList();
 
@@ -291,6 +320,10 @@ export function createPullsView(
 
     wrap.appendChild(buildActions(pr));
 
+    reviewHost = el('div', 'scc-prdetail__review');
+    wrap.appendChild(reviewHost);
+    paintReview(pr.number, pr.commits[0]?.sha, pr.state === 'open');
+
     if (pr.statusChecks.length) {
       wrap.appendChild(sectionTitle('Checks', pr.statusChecks.length));
       const checks = el('div', 'scc-prdetail__checks');
@@ -391,6 +424,17 @@ export function createPullsView(
       );
     }
 
+    const repo = options.getForgeStatus()?.repo ?? '';
+    const review = repo ? getPrReview(prReviewKey(repo, pr.number)) : undefined;
+    const reviewLabel =
+      review?.status === 'running' ? 'Reviewing…' : review ? 'Re-review' : 'Review PR';
+    const reviewBtn = button({
+      label: reviewLabel,
+      onClick: () => void runReview(pr),
+    });
+    if (review?.status === 'running') reviewBtn.disabled = true;
+    bar.appendChild(reviewBtn);
+
     bar.appendChild(
       button({
         label: 'Check out',
@@ -439,36 +483,92 @@ export function createPullsView(
     return bar;
   }
 
+  function paintReview(number: number, currentHeadSha?: string, canMerge?: boolean): void {
+    if (!reviewHost) return;
+    const repo = options.getForgeStatus()?.repo ?? '';
+    if (!repo) {
+      unmountPrReviewPanel(reviewHost);
+      return;
+    }
+    const record = getPrReview(prReviewKey(repo, number));
+    if (!record) {
+      unmountPrReviewPanel(reviewHost);
+      return;
+    }
+    const issueLinked = Boolean(record.issueId);
+    const mergeOk = canMerge ?? cache.find((p) => p.number === number)?.state === 'open';
+    renderPrReviewPanel(reviewHost, record, {
+      currentHeadSha,
+      showUpdateIssue: issueLinked,
+      onMerge: mergeOk ? () => void mergeFromReview(record.key, number) : undefined,
+      onFix: () => void sendPrReviewToBuilder(record),
+      onUpdateIssue: issueLinked
+        ? () => {
+            void import('../chat/review/review-actions').then((m) => {
+              if (record.issueId && m.applyPrReviewToIssue(record, record.issueId)) {
+                showToast('Issue updated with the review', 'success');
+              }
+            });
+          }
+        : undefined,
+      onOpenChat: () => {
+        if (record.chatId) void switchChat(record.chatId);
+      },
+      onRetry: () => {
+        const summary = cache.find((p) => p.number === number);
+        if (summary) void runReview(summary);
+      },
+    });
+  }
+
+  async function runReview(pr: Pick<PullRequestSummary, 'number'>): Promise<void> {
+    const repo = options.getForgeStatus()?.repo ?? '';
+    if (!repo) {
+      showToast('Repository is unknown', 'error');
+      return;
+    }
+    const result = await startPrReview({
+      cwd: ctx.getCwd(),
+      repo,
+      number: pr.number,
+    });
+    if (!result.ok) {
+      showToast(result.error, 'error');
+      return;
+    }
+    showToast(`Reviewing #${pr.number}`, 'success');
+    if (selectedNumber === pr.number) await renderDetail(pr.number);
+  }
+
+  async function mergeFromReview(key: string, number: number): Promise<void> {
+    const record = getPrReview(key);
+    if (!record) return;
+    const outcome = await mergeReviewedPr(record, ctx.getCwd());
+    if (outcome.cancelled) return;
+    if (!outcome.ok) {
+      showToast(outcome.error ?? 'Could not merge the pull request', 'error');
+      return;
+    }
+    showToast(`Merged #${number}`, 'success');
+    selectedNumber = null;
+    await ctx.refreshAll();
+  }
+
   async function merge(
     pr: PullRequestDetail,
     method: 'merge' | 'squash' | 'rebase',
   ): Promise<void> {
-    const warning =
-      pr.checks === 'failure'
-        ? ' Checks are failing.'
-        : pr.checks === 'pending'
-          ? ' Checks are still running.'
-          : '';
-
-    const confirmed = await appConfirm(
-      `${method === 'squash' ? 'Squash and merge' : method === 'rebase' ? 'Rebase and merge' : 'Merge'} #${pr.number} into ${pr.baseRef}?${warning}`,
-      {
-        title: 'Merge pull request',
-        confirmLabel: 'Merge',
-        danger: pr.checks === 'failure',
-      },
-    );
-    if (!confirmed) return;
-
-    const deleteBranch = await appConfirm(`Delete ${pr.headRef} after merging?`, {
-      title: 'Delete branch',
-      confirmLabel: 'Delete branch',
-      cancelLabel: 'Keep branch',
+    const { result, error } = await confirmAndMergePr({
+      cwd: ctx.getCwd(),
+      number: pr.number,
+      method,
+      baseRef: pr.baseRef,
+      headRef: pr.headRef,
+      checks: pr.checks,
     });
-
-    const result = await prMerge({ cwd: ctx.getCwd(), number: pr.number, method, deleteBranch });
-    if (!result.ok) {
-      showToast(result.error ?? 'Could not merge the pull request', 'error');
+    if (result === 'cancelled') return;
+    if (result === 'failed') {
+      showToast(error ?? 'Could not merge the pull request', 'error');
       return;
     }
     showToast(`Merged #${pr.number}`, 'success');
@@ -618,6 +718,8 @@ export function createPullsView(
     },
     destroy: () => {
       destroyed = true;
+      unsubReviews();
+      if (reviewHost) unmountPrReviewPanel(reviewHost);
       root.remove();
     },
   };

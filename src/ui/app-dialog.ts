@@ -21,6 +21,8 @@ export interface AppConfirmOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  /** Extra content rendered under the message (e.g. an itemized list). */
+  body?: HTMLElement;
 }
 
 export interface AppPromptOptions {
@@ -48,6 +50,7 @@ let overlayEl: HTMLDivElement | null = null;
 let panelEl: HTMLDivElement | null = null;
 let titleEl: HTMLHeadingElement | null = null;
 let messageEl: HTMLParagraphElement | null = null;
+let bodyEl: HTMLDivElement | null = null;
 let inputEl: HTMLInputElement | null = null;
 let actionsEl: HTMLElement | null = null;
 let open = false;
@@ -96,6 +99,10 @@ function ensureShell(): void {
   messageEl = document.createElement('p');
   messageEl.className = 'app-dialog-panel__message';
 
+  bodyEl = document.createElement('div');
+  bodyEl.className = 'app-dialog-panel__body';
+  bodyEl.hidden = true;
+
   inputEl = document.createElement('input');
   inputEl.type = 'text';
   inputEl.className = 'app-dialog-panel__input';
@@ -104,7 +111,7 @@ function ensureShell(): void {
   actionsEl = document.createElement('div');
   actionsEl.className = 'app-dialog-panel__actions';
 
-  panelEl.append(titleEl, messageEl, inputEl, actionsEl);
+  panelEl.append(titleEl, messageEl, bodyEl, inputEl, actionsEl);
   overlayEl.appendChild(panelEl);
   document.body.appendChild(overlayEl);
 
@@ -152,6 +159,10 @@ function closeDialog(): void {
   previousFocus?.focus();
   previousFocus = null;
   actionsEl?.replaceChildren();
+  if (bodyEl) {
+    bodyEl.replaceChildren();
+    bodyEl.hidden = true;
+  }
   if (inputEl) {
     inputEl.hidden = true;
     inputEl.value = '';
@@ -174,7 +185,12 @@ function createActionButton(button: AppDialogButton): HTMLButtonElement {
   return btn;
 }
 
-function openDialogShell(kind: DialogKind, title: string, message: string): void {
+function openDialogShell(
+  kind: DialogKind,
+  title: string,
+  message: string,
+  body?: HTMLElement,
+): void {
   ensureShell();
   if (!overlayEl || !panelEl || !titleEl || !messageEl || !actionsEl) return;
 
@@ -182,6 +198,10 @@ function openDialogShell(kind: DialogKind, title: string, message: string): void
 
   titleEl.textContent = title;
   messageEl.textContent = message;
+  if (bodyEl) {
+    bodyEl.replaceChildren(...(body ? [body] : []));
+    bodyEl.hidden = !body;
+  }
   panelEl.dataset.dialogKind = kind;
 
   open = true;
@@ -248,7 +268,7 @@ function showConfirmDialog(options: AppConfirmOptions): Promise<boolean> {
     () =>
       new Promise((resolve) => {
         pending = { kind: 'confirm', resolve };
-        openDialogShell('confirm', title, options.message);
+        openDialogShell('confirm', title, options.message, options.body);
         renderButtons(
           [
             { id: 'cancel', label: cancelLabel },

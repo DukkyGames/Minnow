@@ -51,6 +51,31 @@ describe('sub-agent status tools', () => {
     assert.notEqual(payload.summary, 'Sub-agent completed with no text output.');
   });
 
+  test('buildSubAgentStatusPayload uses message preview instead of the empty-summary placeholder', () => {
+    const run: SubAgentRun = {
+      runId: FIXED_RUN_ID,
+      type: 'explore',
+      task: 'done',
+      status: 'completed',
+      parentChatId: 'chat-1',
+      parentToolCallId: null,
+      parentTurnId: 'turn-done',
+      summary: '',
+      error: null,
+      startedAt: '2026-05-19T12:00:00.000Z',
+      endedAt: '2026-05-19T12:01:00.000Z',
+      toolTurns: 1,
+      maxToolTurns: 12,
+      cancelled: false,
+      messages: [
+        { role: 'assistant', content: 'Here is what I found in src/.' },
+      ],
+    };
+    const payload = buildSubAgentStatusPayload(run);
+    assert.equal(payload.summary, 'Here is what I found in src/.');
+    assert.notEqual(payload.summary, 'Sub-agent completed with no text output.');
+  });
+
   beforeEach(() => {
     resetSubAgentOrchestrator();
     resetSubAgentConfigCache();
@@ -63,6 +88,12 @@ describe('sub-agent status tools', () => {
     const fakeFetch: typeof fetch = async (input, init) => {
       const method = init?.method ?? 'GET';
       const url = String(input);
+      if (method === 'GET' && url.includes('/transcript')) {
+        return new Response(JSON.stringify({ ok: true, events: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       if (method === 'POST' && !url.includes('/cancel')) {
         n += 1;
         const req = JSON.parse(String(init?.body ?? '{}')) as {

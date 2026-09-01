@@ -516,6 +516,11 @@ export async function writeResource(resource, body) {
   if (resource === 'sub-agents') {
     const { config } = normalizeSubAgentsConfig(body);
     await writeConfigJson(key, config);
+    // Same pattern as browser config a few lines above: Settings writes
+    // ~/.minnow/sub-agents.json, then drop the process cache so the next
+    // spawn reads the new type row without an app restart.
+    const { resetSubAgentServerConfigCache } = await import('../sub-agents/config.js');
+    resetSubAgentServerConfigCache();
     return config;
   }
   if (resource === 'bugs') {

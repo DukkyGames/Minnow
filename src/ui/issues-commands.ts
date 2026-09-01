@@ -22,6 +22,7 @@ export type IssuesCommandHost = {
   setGroupBy: (groupBy: IssuesGroupBy) => void;
   setActiveView: (viewId: string) => void;
   goToFocused: () => void;
+  expandFocused: () => void;
   acceptTriage: () => void;
   declineTriage: () => void;
   queueAgent: () => void;
@@ -83,6 +84,14 @@ export function buildIssuesCommands(host: IssuesCommandHost): Command[] {
       group: 'Issues',
       shortcut: 'Enter',
       run: () => host.goToFocused(),
+    },
+    {
+      id: 'issues.expand',
+      title: 'Expand issue',
+      group: 'Issues',
+      keywords: 'sparkles rewrite fill title description',
+      shortcut: 'E',
+      run: () => host.expandFocused(),
     },
     {
       id: 'issues.triage.accept',

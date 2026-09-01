@@ -326,6 +326,7 @@ export const SCOPED_SUITES = {
       'test/state/issues-store.test.mts',
       'test/tools/issue-tools.test.mts',
       'test/os/issues-app.test.mts',
+      'test/server/forge-issue-ops.test.mjs',
     ],
   },
   scheduler: {

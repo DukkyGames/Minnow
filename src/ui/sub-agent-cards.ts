@@ -11,7 +11,7 @@ import { initSubAgentSessionPersistence } from '../state/sub-agent-session-sync'
 import { getActiveChat } from '../state/sessions';
 import { legacyOutcomeFromSummary } from '../agents/sub-agent-structured-outcome';
 import type { Chat, PersistedSubAgentRun } from '../types';
-import { getActiveChatMountElement } from './chat-mount';
+import { getActiveChatMountElement, appendChatTranscriptNode } from './chat-mount';
 import { isBoardChatEmbedOpenForChat } from './orchestrate-board-chat-state';
 import { isHubMounted } from './hub';
 import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
@@ -185,10 +185,11 @@ function placeSubAgentCard(
     return;
   }
 
-  // No tool row yet: append only when the card is not already in this
-  // transcript. A later live upsert re-anchors once the row exists.
+  // No tool row yet (issue expand passes parentToolCallId: null): insert
+  // before the queued-messages block, same as live transcript rows.
+  // Re-anchor on a later upsert once the spawn tool row exists (P10-K).
   if (!inThisTranscript) {
-    area.appendChild(el);
+    appendChatTranscriptNode(el, area);
   }
 }
 

@@ -38,7 +38,7 @@
 .editor-quick-edit-stats {
   display: inline-flex;
   gap: 6px;
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -76,7 +76,7 @@
   margin: 8px 0;
   max-height: 180px;
   overflow: auto;
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.45;
   border: 1px solid var(--mn-border);

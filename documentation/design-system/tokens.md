@@ -76,6 +76,8 @@ Not theme-specific; shared across all palettes.
 
 ## Typography presets
 
+`--font-ui` and `--font-mono` are the only typography tokens. Stylesheets must use those names — `--mn-font-mono` is not defined, so `var(--mn-font-mono, …)` ignores the user's Appearance → Fonts choice.
+
 Font stacks override via [`src/appearance/fonts.ts`](../../src/appearance/fonts.ts):
 
 - **UI:** `system`, `inter`, `geist`, `ibm-plex-sans` (+ upload)

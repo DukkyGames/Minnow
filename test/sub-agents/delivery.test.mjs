@@ -17,10 +17,12 @@ import { ensureMinnowLayout, resetMinnowHomeCache } from '../../server/config/ho
 import { deleteGenerationsForProviderShutdown } from '../../server/generations/store.js';
 import { derive, pendingDeliveries } from '../../server/sub-agents/derive.js';
 import { makeEvent } from '../../server/sub-agents/events.js';
-import {
-  createDelivery,
-  createMemoryJournal,
-} from '../../server/sub-agents/delivery.js';
+    import {
+      buildProductionParentMessage,
+      createDelivery,
+      createMemoryJournal,
+      NO_DELIVERY_LISTENER,
+    } from '../../server/sub-agents/delivery.js';
 import * as agentsJournal from '../../server/sub-agents/journal.js';
 
 const PARENT = 'chat-p8e-parent';
@@ -309,6 +311,78 @@ describe('delivery — fold queue (memory journal)', () => {
     assert.equal(await make().offerNudge({ parentChatId: PARENT, runId: RUN, elapsedSec: 3 }), false);
     assert.equal(nudges, 2);
   });
+
+  test('no delivery listener parks without retry or error callback', async () => {
+    const journal = createMemoryJournal();
+    await seedPassed(journal);
+    /** @type {number} */
+    let injects = 0;
+    /** @type {number} */
+    let errors = 0;
+    const delivery = createDelivery({
+      journal,
+      retryDelayMs: 30,
+      sleep: async () => {},
+      deliverToParent: async () => {
+        injects += 1;
+        throw new Error(NO_DELIVERY_LISTENER);
+      },
+      onDeliverError: () => {
+        errors += 1;
+      },
+    });
+
+    await delivery.tick(PARENT);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.equal(injects, 1, 'must not timer-retry while nobody is listening');
+    assert.equal(errors, 0, 'a missing viewer is idle, not a delivery failure');
+    assert.equal((await journal.loadState(PARENT)).runs.get(RUN).delivered, false);
+
+    delivery.setDeliverToParent(async () => {
+      injects += 1;
+    });
+    await delivery.tick(PARENT);
+    assert.equal(injects, 2);
+    assert.equal((await journal.loadState(PARENT)).runs.get(RUN).delivered, true);
+    delivery.reset();
+  });
+
+  test('a real inject failure still retries and reports', async () => {
+    const journal = createMemoryJournal();
+    await seedPassed(journal);
+    /** @type {number} */
+    let injects = 0;
+    /** @type {string[]} */
+    const reported = [];
+    /** @type {() => void} */
+    let sawRetry = () => {};
+    const retried = new Promise((resolve) => {
+      sawRetry = resolve;
+    });
+    const delivery = createDelivery({
+      journal,
+      retryDelayMs: 30,
+      sleep: async () => {},
+      deliverToParent: async () => {
+        injects += 1;
+        if (injects === 1) throw new Error('resume blew up');
+        sawRetry();
+      },
+      onDeliverError: (err) => {
+        reported.push(err instanceof Error ? err.message : String(err));
+      },
+    });
+
+    await delivery.tick(PARENT);
+    assert.equal(injects, 1);
+    assert.deepEqual(reported, ['resume blew up']);
+    await retried;
+    // The timer tick is still appending. A follow-up tick waits on that tail.
+    await delivery.tick(PARENT);
+    assert.equal(injects, 2, 'timer retry must still run for a real inject failure');
+    assert.equal((await journal.loadState(PARENT)).runs.get(RUN).delivered, true);
+    delivery.reset();
+  });
 });
 
 describe('delivery — kill/restart against the on-disk journal', () => {
@@ -439,5 +513,60 @@ describe('delivery — kill/restart against the on-disk journal', () => {
     await booted.tickAll();
     assert.deepEqual(ids, [runId]);
     assert.equal((await agentsJournal.loadState(parentChatId)).runs.get(runId).delivered, true);
+  });
+});
+
+describe('buildProductionParentMessage', () => {
+  test('includes type, status, and last attempt summary (not ids-only)', async () => {
+    const journal = createMemoryJournal();
+    await seedPassed(journal);
+    const run = (await journal.loadState(PARENT)).runs.get(RUN);
+    const message = buildProductionParentMessage('completion', [run]);
+    assert.match(message, /\[Sub-agent finished\]/);
+    assert.match(message, /FIXED_SUMMARY/);
+    assert.match(message, /"type": "explore"/);
+    assert.match(message, /"status": "completed"/);
+    // Default copy ended with a comma-joined id list. Product copy must not.
+    assert.equal(/\n\n[a-z0-9-]+$/i.test(message.trim()), false);
+  });
+
+  test('abandon includes reason and evidence', async () => {
+    const journal = createMemoryJournal();
+    await journal.appendEvent(PARENT, requested());
+    await journal.appendEvent(PARENT, started());
+    await journal.appendEvent(
+      PARENT,
+      makeEvent('attempt.ended', {
+        runId: RUN,
+        attemptId: 'a1',
+        outcome: 'fail',
+        summary: 'could not finish',
+      }),
+    );
+    await journal.appendEvent(
+      PARENT,
+      makeEvent('run.abandoned', {
+        runId: RUN,
+        reason: 'failed',
+        evidence: { files: ['src/a.ts'], note: 'gave up after retry' },
+      }),
+    );
+    const run = (await journal.loadState(PARENT)).runs.get(RUN);
+    const message = buildProductionParentMessage('completion', [run]);
+    assert.match(message, /"status": "failed"/);
+    assert.match(message, /could not finish/);
+    assert.match(message, /gave up after retry/);
+    assert.match(message, /src\/a\.ts/);
+  });
+
+  test('check-in copy stays on the ids-bearing default', () => {
+    const message = buildProductionParentMessage(
+      'check_in_nudge',
+      [{ runId: RUN, type: 'explore', phase: 'running' }],
+      { elapsedSec: 12 },
+    );
+    assert.match(message, /\[Sub-agent check-in\]/);
+    assert.match(message, new RegExp(RUN));
+    assert.match(message, /12s/);
   });
 });

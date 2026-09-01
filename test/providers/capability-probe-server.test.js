@@ -486,6 +486,8 @@ describe('openai-v1 capabilities/probe route', () => {
       assert.equal(res.json.schemaVersion, 1);
       assert.equal(res.json.models['model-a'].tools, true);
       assert.equal(res.json.models['model-a'].streaming, true);
+      // Targeted first-load probes must not ingest unprobed siblings.
+      assert.equal(res.json.models['model-z'], undefined);
 
       const get = await httpRequest(
         baseUrl,

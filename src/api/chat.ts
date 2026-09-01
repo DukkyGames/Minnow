@@ -98,6 +98,10 @@ import { setStatus } from '../ui/status';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import { createStreamingStatsPublisher } from '../chat/streaming-stats';
 import { llamaRuntimeStatusView } from '../chat/llama-runtime-status';
+import {
+  clearInFlightPromptOverlay,
+  publishInFlightPromptFromMeta,
+} from '../models/in-flight-prompt';
 
 export { parseSsePayloads } from './sse-parse';
 
@@ -325,6 +329,11 @@ export function mergeStreamMeta(
     next.timings = { ...next.timings, ...chunk.timings };
     const derived = statsFromLlamaTimings(next.timings);
     if (derived) next.stats = { ...next.stats, ...derived };
+  } else if (deltaHasGeneratedText(chunk)) {
+    // mlx-lm (and other OpenAI streams) omit timings.predicted_n. Count each
+    // text-bearing delta so the live GEN chip and "Calling {tool}" stay honest.
+    const prev = Number(next.timings?.predicted_n) || 0;
+    next.timings = { ...next.timings, predicted_n: prev + 1 };
   }
   if (chunk.prompt_progress) next.prompt_progress = chunk.prompt_progress;
   if (chunk.stats) next.stats = { ...next.stats, ...chunk.stats };
@@ -336,6 +345,17 @@ export function mergeStreamMeta(
   const streamError = extractStreamErrorMessage(chunk);
   if (streamError) next.error = streamError;
   return next;
+}
+
+/** True when this chunk added assistant prose or reasoning (one mlx-lm token). */
+function deltaHasGeneratedText(chunk: ChatCompletionChunk): boolean {
+  const delta = chunk.choices?.[0]?.delta;
+  if (!delta || typeof delta !== 'object') return false;
+  const content = delta.content;
+  const reasoning = delta.reasoning ?? delta.reasoning_content;
+  if (typeof content === 'string' && content.length > 0) return true;
+  if (typeof reasoning === 'string' && reasoning.length > 0) return true;
+  return false;
 }
 
 /** Upper bound for believable decode throughput (guards bad provider stats). */
@@ -756,6 +776,7 @@ export async function sendMessage(): Promise<void> {
         streamStatus.setPhase('prompt_processing');
       }
       streamStatus.setRuntimeDetail(runtime.detail || null);
+      publishInFlightPromptFromMeta(streamMeta, modelId);
       streamingStatsPublisher.schedule({
         streamMeta,
         t0,
@@ -931,6 +952,7 @@ export async function sendMessage(): Promise<void> {
     thoughtController.abort();
     thinkingTracker.abort();
   } finally {
+    clearInFlightPromptOverlay();
     streamingStatsPublisher.reset();
     thoughtController.abort();
     setStreaming(false, chat.id);

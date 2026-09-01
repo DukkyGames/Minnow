@@ -178,7 +178,7 @@
 
 .orchestrate-plan-screen__activity {
   margin: 8px 0 0;
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.4;
   color: var(--mn-fg-muted);
@@ -195,7 +195,7 @@
   padding: 6px 10px;
   border: 1px solid var(--mn-border);
   border-radius: var(--radius-sm);
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.35;
   color: var(--mn-fg-muted);

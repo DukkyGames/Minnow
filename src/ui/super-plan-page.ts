@@ -53,6 +53,7 @@ import {
 } from '../chat/plans/plan-preview';
 import { findChatById } from '../state/sessions';
 import type { Chat } from '../types';
+import { scheduleAnimationFrame } from '../lib/schedule-animation-frame';
 import { bindComposerAutoResize } from './composer-auto-resize';
 import { cancelComposerExpandFor, initComposerExpand } from './composer-expand';
 
@@ -253,16 +254,63 @@ function baseName(path: string): string {
   return path.split('/').pop() ?? path;
 }
 
+/**
+ * True when this stage has produced a file the reading column may open.
+ * Reserved `specPath` / `planPath` values exist from pipeline start — they are
+ * not files yet, and treating them as such 404s then caches an empty spec (MIN-672).
+ */
+function stageHasWrittenArtifact(
+  record: SuperPlanState['stages'][SuperPlanStageId] | undefined,
+): boolean {
+  if (!record) return false;
+  if (record.artifactPath?.trim()) return true;
+  return record.status === 'blocked_user' || record.status === 'done';
+}
+
 function specPathOf(sp: SuperPlanState): string {
-  return sp.stages.spec_confirm?.artifactPath?.trim() || sp.specPath?.trim() || '';
+  const record = sp.stages.spec_confirm;
+  const fromStage = record?.artifactPath?.trim() || '';
+  if (fromStage) return fromStage;
+  return stageHasWrittenArtifact(record) ? sp.specPath?.trim() || '' : '';
 }
 
 function planPathOf(sp: SuperPlanState): string {
-  return sp.stages.present?.artifactPath?.trim() || sp.planPath?.trim() || '';
+  const present = sp.stages.present?.artifactPath?.trim() || '';
+  if (present) return present;
+  const draft2 = sp.stages.draft2?.artifactPath?.trim() || '';
+  if (draft2) return draft2;
+  const draft1 = sp.stages.draft1?.artifactPath?.trim() || '';
+  if (draft1) return draft1;
+  const written =
+    stageHasWrittenArtifact(sp.stages.present) ||
+    sp.stages.draft1?.status === 'done' ||
+    sp.stages.draft2?.status === 'done';
+  return written ? sp.planPath?.trim() || '' : '';
 }
 
 function researchPathOf(sp: SuperPlanState): string {
-  return sp.stages.research?.artifactPath?.trim() || sp.researchPath?.trim() || '';
+  const record = sp.stages.research;
+  const fromStage = record?.artifactPath?.trim() || '';
+  if (fromStage) return fromStage;
+  return record?.status === 'done' ? sp.researchPath?.trim() || '' : '';
+}
+
+/** Identity of the markdown currently painted in `.sp-doc` (path + payload). */
+function docSignature(path: string, markdown: string): string {
+  return `${path}#${markdown.length}:${markdown.slice(0, 24)}`;
+}
+
+/**
+ * Backoff after empty preview reads. The first retry is immediate so a 404 that
+ * races the save is replaced as soon as the file is visible to `/api/preview`.
+ */
+const DOC_RETRY_DELAYS_MS = [0, 80, 200, 400, 800, 1600];
+
+/** Allow Node to exit while clocks/retries are pending (browser timers ignore this). */
+function unrefTimer(timer: ReturnType<typeof setTimeout> | ReturnType<typeof setInterval> | null): void {
+  if (timer && typeof timer === 'object' && typeof (timer as { unref?: () => void }).unref === 'function') {
+    (timer as { unref: () => void }).unref();
+  }
 }
 
 class SuperPlanPage {
@@ -284,6 +332,7 @@ class SuperPlanPage {
   private firstLedgerPaint = true;
   private ticker: ReturnType<typeof setInterval> | null = null;
   private railObserver: ResizeObserver | null = null;
+  private runPaneObserver: ResizeObserver | null = null;
   /** Drops Super Plan composer auto-resize listeners when the page unmounts. */
   private unbindComposerResize: (() => void) | null = null;
 
@@ -293,6 +342,15 @@ class SuperPlanPage {
 
   private docCache = new Map<string, string>();
   private docRequested = new Set<string>();
+  /** Bumped on each preview fetch and on retarget so a late 404 cannot clobber a later hit. */
+  private docFetchId = 0;
+  private docRetryCount = new Map<string, number>();
+  private docRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastSpecPath = '';
+  private lastPlanPath = '';
+  private renderedDocSig = '';
+  /** Set in destroy() so an in-flight library fetch cannot paint a dead page. */
+  private destroyed = false;
 
   // Element refs held for in-place patching.
   private railList!: HTMLElement;
@@ -352,16 +410,39 @@ class SuperPlanPage {
   private autoCollapseRailWhenNarrow(): void {
     if (typeof ResizeObserver !== 'function') return;
     let wasNarrow: boolean | null = null;
-    const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 0;
+    const applyNarrow = scheduleAnimationFrame(() => {
+      const width = this.root.clientWidth;
       if (width <= 0) return;
       const narrow = width < 660;
       if (narrow === wasNarrow) return;
       wasNarrow = narrow;
       this.root.classList.toggle('is-rail-hidden', narrow);
     });
+    const observer = new ResizeObserver(() => applyNarrow());
     observer.observe(this.root);
     this.railObserver = observer;
+  }
+
+  /**
+   * Publish the run pane's two live measurements so CSS can pin the pipeline
+   * column under the run header.
+   *
+   * Both are genuinely variable and neither can be a constant: .sp-runhead is
+   * sticky in the same scroller and its height changes when the prompt unfolds
+   * from two clamped lines, and the scroller's own height follows the window.
+   * A guessed offset would tuck the pipeline under an opaque header.
+   */
+  private observeRunPaneMetrics(head: HTMLElement, body: HTMLElement): void {
+    if (typeof ResizeObserver !== 'function') return;
+    const publish = (): void => {
+      body.style.setProperty('--sp-runhead-h', `${Math.round(head.offsetHeight)}px`);
+      body.style.setProperty('--sp-runbody-h', `${Math.round(body.clientHeight)}px`);
+    };
+    const observer = new ResizeObserver(scheduleAnimationFrame(publish));
+    observer.observe(head);
+    observer.observe(body);
+    publish();
+    this.runPaneObserver = observer;
   }
 
   /** Narrow layouts overlay the rail, so picking a plan should get out of the way. */
@@ -372,12 +453,15 @@ class SuperPlanPage {
   }
 
   destroy(): void {
+    this.destroyed = true;
     // Abort an in-flight expand that belongs to this composer, not Code/Chat.
     cancelComposerExpandFor('superPlanPrompt');
     this.unbindComposerResize?.();
     this.unbindComposerResize = null;
     this.railObserver?.disconnect();
     this.railObserver = null;
+    this.runPaneObserver?.disconnect();
+    this.runPaneObserver = null;
     this.collector?.stop();
     this.collector = null;
     this.unsubBuffer?.();
@@ -385,6 +469,7 @@ class SuperPlanPage {
     this.buffer = null;
     if (this.ticker) clearInterval(this.ticker);
     this.ticker = null;
+    this.resetDocLoader();
     this.root.remove();
   }
 
@@ -404,9 +489,24 @@ class SuperPlanPage {
     this.manualSegment = null;
     this.renderedEntryIds.clear();
     this.firstLedgerPaint = true;
+    this.resetDocLoader();
+    this.startCollector();
+  }
+
+  /** Drop in-flight spec/plan preview state so a plan switch cannot reuse a 404. */
+  private resetDocLoader(): void {
+    this.docFetchId += 1;
     this.docCache.clear();
     this.docRequested.clear();
-    this.startCollector();
+    this.docRetryCount.clear();
+    this.lastSpecPath = '';
+    this.lastPlanPath = '';
+    this.renderedDocSig = '';
+    if (this.docRetryTimer) {
+      clearTimeout(this.docRetryTimer);
+      this.docRetryTimer = null;
+    }
+    if (this.docEl) delete this.docEl.dataset.path;
   }
 
   // ── Rail ────────────────────────────────────────────────────────────────
@@ -455,11 +555,14 @@ class SuperPlanPage {
   }
 
   private async loadLibrary(): Promise<void> {
+    if (this.destroyed) return;
     try {
       const result = await listSuperPlanLibrary();
+      if (this.destroyed) return;
       this.libraryEntries = result.entries;
       this.libraryError = result.error;
     } catch {
+      if (this.destroyed) return;
       this.libraryEntries = [];
       this.libraryError = 'find_files failed';
     }
@@ -1058,7 +1161,9 @@ class SuperPlanPage {
     const pane = el('div', 'sp-pane sp-pane--run');
 
     const body = el('div', 'sp-runbody');
-    body.appendChild(this.buildRunHead());
+    const head = this.buildRunHead();
+    body.appendChild(head);
+    this.observeRunPaneMetrics(head, body);
 
     const inner = el('div', 'sp-body');
     const cols = el('div', 'sp-cols');
@@ -1222,6 +1327,7 @@ class SuperPlanPage {
   private startTicker(): void {
     if (this.ticker) clearInterval(this.ticker);
     this.ticker = setInterval(() => this.paintClocks(), 1000);
+    unrefTimer(this.ticker);
   }
 
   /** Patch every live region from the current chat. Safe to call on any tick. */
@@ -1237,6 +1343,7 @@ class SuperPlanPage {
     this.paintStages(sp, state);
     this.paintArtifacts(sp);
     this.paintDock(chat, sp, state);
+    this.syncWritableDocPaths(sp);
     this.paintBody(sp);
     this.paintClocks();
   }
@@ -1546,6 +1653,32 @@ class SuperPlanPage {
     dock.hidden = true;
   }
 
+  /**
+   * When a spec/plan path disappears (revise, rewind) drop its cached 404/empty
+   * so the next write is fetched instead of replaying the previous miss.
+   */
+  private syncWritableDocPaths(sp: SuperPlanState): void {
+    const spec = specPathOf(sp);
+    const plan = planPathOf(sp);
+    if (spec !== this.lastSpecPath) {
+      if (this.lastSpecPath) this.dropDocCache(this.lastSpecPath);
+      this.lastSpecPath = spec;
+    }
+    if (plan !== this.lastPlanPath) {
+      if (this.lastPlanPath) this.dropDocCache(this.lastPlanPath);
+      this.lastPlanPath = plan;
+    }
+  }
+
+  private dropDocCache(path: string): void {
+    if (!path) return;
+    this.docCache.delete(path);
+    this.docRequested.delete(path);
+    this.docRetryCount.delete(path);
+    if (this.renderedDocSig.startsWith(`${path}#`)) this.renderedDocSig = '';
+    if (this.docEl?.dataset.path === path) delete this.docEl.dataset.path;
+  }
+
   private paintBody(sp: SuperPlanState): void {
     const showDoc = this.segment !== 'activity';
     if (this.ledgerEl) this.ledgerEl.hidden = showDoc;
@@ -1558,32 +1691,91 @@ class SuperPlanPage {
 
     const path = this.segment === 'spec' ? specPathOf(sp) : planPathOf(sp);
     if (!path || !this.docEl) return;
+
     const cached = this.docCache.get(path);
-    if (cached !== undefined) {
-      if (this.docEl.dataset.path !== path) {
-        this.docEl.dataset.path = path;
-        mountPlanPreviewContent(this.docEl, cached, {
-          modeId: 'super-plan',
-          emptyLabel: '(this file is empty or could not be read)',
-        });
-      }
+    // Only non-empty bodies are terminal. An empty string used to be cached and
+    // then skipped on later paints because dataset.path already matched.
+    if (cached?.trim()) {
+      this.mountDocMarkdown(path, cached);
       return;
     }
+
+    const attempt = this.docRetryCount.get(path) ?? 0;
+    if (attempt >= DOC_RETRY_DELAYS_MS.length) {
+      this.mountEmptyDocPlaceholder(path);
+      return;
+    }
+
     if (this.docRequested.has(path)) return;
     this.docRequested.add(path);
-    this.docEl.dataset.path = '';
-    this.docEl.replaceChildren(el('p', 'sp-doc__missing', 'Loading…'));
-    void readPlanArtifactMarkdown(path)
+    const fetchId = ++this.docFetchId;
+    // Keep the current placeholder on retries so "Loading…" does not flash.
+    if (attempt === 0) {
+      this.docEl.dataset.path = '';
+      this.docEl.replaceChildren(el('p', 'sp-doc__missing', 'Loading…'));
+    }
+
+    void readPlanArtifactMarkdown(path, { cacheBust: fetchId })
       .then((markdown) => {
-        this.docCache.set(path, markdown ?? '');
+        if (fetchId !== this.docFetchId) return;
         this.docRequested.delete(path);
-        this.paintBody(sp);
+        const text = markdown ?? '';
+        if (text.trim()) {
+          this.docCache.set(path, text);
+          this.docRetryCount.delete(path);
+          this.paintBodyFromCurrentChat();
+          return;
+        }
+        this.queueDocRetry(path, attempt);
       })
       .catch(() => {
+        if (fetchId !== this.docFetchId) return;
         this.docRequested.delete(path);
-        this.docCache.set(path, '');
-        this.paintBody(sp);
+        this.queueDocRetry(path, attempt);
       });
+  }
+
+  private paintBodyFromCurrentChat(): void {
+    const chat = findChatById(this.chatId);
+    if (chat?.superPlan) this.paintBody(chat.superPlan);
+  }
+
+  private queueDocRetry(path: string, attempt: number): void {
+    const nextAttempt = attempt + 1;
+    this.docRetryCount.set(path, nextAttempt);
+    if (nextAttempt >= DOC_RETRY_DELAYS_MS.length) {
+      this.mountEmptyDocPlaceholder(path);
+      return;
+    }
+    const delay = DOC_RETRY_DELAYS_MS[attempt] ?? 0;
+    if (this.docRetryTimer) clearTimeout(this.docRetryTimer);
+    this.docRetryTimer = setTimeout(() => {
+      this.docRetryTimer = null;
+      this.paintBodyFromCurrentChat();
+    }, delay);
+    unrefTimer(this.docRetryTimer);
+  }
+
+  private mountDocMarkdown(path: string, markdown: string): void {
+    if (!this.docEl) return;
+    const sig = docSignature(path, markdown);
+    if (this.renderedDocSig === sig) return;
+    this.renderedDocSig = sig;
+    this.docEl.dataset.path = path;
+    try {
+      mountPlanPreviewContent(this.docEl, markdown, {
+        modeId: 'super-plan',
+        emptyLabel: '(this file is empty or could not be read)',
+      });
+    } catch {
+      // Renderer/DOMPurify can throw before the page has a real origin (tests)
+      // or if a plugin fails; still show the artifact instead of a blank column.
+      this.docEl.textContent = markdown.trim() || '(this file is empty or could not be read)';
+    }
+  }
+
+  private mountEmptyDocPlaceholder(path: string): void {
+    this.mountDocMarkdown(path, '');
   }
 
   private paintLedger(): void {

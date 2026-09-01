@@ -22,7 +22,7 @@ import { findToolWrapInDom } from '../tools/tool-wrap-dom';
 
 import type { Chat } from '../types';
 
-import { getActiveChatMountElement } from '../ui/chat-mount';
+import { appendChatTranscriptNode } from '../ui/chat-mount';
 
 import { renderToolCall } from '../ui/tool-messages';
 
@@ -30,6 +30,7 @@ import { isAskQuestionModalOpenForChat } from '../ui/question-cards-modal';
 import { isUserPromptLocked } from '../ui/user-prompt-lock';
 
 import { setStatus } from '../ui/status';
+import { isResumeGateHeld } from './resume-gate';
 
 
 
@@ -75,7 +76,7 @@ function ensureToolWrap(
 
   if (isStreamDomVisible(chat.id)) {
 
-    getActiveChatMountElement().appendChild(toolWrap);
+    appendChatTranscriptNode(toolWrap);
 
   }
 
@@ -102,6 +103,12 @@ export async function resumeIncompleteToolBatch(
 ): Promise<boolean> {
 
   if (typeof document === 'undefined') {
+
+    return false;
+
+  }
+
+  if (isResumeGateHeld()) {
 
     return false;
 
@@ -254,13 +261,20 @@ export async function resumeIncompleteToolBatch(
 
 
 
-/** Resume pending tools for the active chat after reload (other chats wait until opened). */
+/**
+ * Whether the active chat has a tool batch the boot resume would pick up.
+ *
+ * Split out of `bootIncompleteToolResumeForChats` so the boot resume gate can ask
+ * "is there anything here?" — and list it in the prompt — without resuming it.
+ * Hydrates history for the same reason the resume does: a lazy boot leaves an empty
+ * placeholder, and the tail scan would find nothing.
+ */
 
-export async function bootIncompleteToolResumeForChats(chats: readonly Chat[]): Promise<void> {
+export async function hasIncompleteToolBatchForBoot(): Promise<boolean> {
 
   if (typeof document === 'undefined') {
 
-    return;
+    return false;
 
   }
 
@@ -268,13 +282,9 @@ export async function bootIncompleteToolResumeForChats(chats: readonly Chat[]): 
 
   if (!active) {
 
-    return;
+    return false;
 
   }
-
-  // A lazy boot leaves history as an empty placeholder, so the tail scan below would
-
-  // find nothing and silently skip the resume it exists to perform.
 
   try {
 
@@ -284,11 +294,29 @@ export async function bootIncompleteToolResumeForChats(chats: readonly Chat[]): 
 
   } catch {
 
+    return false;
+
+  }
+
+  return Boolean(findIncompleteToolBatchAtTail(active));
+
+}
+
+
+
+/** Resume pending tools for the active chat after reload (other chats wait until opened). */
+
+export async function bootIncompleteToolResumeForChats(chats: readonly Chat[]): Promise<void> {
+
+  if (!(await hasIncompleteToolBatchForBoot())) {
+
     return;
 
   }
 
-  if (!findIncompleteToolBatchAtTail(active)) {
+  const active = getActiveChat();
+
+  if (!active) {
 
     return;
 
@@ -341,6 +369,12 @@ async function ensureAskQuestionSurfaceForChat(chat: Chat): Promise<void> {
 /** Resume when switching to a chat that still has unanswered question cards in history. */
 
 export async function resumeIncompleteToolBatchOnChatSwitch(chat: Chat): Promise<void> {
+
+  if (isResumeGateHeld()) {
+
+    return;
+
+  }
 
   if (!findIncompleteToolBatchAtTail(chat)) {
 

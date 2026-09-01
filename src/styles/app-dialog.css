@@ -54,6 +54,47 @@
   overflow-y: auto;
 }
 
+.app-dialog-panel__body {
+  min-height: 0;
+  max-height: min(40dvh, 18rem);
+  overflow-y: auto;
+}
+
+.app-dialog-panel__body[hidden] {
+  display: none;
+}
+
+/* Itemized list body (boot resume prompt). */
+.app-dialog-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-dialog-list__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg-elevated, var(--mn-bg));
+}
+
+.app-dialog-list__label {
+  font-size: 13px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.app-dialog-list__detail {
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
 .app-dialog-panel__input {
   width: 100%;
   font-family: var(--font-mono);

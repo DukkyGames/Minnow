@@ -18,7 +18,9 @@ import {
   defaultComposerReasoningLevel,
   formatReasoningEffortLabel,
   getComposerReasoningLevelOptions,
+  isComposerReasoningLevel,
   modelShowsComposerBrainToggle,
+  modelUsesAlwaysOnReasoning,
   modelUsesComposerReasoningDropdown,
   modelUsesComposerThinkingToggle,
   normalizeReasoningAllowedOptions,
@@ -101,11 +103,7 @@ function isDropdownReasoningActive(
   if (!boardReasoningSource) return false;
   const board = boardReasoningSource.getBoard();
   if (board.reasoningEffort === 'off') return false;
-  if (
-    board.reasoningEffort === 'low' ||
-    board.reasoningEffort === 'medium' ||
-    board.reasoningEffort === 'high'
-  ) {
+  if (isComposerReasoningLevel(board.reasoningEffort)) {
     return true;
   }
   const resolved = resolveThinkingMode({
@@ -138,6 +136,8 @@ function onSelectChange(): void {
 function applyDropdownModeBrainToggle(): void {
   const caps = effectiveCapabilities();
   if (!boardReasoningSource) return;
+  // Always-on models (GLM-5.3) have no Off state for the brain to toggle back from.
+  if (modelUsesAlwaysOnReasoning(caps)) return;
   if (boardReasoningSource.getBoard().reasoningEffort === 'off') {
     const level = defaultComposerReasoningLevel(caps);
     persistAndRefresh({
@@ -268,24 +268,29 @@ export function syncBoardHeaderReasoning(): void {
   const dropdownMode = modelUsesComposerReasoningDropdown(caps);
   const toggleMode = modelUsesComposerThinkingToggle(caps);
   const disabled = controlsDisabled();
+  // Always-on models hide the brain but still show Low/High/Max.
+  const showWrap = showBrain || dropdownMode;
 
-  wrapEl.classList.toggle('hidden', !showBrain);
+  wrapEl.classList.toggle('hidden', !showWrap);
   toggleBtn.classList.toggle('hidden', !showBrain);
 
-  if (!showBrain) {
+  if (!showWrap) {
     if (selectWrapEl) selectWrapEl.classList.add('hidden');
     return;
   }
 
   if (dropdownMode) {
-    const effectiveOn = isDropdownReasoningActive(caps);
-    toggleBtn.setAttribute('aria-pressed', effectiveOn ? 'true' : 'false');
-    toggleBtn.dataset.inherit = 'false';
-    toggleBtn.dataset.thinkingTri = effectiveOn ? 'on' : 'off';
-    toggleBtn.disabled = disabled;
-    toggleBtn.title = effectiveOn
-      ? 'Board reasoning on — click to turn off'
-      : 'Board reasoning off — click to turn on';
+    const alwaysOn = modelUsesAlwaysOnReasoning(caps);
+    const effectiveOn = alwaysOn || isDropdownReasoningActive(caps);
+    if (showBrain) {
+      toggleBtn.setAttribute('aria-pressed', effectiveOn ? 'true' : 'false');
+      toggleBtn.dataset.inherit = 'false';
+      toggleBtn.dataset.thinkingTri = effectiveOn ? 'on' : 'off';
+      toggleBtn.disabled = disabled;
+      toggleBtn.title = effectiveOn
+        ? 'Board reasoning on — click to turn off'
+        : 'Board reasoning off — click to turn on';
+    }
 
     const showLevel = effectiveOn;
     if (selectWrapEl) selectWrapEl.classList.toggle('hidden', !showLevel);

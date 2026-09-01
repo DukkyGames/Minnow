@@ -26,8 +26,9 @@ mock.module('../../src/chat/super-plan/stages.ts', {
 });
 
 // mock.module replaces the whole module. Super Plan abort dynamically
-// imports agents/orchestrator.ts; every real export must be present here
-// or the mock silently never takes effect (see test/chat/super-plan/stages.test.mts).
+// imports agents/orchestrator.ts; every real export the import graph
+// reads must be present here or the mock throws
+// (SyntaxError: does not provide an export named '…').
 let cancelSubAgentCalls: Array<{ runId: string; reason: string }> = [];
 mock.module('../../src/agents/orchestrator.ts', {
   namedExports: {
@@ -59,6 +60,10 @@ mock.module('../../src/agents/orchestrator.ts', {
     subscribeSubAgentRuns: () => () => undefined,
     subscribeSubAgentDeliver: () => () => undefined,
     hydrateSubAgentRunsForParentChat: async () => undefined,
+    hydrateSubAgentTranscript: async () => undefined,
+    honestTerminalSummary: () => '',
+    lastNonSystemPreview: () => '',
+    rehydrateLiveParentSubAgents: async () => undefined,
     adoptSubAgentRunForTests: () => undefined,
     setSubAgentApiFetchForTests: () => undefined,
     setSubAgentOpenStreamForTests: () => undefined,

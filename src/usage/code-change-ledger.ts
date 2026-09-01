@@ -152,10 +152,21 @@ function toolMessageHasCodeChange(msg: ToolResultMessage): boolean {
 }
 
 /**
+ * Listing-safe: omitted/`true` means the transcript is in memory.
+ * `false` is a summary placeholder — do not read `chat.history` (MIN-734).
+ */
+function isChatHistoryReady(chat: Chat): boolean {
+  return chat.historyLoaded !== false;
+}
+
+/**
  * Whether an agent turn produced file mutations (tool codeChange rows in its output span).
  * Used to show strip Undo only when rewinding would touch the working tree.
  */
 export function runHadCodeChanges(chat: Chat, run: TurnRunRecord): boolean {
+  // Undo runs against the active chat after hydrate; skip placeholder transcripts.
+  if (!isChatHistoryReady(chat)) return false;
+
   const start = run.outputHistoryStart;
   const end = run.outputHistoryEnd;
   if (start != null && end != null && end >= start) {
@@ -185,6 +196,11 @@ export function runHadCodeChanges(chat: Chat, run: TurnRunRecord): boolean {
  * Sorted by total changes descending (most-changed first).
  */
 export function getPerFileChangeSummary(chat: Chat): FileChangeSummary[] {
+  // Sidebar listing paints every chat on boot. Unique file counts live in
+  // tool rows, which summaries omit — return [] so +/− can still come from
+  // persisted codeChangeTotals without tripping the lazy-history trap.
+  if (!isChatHistoryReady(chat)) return [];
+
   const byPath = new Map<string, FileChangeSummary>();
 
   for (const msg of chat.history) {

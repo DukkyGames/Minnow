@@ -7,15 +7,15 @@ part: tool-usage
 
 # Manage appearance
 
-Use **`get_appearance`**, **`update_appearance`**, and **`upload_appearance_asset`** when the user asks to change Minnow theme, colors, fonts, or desktop wallpaper.
+Use **`get_appearance`**, **`update_appearance`**, and **`upload_appearance_asset`** when the user asks to change Minnow theme, colors, or fonts.
 
-Appearance is **browser-local** (not server settings). Do **not** use `update_settings` for theme, wallpaper, fonts, or custom colors — those keys are read-only there.
+Appearance is **browser-local** (not server settings). Do **not** use `update_settings` for theme, fonts, or custom colors — those keys are read-only there.
 
 ## Workflow
 
-1. **`get_appearance`** — read current theme, custom colors, fonts, and wallpaper.
-2. **`upload_appearance_asset`** — when a custom font or wallpaper image lives in the workspace (`kind`: `font` | `wallpaper`, `path`: relative path). Requires Minnow running locally (not Vite-only dev).
-3. **`update_appearance`** — batch patch any subset of `theme`, `customColors`, `fonts`, `wallpaper`.
+1. **`get_appearance`** — read current theme, custom colors, and fonts.
+2. **`upload_appearance_asset`** — when a custom font lives in the workspace (`kind`: `font`, `path`: relative path). Requires Minnow running locally (not Vite-only dev).
+3. **`update_appearance`** — batch patch any subset of `theme`, `customColors`, `fonts`.
 
 ## Examples
 
@@ -37,8 +37,6 @@ Appearance is **browser-local** (not server settings). Do **not** use `update_se
   }
 }
 ```
-
-**Custom wallpaper:** upload asset → set `wallpaper.mode` to `custom` and `wallpaper.imageAssetId` to the returned id.
 
 ## Rules
 

@@ -31,7 +31,7 @@ import {
 import { isProtectedBranchName, resolveTrunkBranchName } from '../lib/git-trunk-branch';
 import { panelPathsEqual } from './panel-worktree-cwd';
 import { confirmDirtyCheckout } from './git-checkout-confirm';
-import { openGitPanelNamePopover } from './git-panel-name-popover';
+import { openGitPanelNamePopover, openGitRefNamePopover } from './git-panel-name-popover';
 import { showToast } from './toast';
 import {
   button,
@@ -141,11 +141,12 @@ export function createBranchesView(ctx: SccContext): SccView {
     icon: 'plus',
     variant: 'primary',
     onClick: () =>
-      openGitPanelNamePopover({
+      openGitRefNamePopover({
         anchor: newBranchBtn,
         title: 'New branch',
-        label: 'Branch name',
-        placeholder: 'feature/my-branch',
+        kind: 'branch',
+        defaultPath: ctx.getCwd() || getWorkspacePath(),
+        reserved: [ctx.getBranch(), 'main', 'master'],
         onSubmit: async (branch) => {
           await run(
             () => gitCheckout({ branch, create: true, cwd: ctx.getCwd() }),
@@ -519,18 +520,19 @@ export function createWorktreesView(
     icon: 'plus',
     variant: 'primary',
     onClick: () =>
-      openGitPanelNamePopover({
+      openGitRefNamePopover({
         anchor: addBtn,
         title: 'Add worktree',
-        label: 'Branch name',
-        placeholder: 'feature/isolated-work',
+        kind: 'worktree',
+        defaultPath: ctx.getCwd() || getWorkspacePath(),
+        reserved: [ctx.getBranch(), 'main', 'master'],
         onSubmit: async (branch) => {
           const result = await gitWorktreeAdd({ branch, cwd: ctx.getCwd() });
           if (!result.ok) {
             showToast(result.error ?? 'Could not add the worktree', 'error');
             return;
           }
-          showToast(`Worktree for ${branch} added`, 'success');
+          showToast(`Worktree for ${result.branch ?? branch} added`, 'success');
           if (result.path) options.onSelectWorktree(result.path);
           await ctx.refreshAll();
         },

@@ -243,6 +243,7 @@
       "src/attachments/document-extensions.mjs",
       "src/state/session-schema.mjs",
       "src/product-wiki/path-filter.mjs",
+      "src/agents/defaults/sub-agents.json",
       "src/evals/packs/**",
       "build/icon.ico",
       "build/tray/**",

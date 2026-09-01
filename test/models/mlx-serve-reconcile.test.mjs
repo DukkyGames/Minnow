@@ -24,6 +24,7 @@ mock.module('../../server/servers/mlx-lm.js', {
     isMlxSupported: () => true,
     getInstallStatus: async () => ({ installed: true }),
     MLX_UNSUPPORTED_MESSAGE: 'MLX runs only on Apple Silicon Macs.',
+    MLX_LM_VERSION: '0.31.3',
   },
 });
 

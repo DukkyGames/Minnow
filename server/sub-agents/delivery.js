@@ -21,14 +21,30 @@
  * graph / evidence. Journal, parent-chat inject, and timers all live here.
  */
 
-import { derive, isTerminal, pendingDeliveries } from './derive.js';
+import { derive, isTerminal, lastEndedAttempt, pendingDeliveries } from './derive.js';
 import { makeEvent, validateEvent } from './events.js';
 
 /** Backstop poll while the parent is streaming or a seam call failed. */
 export const RETRY_DELAY_MS = 5_000;
 
+/**
+ * Production `deliverToParent` throws this when no SSE viewer is connected.
+ * The fold stays pending; the wake-up is `GET /api/agents/:runId/events`
+ * (subscribe then tick). Do not timer-retry or warn — that is idle, not a failure.
+ */
+export const NO_DELIVERY_LISTENER = 'no delivery listener';
+
 /** One extra attempt on a transient network error, matching the renderer path. */
 const TRANSIENT_RETRY_MS = 1_500;
+
+/**
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+export function isNoDeliveryListenerError(err) {
+  const text = err instanceof Error ? err.message : String(err);
+  return text === NO_DELIVERY_LISTENER;
+}
 
 /**
  * In-memory journal with the same load/append/list surface as the disk store.
@@ -114,6 +130,55 @@ export function defaultBuildMessage(kind, runs, extra = {}) {
       ? '[Sub-agent finished] One sub-agent run completed. Use the summary below; `get_sub_agent_status` is available for details.'
       : `[Sub-agent finished] ${runs.length} sub-agent runs completed. Summaries below.`;
   return `${header}\n\n${ids}`;
+}
+
+/**
+ * Product completion copy for the production host. Includes type, status, and
+ * the last attempt summary / abandon evidence — ids-only left the parent
+ * with nothing to resume on. Check-in copy matches {@link defaultBuildMessage}.
+ *
+ * @param {'completion' | 'check_in_nudge'} kind
+ * @param {import('./types').RunState[]} runs
+ * @param {{ elapsedSec?: number }} [extra]
+ * @returns {string}
+ */
+export function buildProductionParentMessage(kind, runs, extra = {}) {
+  if (kind === 'check_in_nudge') return defaultBuildMessage(kind, runs, extra);
+  const list = Array.isArray(runs) ? runs : [];
+  const blocks = list.map((run) => {
+    const last = lastEndedAttempt(run);
+    const status =
+      run.phase === 'passed'
+        ? 'completed'
+        : run.phase === 'cancelled'
+          ? 'cancelled'
+          : run.phase === 'abandoned'
+            ? 'failed'
+            : run.phase;
+    const summary =
+      (typeof last?.summary === 'string' && last.summary.trim() && last.summary) ||
+      (typeof run.abandonedReason === 'string' && run.abandonedReason) ||
+      '';
+    /** @type {Record<string, unknown>} */
+    const body = {
+      runId: run.runId,
+      type: run.type,
+      status,
+      summary,
+    };
+    if (typeof run.abandonedReason === 'string' && run.abandonedReason) {
+      body.error = run.abandonedReason;
+    }
+    if (run.abandonedEvidence && typeof run.abandonedEvidence === 'object') {
+      body.evidence = run.abandonedEvidence;
+    }
+    return JSON.stringify(body, null, 2);
+  });
+  const header =
+    list.length === 1
+      ? '[Sub-agent finished] One sub-agent run completed. Use the summary below; `get_sub_agent_status` is available for details.'
+      : `[Sub-agent finished] ${list.length} sub-agent runs completed. Summaries below.`;
+  return `${header}\n\n${blocks.join('\n\n---\n\n')}`;
 }
 
 /**
@@ -270,7 +335,10 @@ export function createDelivery(opts = {}) {
       await inject(parentChatId, message, { kind: 'completion', runIds });
     } catch (err) {
       // MIN-639: a failed inject must not drop the queue. Leave the journal
-      // without result.delivered and try again.
+      // without result.delivered. A missing SSE viewer is idle — the stream
+      // handler ticks after subscribeDeliver, so a 5s poll would only spam
+      // logs for every unfinished parent under ~/.minnow/agents.
+      if (isNoDeliveryListenerError(err)) return;
       scheduleRetry(parentChatId);
       if (opts.onDeliverError) opts.onDeliverError(err);
       return;
@@ -351,7 +419,7 @@ export function createDelivery(opts = {}) {
       try {
         await inject(parentChatId, message, { kind: 'check_in_nudge', runIds: [runId] });
       } catch (err) {
-        if (opts.onDeliverError) opts.onDeliverError(err);
+        if (!isNoDeliveryListenerError(err) && opts.onDeliverError) opts.onDeliverError(err);
         return false;
       }
 

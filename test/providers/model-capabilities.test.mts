@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  applyProviderCapabilities,
   catalogCapabilitiesFromRow,
   catalogRowHasVision,
   mergeModelCapabilities,
@@ -110,6 +111,37 @@ describe('catalogCapabilitiesFromRow', () => {
     assert.deepEqual(caps.reasoningAllowedOptions, ['off', 'low', 'medium', 'high']);
     assert.equal(caps.reasoningDefault, 'high');
   });
+
+  test('GLM-5.3 defaults thinking on at max (no off / medium)', () => {
+    const caps = catalogCapabilitiesFromRow(
+      { id: 'glm-5.3-flash', type: 'llm' },
+      'openai-v1',
+    );
+    assert.deepEqual(caps.reasoningAllowedOptions, ['low', 'high', 'max']);
+    assert.equal(caps.reasoningDefault, 'max');
+  });
+
+  test('GLM-5.3 infers levels without apiKind (My Models / llama.cpp rows)', () => {
+    const caps = catalogCapabilitiesFromRow({
+      id: 'GLM-5.3-Flash-GGUF',
+      type: 'llm',
+    });
+    assert.deepEqual(caps.reasoningAllowedOptions, ['low', 'high', 'max']);
+    assert.equal(caps.reasoningDefault, 'max');
+  });
+
+  test('GLM-5.3 upgrades off/on and low/medium/high catalogs to Low/High/Max', () => {
+    const caps = catalogCapabilitiesFromRow(
+      {
+        id: 'z-ai/glm-5.3-flash',
+        type: 'llm',
+        reasoning: { allowed_options: ['off', 'low', 'medium', 'high'], default: 'medium' },
+      },
+      'openai-v1',
+    );
+    assert.deepEqual(caps.reasoningAllowedOptions, ['low', 'high', 'max']);
+    assert.equal(caps.reasoningDefault, 'max');
+  });
 });
 
 describe('prioritizeModelIdsForProbe', () => {
@@ -123,6 +155,40 @@ describe('prioritizeModelIdsForProbe', () => {
     );
     assert.equal(out[0], 'zzz');
     assert.equal(out[1], 'loaded-one');
+  });
+});
+
+describe('applyProviderCapabilities', () => {
+  test('stamps llama-cpp-local probe vision onto the matching My Models row', () => {
+    modelCache.clear();
+    const libraryId = 'gguf:org/gemma-3:gemma-3-12b-it.gguf';
+    modelCache.set(encodeModelSelectKey('minnow-library', libraryId), {
+      id: libraryId,
+      type: 'llm',
+      state: 'loaded',
+    });
+    applyProviderCapabilities({
+      schemaVersion: 1,
+      providerId: 'llama-cpp-local',
+      probedAt: '2026-08-27T00:00:00.000Z',
+      apiKind: 'openai-v1',
+      models: {
+        [libraryId]: {
+          vision: true,
+          tools: true,
+          streaming: true,
+          grammar: null,
+          reasoning: null,
+          contextLength: null,
+          loadState: 'loaded',
+          sources: { vision: 'probe', tools: 'probe', streaming: 'probe' },
+          probeErrors: {},
+        },
+      },
+    });
+    const row = modelCache.get(encodeModelSelectKey('minnow-library', libraryId));
+    assert.equal(row?.capabilities?.vision, true);
+    assert.equal(row?.capabilities?.sources?.vision, 'probe');
   });
 });
 
@@ -167,5 +233,35 @@ describe('resolveSendCapabilities', () => {
     const caps = resolveSendCapabilities('lmstudio', 'qwen/qwen3.8-27b', 'lm-studio-v0');
     assert.deepEqual(caps?.reasoningAllowedOptions, ['off', 'low', 'medium', 'high']);
     assert.equal(caps?.reasoningDefault, 'high');
+  });
+
+  test('GLM-5.3 without a cache row still exposes Low/High/Max', () => {
+    modelCache.clear();
+    const caps = resolveSendCapabilities('zai', 'glm-5.3-flash');
+    assert.deepEqual(caps?.reasoningAllowedOptions, ['low', 'high', 'max']);
+    assert.equal(caps?.reasoningDefault, 'max');
+  });
+
+  test('cached off/on for GLM-5.3 is replaced with Low/High/Max', () => {
+    modelCache.clear();
+    modelCache.set(encodeModelSelectKey('zai', 'glm-5.3-flash'), {
+      id: 'glm-5.3-flash',
+      type: 'llm',
+      api: 'openai-v1',
+      capabilities: {
+        vision: false,
+        tools: null,
+        streaming: null,
+        grammar: null,
+        reasoning: true,
+        reasoningAllowedOptions: ['off', 'on'],
+        reasoningDefault: 'on',
+        contextLength: null,
+        loadState: 'loaded',
+      },
+    });
+    const caps = resolveSendCapabilities('zai', 'glm-5.3-flash', 'openai-v1');
+    assert.deepEqual(caps?.reasoningAllowedOptions, ['low', 'high', 'max']);
+    assert.equal(caps?.reasoningDefault, 'max');
   });
 });

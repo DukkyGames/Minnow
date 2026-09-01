@@ -615,5 +615,9 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
     }
   }
 
+  if (ctx.chatLinksBlock?.trim()) {
+    sections.push(ctx.chatLinksBlock.trim());
+  }
+
   return sections.join(PART_SEPARATOR);
 }

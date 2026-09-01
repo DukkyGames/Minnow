@@ -28,6 +28,15 @@ const SUB_AGENT_SUMMARY_SCHEMA_PRESETS = {
     maxSummaryChars: 1500,
     maxDetailChars: 6e3,
     requireFindings: false
+  },
+  "minnow.pr-review.v1": {
+    id: "minnow.pr-review.v1",
+    label: "PR review (verdict + findings)",
+    maxFindings: 40,
+    maxArtifacts: 20,
+    maxSummaryChars: 2e3,
+    maxDetailChars: 6e3,
+    requireFindings: false
   }
 };
 function resolveSummarySchemaPreset(schemaId) {
