@@ -134,5 +134,6 @@ counter, not one toast per tick.
 [`runtime.js`](./runtime.js) is the production delivery host: disk journal,
 `deliverToParent` = `emitDeliver` (throws `'no delivery listener'` when the
 count is 0 so the fold stays pending), `bootAgentsRuntime()` → `tickAll()`.
-Connecting `GET /api/agents/:runId/events` subscribes then ticks so a pending
-completion can land.
+That miss is idle, not a failure: no warn, no 5s retry. Connecting
+`GET /api/agents/:runId/events` subscribes then ticks so a pending completion
+can land.

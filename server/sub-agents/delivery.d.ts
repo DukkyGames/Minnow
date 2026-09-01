@@ -1,6 +1,9 @@
 import type { AgentsState, RunState } from './types';
 
 export const RETRY_DELAY_MS: number;
+/** Thrown by production inject when no SSE viewer is subscribed. */
+export const NO_DELIVERY_LISTENER: string;
+export function isNoDeliveryListenerError(err: unknown): boolean;
 
 export type DeliverySkipReason = 'missing_chat' | 'orchestrate';
 

@@ -7,11 +7,16 @@
  * the same ordering as `attempt.started`.
  *
  * At boot there is no renderer. `deliverToParent` throws when nobody is
- * listening so the fold stays pending; opening an SSE stream retries.
- * `tickAll` at process start is what re-offers work that survived a restart.
+ * listening so the fold stays pending. Opening an SSE stream ticks after
+ * subscribe — that is the retry, not a 5s warn loop. `tickAll` at process
+ * start re-offers work that survived a restart (and parks until a viewer).
  */
 
-import { createDelivery, buildProductionParentMessage } from './delivery.js';
+import {
+  createDelivery,
+  buildProductionParentMessage,
+  NO_DELIVERY_LISTENER,
+} from './delivery.js';
 import {
   appendEvent,
   appendEvents,
@@ -80,7 +85,7 @@ async function productionDeliver(parentChatId, message, meta) {
     message,
   });
   if (n === 0) {
-    throw new Error('no delivery listener');
+    throw new Error(NO_DELIVERY_LISTENER);
   }
 }
 
@@ -96,13 +101,17 @@ export function getProductionDelivery() {
       journal: diskJournal(),
       deliverToParent: productionDeliver,
       buildMessage: buildProductionParentMessage,
-      // Streaming coalesce is a renderer fact. The server retries when nobody
-      // is listening; a connected view receives `event: deliver` and resumes.
+      // Streaming coalesce is a renderer fact. A missing viewer parks the
+      // queue; a connected stream ticks after subscribeDeliver and resumes.
       // The probe is called on every tick so a test can flip streaming without
       // rebuilding the handle (the journal stays the queue).
       parentStatus: (parentChatId) => parentStatusProbe(parentChatId),
       onDeliverError: (err) => {
-        console.warn('[agents] delivery failed:', err instanceof Error ? err.message : err);
+        const message = err instanceof Error ? err.message : err;
+        // A missing viewer is handled in delivery.js (park, no retry).
+        // Anything else is a real inject/journal failure worth a warn.
+        if (message === NO_DELIVERY_LISTENER) return;
+        console.warn('[agents] delivery failed:', message);
       },
     });
   }

@@ -17,11 +17,12 @@ import { ensureMinnowLayout, resetMinnowHomeCache } from '../../server/config/ho
 import { deleteGenerationsForProviderShutdown } from '../../server/generations/store.js';
 import { derive, pendingDeliveries } from '../../server/sub-agents/derive.js';
 import { makeEvent } from '../../server/sub-agents/events.js';
-import {
-  buildProductionParentMessage,
-  createDelivery,
-  createMemoryJournal,
-} from '../../server/sub-agents/delivery.js';
+    import {
+      buildProductionParentMessage,
+      createDelivery,
+      createMemoryJournal,
+      NO_DELIVERY_LISTENER,
+    } from '../../server/sub-agents/delivery.js';
 import * as agentsJournal from '../../server/sub-agents/journal.js';
 
 const PARENT = 'chat-p8e-parent';
@@ -309,6 +310,78 @@ describe('delivery — fold queue (memory journal)', () => {
     assert.equal((await journal.loadState(PARENT)).runs.get(RUN).nudged, true);
     assert.equal(await make().offerNudge({ parentChatId: PARENT, runId: RUN, elapsedSec: 3 }), false);
     assert.equal(nudges, 2);
+  });
+
+  test('no delivery listener parks without retry or error callback', async () => {
+    const journal = createMemoryJournal();
+    await seedPassed(journal);
+    /** @type {number} */
+    let injects = 0;
+    /** @type {number} */
+    let errors = 0;
+    const delivery = createDelivery({
+      journal,
+      retryDelayMs: 30,
+      sleep: async () => {},
+      deliverToParent: async () => {
+        injects += 1;
+        throw new Error(NO_DELIVERY_LISTENER);
+      },
+      onDeliverError: () => {
+        errors += 1;
+      },
+    });
+
+    await delivery.tick(PARENT);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.equal(injects, 1, 'must not timer-retry while nobody is listening');
+    assert.equal(errors, 0, 'a missing viewer is idle, not a delivery failure');
+    assert.equal((await journal.loadState(PARENT)).runs.get(RUN).delivered, false);
+
+    delivery.setDeliverToParent(async () => {
+      injects += 1;
+    });
+    await delivery.tick(PARENT);
+    assert.equal(injects, 2);
+    assert.equal((await journal.loadState(PARENT)).runs.get(RUN).delivered, true);
+    delivery.reset();
+  });
+
+  test('a real inject failure still retries and reports', async () => {
+    const journal = createMemoryJournal();
+    await seedPassed(journal);
+    /** @type {number} */
+    let injects = 0;
+    /** @type {string[]} */
+    const reported = [];
+    /** @type {() => void} */
+    let sawRetry = () => {};
+    const retried = new Promise((resolve) => {
+      sawRetry = resolve;
+    });
+    const delivery = createDelivery({
+      journal,
+      retryDelayMs: 30,
+      sleep: async () => {},
+      deliverToParent: async () => {
+        injects += 1;
+        if (injects === 1) throw new Error('resume blew up');
+        sawRetry();
+      },
+      onDeliverError: (err) => {
+        reported.push(err instanceof Error ? err.message : String(err));
+      },
+    });
+
+    await delivery.tick(PARENT);
+    assert.equal(injects, 1);
+    assert.deepEqual(reported, ['resume blew up']);
+    await retried;
+    // The timer tick is still appending. A follow-up tick waits on that tail.
+    await delivery.tick(PARENT);
+    assert.equal(injects, 2, 'timer retry must still run for a real inject failure');
+    assert.equal((await journal.loadState(PARENT)).runs.get(RUN).delivered, true);
+    delivery.reset();
   });
 });
 

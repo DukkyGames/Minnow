@@ -27,8 +27,24 @@ import { makeEvent, validateEvent } from './events.js';
 /** Backstop poll while the parent is streaming or a seam call failed. */
 export const RETRY_DELAY_MS = 5_000;
 
+/**
+ * Production `deliverToParent` throws this when no SSE viewer is connected.
+ * The fold stays pending; the wake-up is `GET /api/agents/:runId/events`
+ * (subscribe then tick). Do not timer-retry or warn — that is idle, not a failure.
+ */
+export const NO_DELIVERY_LISTENER = 'no delivery listener';
+
 /** One extra attempt on a transient network error, matching the renderer path. */
 const TRANSIENT_RETRY_MS = 1_500;
+
+/**
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+export function isNoDeliveryListenerError(err) {
+  const text = err instanceof Error ? err.message : String(err);
+  return text === NO_DELIVERY_LISTENER;
+}
 
 /**
  * In-memory journal with the same load/append/list surface as the disk store.
@@ -319,7 +335,10 @@ export function createDelivery(opts = {}) {
       await inject(parentChatId, message, { kind: 'completion', runIds });
     } catch (err) {
       // MIN-639: a failed inject must not drop the queue. Leave the journal
-      // without result.delivered and try again.
+      // without result.delivered. A missing SSE viewer is idle — the stream
+      // handler ticks after subscribeDeliver, so a 5s poll would only spam
+      // logs for every unfinished parent under ~/.minnow/agents.
+      if (isNoDeliveryListenerError(err)) return;
       scheduleRetry(parentChatId);
       if (opts.onDeliverError) opts.onDeliverError(err);
       return;
@@ -400,7 +419,7 @@ export function createDelivery(opts = {}) {
       try {
         await inject(parentChatId, message, { kind: 'check_in_nudge', runIds: [runId] });
       } catch (err) {
-        if (opts.onDeliverError) opts.onDeliverError(err);
+        if (!isNoDeliveryListenerError(err) && opts.onDeliverError) opts.onDeliverError(err);
         return false;
       }
 
