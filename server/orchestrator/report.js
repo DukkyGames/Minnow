@@ -29,6 +29,33 @@ export const REPORT_EVENT_TYPE = 'run.report.written';
 /** Filename next to `journal.jsonl`. */
 export const REPORT_FILE = 'report.md';
 
+/** Abort a hung LLM writer so Stop / workspace switch cannot wait forever. */
+export const REPORT_COMPLETE_TIMEOUT_MS = 8_000;
+
+/**
+ * @param {Promise<string>} promise
+ * @param {number} timeoutMs
+ * @returns {Promise<string>}
+ */
+function completeWithTimeout(promise, timeoutMs) {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`report writer timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 /** How many times this process has written a report tmp file (Windows rename uniqueness). */
 let reportWrites = 0;
 
@@ -427,6 +454,7 @@ export async function readReport(boardId) {
  *   state: import('./core/types').BoardState,
  *   complete?: (args: { input: Record<string, unknown>, messages: Array<{ role: string, content: string }> }) => Promise<string>,
  *   persist?: (boardId: string, markdown: string) => Promise<string>,
+ *   completeTimeoutMs?: number,
  * }} options
  * @returns {Promise<{
  *   markdown: string,
@@ -443,11 +471,17 @@ export async function writeEndOfRunReport(options) {
   const messages = buildReportMessages(input);
   const complete = options.complete ?? defaultComplete;
   const persist = options.persist ?? persistReport;
+  const timeoutMs =
+    typeof options.completeTimeoutMs === 'number'
+      ? options.completeTimeoutMs
+      : REPORT_COMPLETE_TIMEOUT_MS;
 
   let markdown = '';
   let usedFallback = false;
   try {
-    markdown = String((await complete({ input, messages })) ?? '').trim();
+    markdown = String(
+      (await completeWithTimeout(complete({ input, messages }), timeoutMs)) ?? '',
+    ).trim();
   } catch (err) {
     usedFallback = true;
     console.warn(
