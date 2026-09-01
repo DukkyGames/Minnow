@@ -17,6 +17,8 @@ import { endChatTurnSetup } from '../../src/chat/chat-turn-guard.ts';
 import { getChatAbort, setChatAbort, setStreaming } from '../../src/app-state.ts';
 import { DEFAULT_TITLES_CONFIG, setTitlesConfigForTests } from '../../src/config/titles-meta.ts';
 import { notifyChatStreamEnded } from '../../src/chat/streaming-state.ts';
+import { buildAgentActivitySnapshot } from '../../src/state/agent-activity-registry.ts';
+import { listMainTurnActivity } from '../../src/chat/main-turn-activity.ts';
 import {
   maybeRunChatTurnViaRunner,
   resetRunTurnForTests,
@@ -40,6 +42,15 @@ function installChatDom(): void {
   const msgInput = document.createElement('textarea');
   msgInput.id = 'msgInput';
   document.body.appendChild(msgInput);
+  const sendBtn = document.createElement('button');
+  sendBtn.id = 'sendBtn';
+  sendBtn.type = 'button';
+  sendBtn.innerHTML = `
+    <span id="sendIcon"></span>
+    <span id="sendStopIcon" class="hidden"></span>
+    <span id="sendSpinner" class="hidden"></span>
+  `;
+  document.body.appendChild(sendBtn);
 }
 
 function makeChat(): Chat {
@@ -98,5 +109,47 @@ describe('P6-D stream-end order (MIN-726)', () => {
     });
 
     assert.deepEqual(order, ['setStreaming(false)', 'notifyChatStreamEnded']);
+  });
+
+  test('no_report restores idle composer and clears the main-turn activity fallback', async () => {
+    setTitlesConfigForTests({ ...DEFAULT_TITLES_CONFIG, enabled: false });
+    installChatDom();
+    setRunTurnForTests(async () => ({ outcome: 'no_report' }));
+
+    const chat = makeChat();
+    chat.currentGenerationId = 'gen-stale-1111';
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    await maybeRunChatTurnViaRunner({
+      chat,
+      pushUser: true,
+      rawText: 'Hi',
+      userText: 'Hi',
+      skillId: null,
+      historyContent: 'Hi',
+      validAttachments: [],
+      ownsGlobalStreaming: true,
+    });
+
+    const input = document.getElementById('msgInput') as HTMLTextAreaElement;
+    const sendBtn = document.getElementById('sendBtn') as HTMLButtonElement;
+    assert.notEqual(input.placeholder, 'Add a follow-up');
+    assert.equal(sendBtn.dataset.mode, 'send');
+    assert.equal(chat.currentGenerationId, undefined);
+    assert.equal(listMainTurnActivity().some((t) => t.chatId === chat.id), false);
+
+    const rows = buildAgentActivitySnapshot({
+      nowMs: 1_710_000_000_000,
+      chats: [chat],
+      mainTurns: listMainTurnActivity(),
+      subAgents: [],
+      titleJobs: [],
+    });
+    assert.equal(rows.some((r) => r.id === `main:${chat.id}`), false);
   });
 });

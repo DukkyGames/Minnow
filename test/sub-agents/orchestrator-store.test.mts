@@ -15,6 +15,8 @@ import {
   adoptSubAgentRunForTests,
   cancelAllForParentTurn,
   cancelSubAgent,
+  listActiveSubAgentRuns,
+  rehydrateLiveParentSubAgents,
   resetSubAgentOrchestrator,
   setSubAgentApiFetchForTests,
   setSubAgentOpenStreamForTests,
@@ -294,6 +296,52 @@ describe('cancel origin wiring (P10-L / MIN-777)', () => {
     );
     assert.equal(stop.includes('cancelAllForParentTurn'), false);
     assert.equal(chat.includes('cancelAllForParentTurn'), false);
+  });
+
+  test('rehydrateLiveParentSubAgents is a no-op when no live children', async () => {
+    const fetches: string[] = [];
+    setSubAgentApiFetchForTests(async (input) => {
+      fetches.push(String(input));
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    await rehydrateLiveParentSubAgents(CHAT_ID);
+    assert.deepEqual(fetches, []);
+  });
+
+  test('rehydrateLiveParentSubAgents folds a terminal run so it leaves the activity list', async () => {
+    setSubAgentOpenStreamForTests(() => ({ addEventListener() {}, close() {} }));
+    adoptSubAgentRunForTests(runningRun());
+    assert.equal(listActiveSubAgentRuns().length, 1);
+    setSubAgentApiFetchForTests(async (input) => {
+      const url = String(input);
+      if (url.includes(`parentChatId=${encodeURIComponent(CHAT_ID)}`)) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            state: {
+              runs: [
+                {
+                  runId: FIXED_RUN_ID,
+                  type: 'explore',
+                  task: 'scan',
+                  parentChatId: CHAT_ID,
+                  phase: 'passed',
+                  attempts: [{ ended: true, summary: FIXED_SUMMARY }],
+                  delivered: true,
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({ ok: false, error: `unexpected ${url}` }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+    await rehydrateLiveParentSubAgents(CHAT_ID);
+    assert.equal(listActiveSubAgentRuns().length, 0);
   });
 });
 

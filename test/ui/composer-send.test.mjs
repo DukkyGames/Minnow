@@ -10,6 +10,7 @@ const { setDesktopStateForTests } = await import('../helpers/legacy-desktop-stat
 const {
   setComposerStreamingMode,
   shouldAllowComposerPrimaryAction,
+  syncComposerFromStreamingState,
 } = await import('../../src/ui/composer-send.ts');
 
 const FIXED_CHAT_ID = '11111111-1111-1111-1111-111111111111';
@@ -117,6 +118,26 @@ describe('setComposerStreamingMode', () => {
     assert.ok(!btn.classList.contains('send-btn--stop'));
     assert.ok(!document.getElementById('sendIcon').classList.contains('hidden'));
     assert.ok(document.getElementById('sendStopIcon').classList.contains('hidden'));
+  });
+
+  test('syncComposerFromStreamingState restores send mode after stream end', () => {
+    const btn = setupSendButton();
+    const chat = createEmptyChatObject(FIXED_CHAT_ID);
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+    appState.setStreaming(true, chat.id);
+    syncComposerFromStreamingState();
+    assert.equal(btn.dataset.mode, 'stop');
+    assert.equal(document.getElementById('msgInput').placeholder, 'Add a follow-up');
+
+    appState.setStreaming(false, chat.id);
+    syncComposerFromStreamingState();
+    assert.equal(btn.dataset.mode, 'send');
+    assert.notEqual(document.getElementById('msgInput').placeholder, 'Add a follow-up');
   });
 
 });

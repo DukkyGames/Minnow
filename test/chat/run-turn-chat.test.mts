@@ -25,8 +25,10 @@ import {
   appendIsolatedProductRows,
   maybeRunChatTurnViaRunner,
   resetRunTurnForTests,
+  setChatModelLoadForTests,
   setRunTurnForTests,
 } from '../../src/chat/run-turn-chat.ts';
+import { STREAM_LABEL_LOADING_MODEL } from '../../src/ui/stream-status.ts';
 import type { RunTurnOptions, TurnResult } from '../../server/runner/run-turn';
 import { getSubAgentExecutorContext } from '../../src/tools/sub-agent-executor.ts';
 import type { SubAgentExecutorContext } from '../../src/agents/types.ts';
@@ -955,5 +957,58 @@ describe('P10-I in-turn steer and context overlay (MIN-774)', () => {
     });
     // finally clears the overlay so the ring can settle post-turn.
     assert.equal(getContextInFlightOverlay(CHAT_ID), undefined);
+  });
+
+  test('pending model load shows Loading model… in the transcript before completions', async () => {
+    setTitlesConfigForTests({ ...DEFAULT_TITLES_CONFIG, enabled: false });
+    installChatDom();
+
+    let releaseLoad!: () => void;
+    let markLoadStarted!: () => void;
+    const loadStarted = new Promise<void>((resolve) => {
+      markLoadStarted = resolve;
+    });
+    const loadHeld = new Promise<void>((resolve) => {
+      releaseLoad = resolve;
+    });
+    let completionsStarted = false;
+
+    setChatModelLoadForTests({
+      needsLoad: () => true,
+      ensure: async () => {
+        markLoadStarted();
+        await loadHeld;
+      },
+    });
+    setRunTurnForTests(async (options) => {
+      completionsStarted = true;
+      options.onEvent?.({ type: 'delta', text: 'Ready.' });
+      return { outcome: 'no_report' } satisfies TurnResult;
+    });
+
+    const chat = makeChat();
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    const { runChatTurn } = await import('../../src/chat/run-turn-chat.ts');
+    const turnPromise = runChatTurn({
+      chat,
+      ...SIMPLE_TURN,
+    });
+
+    await loadStarted;
+    const area = document.getElementById('chatArea');
+    assert.equal(completionsStarted, false, 'completions must wait for model load');
+    assert.match(area?.textContent ?? '', new RegExp(STREAM_LABEL_LOADING_MODEL));
+    const streamRow = area?.querySelector('.msg.assistant') as HTMLElement | null;
+    assert.equal(streamRow?.dataset.streamPhase, 'loading_model');
+
+    releaseLoad();
+    await turnPromise;
+    assert.equal(completionsStarted, true);
   });
 });

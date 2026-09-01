@@ -156,4 +156,37 @@ describe('agent-activity-registry', () => {
     };
     assert.equal(formatAgentActivityStatusLine(row), 'Running Shell');
   });
+
+  test('stale currentGenerationId without a live main-turn still produces a main: fallback', () => {
+    const rows = buildAgentActivitySnapshot({
+      nowMs: NOW_MS,
+      chats: [
+        {
+          ...CHAT_FIXTURE,
+          currentGenerationId: 'gen-stale-1111',
+        },
+      ],
+      mainTurns: [],
+      subAgents: [],
+      titleJobs: [],
+    });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.id, `main:${CHAT_A}`);
+  });
+
+  test('finished turn with no generation id and no mainTurns has no main: row', () => {
+    const rows = buildAgentActivitySnapshot({
+      nowMs: NOW_MS,
+      chats: [
+        {
+          ...CHAT_FIXTURE,
+          currentGenerationId: undefined,
+        },
+      ],
+      mainTurns: [],
+      subAgents: [],
+      titleJobs: [],
+    });
+    assert.equal(rows.some((r) => r.id.startsWith('main:')), false);
+  });
 });

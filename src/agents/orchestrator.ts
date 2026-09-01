@@ -292,6 +292,20 @@ export function listActiveSubAgentRuns(): SubAgentRun[] {
   return [...runs.values()].filter((r) => r.status === 'queued' || r.status === 'running');
 }
 
+/**
+ * If the client map still shows live children after the parent turn ends,
+ * re-fetch derived state so a missed SSE fold cannot leave the activity
+ * panel ticking until the next chat switch.
+ */
+export async function rehydrateLiveParentSubAgents(parentChatId: string): Promise<void> {
+  if (!parentChatId) return;
+  const live = listSubAgentRunsForParentChat(parentChatId).filter(
+    (r) => r.status === 'queued' || r.status === 'running',
+  );
+  if (live.length === 0) return;
+  await hydrateSubAgentRunsForParentChat(parentChatId);
+}
+
 export function listSubAgentRunsForParentChat(parentChatId: string | null | undefined): SubAgentRun[] {
   if (!parentChatId) return [];
   const ids = parentIndex.get(parentChatId);

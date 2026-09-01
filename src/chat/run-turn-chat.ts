@@ -107,6 +107,7 @@ import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import { consumePendingSteer, clearPendingSteer } from './steer-message';
 import { flushPendingMessageQueue } from './message-queue';
 import { syncComposerMessageQueue } from '../ui/composer-message-queue';
+import { syncComposerFromStreamingState } from '../ui/composer-send';
 import {
   setContextInFlightOverlay,
   syncTurnContextUsage,
@@ -140,6 +141,7 @@ import {
   requireHistory,
   scheduleSaveSessions,
   sessionState,
+  touchChat,
 } from '../state/sessions';
 import {
   createRun,
@@ -213,6 +215,7 @@ import {
   appendInjectionNoticesDom,
   appendStats,
   appendStreamingAssistantRow,
+  removeOrphanStreamingRow,
   revealAssistantProseBubble,
 } from '../ui/messages';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
@@ -244,6 +247,7 @@ import { scrollChatIfPinned } from '../ui/chat-scroll';
 import { completeStreamAnnouncer } from '../ui/a11y/stream-announcer';
 import { refreshBranchPickerAtFork } from '../ui/branch-picker';
 import { registerStreamDomRemount } from '../tools/stream-chat-dom';
+import { rehydrateLiveParentSubAgents } from '../agents/orchestrator';
 import {
   applyModelSelectValueToChat,
 } from '../lib/model-select-key';
@@ -393,8 +397,29 @@ export function setRunTurnForTests(fn: RunTurnFn | null): void {
   runTurnImpl = fn ?? runTurn;
 }
 
+type ChatTurnNeedsModelLoadFn = typeof chatTurnNeedsModelLoad;
+type EnsureChatModelLoadedFn = typeof ensureChatModelLoadedForTurn;
+let chatTurnNeedsModelLoadImpl: ChatTurnNeedsModelLoadFn = chatTurnNeedsModelLoad;
+let ensureChatModelLoadedImpl: EnsureChatModelLoadedFn = ensureChatModelLoadedForTurn;
+
+/**
+ * Stub model-load gating in tests so the transcript can show Loading model…
+ * before completions start.
+ */
+export function setChatModelLoadForTests(
+  fns: {
+    needsLoad?: ChatTurnNeedsModelLoadFn;
+    ensure?: EnsureChatModelLoadedFn;
+  } | null,
+): void {
+  chatTurnNeedsModelLoadImpl = fns?.needsLoad ?? chatTurnNeedsModelLoad;
+  ensureChatModelLoadedImpl = fns?.ensure ?? ensureChatModelLoadedForTurn;
+}
+
 export function resetRunTurnForTests(): void {
   runTurnImpl = runTurn;
+  chatTurnNeedsModelLoadImpl = chatTurnNeedsModelLoad;
+  ensureChatModelLoadedImpl = ensureChatModelLoadedForTurn;
 }
 
 /**
@@ -846,7 +871,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
     let provider = await getActiveProvider(sendProviderId);
     if (libraryModelId == null) {
-      pendingModelLoad = chatTurnNeedsModelLoad(provider, sendModelId);
+      pendingModelLoad = chatTurnNeedsModelLoadImpl(provider, sendModelId);
     }
 
     const mainTurnLabel = uiDesignerCtx.active
@@ -865,6 +890,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     if (ownsGlobalStreaming) {
       setStreaming(true, chat.id);
     }
+    // Match the pre-runTurn overlay: send/stop + follow-up placeholder while this
+    // chat is on screen. Teardown syncs again in `finally`.
+    if (getActiveChat().id === chat.id) {
+      syncComposerFromStreamingState();
+    }
     if (isStreamDomVisible(chat.id)) {
       setStatus(
         'spin',
@@ -876,10 +906,46 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       );
     }
 
+    // Stream shell must exist before the load await so "Loading model…" is
+    // in-transcript, not only on the status bar.
+    const streamRow = appendStreamingAssistantRow(chat.id);
+    wrap = streamRow.wrap;
+    bubble = streamRow.bubble;
+    cursor = streamRow.cursor;
+    streamStatus = streamRow.streamStatus;
+
+    const applyStreamDomRemount = (row: {
+      wrap: HTMLDivElement;
+      bubble: HTMLDivElement;
+      cursor: HTMLDivElement;
+      streamStatus: StreamingStatusHandle;
+    }): void => {
+      wrap = row.wrap;
+      bubble = row.bubble;
+      cursor = row.cursor;
+      streamStatus = row.streamStatus;
+      thoughtController?.setAssistantWrap(wrap);
+      if (!painter) return;
+      // revealProse closes over these `let`s, so retarget does not need a new one.
+      painter.retarget({
+        wrap,
+        bubble,
+        cursor,
+        streamStatus,
+        ...(isStreamDomVisible(chat.id)
+          ? { mount: getActiveChatMountElement() }
+          : {}),
+        thoughtController: thoughtController ?? undefined,
+      });
+    };
+    registerStreamDomRemount(chat.id, applyStreamDomRemount);
+
     if (pendingModelLoad) {
+      streamStatus?.setPhase('loading_model');
+      setSidebarStreamPhase('loading_model', chat.id);
       const ensureProviderId = libraryEnsure?.providerId ?? sendProviderId;
       const ensureModelId = libraryEnsure?.modelId ?? sendModelId;
-      await ensureChatModelLoadedForTurn(ensureProviderId, ensureModelId, chatSignal);
+      await ensureChatModelLoadedImpl(ensureProviderId, ensureModelId, chatSignal);
       if (libraryEnsure) {
         const cachedAfter = await fetchCachedModels().catch(() => []);
         const libraryAfter = await loadableLibraryFromCached(cachedAfter);
@@ -892,16 +958,15 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         sendModelId = served.modelId;
       }
       provider = await getActiveProvider(sendProviderId);
+      streamStatus?.setPhase('generating');
+      setSidebarStreamPhase('generating', chat.id);
+      patchMainTurnActivity(chat.id, { phase: 'generating', currentTool: null });
       if (isStreamDomVisible(chat.id)) {
         setStatus('spin', 'Generating reply…');
       }
+    } else {
+      setSidebarStreamPhase('generating', chat.id);
     }
-
-    const streamRow = appendStreamingAssistantRow(chat.id);
-    wrap = streamRow.wrap;
-    bubble = streamRow.bubble;
-    cursor = streamRow.cursor;
-    streamStatus = streamRow.streamStatus;
 
     // Live thinking timer (loop.ts:1949–1953). The store has its own tracker
     // for persist duration; this one drives the elapsed suffix and toggle.
@@ -1112,23 +1177,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     if (isLocalProvider(provider)) {
       releaseTickedMotion = acquireTickedMotion();
     }
-
-    registerStreamDomRemount(chat.id, (row) => {
-      wrap = row.wrap;
-      bubble = row.bubble;
-      cursor = row.cursor;
-      streamStatus = row.streamStatus;
-      thoughtController?.setAssistantWrap(wrap);
-      painter?.retarget({
-        wrap,
-        bubble,
-        cursor,
-        streamStatus,
-        mount: getActiveChatMountElement(),
-        thoughtController: thoughtController ?? undefined,
-        revealProse,
-      });
-    });
 
     let systemPrompt = 'You are a helpful assistant.';
     let injectionBlocks: Awaited<ReturnType<typeof composeRunTurnChatSystemPrompt>>['injectionBlocks'] = {
@@ -1760,7 +1808,20 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     setContextInFlightOverlay(null);
     scheduleContextUsageRefresh();
     registerStreamDomRemount(chat.id, null);
+    // System Stop (Quit Minnow) leaves the id so boot resume can still prompt.
+    // Activity snapshot otherwise rebuilds a `main:<chatId>` row from a leftover id.
+    if (turnStopReason !== 'system' && chat.currentGenerationId) {
+      chat.currentGenerationId = undefined;
+      touchChat(chat);
+      scheduleSaveSessions();
+    }
     clearMainTurnActivity(chat.id);
+    streamStatus?.setPhase('done');
+    streamStatus?.dispose();
+    // Tools-only last round / detached wrap can leave Generating… in the transcript.
+    if (wrap?.isConnected && wrap.classList.contains('msg--awaiting-prose')) {
+      removeOrphanStreamingRow(wrap, streamStatus);
+    }
     if (uiDesignerActive) {
       chat.workAgentId = savedWorkAgentId;
     }
@@ -1789,6 +1850,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       setSidebarStreamPhase(null, chat.id);
       syncChatItemDotsInDom();
     }
+    // Composer send/stop chrome is not a stream-end listener; switchChat
+    // used to be the only path that restored idle placeholder + send icon.
+    if (getActiveChat().id === chat.id) {
+      syncComposerFromStreamingState();
+    }
+    // Do not await — a slow /api/agents must not stall queue drain or abort clear.
+    void rehydrateLiveParentSubAgents(chat.id);
     if (getChatAbort(chat.id)?.signal) {
       setChatAbort(chat.id, null);
     }

@@ -6,7 +6,7 @@ import {
 } from '../chat/message-queue';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { stopGeneration } from '../chat/stop-generation';
-import { getActiveChat } from '../state/sessions';
+import { getActiveChat, sessionState } from '../state/sessions';
 import { clearComposerAfterSend } from './composer-draft';
 import { getActiveComposerSurface } from './composer-surface';
 import { getForegroundAppId } from '../os/instances';
@@ -156,8 +156,16 @@ export function syncComposerFromStreamingState(): void {
   syncGoalActiveHint();
   syncLoopActiveHint();
   syncTodoPanel();
-  void import('./composer-run-target').then((m) => m.refreshComposerRunTargetDisabled());
-  void import('./composer-undo').then((m) => m.refreshComposerUndoDisabled());
+  // These refresh helpers read getActiveChat(); skip if tests already tore down sessions.
+  if (!sessionState) return;
+  void import('./composer-run-target').then((m) => {
+    if (!sessionState) return;
+    m.refreshComposerRunTargetDisabled();
+  });
+  void import('./composer-undo').then((m) => {
+    if (!sessionState) return;
+    m.refreshComposerUndoDisabled();
+  });
 }
 
 function submitQueueFromComposer(): void {

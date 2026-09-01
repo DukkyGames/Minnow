@@ -25,6 +25,8 @@ function hostStub(overrides: {
     markdown: string,
     streamCursor: HTMLElement,
   ) => void;
+  chatId?: string;
+  isDomVisible?: () => boolean;
 } = {}) {
   const mount = document.createElement('div');
   document.body.appendChild(mount);
@@ -590,5 +592,68 @@ describe('P10-H tool-row chrome (MIN-773)', () => {
       stranded.querySelector('.tool-call-body')?.dataset.resultRendered,
       'true',
     );
+  });
+
+  test('tool_call and delta do not paint into a shared mount after switching away', () => {
+    const ticks: Array<() => void> = [];
+    let visible = true;
+    const stub = hostStub({
+      schedulePaintTick: (cb) => {
+        ticks.push(cb);
+      },
+      scheduleMarkdown: (bubble, markdown) => {
+        bubble.textContent = markdown;
+      },
+      chatId: '11111111-1111-1111-1111-111111111111',
+      isDomVisible: () => visible,
+    });
+    const painter = createChatTurnEventPainter(stub.host);
+
+    painter.onEvent({ type: 'delta', text: 'Hello from A' });
+    ticks[0]?.();
+    assert.equal(stub.bubble.textContent, 'Hello from A');
+
+    // switchChat wipes the shared #chatArea and paints B's history.
+    visible = false;
+    stub.mount.replaceChildren();
+    const bUser = document.createElement('div');
+    bUser.className = 'msg user';
+    bUser.textContent = 'B history';
+    stub.mount.appendChild(bUser);
+
+    painter.onEvent({
+      type: 'tool_call',
+      name: 'get_datetime',
+      id: 'call_switch',
+      arguments: '{}',
+    });
+    painter.onEvent({ type: 'delta', text: 'Hello from A still streaming' });
+    ticks[1]?.();
+
+    assert.equal(
+      stub.mount.querySelector('.tool-call-msg'),
+      null,
+      'tool_call must not append into B',
+    );
+    assert.equal(stub.mount.textContent?.includes('Hello from A still streaming'), false);
+    assert.match(stub.mount.textContent ?? '', /B history/);
+    assert.equal(painter.snapshot().lastDelta, 'Hello from A still streaming');
+
+    // Switch back: remount a stream shell; in-memory snapshot catches up.
+    visible = true;
+    stub.mount.replaceChildren();
+    const nextWrap = document.createElement('div');
+    const nextBubble = document.createElement('div');
+    const nextCursor = document.createElement('div');
+    nextWrap.appendChild(nextBubble);
+    nextBubble.appendChild(nextCursor);
+    stub.mount.appendChild(nextWrap);
+    painter.retarget({
+      wrap: nextWrap,
+      bubble: nextBubble,
+      cursor: nextCursor,
+      mount: stub.mount,
+    });
+    assert.equal(nextBubble.textContent, 'Hello from A still streaming');
   });
 });

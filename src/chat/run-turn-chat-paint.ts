@@ -56,6 +56,8 @@ import {
 } from '../tools/parse-tool-arguments';
 import { resolveLiveToolWrap } from '../tools/chat-tool-batch';
 import type { CodeChangeStats, ToolImageAttachment } from '../types';
+import { sessionState } from '../state/sessions';
+import { isStreamDomVisible } from './streaming-state';
 
 /**
  * Live thought controller plus the round-close methods P10-F needs.
@@ -91,6 +93,12 @@ export interface ChatTurnPaintHost {
    * Optional so painter unit tests that only assert rows can omit it.
    */
   chatId?: string;
+  /**
+   * When false, skip DOM writes so a mid-turn switch cannot paint into the
+   * newly visible transcript. Defaults to `isStreamDomVisible(chatId)` when
+   * `chatId` is set; tests without a chat always paint.
+   */
+  isDomVisible?: () => boolean;
   /** First prose token reveals the awaiting bubble. */
   revealProse: () => void;
   /** Optional activity ping (sidebar dots, stream-activity listeners). */
@@ -299,10 +307,24 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
   const scrollTranscript = host.scrollTranscript ?? scrollChatIfPinned;
   const schedulePaintTick = host.schedulePaintTick ?? defaultSchedulePaintTick;
 
+  /**
+   * Origin-chat gate: `#chatArea` is shared, so a switch away would otherwise
+   * append A's tools/tokens into B. Tests without `chatId` always paint.
+   */
+  const originStreamVisible = (): boolean => {
+    if (host.isDomVisible) return host.isDomVisible();
+    if (!host.chatId) return true;
+    // Paint tests may set chatId for shell-kill without a session.
+    if (!sessionState) return true;
+    return isStreamDomVisible(host.chatId);
+  };
+
   const bindToolStartIndicator = (): void => {
     toolStart?.dispose();
     toolStart = null;
     if (!lastStreamingToolName || !host.streamStatus) return;
+    // Detached "Calling {tool}…" chrome is fine; do not attach onto B's row.
+    if (!originStreamVisible()) return;
     toolStart = attachToolStartIndicator({
       wrap: host.wrap,
       bubble: host.bubble,
@@ -326,25 +348,29 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
     pendingDelta = null;
     if (thinkingSnap === null && deltaSnap === null) return;
 
+    const visible = originStreamVisible();
+
     if (thinkingSnap !== null) {
       const added = thinkingDeltaFromSnapshot(lastPaintedThinking, thinkingSnap);
       lastPaintedThinking = thinkingSnap;
-      if (added) host.thoughtController.appendReasoningDelta(added);
+      if (added && visible) host.thoughtController.appendReasoningDelta(added);
     }
 
     if (deltaSnap !== null) {
       if (!proseRevealed && deltaSnap.trim()) {
         proseRevealed = true;
-        host.revealProse();
-        revealAssistantProseBubble(host.wrap, host.bubble, host.streamStatus);
+        if (visible) {
+          host.revealProse();
+          revealAssistantProseBubble(host.wrap, host.bubble, host.streamStatus);
+        }
       }
-      scheduleMarkdown(host.bubble, deltaSnap, host.cursor);
+      if (visible) scheduleMarkdown(host.bubble, deltaSnap, host.cursor);
     }
 
     // One forced layout per tick covers thinking-only and prose streams.
     // P10-I: runChatTurn writes the context-ring overlay from this hook so
-    // in-flight tokens are not counted per delta.
-    scrollTranscript();
+    // in-flight tokens are not counted per delta. Stats still fire when hidden.
+    if (visible) scrollTranscript();
     host.onCoalescedPaint?.({ lastDelta, lastThinking, toolCallCount });
   };
 
@@ -371,8 +397,10 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
     if (next.bubble) host.bubble = next.bubble;
     if (next.cursor) host.cursor = next.cursor;
     if (next.streamStatus) host.streamStatus = next.streamStatus;
-    if (next.mount) host.mount = next.mount;
     if (next.chatId !== undefined) host.chatId = next.chatId;
+    if (next.isDomVisible) host.isDomVisible = next.isDomVisible;
+    // Never retarget onto B's transcript while A is still the origin.
+    if (next.mount && originStreamVisible()) host.mount = next.mount;
     if (next.thoughtController) host.thoughtController = next.thoughtController;
     if (next.revealProse) host.revealProse = next.revealProse;
     if (next.modeId !== undefined) host.modeId = next.modeId;
@@ -388,7 +416,7 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
     applyHostPatch(next);
     // Apply queued snapshots onto the new shell before rebinding chrome.
     flushPaint();
-    if (proseRevealed && lastDelta && next.bubble) {
+    if (proseRevealed && lastDelta && next.bubble && originStreamVisible()) {
       scheduleMarkdown(next.bubble, lastDelta, next.cursor ?? host.cursor);
     }
     // Chat switch rebuilds the streaming shell; keep "Calling {tool}…" if args
@@ -427,6 +455,7 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
       streamStatus: host.streamStatus,
       hasProse,
       durationMs,
+      domVisible: originStreamVisible(),
     });
     // Settled rows must not keep a live status handle; orphan/anchor already dispose.
     if (wrap.isConnected) host.streamStatus?.dispose();
@@ -511,7 +540,8 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
           host.chatId,
         );
       }
-      host.mount.appendChild(wrap);
+      // Same `#chatArea` node is reused after switchChat — skip while hidden.
+      if (originStreamVisible()) host.mount.appendChild(wrap);
       return;
     }
     if (event.type === 'tool_result') {
@@ -522,9 +552,12 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
       const captured =
         (event.id && toolWraps.get(event.id)) || (key ? toolWraps.get(key) : undefined);
       if (!captured) return;
-      // Chat switch rebuilds the transcript and strands the node we stored
-      // at `tool_call`. Re-query by id (MIN-649 / chat-tool-batch).
-      const wrap = event.id ? resolveLiveToolWrap(event.id, captured) : captured;
+      // Re-query live DOM only while the origin chat is visible — otherwise a
+      // matching toolCallId in B's transcript would take the result paint.
+      const wrap =
+        originStreamVisible() && event.id
+          ? resolveLiveToolWrap(event.id, captured)
+          : captured;
       if (wrap !== captured && event.id) {
         toolWraps.set(event.id, wrap);
       }
