@@ -5,6 +5,9 @@ export const REPORT_EVENT_TYPE: 'run.report.written';
 
 export const REPORT_FILE: 'report.md';
 
+/** Give up on the LLM writer and use the mechanical fallback. */
+export const REPORT_COMPLETE_TIMEOUT_MS: 8000;
+
 export const REPORT_SYSTEM_PROMPT: string;
 
 export function reportPath(boardId: string): string;
@@ -54,6 +57,8 @@ export function writeEndOfRunReport(options: {
   state: BoardState;
   complete?: ReportComplete;
   persist?: (boardId: string, markdown: string) => Promise<string>;
+  /** Override the LLM writer timeout (tests). Default REPORT_COMPLETE_TIMEOUT_MS. */
+  completeTimeoutMs?: number;
 }): Promise<{
   markdown: string;
   input: Record<string, unknown>;

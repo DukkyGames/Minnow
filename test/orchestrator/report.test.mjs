@@ -235,6 +235,21 @@ describe('writeEndOfRunReport — abandoned task', () => {
     assert.match(written, /W1-A/);
     assert.match(written, /Unblock W1-A/);
   });
+
+  it('uses the mechanical fallback when complete() never resolves', async () => {
+    const boardId = 'hung-complete';
+    const events = await seedAbandonedJournal(boardId);
+    const state = derive(events);
+    const result = await writeEndOfRunReport({
+      boardId,
+      events,
+      state,
+      completeTimeoutMs: 20,
+      complete: () => new Promise(() => {}),
+    });
+    assert.equal(result.usedFallback, true);
+    assert.match(result.markdown, /W1-A|# |Abandoned|Report/i);
+  });
 });
 
 describe('writeEndOfRunReport — stateless', () => {

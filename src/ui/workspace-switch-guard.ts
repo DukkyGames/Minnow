@@ -14,23 +14,48 @@ import {
   getGroupsForWorkspace,
   isLeftoverBoardRunning,
 } from '../state/chat-groups';
-import { sessionState } from '../state/sessions';
+import { markGroupDirty, scheduleSaveSessions, sessionState } from '../state/sessions';
 import { getWorkspacePath } from '../state/workspace';
 import type { ChatGroup } from '../types';
+
+/** How long a workspace switch waits for V2 stop before continuing the PUT. */
+export const V2_BOARD_STOP_TIMEOUT_MS = 2_500;
 
 /** Injected in tests so V2 list/stop do not need a live `/api/boards` server. */
 let listV2Boards: () => Promise<BoardSummary[]> = listBoards;
 let stopV2Board: (boardId: string) => Promise<void> = stopBoard;
+let v2StopTimeoutMs = V2_BOARD_STOP_TIMEOUT_MS;
 
 /** Test seam for V2 switch-guard list/stop. Pass null to restore defaults. */
 export function setV2WorkspaceSwitchDepsForTests(
   deps: {
     listBoards?: () => Promise<BoardSummary[]>;
     stopBoard?: (boardId: string) => Promise<void>;
+    stopTimeoutMs?: number;
   } | null,
 ): void {
   listV2Boards = deps?.listBoards ?? listBoards;
   stopV2Board = deps?.stopBoard ?? stopBoard;
+  v2StopTimeoutMs = deps?.stopTimeoutMs ?? V2_BOARD_STOP_TIMEOUT_MS;
+}
+
+/** Resolve when `ms` elapses so a hung stop cannot block the workspace PUT. */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+/**
+ * Ask the engine to stop, but do not wait forever.
+ * The HTTP stop may still finish in the background (report writer, process teardown).
+ */
+async function stopV2BoardBestEffort(boardId: string): Promise<void> {
+  try {
+    await Promise.race([stopV2Board(boardId), delay(v2StopTimeoutMs)]);
+  } catch (err) {
+    console.warn('[workspace] failed to stop V2 board', boardId, err);
+  }
 }
 
 /** True when a board still has active orchestration work that must not be orphaned. */
@@ -139,7 +164,10 @@ export async function confirmAndStopBoardsForWorkspaceSwitch(
 
   for (const group of v1) {
     // Mark leftover folders Stopped so the rail does not keep treating them as live.
-    if (group.orchestrateBoard) group.orchestrateBoard.status = 'stopped';
+    if (group.orchestrateBoard) {
+      group.orchestrateBoard.status = 'stopped';
+      markGroupDirty(group.id);
+    }
     const { stopGeneration } = await import('../chat/stop-generation');
     for (const task of group.orchestrateBoard?.tasks ?? []) {
       const chatId = task.chatId?.trim();
@@ -148,13 +176,11 @@ export async function confirmAndStopBoardsForWorkspaceSwitch(
     const plannerId = group.plannerChatId?.trim();
     if (plannerId) stopGeneration(plannerId, 'user');
   }
-  for (const board of v2) {
-    try {
-      await stopV2Board(board.boardId);
-    } catch (err) {
-      console.warn('[workspace] failed to stop V2 board', board.boardId, err);
-    }
+  if (v1.length > 0) {
+    scheduleSaveSessions();
   }
+  // Stop is best-effort: a hung end-of-run report must not block the workspace PUT.
+  await Promise.all(v2.map((board) => stopV2BoardBestEffort(board.boardId)));
 
   const { exitBoardViewForNavigation } = await import('./exit-board-view');
   exitBoardViewForNavigation();

@@ -9,6 +9,9 @@
   justify-content: center;
   padding: 12px;
   background: var(--mn-overlay);
+  /* Frameless Electron on macOS treats untitled regions as window-drag. */
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
 }
 
 .app-dialog-overlay.hidden,
@@ -30,6 +33,7 @@
   box-shadow: var(--shadow-popover-soft);
   outline: none;
   animation: minnow-panel-reveal var(--duration-normal) var(--ease-out);
+  -webkit-app-region: no-drag;
 }
 
 .app-dialog-panel__title {

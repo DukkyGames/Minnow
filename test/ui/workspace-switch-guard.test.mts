@@ -200,6 +200,35 @@ describe('workspace-switch-guard', () => {
     assert.deepEqual(stopped, ['v2-running']);
   });
 
+  test('hung V2 stop does not block switch after confirm', async () => {
+    setV2WorkspaceSwitchDepsForTests({
+      listBoards: async () => [
+        {
+          boardId: 'v2-hang',
+          name: 'Hung report',
+          planPath: PLAN_PATH,
+          status: 'running',
+          concurrency: 2,
+          taskCount: 1,
+          finished: false,
+        },
+      ],
+      stopBoard: () => new Promise(() => {}),
+      stopTimeoutMs: 20,
+    });
+
+    const allowedPromise = confirmAndStopBoardsForWorkspaceSwitch(OTHER_WS);
+    const confirmBtn = await waitForDialogAction('confirm');
+    confirmBtn.click();
+    const allowed = await Promise.race([
+      allowedPromise,
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('switch stayed blocked on hung stop')), 500);
+      }),
+    ]);
+    assert.equal(allowed, true);
+  });
+
   test('V1 path is unchanged when no V2 board is running', async () => {
     const { group } = seedRunningBoard();
     setV2WorkspaceSwitchDepsForTests({

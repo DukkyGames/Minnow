@@ -157,6 +157,7 @@ async function onOpenNewWorkspace(): Promise<void> {
       return;
     }
 
+    // Picker is closed; confirm (if any) must stay clickable on Electron macOS.
     const info = await executeWorkspaceSwitch(result.path);
     if (!info) {
       setStatus('ok', 'Workspace unchanged');

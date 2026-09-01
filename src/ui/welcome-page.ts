@@ -325,14 +325,15 @@ async function activateRecentWorkspace(absPath: string): Promise<void> {
     return;
   }
   setStatus('spin', 'Switching workspace…');
-  await setWorkspaceGateOpening(true);
+  // Keep the gate clickable until confirm returns — opening (pointer-events:
+  // none) during the board-stop dialog made Confirm a no-op on Electron macOS.
   try {
     const info = await executeWorkspaceSwitch(absPath);
     if (!info) {
-      await setWorkspaceGateOpening(false);
       setStatus('ok', 'Workspace unchanged');
       return;
     }
+    await setWorkspaceGateOpening(true);
     await completeWorkspaceActivation();
     setStatus('ok', `Workspace: ${info.label}`);
   } catch (err) {
@@ -362,12 +363,14 @@ async function onOpenProject(): Promise<void> {
       setStatus('err', 'No folder selected');
       return;
     }
+    // Restore clicks for the board-stop confirm; dim again only after it proceeds.
+    await setWorkspaceGateOpening(false);
     const info = await executeWorkspaceSwitch(result.path);
     if (!info) {
-      await setWorkspaceGateOpening(false);
       setStatus('ok', 'Workspace unchanged');
       return;
     }
+    await setWorkspaceGateOpening(true);
     await completeWorkspaceActivation();
     setStatus('ok', `Workspace: ${info.label}`);
   } catch (err) {
@@ -418,16 +421,15 @@ async function onCreateProjectSubmit(): Promise<void> {
   showCreateError(null);
   setStatus('spin', 'Creating project…');
 
-  await setWorkspaceGateOpening(true);
   try {
     const created = await createWorkspaceSubfolder(parent, name.trim());
     const info = await executeWorkspaceSwitch(created.path);
     if (!info) {
-      await setWorkspaceGateOpening(false);
       setStatus('ok', 'Workspace unchanged');
       return;
     }
     showCreatePanel(false);
+    await setWorkspaceGateOpening(true);
     await completeWorkspaceActivation();
   } catch (err) {
     await setWorkspaceGateOpening(false);
