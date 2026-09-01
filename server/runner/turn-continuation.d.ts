@@ -31,6 +31,8 @@ export declare const PROSE_QUESTION_RETRY_INSTRUCTION = "Your previous reply is 
  * tool (prose-only). Forces another tool round before structured JSON finalization.
  */
 export declare const SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION = "You must use the available tools to complete the task. Do not answer with prose only \u2014 call the appropriate tool(s) now, then summarize after you have tool results.";
+/** Extra user row when a board turn finished without calling the report tool. */
+export declare function buildReportToolNudgeInstruction(toolName: string): string;
 export type TurnContinuation = 'continueTools' | 'finalize' | 'retryEmpty';
 /** True when dev turn logging is enabled (`localStorage.minnowDebugTurns === '1'`). */
 export declare function isTurnDebugEnabled(): boolean;

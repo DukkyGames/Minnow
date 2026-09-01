@@ -40,6 +40,10 @@ import { resolveAttemptModel } from './model-binding.js';
 import { recordTranscriptEnd, recordTranscriptEvent } from './transcripts.js';
 import { isHighFrequencyTurnEvent } from '../runner/turn-event.js';
 import { interpolatePrompt, loadRolePrompt } from './prompts.js';
+import {
+  extractJsonTextFromAssistantBody,
+  tryParseStructuredOutcomeFromAssistantProse,
+} from '../runner/sub-agent-structured-outcome.js';
 import { parseReportFor, reportToolFor, REPORT_TOOL_NAME } from './report-tool.js';
 import { buildSeed } from './seeds.js';
 import { runMerge } from './merge-queue.js';
@@ -224,6 +228,98 @@ function toAttemptEnd(attemptId, desired, result) {
 function errorMessage(err) {
   if (err instanceof Error && err.message) return err.message;
   return String(err ?? 'unknown error');
+}
+
+/**
+ * Last committed assistant prose on a memory transcript.
+ * Tool-call-only rows are skipped — those are not a dumped report.
+ *
+ * @param {unknown} messages
+ * @returns {string}
+ */
+function lastAssistantProse(messages) {
+  if (!Array.isArray(messages)) return '';
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const row = messages[i];
+    if (!row || typeof row !== 'object') continue;
+    if (/** @type {{ role?: string }} */ (row).role !== 'assistant') continue;
+    const toolCalls = /** @type {{ tool_calls?: unknown }} */ (row).tool_calls;
+    if (Array.isArray(toolCalls) && toolCalls.length > 0) continue;
+    const text =
+      typeof /** @type {{ content?: unknown }} */ (row).content === 'string'
+        ? /** @type {{ content: string }} */ (row).content.trim()
+        : '';
+    if (text) return text;
+  }
+  return '';
+}
+
+/**
+ * Map a sub-agent findings dump onto a board TurnResult.
+ * Blocker findings are fail (tester/final) or blocked (builder); warn is fail;
+ * info-only or empty findings is pass so a clean dump is not abandoned.
+ *
+ * @param {{ summary: string, findings?: Array<{ title?: string, detail?: string, severity?: string, paths?: string[] }>, artifacts?: Array<{ ref?: string }> }} structured
+ * @param {'builder' | 'tester' | 'final'} role
+ * @returns {import('../runner/run-turn').TurnResult}
+ */
+function turnResultFromFindingsDump(structured, role) {
+  const findings = Array.isArray(structured.findings) ? structured.findings : [];
+  const artifacts = Array.isArray(structured.artifacts) ? structured.artifacts : [];
+  const summary = structured.summary;
+  const details = findings
+    .map((finding) => {
+      const title = typeof finding.title === 'string' ? finding.title : '';
+      const detail = typeof finding.detail === 'string' ? finding.detail : '';
+      return [title, detail].filter(Boolean).join(': ');
+    })
+    .filter(Boolean);
+  const evidence = [
+    ...findings.flatMap((finding) =>
+      Array.isArray(finding.paths)
+        ? finding.paths.filter((path) => typeof path === 'string')
+        : [],
+    ),
+    ...artifacts
+      .map((artifact) => (typeof artifact.ref === 'string' ? artifact.ref : ''))
+      .filter(Boolean),
+  ];
+  const hasBlocker = findings.some((finding) => finding.severity === 'blocker');
+  const hasWarn = findings.some((finding) => finding.severity === 'warn');
+  const testerLike = role === 'tester' || role === 'final';
+  if (hasBlocker) {
+    if (testerLike) {
+      return { outcome: 'fail', summary, blockers: details.length ? details : evidence };
+    }
+    return { outcome: 'blocked', summary, needs: details.length ? details : evidence };
+  }
+  if (hasWarn) {
+    return { outcome: 'fail', summary, blockers: details.length ? details : evidence };
+  }
+  return { outcome: 'pass', summary, evidence };
+}
+
+/**
+ * Boards require `report_outcome`. The inner loop used to ask for sub-agent
+ * JSON instead, so agents dump `{ summary, findings, artifacts }` and
+ * `runTurn` returns `no_report`. Accept that blob here (effector, not runner)
+ * the same way sub-agents degrade prose — only when it parses.
+ *
+ * @param {import('../runner/run-turn').TurnResult} result
+ * @param {unknown} messages
+ * @param {'builder' | 'tester' | 'final'} role
+ * @returns {import('../runner/run-turn').TurnResult}
+ */
+export function recoverBoardReportIfDumped(result, messages, role) {
+  if (!result || result.outcome !== 'no_report') return result;
+  if (role !== 'builder' && role !== 'tester' && role !== 'final') return result;
+  const prose = lastAssistantProse(messages);
+  if (!prose) return result;
+  const parsed = parseReportFor(role)(extractJsonTextFromAssistantBody(prose));
+  if (parsed.ok) return { ...result, ...parsed.result };
+  const structured = tryParseStructuredOutcomeFromAssistantProse(prose);
+  if (!structured) return result;
+  return { ...result, ...turnResultFromFindingsDump(structured, role) };
 }
 
 /**
@@ -741,6 +837,10 @@ export function createRunnerEffector(options = {}) {
             reportToolName: REPORT_TOOL_NAME,
             parseReport: parseReportFor(desired.role),
             systemPrompt: prompt,
+            // Do not run the sub-agent JSON-only finalization. That prompt
+            // forbids tools and asks for summary/findings/artifacts, which
+            // this binding cannot accept as a report.
+            finalizeStructuredOutcome: false,
             // Unattended: no human. Fabricated ask_question must fail immediately.
             ask: null,
             onEvent: (event) => {
@@ -777,6 +877,11 @@ export function createRunnerEffector(options = {}) {
           result = { outcome: 'crashed', error: errorMessage(err) };
         }
         if (entry.stopped) return;
+        result = recoverBoardReportIfDumped(
+          result,
+          deps.transcriptStore?.load?.(attemptId)?.messages,
+          desired.role,
+        );
         if (boardId) {
           recordTranscriptEnd({
             boardId,

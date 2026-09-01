@@ -80,7 +80,8 @@ import {
   MAX_EMPTY_POST_TOOL_RETRIES,
   MAX_PROSE_QUESTION_RETRIES,
   PROSE_QUESTION_RETRY_INSTRUCTION,
-  SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION
+  SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION,
+  buildReportToolNudgeInstruction
 } from "./turn-continuation.js";
 import { mergeThinkingIntoCompletionBody } from "./merge-thinking-body.js";
 import {
@@ -553,6 +554,11 @@ function createSubAgentRunner(deps) {
         subAgentType: typeConfig
       });
       let toolUseNudgeSent = false;
+      let reportToolNudgeSent = false;
+      const reportToolName =
+        typeof input.reportToolName === "string" && input.reportToolName.trim()
+          ? input.reportToolName.trim()
+          : "";
       const contextBudget = input.contextBudget ?? {
         enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY
       };
@@ -1278,6 +1284,20 @@ function createSubAgentRunner(deps) {
           emitProgress(void 0, true);
           continue;
         }
+        // Boards pass finalizeStructuredOutcome: false plus a report tool.
+        // Nudge that tool instead of the sub-agent "JSON only, no tools" pass.
+        if (reportToolName && input.finalizeStructuredOutcome === false && !reportToolNudgeSent) {
+          reportToolNudgeSent = true;
+          if (prose) {
+            messages.push({ role: "assistant", content: prose });
+          }
+          messages.push({
+            role: "user",
+            content: buildReportToolNudgeInstruction(reportToolName)
+          });
+          emitProgress(void 0, true);
+          continue;
+        }
         if (!await enforceContextBudget(turn)) {
           return {
             summary: SUB_AGENT_CONTEXT_BUDGET_ERROR,
@@ -1301,8 +1321,8 @@ function createSubAgentRunner(deps) {
             stats: statsSegments.length ? averageStatsSegments(statsSegments) : void 0
           };
         };
-        // Chat (P6-C) skips structured-outcome finalization. Board / sub-agent
-        // callers leave this unset so today's extra completion still runs.
+        // Chat and board skip JSON finalization. Sub-agents leave this unset
+        // so today's extra completion still runs.
         if (input.finalizeStructuredOutcome === false) {
           return returnProseWithoutFinalization();
         }

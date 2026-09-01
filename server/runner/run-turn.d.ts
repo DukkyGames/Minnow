@@ -270,8 +270,9 @@ export interface RunTurnOptions {
   nudgeToolUse?: boolean;
   /**
    * When `false`, skip `requestStructuredOutcome` / prose JSON finalization.
-   * Default `true`. Chat passes `false` so a normal reply does not spend an
-   * extra completion. Board / sub-agent callers omit this (stay on).
+   * Default `true`. Chat and the board effector pass `false`. Sub-agents omit
+   * this (stay on). Boards then nudge `reportToolName` instead of dumping
+   * `summary` / `findings` / `artifacts` JSON.
    *
    * **Phase 6 finding (P6-C / MIN-725).**
    */

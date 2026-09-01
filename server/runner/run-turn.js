@@ -811,6 +811,7 @@ export async function runTurn(options) {
       priorMessages,
       nudgeToolUse: options.nudgeToolUse,
       finalizeStructuredOutcome: options.finalizeStructuredOutcome,
+      reportToolName: injection.inject ? reportToolName : null,
       summarySchema: options.summarySchema,
       executeTool: async (name, args, ctx) => {
         if (typeof options.execute === 'function') {

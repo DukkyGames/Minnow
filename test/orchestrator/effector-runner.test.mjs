@@ -660,6 +660,8 @@ describe('runner effector', { concurrency: false }, () => {
     const journal = await openBoard(boardId);
     /** @type {unknown[]} */
     const seenAsk = [];
+    /** @type {boolean[]} */
+    const seenFinalize = [];
     const box = { engine: /** @type {ReturnType<typeof createEngine> | null} */ (null) };
     const effector = makeEffector({
       boardId,
@@ -668,6 +670,7 @@ describe('runner effector', { concurrency: false }, () => {
       getState: () => box.engine.getState(),
       runTurn: async (options) => {
         seenAsk.push(options.ask);
+        seenFinalize.push(options.finalizeStructuredOutcome);
         return { outcome: 'pass', summary: 'ok', evidence: [] };
       },
     });
@@ -678,6 +681,7 @@ describe('runner effector', { concurrency: false }, () => {
       await engine.startBoard(1);
       await waitFor(() => seenAsk.length >= 1, 10_000);
       assert.equal(seenAsk[0], null);
+      assert.equal(seenFinalize[0], false);
     } finally {
       engine.dispose();
     }

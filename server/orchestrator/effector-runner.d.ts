@@ -5,6 +5,13 @@ import type * as diskJournal from './journal';
 
 export function cancelOrphanedRunnerGenerations(): number;
 
+/** Accept a dumped report_outcome or findings JSON when the report tool was never called. */
+export function recoverBoardReportIfDumped(
+  result: TurnResult,
+  messages: unknown,
+  role: string,
+): TurnResult;
+
 export interface RunnerEffector {
   inspect(): Array<{ taskId: string | null; role: string; attemptId: string; worktree?: string }>;
   start(desired: {

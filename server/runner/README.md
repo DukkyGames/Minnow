@@ -77,7 +77,7 @@ object so a caller can reject without teaching this package a role name.
 | `messages` | Prior transcript for a continuation (no leading system required). **P6-C.** Wins over `seedKind`. |
 | `seedKind` | `'continue'` loads `transcript.load(chatId).messages` and appends `user(seed)` unless that user row is already last. Default / omitted is isolated `[system, user(seed)]` (board callers that pass only `seed`). **P6-C.** |
 | `nudgeToolUse` | When `false`, skip the inner `SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION` user row. Default `true`. Chat passes `false`. **P6-C.** |
-| `finalizeStructuredOutcome` | When `false`, skip `requestStructuredOutcome`. Default `true`. Chat passes `false`. **P6-C.** |
+| `finalizeStructuredOutcome` | When `false`, skip `requestStructuredOutcome`. Default `true`. Chat and the board effector pass `false`. Sub-agents omit (stay on). **P6-C.** |
 | `summarySchema` | Forwarded to the inner loop when finalization is on. Chat omits it. |
 
 `ask_question` is callable when an `AskCapability` is injected, and unavailable
@@ -121,7 +121,8 @@ P6-C **did** change this signature (findings 1, 2, 4 from the gap list):
 - **Nudge + finalization gates.** `nudgeToolUse: false` and
   `finalizeStructuredOutcome: false` skip the inner sub-agent tool-use nudge
   and structured-outcome extra completion. Chat passes both `false`. Board
-  callers omit them (today's defaults).
+  callers pass `finalizeStructuredOutcome: false` so the inner loop nudges
+  `report_outcome` instead of asking for sub-agent `summary`/`findings` JSON.
 
 The chat adapter (`src/chat/run-turn-chat.ts`) is the product send path around
 `runTurn()` (P6-D / MIN-726). Completions: HTTP `/api/generations` via

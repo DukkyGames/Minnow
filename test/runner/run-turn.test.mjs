@@ -1113,6 +1113,62 @@ describe('P6-C runTurn interface (MIN-725)', () => {
       },
     );
   });
+
+  test('finalizeStructuredOutcome false nudges report_outcome instead of JSON-only finalization', { timeout: 20_000 }, async () => {
+    const valid = {
+      outcome: 'pass',
+      summary: 'Called the tool after the nudge.',
+      evidence: ['ok'],
+    };
+    await withFake(
+      [
+        {
+          match: { nth: 0 },
+          emit: proseSseChunks(
+            JSON.stringify({
+              summary: 'dumped findings instead of calling the tool',
+              findings: [],
+              artifacts: [],
+            }),
+          ),
+        },
+        { emit: functionCallChunks(DEFAULT_REPORT_TOOL_NAME, valid) },
+      ],
+      async (baseUrl, fake) => {
+        const result = await runTurn({
+          chatId: CHAT_UUID,
+          seed: 'Finish up.',
+          tools: [],
+          model: { providerId: 'local-fake', id: 'fake-model' },
+          deps: stubDeps(baseUrl),
+          nudgeToolUse: false,
+          finalizeStructuredOutcome: false,
+        });
+        assert.equal(result.outcome, 'pass');
+        assert.equal(result.summary, valid.summary);
+        const completions = fake.requests.filter((row) => row.pathname === '/v1/chat/completions');
+        const dumpedJsonFinalization = completions.some((row) =>
+          (row.body?.messages ?? []).some(
+            (m) =>
+              m.role === 'user' &&
+              typeof m.content === 'string' &&
+              m.content.includes('Final response (required)'),
+          ),
+        );
+        assert.equal(dumpedJsonFinalization, false);
+        const reportNudged = completions.some((row) =>
+          (row.body?.messages ?? []).some(
+            (m) =>
+              m.role === 'user' &&
+              typeof m.content === 'string' &&
+              m.content.includes(DEFAULT_REPORT_TOOL_NAME) &&
+              m.content.includes('must call'),
+          ),
+        );
+        assert.ok(reportNudged, 'board-shaped turns must nudge the report tool');
+      },
+    );
+  });
 });
 
 describe('P10-C settled incremental persist (MIN-768)', () => {

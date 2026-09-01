@@ -294,6 +294,11 @@ export interface SubAgentRunner {
      * When false, skip structured-outcome finalization. Default true.
      */
     finalizeStructuredOutcome?: boolean;
+    /**
+     * When set and `finalizeStructuredOutcome` is false, nudge this tool
+     * once before ending the inner loop (board `report_outcome`).
+     */
+    reportToolName?: string | null;
     modelContextLimit?: number | null;
     signal: AbortSignal;
     /** Passed into each nested tool call (chat id, sub-agent label). */
