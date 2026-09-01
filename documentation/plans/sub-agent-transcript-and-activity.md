@@ -10,6 +10,13 @@ Plan copied from the Cursor plan *Sub-agent transcript fixes*. Three bugs share 
 - [x] **completion-delivery** — Production `buildMessage` is `buildProductionParentMessage` (type, status, last summary / abandon evidence). Effector maps prose-only `no_report` to a degraded pass (`degradeNoReportIfProse`). Empty `no_report` still retries then abandons.
 - [x] **tests-docs** — Store merge, delivery copy, live accumulation, activity drop, GET transcript, mapper, generating tail. Update `documentation/context.md` and this plan.
 
+### Follow-up (empty overlay)
+
+- [x] **sse-auth** — Production `ensureClient` opens EventSource with `withSessionToken`; tests still inject `setSubAgentOpenStreamForTests`.
+- [x] **placeholder** — Do not paint `legacyOutcomeFromSummary('')` as a structured outcome. Activity stays open unless a real fold summary / `structuredOutcome` exists. Terminal empty uses the fold error or a short honest line.
+- [x] **mapper** — Map coalesced `thinking` onto assistant `reasoning` and `attempt_end.summary` onto assistant content when no later prose exists. Effector records a synthetic `round_end` when `degradeNoReportIfProse` finds in-memory assistant prose (does not promote raw thinking to a pass).
+- [x] **tests-docs** — Store hydrate, drawer Activity, aggregate/status, `transcript-messages`, tsc. `documentation/context.md` EventSource token + overlay rules.
+
 ## Out of scope (kept)
 
 - V1 heartbeat / stall supervisor.

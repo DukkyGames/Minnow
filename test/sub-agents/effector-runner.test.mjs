@@ -985,6 +985,15 @@ describe('degradeNoReportIfProse (effector-only)', () => {
     assert.equal(out.outcome, 'no_report');
   });
 
+  test('thinking-only rows are not a summary', () => {
+    const out = degradeNoReportIfProse(
+      { outcome: 'no_report' },
+      [{ role: 'assistant', content: '', thinking: ['hmm'] }],
+      SCHEMA,
+    );
+    assert.equal(out.outcome, 'no_report');
+  });
+
   test('tool-call-only rows are not a summary', () => {
     const out = degradeNoReportIfProse(
       { outcome: 'no_report' },

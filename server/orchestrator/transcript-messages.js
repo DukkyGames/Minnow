@@ -22,6 +22,41 @@ function argsString(value) {
 }
 
 /**
+ * Last assistant row, walking backward past tool results.
+ *
+ * @param {unknown[]} messages
+ * @returns {{ index: number, row: Record<string, unknown> } | null}
+ */
+function lastAssistant(messages) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const raw = messages[i];
+    if (!raw || typeof raw !== 'object') continue;
+    const row = /** @type {Record<string, unknown>} */ (raw);
+    if (row.role === 'assistant') return { index: i, row };
+  }
+  return null;
+}
+
+/**
+ * True when any assistant row already has visible prose (not a tool-call stub).
+ *
+ * @param {unknown[]} messages
+ * @returns {boolean}
+ */
+function hasAssistantProse(messages) {
+  for (const raw of messages) {
+    if (!raw || typeof raw !== 'object') continue;
+    const row = /** @type {Record<string, unknown>} */ (raw);
+    if (row.role !== 'assistant') continue;
+    const toolCalls = row.tool_calls;
+    if (Array.isArray(toolCalls) && toolCalls.length > 0) continue;
+    const text = typeof row.content === 'string' ? row.content.trim() : '';
+    if (text) return true;
+  }
+  return false;
+}
+
+/**
  * Last tool_call id that does not yet have a matching tool row.
  *
  * @param {unknown[]} messages
@@ -58,8 +93,9 @@ function lastOpenToolCallId(messages) {
  * Apply one recorded TurnEvent onto an API-message list.
  *
  * High-frequency types (`delta`, `phase`, …) are ignored here — they never
- * land on disk, and live overlays handle them separately. `thinking` is a
- * live tail, not a committed row.
+ * land on disk, and live overlays handle them separately. Coalesced
+ * `thinking` and `attempt_end.summary` do land on disk and must hydrate
+ * into Activity; otherwise a reasoning-only or delta-only turn paints empty.
  *
  * @param {unknown[]} messages
  * @param {unknown} event
@@ -111,6 +147,36 @@ export function applyTurnEventToMessages(messages, event) {
     const text = typeof rec.text === 'string' ? rec.text.trim() : '';
     if (!text) return list;
     return [...list, { role: 'assistant', content: text }];
+  }
+
+  // Coalesced on disk: attach to the last assistant's reasoning, or start a row.
+  if (type === 'thinking') {
+    const text = typeof rec.text === 'string' ? rec.text.trim() : '';
+    if (!text) return list;
+    const found = lastAssistant(list);
+    if (found) {
+      const next = list.slice();
+      next[found.index] = { ...found.row, reasoning: text };
+      return next;
+    }
+    return [...list, { role: 'assistant', content: '', reasoning: text }];
+  }
+
+  // Effector writes this after the attempt; use it only when no later prose exists.
+  if (type === 'attempt_end') {
+    const summary = typeof rec.summary === 'string' ? rec.summary.trim() : '';
+    if (!summary) return list;
+    if (hasAssistantProse(list)) return list;
+    const found = lastAssistant(list);
+    if (found) {
+      const toolCalls = found.row.tool_calls;
+      if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+        const next = list.slice();
+        next[found.index] = { ...found.row, content: summary };
+        return next;
+      }
+    }
+    return [...list, { role: 'assistant', content: summary }];
   }
 
   return list;

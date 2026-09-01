@@ -13,8 +13,12 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import {
   adoptSubAgentRunForTests,
+  buildSubAgentStatusPayload,
   cancelAllForParentTurn,
   cancelSubAgent,
+  getSubAgentRun,
+  hydrateSubAgentRunsForParentChat,
+  hydrateSubAgentTranscript,
   listActiveSubAgentRuns,
   rehydrateLiveParentSubAgents,
   resetSubAgentOrchestrator,
@@ -278,6 +282,16 @@ describe('cancel origin wiring (P10-L / MIN-777)', () => {
     assert.equal(/waitForSubAgent\(result\.runId\s*,/.test(source), false);
   });
 
+  test('production ensureClient defaults EventSource through withSessionToken', () => {
+    const source = fs.readFileSync(
+      path.join(PROJECT_ROOT, 'src', 'agents', 'orchestrator.ts'),
+      'utf8',
+    );
+    assert.match(source, /function openAuthenticatedStream\(url: string\): EventStream/);
+    assert.match(source, /new EventSource\(withSessionToken\(url\)\)/);
+    assert.match(source, /openStream: openStream \?\? openAuthenticatedStream/);
+  });
+
   test('executeSubAgentTool does not take the parent chat signal', () => {
     const source = fs.readFileSync(
       path.join(PROJECT_ROOT, 'src', 'tools', 'sub-agent-executor.ts'),
@@ -423,6 +437,83 @@ describe('fold merge and Agent activity listing', () => {
     }
     adoptSubAgentRunForTests(runningRun());
     assert.equal(listActiveSubAgentRuns().length, 1);
+  });
+});
+
+describe('transcript hydrate fills Activity without the empty placeholder', () => {
+  const PLACEHOLDER = 'Sub-agent completed with no text output.';
+
+  beforeEach(() => {
+    resetSubAgentOrchestrator();
+    setSubAgentOpenStreamForTests(() => ({ addEventListener() {}, close() {} }));
+  });
+
+  afterEach(() => {
+    setSubAgentOpenStreamForTests(null);
+    resetSubAgentOrchestrator();
+  });
+
+  test('GET transcript with thinking + attempt_end + tools fills messages and a real summary', async () => {
+    setSubAgentApiFetchForTests(async (input) => {
+      const url = String(input);
+      if (url.includes('/transcript')) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            events: [
+              { type: 'thinking', text: 'I should look at src/ next.' },
+              {
+                type: 'tool_call',
+                name: 'read_file',
+                id: 'call_read',
+                arguments: { path: 'src/a.ts' },
+              },
+              { type: 'tool_result', id: 'call_read', content: 'export const a = 1;' },
+              { type: 'attempt_end', name: 'pass', summary: 'Here is what I found in src/.' },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      if (url.includes(`parentChatId=${encodeURIComponent(CHAT_ID)}`)) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            state: {
+              runs: [
+                {
+                  runId: FIXED_RUN_ID,
+                  type: 'explore',
+                  task: 'scan',
+                  parentChatId: CHAT_ID,
+                  phase: 'passed',
+                  attempts: [{ ended: true, summary: '', outcome: 'pass' }],
+                  delivered: true,
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({ ok: false, error: `unexpected ${url}` }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    });
+
+    await hydrateSubAgentRunsForParentChat(CHAT_ID);
+    await hydrateSubAgentTranscript(FIXED_RUN_ID);
+    const run = getSubAgentRun(FIXED_RUN_ID);
+    assert.ok(run);
+    assert.ok((run.messages?.length ?? 0) >= 3);
+    const hasTool = run.messages.some(
+      (row) => row && typeof row === 'object' && (row as { role?: string }).role === 'tool',
+    );
+    assert.equal(hasTool, true);
+    const payload = buildSubAgentStatusPayload(run);
+    assert.equal(payload.summary, 'Here is what I found in src/.');
+    assert.notEqual(payload.summary, PLACEHOLDER);
   });
 });
 

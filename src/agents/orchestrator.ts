@@ -27,6 +27,7 @@ import {
   emitSubAgentRunUpdated,
   subscribeSubAgentRuns,
 } from './sub-agent-events';
+import { withSessionToken } from '../api/session-token';
 import { createSubAgentRunClient, type EventStream, type DeliverFrame } from './sub-agent-client';
 import { countToolCalls, turnEventsToMessages } from '../../server/orchestrator/transcript-messages.js';
 import type { PersistedSubAgentRun } from '../types';
@@ -253,9 +254,21 @@ function mergeClientView(runId: string): void {
   publish(next);
 }
 
+/**
+ * `EventSource` cannot send `X-Minnow-Token`, so the per-boot session token
+ * goes in the query string — the same split as boards: the client stays
+ * token-free so tests inject a plain stream, and production binds auth here.
+ */
+function openAuthenticatedStream(url: string): EventStream {
+  return new EventSource(withSessionToken(url)) as EventStream;
+}
+
 function ensureClient(runId: string): void {
   if (clients.has(runId)) return;
-  const client = createSubAgentRunClient(runId, openStream ? { openStream } : {});
+  // Tests inject `setSubAgentOpenStreamForTests`; production always tokens the URL.
+  const client = createSubAgentRunClient(runId, {
+    openStream: openStream ?? openAuthenticatedStream,
+  });
   clients.set(runId, client);
   client.subscribe(() => mergeClientView(runId));
   client.subscribeDeliver((frame) => {
@@ -610,10 +623,31 @@ export function deriveSubAgentTerminalReason(run: SubAgentRun): SubAgentTerminal
   return 'success';
 }
 
+/**
+ * Honest terminal copy when the fold has no prose. Must never be the
+ * placeholder from `legacyOutcomeFromSummary('')` — that string is painted
+ * as a fake structured answer and collapses Activity.
+ */
+export function honestTerminalSummary(run: { status: string; error?: string | null }): string {
+  const err = typeof run.error === 'string' ? run.error.trim() : '';
+  if (err) return err;
+  if (run.status === 'cancelled') return 'Cancelled.';
+  if (run.status === 'failed') return 'The sub-agent failed without a written summary.';
+  return 'The sub-agent finished without a written summary.';
+}
+
+/**
+ * Prefer a real structured outcome, then a trimmed fold summary, then the
+ * last non-system message. Never call `legacyOutcomeFromSummary` on blank.
+ */
 function outcomeForRun(run: SubAgentRun) {
   if (run.structuredOutcome) return run.structuredOutcome;
+  const trimmed = typeof run.summary === 'string' ? run.summary.trim() : '';
+  if (trimmed) return legacyOutcomeFromSummary(trimmed);
   if (!isSubAgentRunTerminal(run.status)) return null;
-  return legacyOutcomeFromSummary(run.summary);
+  const preview = lastNonSystemPreview(run.messages);
+  if (preview) return legacyOutcomeFromSummary(preview);
+  return null;
 }
 
 export function formatAggregateResult(result: AggregateResult): string {
@@ -627,9 +661,8 @@ export function formatAggregateResult(result: AggregateResult): string {
 }
 
 export function buildAggregateResult(run: SubAgentRun): AggregateResult {
-  const outcome = run.structuredOutcome
-    ? run.structuredOutcome
-    : legacyOutcomeFromSummary(run.summary);
+  const outcome =
+    outcomeForRun(run) ?? legacyOutcomeFromSummary(honestTerminalSummary(run));
   const out: AggregateResult = {
     runId: run.runId,
     type: run.type,
@@ -656,7 +689,8 @@ export function buildAggregateResult(run: SubAgentRun): AggregateResult {
   return out;
 }
 
-function lastNonSystemPreview(messages: SubAgentRun['messages']): string {
+export function lastNonSystemPreview(messages: unknown[] | undefined | null): string {
+  if (!Array.isArray(messages) || messages.length === 0) return '';
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i] as { role?: string; content?: unknown };
     if (!m || m.role === 'system') continue;

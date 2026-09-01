@@ -864,9 +864,27 @@ export function createSubAgentEffector(options = {}) {
 
         // Effector-only: prose (or valid structured JSON) without report_outcome
         // is a degraded pass. True empty no_report still retries then abandons.
+        // Do not promote raw thinking to a pass — lastAssistantProse skips it.
+        const incomingOutcome = result?.outcome;
         result = degradeNoReportIfProse(result, rec?.messages, schemaId);
         clearLiveDelta(attemptId);
         if (parentChatId) {
+          // Delta-only turns never write round_end. Record the in-memory prose
+          // so GET hydrate is not empty after degradeNoReportIfProse.
+          if (
+            incomingOutcome === 'no_report' &&
+            result.outcome === 'pass' &&
+            typeof result.summary === 'string' &&
+            result.summary.trim()
+          ) {
+            recordTranscriptEvent({
+              entryDir: agentsDir(parentChatId),
+              attemptId,
+              taskId: runId,
+              role: SUB_AGENT_ROLE,
+              event: { type: 'round_end', text: result.summary },
+            });
+          }
           recordTranscriptEnd({
             entryDir: agentsDir(parentChatId),
             attemptId,
