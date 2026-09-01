@@ -54,6 +54,9 @@
   min-height: 0;
   background: var(--mn-bg);
   color: var(--mn-fg);
+  /* Hub ask pane gutters (same tokens as ob-page.css, scoped here). */
+  --ob-gutter: 28px;
+  --ob-read-col: 790px;
 }
 
 /* Task detail covers the whole Boards shell (rail + pane), not only the
@@ -152,6 +155,178 @@
   min-height: 0;
   padding: 18px 20px 40px;
   overflow-y: auto;
+}
+
+/*
+ * Hub ask/start pane when no board is selected. Restate `.ob-pane--ask` /
+ * `.ob-ask` from ob-page.css under `.ov2` so the live-board restatements are
+ * not replaced by importing that whole sheet (it would restyle the rail).
+ */
+.ov2__board.ov2__board--ask {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.ov2 .ob-pane--ask {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  justify-content: flex-start;
+  padding: 32px var(--ob-gutter);
+  box-sizing: border-box;
+}
+
+.ov2 .ob-ask {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.ov2 .ob-ask .orchestrate-hub__workflow {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.ov2 .ob-ask__eyebrow {
+  margin: 0 0 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.ov2 .ob-ask__title {
+  margin: 0 0 10px;
+  color: var(--mn-fg);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.ov2 .ob-ask__lede {
+  margin: 0 0 22px;
+  max-width: 54ch;
+  color: var(--mn-fg-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ov2 .ob-ask__workspace {
+  margin: -12px 0 22px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--mn-fg-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ov2 .ob-ask__workspace.hidden {
+  display: none;
+}
+
+.ov2 .ob-ask__sec {
+  display: block;
+  margin: 0 0 10px;
+  color: var(--mn-fg-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ov2 .ob-ask__field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.ov2 .ob-ask .orchestrate-hub__plan-select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font: inherit;
+  font-size: 14px;
+}
+
+.ov2 .ob-ask__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ov2 .ob-ask .orchestrate-hub__workflow-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ov2 .ob-ask .orchestrate-hub__plan-refresh,
+.ov2 .ob-ask .orchestrate-hub__make-plan-btn {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ov2 .ob-ask .orchestrate-hub__start-btn {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--mn-accent);
+  border-radius: var(--radius-sm);
+  background: var(--mn-accent);
+  color: var(--mn-text-hover, var(--mn-bg));
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ov2 .ob-ask .orchestrate-hub__start-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ov2 .ob-ask .orchestrate-hub__plan-hint {
+  margin: 10px 0 0;
+  color: var(--mn-fg-muted);
+  font-size: 13px;
+}
+
+.ov2 .ob-ask .orchestrate-hub__plan-preview {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--mn-border);
 }
 
 
