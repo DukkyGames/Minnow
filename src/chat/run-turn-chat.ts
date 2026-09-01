@@ -76,6 +76,7 @@ import {
   notifyChatStreamEnded,
 } from './streaming-state';
 import { createChatTurnEventPainter } from './run-turn-chat-paint';
+import { createStreamingStatsPublisher } from './streaming-stats';
 import { setSteerEnqueuedListener, clearPendingSteer } from './steer-message';
 import { flushPendingMessageQueue } from './message-queue';
 import {
@@ -128,7 +129,9 @@ import {
   restorePendingAttachments,
 } from '../attachments/store';
 import { getActiveProvider } from '../providers/store';
+import { isLocalProvider } from '../providers/provider-host';
 import { canSendImagesToModel } from '../providers/vision-model.ts';
+import { acquireTickedMotion } from '../ui/motion-ticker';
 import { executeTool, getEnabledToolDefinitionsForChat } from '../tools/client';
 import { getToolById } from '../tools/definitions';
 import { enqueueAskQuestion } from '../tools/ask-question-queue';
@@ -567,6 +570,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let sendProviderId = '';
   let ownsComposer = false;
   let sentAttachments: Attachment[] = [];
+  let releaseTickedMotion: (() => void) | null = null;
+  let streamingStatsPublisher: ReturnType<typeof createStreamingStatsPublisher> | null = null;
 
   try {
     if (skillId === GIT_SETUP_SKILL_ID && !resumeGenerationId) {
@@ -820,6 +825,29 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       revealAssistantProseBubble(wrap, bubble, streamStatus);
     };
 
+    // Live strip: schedule from the coalesced paint so a token burst is one
+    // snapshot of already-held cumulative strings, not a thought-bubble join.
+    streamingStatsPublisher = createStreamingStatsPublisher(chat);
+    let statsT0 = 0;
+    let statsTFirst: number | null = null;
+    const publishLiveStats = (
+      snap: { lastDelta: string; lastThinking: string },
+      flush: boolean,
+      streamMeta: { usage?: Usage } = {},
+    ): void => {
+      const input = {
+        streamMeta,
+        t0: statsT0 || performance.now(),
+        tFirst: statsTFirst,
+        partialText: snap.lastDelta,
+        partialThinkingLength: snap.lastThinking.length,
+        modelId: sendModelId,
+        modelInfo: chat.modelInfo ?? undefined,
+      };
+      if (flush) streamingStatsPublisher?.flush(input);
+      else streamingStatsPublisher?.schedule(input);
+    };
+
     const painter = createChatTurnEventPainter({
       wrap,
       bubble,
@@ -829,7 +857,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       mount: getActiveChatMountElement(),
       revealProse,
       onActivity: () => notifyChatStreamActivity(chat.id),
+      onCoalescedPaint: (snap) => publishLiveStats(snap, false),
     });
+
+    // Local inference shares the GPU with the compositor; cloud must not acquire.
+    if (isLocalProvider(provider)) {
+      releaseTickedMotion = acquireTickedMotion();
+    }
 
     registerStreamDomRemount(chat.id, (row) => {
       wrap = row.wrap;
@@ -1052,6 +1086,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       ephemeralContinueInstruction?.trim() ||
       (priorMessages ? '' : userText);
 
+    statsT0 = performance.now();
     const result = await runTurnImpl({
       chatId: chat.id,
       seed,
@@ -1068,6 +1103,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             : undefined,
       },
       onEvent: (event) => {
+        if (
+          statsTFirst == null &&
+          (event.type === 'delta' || event.type === 'thinking') &&
+          event.text
+        ) {
+          statsTFirst = performance.now();
+        }
         if (event.type === 'tool_streaming') {
           // Keep phase `generating` so remount still attaches a stream shell
           // (stream-chat-dom skips remount when phase is `tools` = execute).
@@ -1128,7 +1170,13 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     recordChatMessage(chat);
     scheduleSaveSessions();
 
+    painter.flush();
     const painted = painter.snapshot();
+    publishLiveStats(
+      painted,
+      true,
+      result.usage ? { usage: result.usage as Usage } : {},
+    );
     cancelAssistantBubbleRenderDebounce(bubble);
     finishStreamingBubbleRender(bubble, cursor);
     const prose = painted.lastDelta.trim();
@@ -1217,6 +1265,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     }
   } finally {
     turnTeardownRan = true;
+    // Drop the live-strip timer; hand looping animations back to vsync.
+    streamingStatsPublisher?.reset();
+    streamingStatsPublisher = null;
+    releaseTickedMotion?.();
+    releaseTickedMotion = null;
     thoughtController?.abort();
     setSteerEnqueuedListener(null);
     registerStreamDomRemount(chat.id, null);

@@ -26,7 +26,12 @@ export interface StreamingStatsSnapshot {
   t0: number;
   tFirst: number | null;
   partialText: string;
-  partialThinking?: string;
+  /**
+   * Streamed reasoning size in characters. Length only — callers must not join
+   * thought-bubble segments (O(thinking) per token). Unused for token estimates
+   * (provider usage reports reasoning); kept so the strip snapshot stays cheap.
+   */
+  partialThinkingLength?: number;
   /** Completed usage from earlier tool-loop rounds in the same user turn. */
   priorSegments?: Usage[];
   /** Completed stats + usage from earlier tool-loop rounds (weighted live tok/s). */

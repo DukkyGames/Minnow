@@ -24,20 +24,20 @@ describe('buildLiveStreamUsage', () => {
       t0: 0,
       tFirst: 10,
       partialText: 'x'.repeat(400),
-      partialThinking: '',
+      partialThinkingLength: 0,
     });
 
     assert.equal(usage.completion_tokens, proseTokens(400));
     assert.equal(usage.total_tokens, proseTokens(400));
   });
 
-  test('does not estimate completion from thinking text (provider reports it)', () => {
+  test('does not estimate completion from thinking length (provider reports it)', () => {
     const usage = buildLiveStreamUsage({
       streamMeta: {},
       t0: 0,
       tFirst: 10,
       partialText: 'abcd',
-      partialThinking: 'efgh',
+      partialThinkingLength: 4,
     });
 
     assert.equal(usage.completion_tokens, 1);
@@ -51,7 +51,7 @@ describe('buildLiveStreamUsage', () => {
       t0: 0,
       tFirst: 10,
       partialText: 'ignored for count',
-      partialThinking: '',
+      partialThinkingLength: 0,
     });
 
     assert.equal(usage.completion_tokens, 42);
@@ -65,7 +65,7 @@ describe('buildLiveStreamUsage', () => {
       t0: 0,
       tFirst: 10,
       partialText: 'abcd',
-      partialThinking: '',
+      partialThinkingLength: 0,
       priorSegments: [{ prompt_tokens: 500, completion_tokens: 80, total_tokens: 580 }],
     });
 

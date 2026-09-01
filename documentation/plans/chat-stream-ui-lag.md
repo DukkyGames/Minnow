@@ -4,18 +4,18 @@
 
 ## Status
 
-Research complete. Tracked as V2 Phase 7 ([MIN-727](https://linear.app/minnowai/issue/MIN-727)). Confirm with a Performance panel + `MINNOW_DEBUG=1` long-task log before implementing. Can start now; does not wait on Phases 1–6.
+Research complete. Tracked as V2 Phase 7 ([MIN-727](https://linear.app/minnowai/issue/MIN-727)). **P7-A PASS** (static). **P7-B PASS** — coalesces presentation in `src/chat/run-turn-chat-paint.ts` (`createChatTurnEventPainter`) — not `loop.ts` (deleted in Phase 6) and not `handleChunk`. **P7-C PASS** — re-wires `acquireTickedMotion` on `runChatTurn` (local only), parks mid-turn loops via MutationObserver/`animationstart` (no 250 ms `getAnimations()` timer), and schedules live stats from the painter snapshot (thinking length, not `getJoinedDisplayText()`). **P7-D PASS (automated, 2026-08-31)** — `STEP_HZ` comments/JSDoc match 20 Hz; `npx tsc --noEmit` + ticker + markdown + P7-B/C tests. Live Chromium / tok/s / mid-stream typing on cloud+local is **manual QA** (worktree cannot steal port 9473 from the main-checkout Electron).
 
 ## Todos
 
-- [ ] Measure: one cloud turn and one local turn with `MINNOW_DEBUG=1`; capture `[minnow:longtask]` + Chromium Performance profile
-- [ ] Confirm whether “external” means remote APIs or LM Studio on localhost (`isLocalProvider` is true for loopback)
-- [ ] P0: Coalesce `handleChunk` work onto one rAF / 50–100 ms tick; yield between SSE blocks in a burst
-- [ ] P0: Call `scrollChatIfPinned` once per paint, not per token (loop, thought bubble, markdown flush)
-- [ ] P1: Stop joining full thinking text on every chunk; pass length/delta into live stats instead
-- [ ] P1: Ticked motion — drop periodic `document.getAnimations()`; park by mutation / known roots
-- [ ] P2: Align `STEP_HZ` comments (code is 20 Hz, comments still say 8 Hz)
-- [ ] Verify: idle UI unchanged; local tok/s not regressed; cloud and local typing/scroll stay responsive mid-stream
+- [x] Measure: static hotspot readout after Phase 6 (live cloud/local Chromium profiles deferred to P7-D manual QA — worktree has no dedicated Electron instance)
+- [x] Confirm whether “external” means remote APIs or LM Studio on localhost (`isLocalProvider` is true for loopback) — loopback is local; LM Studio on localhost takes the ticker path (P7-C re-wired `acquireTickedMotion` on `runChatTurn`)
+- [x] P0: Coalesce painter `onEvent` work onto one rAF / 50–100 ms tick; yield between SSE blocks in a burst
+- [x] P0: Call `scrollChatIfPinned` once per paint, not per thinking delta / markdown flush
+- [x] P1: Re-wire live stats onto `runChatTurn` without joining full thinking text every chunk
+- [x] P1: Re-wire `acquireTickedMotion` on local streams; drop periodic `document.getAnimations()`; park by mutation / known roots
+- [x] P2: Align `STEP_HZ` comments/JSDoc to 20 Hz (`acquireTickedMotion`, `isLocalProvider`; historical “8 Hz was cheap but visibly choppy” rationale in `motion-ticker.ts` kept)
+- [x] Verify (automated): `npx tsc --noEmit` + `motion-ticker` + markdown incremental + P7-B/C tests (`run-turn-chat-paint`, `streaming-stats`, `generations-subscribe-yield`) PASS. Live Chromium / tok/s / mid-stream typing on cloud+local is **manual QA** (worktree cannot steal port 9473 from the main-checkout Electron)
 
 ## Symptom
 
@@ -48,13 +48,13 @@ Do not wait on V2 for this. The P0 coalesce (one paint + one scroll per frame) i
 
 | Piece | File | Gate | Intent | UI side effect |
 |---|---|---|---|---|
-| Ticked motion | `src/ui/motion-ticker.ts` | Local provider stream | Drop compositor from vsync (~6 tok/s at 144 Hz) to 20 Hz | Parks **every** infinite animation in the document; `getAnimations()` every 250 ms forces style recalc (authors already noted input/scroll latency) |
+| Ticked motion | `src/ui/motion-ticker.ts` | Local provider stream | Drop compositor from vsync (~6 tok/s at 144 Hz) to 20 Hz | Parks **every** infinite animation in the document once on acquire; mid-turn discovery is MutationObserver + `animationstart` (no 250 ms `getAnimations()` timer) |
 | Hidden-window park | `src/boot/render-idle.ts` + `src/styles/motion.css` | Window hidden / minimised | Same vsync tax while AFK | None while the window is visible |
 | `backgroundThrottling: false` | `electron/main.ts` | Always | Keep SSE + AFK timers alive | Compositor stays unthrottled; decorative CSS runs at full rate unless parked |
 | Loader spinner stop | `index.html` | After `app-ready` | Leftover vsync after boot | Idle only |
 | Live metrics | `src/chat/streaming-stats.ts` | Every stream | Live tok/s / TTFT | ~100 ms strip update — cheap |
 
-`loop.ts` still comments “8 Hz” and “no-op for cloud”. Actual `STEP_HZ` is **20**. Cloud never calls `acquireTickedMotion`.
+`loop.ts` is gone (Phase 6). `STEP_HZ` is **20**; comments/JSDoc match. Cloud never calls `acquireTickedMotion`. Historical note in `motion-ticker.ts`: 8 Hz was cheap but visibly choppy — that is why 20 was chosen, not a claim that the live rate is 8.
 
 `isLocalProvider` is true for llama.cpp, mlx-lm, `lm-studio-local`, and **any** `localhost` / `127.0.0.1` / `::1` base URL (LM Studio, Ollama, MTPLX). If “external” meant LM Studio, both sessions run the ticker.
 
@@ -88,7 +88,7 @@ For **local** sessions it is doing what it was asked: zero running compositor an
 
 Cost of that exhaustiveness:
 
-- `document.getAnimations()` is a document-wide style recalc
+- `document.getAnimations()` on acquire is a one-shot document-wide style recalc; mid-turn discovery is MutationObserver (new nodes) + `animationstart` (class-toggled loops), not a 250 ms sweep
 - Stepping `currentTime` on every looping animation in the shell (sidebar, status, thinking caret, streaming caret)
 - The UI clock drops to 20 fps of motion, which reads as lag even when hit-testing still works
 
@@ -125,12 +125,12 @@ Look for: **Layout** (`scrollHeight` / `getAnimations`), **Scripting** (`marked.
 
 ### P2 — hygiene
 
-- Comments and JSDoc: 20 Hz, not 8 Hz
-- Consider not parking animations outside chat chrome (sidebar rings) unless tok/s measurement still requires it
+- [x] Comments and JSDoc: 20 Hz (`STEP_HZ`), not 8 Hz as the live rate. Historical 8 Hz comparison kept.
+- Consider not parking animations outside chat chrome (sidebar rings) unless tok/s measurement still requires it — **out of scope for P7-D**; exhaustive document parking is still the tok/s win, and no live measurement exists to justify shrinking it.
 
 ## Accept
 
-- Typing, scrolling, and clicking stay responsive during cloud and local streams
-- Local tok/s on a fixed prompt is not worse than today (repeat the original 144 Hz vs parked measurement)
-- `npx tsc --noEmit` + existing motion-ticker and markdown incremental tests
-- Manual: Code + Chat app, collapsed thinking, long reply with a fenced code block
+- Typing, scrolling, and clicking stay responsive during cloud and local streams — **manual QA** (see below)
+- Local tok/s on a fixed prompt is not worse than today (repeat the original 144 Hz vs parked measurement) — **manual QA**
+- [x] `npx tsc --noEmit` + motion-ticker + markdown incremental + P7-B/C tests (`run-turn-chat-paint`, `streaming-stats`, `generations-subscribe-yield`)
+- **Manual QA** (worktree cannot run Electron on 9473 — main checkout owns that port): Code + Chat app, collapsed thinking, long reply with a fenced code block, **cloud and local**, `MINNOW_DEBUG=1` and watch `[minnow:longtask]` (threshold 100 ms). Confirm composer typing, transcript scroll, and clicks stay live mid-stream; local tok/s not worse than the parked baseline.

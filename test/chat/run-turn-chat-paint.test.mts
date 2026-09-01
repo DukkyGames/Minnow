@@ -1,5 +1,5 @@
 /**
- * P6-A onEvent → existing chat DOM helpers.
+ * P6-A / P7-B onEvent → existing chat DOM helpers, coalesced onto one paint tick.
  */
 
 import '../tools/install-dom-before-imports.mts';
@@ -12,7 +12,15 @@ import {
   thinkingDeltaFromSnapshot,
 } from '../../src/chat/run-turn-chat-paint.ts';
 
-function hostStub() {
+function hostStub(overrides: {
+  schedulePaintTick?: (cb: () => void) => void;
+  scrollTranscript?: () => void;
+  scheduleMarkdown?: (
+    bubble: HTMLElement,
+    markdown: string,
+    streamCursor: HTMLElement,
+  ) => void;
+} = {}) {
   const mount = document.createElement('div');
   document.body.appendChild(mount);
   const wrap = document.createElement('div');
@@ -52,6 +60,7 @@ function hostStub() {
       onActivity: () => {
         activity.push('tick');
       },
+      ...overrides,
     },
   };
 }
@@ -94,7 +103,8 @@ describe('P6-A chat turn event painter (MIN-723)', () => {
     assert.equal(snap.lastThinking, 'Let me look. Then call.');
     assert.equal(snap.toolCallCount, 1);
     assert.equal(stub.revealed, true);
-    assert.deepEqual(stub.thinking, ['Let me look.', ' Then call.']);
+    // tool_call flushes pending snapshots; latest thinking wins as one append.
+    assert.deepEqual(stub.thinking, ['Let me look. Then call.']);
     const toolRow = stub.mount.querySelector('.tool-call-msg');
     assert.ok(toolRow, 'tool_call must append a .tool-call-msg row');
     // `renderToolResult` removes aria-busy rather than setting it to "false".
@@ -144,5 +154,97 @@ describe('P6-A chat turn event painter (MIN-723)', () => {
       arguments: '{}',
     });
     assert.equal(wrap2.querySelector('.tool-start-indicator'), null);
+  });
+});
+
+describe('P7-B coalesced chat paint (MIN-729)', () => {
+  test('a burst of thinking/delta events is one scroll and one markdown schedule per tick', () => {
+    const ticks: Array<() => void> = [];
+    let scrolls = 0;
+    let markdowns = 0;
+    let coalescedPaints = 0;
+    const stub = hostStub({
+      schedulePaintTick: (cb) => {
+        ticks.push(cb);
+      },
+      scrollTranscript: () => {
+        scrolls += 1;
+      },
+      scheduleMarkdown: () => {
+        markdowns += 1;
+      },
+    });
+    const painter = createChatTurnEventPainter({
+      ...stub.host,
+      onCoalescedPaint: () => {
+        coalescedPaints += 1;
+      },
+    });
+
+    const burst = 20;
+    for (let i = 1; i <= burst; i += 1) {
+      painter.onEvent({ type: 'thinking', text: 'x'.repeat(i) });
+      painter.onEvent({ type: 'delta', text: 'y'.repeat(i) });
+    }
+
+    assert.equal(ticks.length, 1, 'one rAF scheduled for the burst');
+    assert.equal(scrolls, 0, 'no scroll before the paint tick');
+    assert.equal(markdowns, 0, 'no markdown schedule before the paint tick');
+    assert.deepEqual(stub.thinking, []);
+    assert.equal(stub.revealed, false);
+
+    ticks[0]();
+
+    assert.equal(scrolls, 1);
+    assert.equal(markdowns, 1);
+    assert.equal(coalescedPaints, 1, 'live stats hook fires once per paint tick');
+    assert.deepEqual(stub.thinking, ['x'.repeat(burst)]);
+    assert.equal(stub.revealed, true);
+    assert.equal(painter.snapshot().lastDelta, 'y'.repeat(burst));
+    assert.equal(painter.snapshot().lastThinking, 'x'.repeat(burst));
+  });
+
+  test('thinking prefix-diffs against the last painted snapshot across ticks', () => {
+    const ticks: Array<() => void> = [];
+    const stub = hostStub({
+      schedulePaintTick: (cb) => {
+        ticks.push(cb);
+      },
+      scrollTranscript: () => {},
+      scheduleMarkdown: () => {},
+    });
+    const painter = createChatTurnEventPainter(stub.host);
+
+    painter.onEvent({ type: 'thinking', text: 'Let me' });
+    ticks[0]();
+    assert.deepEqual(stub.thinking, ['Let me']);
+
+    painter.onEvent({ type: 'thinking', text: 'Let me look.' });
+    painter.onEvent({ type: 'thinking', text: 'Let me look. Then call.' });
+    assert.equal(ticks.length, 2);
+    ticks[1]();
+    assert.deepEqual(stub.thinking, ['Let me', ' look. Then call.']);
+  });
+
+  test('tool_call still paints immediately without waiting for a paint tick', () => {
+    const ticks: Array<() => void> = [];
+    const stub = hostStub({
+      schedulePaintTick: (cb) => {
+        ticks.push(cb);
+      },
+      scrollTranscript: () => {},
+      scheduleMarkdown: () => {},
+    });
+    const painter = createChatTurnEventPainter(stub.host);
+
+    painter.onEvent({
+      type: 'tool_call',
+      name: 'get_datetime',
+      id: 'call_now',
+      arguments: '{}',
+    });
+
+    assert.equal(ticks.length, 0, 'tools do not schedule a transcript paint');
+    assert.ok(stub.mount.querySelector('.tool-call-msg'), 'tool row appears immediately');
   });
 });

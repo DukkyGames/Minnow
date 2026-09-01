@@ -3,7 +3,6 @@
  * expand-to-read full prose; per-message toggle after the assistant reply completes.
  */
 
-import { scrollChatIfPinned } from './chat-scroll';
 import { resolveChatMount } from './chat-mount';
 import { splitThinkingSegments } from '../api/reasoning';
 import { formatThinkingDuration } from './thinking-duration';
@@ -106,7 +105,9 @@ export class ThoughtBubbleController {
     }
   }
 
-  /** Append streamed reasoning characters; splits on `\n\n` into discrete thoughts. */
+  /** Append streamed reasoning characters; splits on `\n\n` into discrete thoughts.
+   * Follow-scroll is owned by `createChatTurnEventPainter` (MIN-729), not here.
+   */
   appendReasoningDelta(delta: string): void {
     if (this.disposed || !delta) return;
     this.invalidateJoinedDisplayCache();
@@ -130,7 +131,8 @@ export class ThoughtBubbleController {
 
     this.ensureThinkingPanel();
     this.syncFlowContent();
-    this.scrollChat();
+    // Stream follow-scroll is owned by createChatTurnEventPainter (MIN-729) so a
+    // thinking burst is one layout per paint tick, not one per delta.
   }
 
   /** Store Anthropic signature_delta for replay on later tool-loop turns. */
@@ -338,10 +340,6 @@ export class ThoughtBubbleController {
     this.flowEl = null;
     this.flowTextEl = null;
     this.expanded = false;
-  }
-
-  private scrollChat(): void {
-    scrollChatIfPinned();
   }
 }
 

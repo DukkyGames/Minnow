@@ -667,19 +667,25 @@ export async function sendMessage(): Promise<void> {
   let streamMeta: StreamMetaAccumulator = {};
   const t0 = performance.now();
   let tFirst: number | null = null;
+  // Length only — joining thought-bubble segments every chunk is O(thinking).
+  let thinkingLength = 0;
   const streamingStatsPublisher = createStreamingStatsPublisher(chat);
   const inlineRouter = new InlineContentThinkingRouter({
     thinkingModel: modelLikelyUsesInlineThinking(modelId),
   });
   const harmonyRouter = new HarmonyChannelRouter();
 
+  function appendThinking(text: string): void {
+    if (!text) return;
+    thoughtController.appendReasoningDelta(text);
+    thinkingLength += text.length;
+  }
+
   function processRoutedParts(parts: RoutedContentPart[]): void {
     for (const [text, isThinking] of parts) {
       if (text && tFirst == null) tFirst = performance.now();
       if (isThinking) {
-        if (text) {
-          thoughtController.appendReasoningDelta(text);
-        }
+        appendThinking(text);
         continue;
       }
       if (!text) {
@@ -700,9 +706,7 @@ export async function sendMessage(): Promise<void> {
     }
     for (const [harmonyText, isHarmonyThinking] of harmonyRouter.feed(delta)) {
       if (isHarmonyThinking) {
-        if (harmonyText) {
-          thoughtController.appendReasoningDelta(harmonyText);
-        }
+        appendThinking(harmonyText);
         continue;
       }
       processRoutedParts(inlineRouter.feed(harmonyText));
@@ -712,9 +716,7 @@ export async function sendMessage(): Promise<void> {
   function flushContentRouters(): void {
     for (const [harmonyText, isHarmonyThinking] of harmonyRouter.flush()) {
       if (isHarmonyThinking) {
-        if (harmonyText) {
-          thoughtController.appendReasoningDelta(harmonyText);
-        }
+        appendThinking(harmonyText);
         continue;
       }
       processRoutedParts(inlineRouter.feed(harmonyText));
@@ -741,7 +743,7 @@ export async function sendMessage(): Promise<void> {
       const reasoning = extractReasoningDelta(chunk);
       if (reasoning) {
         if (tFirst == null) tFirst = performance.now();
-        thoughtController.appendReasoningDelta(reasoning);
+        appendThinking(reasoning);
       }
       const contentDelta = extractStreamDelta(chunk);
       if (contentDelta) {
@@ -759,7 +761,7 @@ export async function sendMessage(): Promise<void> {
         t0,
         tFirst,
         partialText: fullText,
-        partialThinking: thoughtController.getJoinedDisplayText(),
+        partialThinkingLength: thinkingLength,
         modelId,
         modelInfo: chat.modelInfo ?? undefined,
       });

@@ -117,6 +117,67 @@ export async function createGeneration(
   return { generationId };
 }
 
+/**
+ * After this many `\n\n` SSE blocks from one `read()`, yield so input can run
+ * (MIN-729). Events are not dropped — remaining blocks process after the yield.
+ */
+export const SSE_BLOCKS_PER_YIELD = 8;
+
+type SchedulerWithYield = { yield: () => Promise<void> };
+
+/** Prefer `scheduler.yield()`, then rAF, then a 0 ms timeout. */
+export function yieldForSseBurst(): Promise<void> {
+  const sched = (globalThis as typeof globalThis & { scheduler?: SchedulerWithYield })
+    .scheduler;
+  if (sched && typeof sched.yield === 'function') {
+    return sched.yield();
+  }
+  if (typeof requestAnimationFrame === 'function') {
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        resolve();
+      });
+    });
+  }
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+/**
+ * Walk `\n\n`-delimited SSE blocks in `buffer`, yielding every
+ * {@link SSE_BLOCKS_PER_YIELD} non-empty blocks. Returns `'stop'` when
+ * `onBlock` says so (terminal `event: end`).
+ */
+async function consumeSseBlocks(
+  bufferRef: { value: string },
+  cancelled: () => boolean,
+  onBlock: (block: string) => 'continue' | 'stop',
+): Promise<'continue' | 'stop'> {
+  let sinceYield = 0;
+  let endIndex = bufferRef.value.indexOf('\n\n');
+  while (endIndex >= 0) {
+    if (cancelled()) return 'stop';
+    const block = bufferRef.value.slice(0, endIndex);
+    bufferRef.value = bufferRef.value.slice(endIndex + 2);
+    const action = onBlock(block);
+    if (action === 'stop') return 'stop';
+    if (block.trim()) {
+      sinceYield += 1;
+      if (sinceYield >= SSE_BLOCKS_PER_YIELD) {
+        sinceYield = 0;
+        // Skip the yield when this read's buffer is already drained — the next
+        // `reader.read()` awaits on its own.
+        if (bufferRef.value.indexOf('\n\n') >= 0) {
+          await yieldForSseBurst();
+        }
+      }
+    }
+    endIndex = bufferRef.value.indexOf('\n\n');
+  }
+  return 'continue';
+}
+
 export interface SubscribeToGenerationOptions {
   signal?: AbortSignal;
   onStreamOpen?: () => void;
@@ -165,40 +226,36 @@ export function subscribeToGeneration(
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = '';
+      const bufferRef = { value: '' };
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        if (cancelled) return;
 
-        buffer += decoder.decode(value, { stream: true });
+        bufferRef.value += decoder.decode(value, { stream: true });
 
-        let endIndex = buffer.indexOf('\n\n');
-        while (endIndex >= 0) {
-          const block = buffer.slice(0, endIndex);
-          buffer = buffer.slice(endIndex + 2);
-
+        const consumed = await consumeSseBlocks(bufferRef, () => cancelled, (block) => {
           const endPayload = parseEndEventBlock(block);
           if (endPayload) {
             options.onEnd?.(endPayload);
-            return;
+            return 'stop';
           }
-
           if (block.trim()) {
             feedSseBlock(block, options.onChunk);
           }
-
-          endIndex = buffer.indexOf('\n\n');
-        }
+          return 'continue';
+        });
+        if (consumed === 'stop' || cancelled) return;
       }
 
-      if (buffer.trim()) {
-        const endPayload = parseEndEventBlock(buffer);
+      if (bufferRef.value.trim()) {
+        const endPayload = parseEndEventBlock(bufferRef.value);
         if (endPayload) {
           options.onEnd?.(endPayload);
           return;
         }
-        feedSseBlock(buffer, options.onChunk);
+        feedSseBlock(bufferRef.value, options.onChunk);
       }
 
       options.onEnd?.();
@@ -262,25 +319,21 @@ export function subscribeToGenerationRaw(
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = '';
+      const bufferRef = { value: '' };
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        if (cancelled) return;
 
-        buffer += decoder.decode(value, { stream: true });
+        bufferRef.value += decoder.decode(value, { stream: true });
 
-        let endIndex = buffer.indexOf('\n\n');
-        while (endIndex >= 0) {
-          const block = buffer.slice(0, endIndex);
-          buffer = buffer.slice(endIndex + 2);
-
+        const consumed = await consumeSseBlocks(bufferRef, () => cancelled, (block) => {
           const endPayload = parseEndEventBlock(block);
           if (endPayload) {
             handlers.onEnd?.(endPayload);
-            return;
+            return 'stop';
           }
-
           if (block.trim()) {
             // Preserve SSE event boundaries (`\n\n`). The inner runner's
             // feedSseEventBuffer will not parse a `data:` line until the blank
@@ -289,18 +342,18 @@ export function subscribeToGenerationRaw(
             const framed = `${block.replace(/\n+$/, '')}\n\n`;
             handlers.onChunk(framed);
           }
-
-          endIndex = buffer.indexOf('\n\n');
-        }
+          return 'continue';
+        });
+        if (consumed === 'stop' || cancelled) return;
       }
 
-      if (buffer.trim()) {
-        const endPayload = parseEndEventBlock(buffer);
+      if (bufferRef.value.trim()) {
+        const endPayload = parseEndEventBlock(bufferRef.value);
         if (endPayload) {
           handlers.onEnd?.(endPayload);
           return;
         }
-        handlers.onChunk(`${buffer.replace(/\n+$/, '')}\n\n`);
+        handlers.onChunk(`${bufferRef.value.replace(/\n+$/, '')}\n\n`);
       }
 
       handlers.onEnd?.();

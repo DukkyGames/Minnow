@@ -370,8 +370,21 @@ export function setAssistantBubbleContent(
   renderFull(bubble, raw, false, null);
 }
 
+/** Options for a streaming markdown flush. */
+export interface AssistantBubbleRenderOptions {
+  /**
+   * When false, skip `scrollBottom` on this flush. The chat painter (MIN-729)
+   * owns stream follow-scroll so one rAF tick is not two forced layouts.
+   * Debounce-timer flushes keep the default (true) so a paused stream still pins.
+   */
+  pinScroll?: boolean;
+}
+
 /** Paint the latest pending markdown for a streaming assistant bubble. */
-export function flushAssistantBubbleRender(bubble: HTMLElement): void {
+export function flushAssistantBubbleRender(
+  bubble: HTMLElement,
+  opts?: AssistantBubbleRenderOptions,
+): void {
   const state = renderStateByBubble.get(bubble);
   if (!state || state.pendingMarkdown == null || state.pendingCursor == null) {
     return;
@@ -385,7 +398,9 @@ export function flushAssistantBubbleRender(bubble: HTMLElement): void {
     streamCursor: pendingCursor,
   });
   announceStreamingProse(pendingMarkdown);
-  scrollBottom();
+  if (opts?.pinScroll !== false) {
+    scrollBottom();
+  }
   state.lastRenderedAt = Date.now();
 }
 
@@ -398,6 +413,7 @@ export function scheduleAssistantBubbleRender(
   bubble: HTMLElement,
   markdown: string,
   streamCursor: HTMLElement,
+  opts?: AssistantBubbleRenderOptions,
 ): void {
   const state = getRenderState(bubble);
   state.pendingMarkdown = markdown;
@@ -408,7 +424,7 @@ export function scheduleAssistantBubbleRender(
   const throttleElapsed = now - state.lastRenderedAt >= ASSISTANT_RENDER_DEBOUNCE_MS;
 
   if (neverRendered || throttleElapsed) {
-    flushAssistantBubbleRender(bubble);
+    flushAssistantBubbleRender(bubble, opts);
     return;
   }
 

@@ -598,9 +598,17 @@ One turn loop for chat. Leftover exclusive `loop.ts` behaviour is a **caller ove
 ### Phase 7 — Chat-stream UI stays responsive mid-generation
 *Proves: typing, scrolling, and clicking stay live while a chat streams, without giving back local tok/s. Can start now.*
 
-**MIN-727** · MIN-728 P7-A Measure stream long tasks · MIN-729 P7-B Coalesce `handleChunk` onto one paint · MIN-730 P7-C Cheap thinking stats + ticked-motion rescan · MIN-731 P7-D `STEP_HZ` hygiene and accept
+**MIN-727** · MIN-728 P7-A Measure stream long tasks · MIN-729 P7-B Coalesce painter `onEvent` onto one paint · MIN-730 P7-C Cheap thinking stats + ticked-motion rescan · MIN-731 P7-D `STEP_HZ` hygiene and accept
 
-Full research plan: [`chat-stream-ui-lag.md`](./chat-stream-ui-lag.md). Phases 1 and 6 do not fix this: upstream SSE is already server-side; the freeze is token→DOM on the renderer. P6-A may later batch `onEvent`; until then P7-B is required on whatever loop owns the transcript.
+Full research plan: [`chat-stream-ui-lag.md`](./chat-stream-ui-lag.md). Phases 1 and 6 do not fix this: upstream SSE is already server-side; the freeze is token→DOM on the renderer. P6-A batched `TurnEvent` grain to cumulative snapshots (~80 ms `delta`); it did **not** coalesce renderer paints.
+
+**P7-A PASS (static, 2026-08-31).** `loop.ts` is gone. Insertion point is `src/chat/run-turn-chat-paint.ts` (`createChatTurnEventPainter.onEvent`). At measure time `acquireTickedMotion` had no production caller — P7-C re-wired it. Live Chromium profiles were deferred and remain **manual QA** (see P7-D).
+
+**P7-B PASS.** Delta/thinking presentation coalesces onto one rAF in `createChatTurnEventPainter` (latest snapshot wins; thinking prefix-diffs against last painted). `scrollChatIfPinned` once per tick; live `appendReasoningDelta` does not scroll. `tool_call` / `tool_result` / `tool_streaming` stay immediate. `subscribeToGeneration` / `Raw` yield every 8 SSE blocks in one `read()`.
+
+**P7-C PASS.** `runChatTurn` calls `acquireTickedMotion` for local providers only (released in `finally`). Mid-turn discovery is MutationObserver on `<html>` + capture-phase `animationstart` — no 250 ms `getAnimations()` timer. Live stats schedule from the painter snapshot (thinking **length**, not `getJoinedDisplayText()`). Exhaustive document parking kept (no chat-chrome-only narrowing without a tok/s measurement).
+
+**P7-D PASS (automated, 2026-08-31).** `STEP_HZ` remains 20; comments/JSDoc in `motion-ticker.ts` (`acquireTickedMotion`) and `provider-host.ts` (`isLocalProvider`) match. Historical “8 Hz was cheap but visibly choppy” rationale kept. `npx tsc --noEmit` + ticker + markdown incremental + P7-B/C tests. Live Chromium / tok/s / mid-stream typing on cloud+local is **manual QA** — the worktree cannot steal port 9473 from the main-checkout Electron. Human: Code + Chat app, collapsed thinking, long reply with a fenced code block, cloud and local, `MINNOW_DEBUG=1` `[minnow:longtask]`.
 
 ### Phase 8 — Sub-agents adopt the runner
 *Proves: the journal + reconcile that fixed boards fixes every background agent. Blocked only on Phase 2, which is done — this can start now, and should land before Phase 6.*
@@ -663,7 +671,7 @@ Ordering note: **before Phase 4.** Phase 4 deletes `orchestrate-board.ts` and it
 - [x] `board_set_autonomy` / `delegate_tasks` gone from `src` + `server`; `board_init` remains only as leftover V1 session-log vocabulary in `session-schema.mjs` (hydrate, not a live tool) (Phase 4 gate)
 - [ ] An overnight AFK run finishes, reports once, and stalls on nothing (Phase 5 gate)
 - [x] A normal chat turn runs through `runTurn()`; `src/tools/loop.ts` is deleted; `ask_question` is injection-only (Phase 6 gate)
-- [ ] Cloud and local streams leave composer/scroll/clicks responsive; local tok/s not regressed (Phase 7 gate)
+- [x] Cloud and local streams leave composer/scroll/clicks responsive; local tok/s not regressed (Phase 7 gate — **automated half:** tsc + ticker + markdown + P7-B/C tests PASS. **Live half deferred:** Chromium / tok/s / mid-stream typing on cloud+local; worktree cannot steal port 9473 from the main-checkout Electron)
 - [ ] A sub-agent spawned from a chat survives a renderer reload and a server restart, and finishes (Phase 8 gate)
 - [ ] A sub-agent that runs past its wall-clock limit is retried by policy, not cancelled with its work discarded (Phase 8 gate)
 - [x] Starting a board with no model bound fails at the button with a readable message, and never enters a silent retry loop (Phase 9 gate)

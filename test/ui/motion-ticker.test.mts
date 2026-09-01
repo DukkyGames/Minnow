@@ -10,7 +10,11 @@ import {
   type SteppableAnimation,
 } from '../../src/ui/motion-ticker.ts';
 
-type Globals = typeof globalThis & { document: Document; window: Window };
+type Globals = typeof globalThis & {
+  document: Document;
+  window: Window;
+  MutationObserver: typeof MutationObserver;
+};
 
 /** Mount a happy-dom window as the ambient globals the module reads. */
 function mountWindow(): { win: Window; restore: () => void } {
@@ -18,16 +22,29 @@ function mountWindow(): { win: Window; restore: () => void } {
   const g = globalThis as Globals;
   const prevDoc = g.document;
   const prevWin = g.window;
+  const prevObserver = g.MutationObserver;
   g.document = win.document as unknown as Document;
   g.window = win;
+  g.MutationObserver = win.MutationObserver as unknown as typeof MutationObserver;
   return {
     win,
     restore: () => {
       g.document = prevDoc;
       g.window = prevWin;
+      g.MutationObserver = prevObserver;
       win.close();
     },
   };
+}
+
+type GetAnimationsFn = (opts?: { subtree?: boolean }) => SteppableAnimation[];
+
+/** happy-dom has no Web Animations API — install a stub we can count. */
+function installGetAnimations(
+  target: { getAnimations?: GetAnimationsFn },
+  impl: GetAnimationsFn,
+): void {
+  target.getAnimations = impl;
 }
 
 /** Stand-in for a CSSAnimation: happy-dom implements no Web Animations API. */
@@ -171,5 +188,67 @@ describe('ticked motion', () => {
     // Releasing twice must not unbalance the refcount for a concurrent generation.
     second();
     assert.equal(isTickedMotionActive(), false);
+  });
+
+  it('does not call document.getAnimations on a timer while ticking', async () => {
+    const mounted = mountWindow();
+    restore = mounted.restore;
+    const doc = mounted.win.document as unknown as { getAnimations?: GetAnimationsFn };
+    const calls: number[] = [];
+    const existing = new FakeAnimation();
+    installGetAnimations(doc, () => {
+      calls.push(Date.now());
+      return [existing];
+    });
+
+    release = acquireTickedMotion();
+    const afterAcquire = calls.length;
+    assert.ok(afterAcquire >= 1, 'acquire parks existing animations once');
+    assert.equal(existing.playState, 'paused');
+
+    // Longer than the old 250 ms rescan so a leftover timer would have fired.
+    await new Promise((r) => setTimeout(r, 400));
+    assert.equal(
+      calls.length,
+      afterAcquire,
+      'getAnimations must not run on a 250 ms interval while stepping',
+    );
+  });
+
+  it('parks looping animations that appear via DOM mutation', async () => {
+    const mounted = mountWindow();
+    restore = mounted.restore;
+    const doc = mounted.win.document as unknown as { getAnimations?: GetAnimationsFn };
+    installGetAnimations(doc, () => []);
+
+    release = acquireTickedMotion();
+
+    const late = new FakeAnimation();
+    const spinner = mounted.win.document.createElement('div');
+    installGetAnimations(spinner as unknown as { getAnimations?: GetAnimationsFn }, () => [late]);
+    mounted.win.document.body.appendChild(spinner);
+
+    const started = Date.now();
+    while (late.playState !== 'paused' && Date.now() - started < 250) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    assert.equal(late.playState, 'paused', 'mid-turn spinner must be parked without a sweep timer');
+  });
+
+  it('parks looping animations that start via animationstart on existing chrome', () => {
+    const mounted = mountWindow();
+    restore = mounted.restore;
+    const doc = mounted.win.document as unknown as { getAnimations?: GetAnimationsFn };
+    installGetAnimations(doc, () => []);
+
+    release = acquireTickedMotion();
+
+    const late = new FakeAnimation();
+    const dots = mounted.win.document.createElement('span');
+    installGetAnimations(dots as unknown as { getAnimations?: GetAnimationsFn }, () => [late]);
+    mounted.win.document.body.appendChild(dots);
+    dots.dispatchEvent(new mounted.win.Event('animationstart', { bubbles: true }));
+
+    assert.equal(late.playState, 'paused');
   });
 });
