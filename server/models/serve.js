@@ -977,7 +977,6 @@ export async function startServe(body) {
 
     // Process is up but weights are not loaded until the first completion.
     // Commit `starting` first so the UI does not lie `running` during warmup.
-    const mlxLibraryId = typeof body.libraryId === 'string' ? body.libraryId.trim() : '';
     const row = /** @type {ServeRecord} */ ({
       id: serveId,
       runtime,

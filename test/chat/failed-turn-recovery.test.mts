@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { buildApiMessages } from '../../src/tools/loop.ts';
+import { buildApiMessages } from '../../src/chat/build-api-messages.ts';
 import {
   CONTINUE_AFTER_FAILURE_INSTRUCTION,
   resolveFailedTurnContinueInstruction,
