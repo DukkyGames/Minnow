@@ -287,14 +287,61 @@ function selectTaskDetail(taskId: string | null): void {
   }
 }
 
-export async function closeBoardsView(): Promise<void> {
-  const { notifyCodeStageViewChanged } = await import('../ui/main-column-overlay');
+/**
+ * Leave the V2 Boards surface. By default restores the last active chat into
+ * `#chatArea` and stamps `#/app/code/chat` so the Chats view-bar control does
+ * not leave a blank column (same contract as Overview / Dev Servers).
+ */
+export async function closeBoardsView(options?: {
+  skipNavigate?: boolean;
+  restoreChat?: boolean;
+}): Promise<void> {
+  if (!isBoardsViewOpen()) return;
+
   teardownBoardsView();
+
+  // Leftover V1 board folders can keep viewMode `board` under the V2 surface.
+  // Clear that focus before painting, or renderChatFromHistory redirects back.
+  const { dismissActiveBoardView } = await import('../state/chat-groups');
+  dismissActiveBoardView();
+
+  const { notifyCodeStageViewChanged } = await import('../ui/main-column-overlay');
+
+  if (!options?.skipNavigate) {
+    const { navigateToCodeChatIfCurrentSection } = await import('../os/router');
+    // Both hashes open this surface (`showCodeStageSection`).
+    navigateToCodeChatIfCurrentSection('boards');
+    navigateToCodeChatIfCurrentSection('orchestrate');
+  }
+
+  if (options?.restoreChat === false) {
+    notifyCodeStageViewChanged();
+    return;
+  }
+
+  const { sessionState } = await import('../state/sessions');
+  const targetId = sessionState?.activeId;
+  const chat = targetId ? sessionState?.chats.find((c) => c.id === targetId) : undefined;
+  const area = document.getElementById('chatArea');
+  if (chat) {
+    const { renderChatFromHistory } = await import('../ui/messages');
+    renderChatFromHistory(chat);
+  } else if (area) {
+    area.replaceChildren();
+  }
+
+  const { notifyAskQuestionDisplayContextChanged } = await import(
+    '../chat/ask-question-display'
+  );
+  notifyAskQuestionDisplayContextChanged();
+  void import('../ui/preview-electron-visibility').then((m) =>
+    m.scheduleElectronPreviewHostVisibilitySync(),
+  );
   notifyCodeStageViewChanged();
 }
 
 function syncRailButton(): void {
-  const btn = document.getElementById('btnOrchestratorBoards');
+  const btn = document.getElementById('btnOrchestrate');
   if (!btn) return;
   const open = isBoardsViewOpen();
   btn.setAttribute('aria-pressed', open ? 'true' : 'false');
