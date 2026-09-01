@@ -2,7 +2,7 @@
  * File sidebar and split-viewer layout (mirrors chat sidebar layout.ts).
  */
 
-import { ICON_CHEVRON_RIGHT, ICON_FILE_TREE } from '../constants';
+import { ICON_FILE_TREE } from '../constants';
 import {
   getFilePanelState,
   patchFilePanelState,
@@ -223,6 +223,41 @@ function refreshUnifiedTabsIfPresent(): void {
   void import('./unified-right-tabs').then((m) => m.refreshUnifiedRightTabs());
 }
 
+/**
+ * Sync the Files pane button: always the folder glyph, highlighted when
+ * the files view is the active left pane (MIN-655).
+ */
+export function syncFileSidebarFilesPaneButton(options?: { gitOpen?: boolean }): void {
+  const side = document.getElementById('fileSidebar');
+  const btn = document.getElementById('btnFileSidebarCollapse');
+  if (!side || !btn) return;
+
+  const gitOpen = options?.gitOpen ?? side.classList.contains('file-sidebar--git');
+  const mobile = isMobileLayout();
+  const mobileOpen = side.classList.contains('mobile-open');
+  const collapsed = mobile
+    ? !mobileOpen
+    : side.classList.contains('collapsed') || getFilePanelState().fileSidebarCollapsed;
+
+  // Stable folder glyph — active highlight marks the pane, not a chevron swap.
+  btn.innerHTML = ICON_FILE_TREE;
+
+  const filesActive = !collapsed && !gitOpen;
+  let label: string;
+  if (gitOpen) {
+    label = 'Show file tree';
+  } else if (mobile) {
+    label = mobileOpen ? 'Close file tree' : 'Open file tree';
+  } else {
+    label = collapsed ? 'Expand file tree' : 'Collapse file tree';
+  }
+
+  btn.classList.toggle('is-active', filesActive);
+  btn.setAttribute('aria-pressed', filesActive ? 'true' : 'false');
+  btn.setAttribute('aria-label', label);
+  btn.setAttribute('title', label);
+}
+
 /** Apply collapsed rail, mobile overlay, and split ratio CSS variables. */
 export function applyFileSidebarVisuals(): void {
   reconcileRightSplitDomWithState();
@@ -256,22 +291,11 @@ export function applyFileSidebarVisuals(): void {
   if (!isMobileLayout()) {
     clearMobileFileSidebarOverlay();
     side.classList.toggle('collapsed', state.fileSidebarCollapsed);
-    btn.innerHTML = state.fileSidebarCollapsed ? ICON_FILE_TREE : ICON_CHEVRON_RIGHT;
-    btn.setAttribute(
-      'aria-label',
-      state.fileSidebarCollapsed ? 'Expand file tree' : 'Collapse file tree',
-    );
-    btn.setAttribute(
-      'title',
-      state.fileSidebarCollapsed ? 'Expand file tree' : 'Collapse file tree',
-    );
   } else {
     side.classList.toggle('collapsed', state.fileSidebarCollapsed);
-    const open = side.classList.contains('mobile-open');
-    btn.innerHTML = open ? ICON_CHEVRON_RIGHT : ICON_FILE_TREE;
-    btn.setAttribute('aria-label', open ? 'Close file tree' : 'Open file tree');
-    btn.setAttribute('title', open ? 'Close file tree' : 'Open file tree');
   }
+
+  syncFileSidebarFilesPaneButton();
 
   const previewBtn = document.getElementById('btnPreviewToggle');
   if (previewBtn) {
@@ -291,7 +315,25 @@ export function applyFileSidebarVisuals(): void {
   }
 }
 
-export function toggleFileSidebarLayout(): void {
+/**
+ * Files pane control: switch back from Source Control, else toggle collapse /
+ * mobile overlay (MIN-655).
+ */
+export async function toggleFileSidebarLayout(): Promise<void> {
+  const git = await import('./git-panel');
+
+  // While Source Control is open, the Files button returns to the tree.
+  if (git.isGitSidePanelOpen()) {
+    git.closeGitSidePanel();
+    if (isMobileLayout()) {
+      openMobileFileSidebar();
+    } else if (getFilePanelState().fileSidebarCollapsed) {
+      patchFilePanelState({ fileSidebarCollapsed: false });
+    }
+    applyFileSidebarVisuals();
+    return;
+  }
+
   if (isMobileLayout()) {
     const side = document.getElementById('fileSidebar');
     if (side && side.classList.contains('mobile-open')) {

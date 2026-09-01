@@ -24,6 +24,7 @@ describe('issues command source', () => {
           setGroupBy: () => {},
           setActiveView: () => {},
           goToFocused: () => {},
+          expandFocused: () => {},
           acceptTriage: () => {},
           declineTriage: () => {},
           queueAgent: () => {},
@@ -34,6 +35,8 @@ describe('issues command source', () => {
 
     const ids = listCommands().map((command) => command.id);
     assert.ok(ids.includes('issues.new'));
+    assert.ok(ids.includes('issues.expand'));
+    assert.equal(listCommands().find((command) => command.id === 'issues.expand')?.shortcut, 'E');
     assert.ok(ids.includes('issues.view.triage'));
     assert.ok(ids.includes('issues.triage.accept'));
     assert.ok(ids.includes('issues.group.status'));
@@ -56,6 +59,7 @@ describe('issues command source', () => {
         setGroupBy: () => {},
         setActiveView: () => {},
         goToFocused: () => {},
+        expandFocused: () => {},
         acceptTriage: () => {},
         declineTriage: () => {},
         queueAgent: () => {},

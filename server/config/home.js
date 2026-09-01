@@ -63,6 +63,7 @@ const SCAFFOLD_DIRS = [
   'sessions',
   'bugs',
   'issues',
+  'reviews',
   'memory',
   'models',
   'models/embeddings',

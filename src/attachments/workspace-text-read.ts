@@ -15,11 +15,16 @@ export function parseGetFileMetadataSize(metadata: string): number | null {
 /**
  * Fetches a workspace UTF-8 text file through GET /api/preview/file/…?raw=1.
  * Raw skips HTML `<base>` injection so the file viewer edits the true on-disk bytes.
+ * `cacheBust` is sent as `?v=` to skip a stale cached 404 after a just-written file.
  */
-export async function readWorkspaceTextFile(path: string, workspaceRoot?: string): Promise<string> {
+export async function readWorkspaceTextFile(
+  path: string,
+  workspaceRoot?: string,
+  cacheBust?: number,
+): Promise<string> {
   const url = resolvePreviewLoadUrl(
     { kind: 'workspace', path },
-    undefined,
+    cacheBust,
     workspaceRoot,
     { raw: true },
   );

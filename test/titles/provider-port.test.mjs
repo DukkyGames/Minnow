@@ -37,4 +37,19 @@ describe('applyTitleThinkingOffPatch', () => {
 
     assert.deepEqual(body.thinking, { type: 'disabled' });
   });
+
+  test('GLM-5.3 openai-v1 remaps off to enabled + low', () => {
+    const body = applyTitleThinkingOffPatch(
+      {
+        model: 'glm-5.3-flash',
+        messages: [{ role: 'user', content: 'Hello' }],
+        temperature: 0.3,
+        max_tokens: 24,
+      },
+      'openai-v1',
+    );
+
+    assert.deepEqual(body.thinking, { type: 'enabled' });
+    assert.equal(body.reasoning_effort, 'low');
+  });
 });

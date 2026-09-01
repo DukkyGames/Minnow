@@ -186,6 +186,51 @@ describe('code-change-ledger', () => {
     assert.equal(runHadCodeChanges(chatOnly, chatOnlyRun), false);
   });
 
+  test('getPerFileChangeSummary skips unloaded chats without reading history', () => {
+    const chat = makeChat();
+    chat.historyLoaded = false;
+    chat.codeChangeTotals = { additions: 4, deletions: 1 };
+    let historyReads = 0;
+    Object.defineProperty(chat, 'history', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        historyReads += 1;
+        return [];
+      },
+    });
+
+    assert.deepEqual(getPerFileChangeSummary(chat), []);
+    assert.equal(historyReads, 0);
+  });
+
+  test('runHadCodeChanges is false while history is unloaded', () => {
+    const chat = makeChat();
+    chat.historyLoaded = false;
+    const run: TurnRunRecord = {
+      runId: 'run-unloaded',
+      branchId: 'main',
+      forkHistoryIndex: 0,
+      status: 'completed',
+      createdAt: 1,
+      snapshot: {} as TurnRunRecord['snapshot'],
+      outputHistoryStart: 1,
+      outputHistoryEnd: 2,
+    };
+    let historyReads = 0;
+    Object.defineProperty(chat, 'history', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        historyReads += 1;
+        return [];
+      },
+    });
+
+    assert.equal(runHadCodeChanges(chat, run), false);
+    assert.equal(historyReads, 0);
+  });
+
   test('getPerFileChangeSummary expands paths array entries', () => {
     const chat = makeChat();
     chat.history = [

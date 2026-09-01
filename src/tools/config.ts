@@ -23,6 +23,7 @@ import {
   type ToolPermissionMode,
   type ToolPermissionsConfig,
 } from './tool-settings-types';
+import { normalizeToolOutputConfig } from '../../server/tools/output-cap.js';
 
 export type {
   ToolConfig,
@@ -198,6 +199,7 @@ export function normalizeToolConfig(raw: unknown): ToolConfig {
     keys?: unknown;
     permissions?: unknown;
     toolCache?: unknown;
+    toolOutput?: unknown;
     webSearchProvider?: unknown;
   };
   if (stored.enabled && typeof stored.enabled === 'object') {
@@ -271,6 +273,8 @@ export function normalizeToolConfig(raw: unknown): ToolConfig {
   if (!config.toolCache) {
     config.toolCache = { enabled: true };
   }
+
+  config.toolOutput = normalizeToolOutputConfig(stored.toolOutput);
 
   return config;
 }

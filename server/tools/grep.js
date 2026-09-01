@@ -9,11 +9,11 @@ import { promisify } from 'node:util';
 import { getRipgrepPath } from '../lib/ripgrep-path.js';
 import { truncateUtf8 } from '../../src/lib/fetch-web-content.mjs';
 import {
-  DEFAULT_MAX_LINE_CHARS,
-  DEFAULT_MAX_OUTPUT_CHARS,
   GREP_MAX_LINE_CHARS,
   GREP_MAX_OUTPUT_CHARS,
   capLineLength,
+  getOutputCapPolicy,
+  withFullResultFooterHint,
 } from './output-cap.js';
 
 const execFileAsync = promisify(execFile);
@@ -21,11 +21,14 @@ const execFileAsync = promisify(execFile);
 /** Resolved once at load; remap for Electron asar.unpacked when packaged. */
 const rgExecutable = getRipgrepPath();
 
-/** Default max lines returned per request. */
-export const GREP_DEFAULT_HEAD_LIMIT = 200;
+/** Default max lines returned per request (automatic ceiling when capping is on). */
+export const GREP_DEFAULT_HEAD_LIMIT = 500;
 
-/** Hard cap for head_limit argument. */
-export const GREP_MAX_HEAD_LIMIT = 200;
+/** Hard cap for head_limit when result capping is on (must be > default so raising it works). */
+export const GREP_MAX_HEAD_LIMIT = 2_000;
+
+/** Default path ceiling for find_files when result capping is on. */
+export const FIND_FILES_DEFAULT_MAX = 2_000;
 
 export { GREP_MAX_OUTPUT_CHARS, GREP_MAX_LINE_CHARS };
 
@@ -79,10 +82,21 @@ export function isRipgrepMatchLine(line) {
  * @returns {{ text: string, truncated: boolean, lineCount: number, nextOffset: number }}
  */
 export function capGrepOutput(stdout, options = {}) {
+  const policy = getOutputCapPolicy();
+  const applyResultCap = options.applyResultCap ?? policy.applyResultCap;
   const offset = Math.max(0, options.offset ?? 0);
-  const headLimit = options.headLimit ?? GREP_DEFAULT_HEAD_LIMIT;
-  const maxLineChars = options.maxLineChars ?? GREP_MAX_LINE_CHARS;
-  const maxOutputChars = options.maxOutputChars ?? GREP_MAX_OUTPUT_CHARS;
+  const explicitHead = options.explicitHeadLimit === true;
+  // Automatic head ceiling only when product caps are on (or the agent passed head_limit).
+  const headLimit =
+    explicitHead || applyResultCap
+      ? (options.headLimit ?? GREP_DEFAULT_HEAD_LIMIT)
+      : Number.MAX_SAFE_INTEGER;
+  const maxLineChars = applyResultCap
+    ? (options.maxLineChars ?? GREP_MAX_LINE_CHARS)
+    : Number.MAX_SAFE_INTEGER;
+  const maxOutputChars = applyResultCap
+    ? (options.maxOutputChars ?? GREP_MAX_OUTPUT_CHARS)
+    : Number.MAX_SAFE_INTEGER;
 
   const lines = stdout.split(/\r?\n/);
   const kept = [];
@@ -103,9 +117,9 @@ export function capGrepOutput(stdout, options = {}) {
       break;
     }
 
-    const line = capLineLength(rawLine, maxLineChars);
+    const line = applyResultCap ? capLineLength(rawLine, maxLineChars) : rawLine;
     const addedChars = line.length + (kept.length > 0 ? 1 : 0);
-    if (totalChars + addedChars > maxOutputChars) {
+    if (applyResultCap && totalChars + addedChars > maxOutputChars) {
       truncated = true;
       break;
     }
@@ -119,20 +133,23 @@ export function capGrepOutput(stdout, options = {}) {
   const nextOffset = offset + lineCount;
 
   if (truncated) {
-    const canRaiseLimit = GREP_DEFAULT_HEAD_LIMIT < GREP_MAX_HEAD_LIMIT;
-    const hint =
+    const canRaiseLimit = applyResultCap && GREP_DEFAULT_HEAD_LIMIT < GREP_MAX_HEAD_LIMIT;
+    const pageHint =
       lineCount > 0
         ? canRaiseLimit
           ? `use offset=${nextOffset} for the next page or raise head_limit (max ${GREP_MAX_HEAD_LIMIT})`
           : `use offset=${nextOffset} for the next page`
         : `use offset=${offset} with a smaller head_limit`;
+    const hint = withFullResultFooterHint(pageHint, applyResultCap);
     text = `${text}\n(truncated at ${lineCount} match lines, default head_limit=${GREP_DEFAULT_HEAD_LIMIT}; ${hint})`;
   }
 
-  const beforeUtf8 = text;
-  text = truncateUtf8(text, maxOutputChars);
-  if (text !== beforeUtf8) {
-    truncated = true;
+  if (applyResultCap) {
+    const beforeUtf8 = text;
+    text = truncateUtf8(text, maxOutputChars);
+    if (text !== beforeUtf8) {
+      truncated = true;
+    }
   }
 
   return { text, truncated, lineCount, nextOffset };
@@ -272,12 +289,21 @@ export async function runGrepSearch(args, deps) {
     }
   }
 
-  const headLimit = clampInt(
-    args?.head_limit,
-    1,
-    GREP_MAX_HEAD_LIMIT,
-    GREP_DEFAULT_HEAD_LIMIT,
-  );
+  const policy = getOutputCapPolicy();
+  const hasExplicitHead =
+    args != null &&
+    Object.prototype.hasOwnProperty.call(args, 'head_limit') &&
+    args.head_limit != null;
+  const headLimit = hasExplicitHead
+    ? clampInt(
+        args.head_limit,
+        1,
+        policy.applyResultCap ? GREP_MAX_HEAD_LIMIT : Number.MAX_SAFE_INTEGER,
+        GREP_DEFAULT_HEAD_LIMIT,
+      )
+    : policy.applyResultCap
+      ? GREP_DEFAULT_HEAD_LIMIT
+      : Number.MAX_SAFE_INTEGER;
   const offset = clampInt(args?.offset, 0, Number.MAX_SAFE_INTEGER, 0);
   const context = clampInt(args?.context, 0, 5, 0);
   const caseInsensitive = args?.case_insensitive === true;
@@ -323,7 +349,9 @@ export async function runGrepSearch(args, deps) {
     glob,
     // --max-count limits matches per file; only meaningful when returning content lines.
     // In count / files_with_matches mode it would silently under-report per-file totals.
-    maxCount: ripgrepMode === 'content' ? headLimit + offset : 0,
+    // Skip when the agent opted out of the automatic head ceiling (unbounded rg).
+    maxCount:
+      ripgrepMode === 'content' && headLimit < 1_000_000 ? headLimit + offset : 0,
   });
   // Always pass an explicit path target. `rg pattern` with no path reads from stdin when
   // stdin is a pipe (as it is under execFile), which would hang forever — the "./" prefix
@@ -362,6 +390,8 @@ export async function runGrepSearch(args, deps) {
   let { text } = capGrepOutput(trimmed, {
     offset,
     headLimit,
+    applyResultCap: policy.applyResultCap,
+    explicitHeadLimit: hasExplicitHead,
     maxLineChars: GREP_MAX_LINE_CHARS,
     maxOutputChars: GREP_MAX_OUTPUT_CHARS,
   });
@@ -391,7 +421,10 @@ export async function runFindFilesSearch(args, deps, options = {}) {
   if (!pattern) {
     return 'Error: pattern is required';
   }
-  const maxResults = options.maxResults ?? 500;
+  const findPolicy = getOutputCapPolicy();
+  const maxResults =
+    options.maxResults ??
+    (findPolicy.applyResultCap ? FIND_FILES_DEFAULT_MAX : Number.MAX_SAFE_INTEGER);
 
   const resolved = deps.resolveSafePath(
     typeof args?.path === 'string' && args.path.trim() ? args.path.trim() : '.',

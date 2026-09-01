@@ -1,4 +1,4 @@
-/* Settings → Appearance: theme, fonts, wallpaper pickers (General page shell) */
+/* Settings → Appearance: theme and font pickers (General page shell) */
 
 .settings-general .settings-appearance-preview {
   margin: 0 0 16px;
@@ -18,15 +18,6 @@
   margin-bottom: 0;
 }
 
-.settings-general .settings-appearance-wallpaper-grid {
-  margin-top: 0;
-}
-
-.settings-general .settings-appearance-wallpaper-custom {
-  margin-top: 12px;
-  padding-top: 12px;
-}
-
 .settings-general .settings-appearance-simplified,
 .settings-general .settings-appearance-color-grid {
   margin-top: 0;
@@ -36,18 +27,11 @@
   margin-bottom: 12px;
 }
 
-.settings-general .settings-group--emphasis .settings-appearance-wallpaper-card,
-.settings-general .settings-group--emphasis .settings-theme-family {
-  background: var(--mn-bg);
-}
-
 .settings-general .settings-group--emphasis .settings-appearance-font-preview {
   background: var(--mn-surface-1);
 }
 
 /* Live bench preview — vertical miniature of chat thread + composer */
-
-
 
 .settings-appearance-preview__label {
 
@@ -65,8 +49,6 @@
 
 }
 
-
-
 .settings-appearance-preview__bench {
 
   overflow: hidden;
@@ -78,8 +60,6 @@
   background: var(--mn-bg);
 
 }
-
-
 
 .settings-appearance-preview__thread {
 
@@ -94,8 +74,6 @@
   background: var(--mn-surface-1);
 
 }
-
-
 
 .settings-appearance-preview__msg {
 
@@ -117,8 +95,6 @@
 
 }
 
-
-
 .settings-appearance-preview__msg--user {
 
   align-self: flex-end;
@@ -128,8 +104,6 @@
   color: var(--mn-fg-on-accent);
 
 }
-
-
 
 .settings-appearance-preview__msg--asst {
 
@@ -142,8 +116,6 @@
   color: var(--mn-fg);
 
 }
-
-
 
 .settings-appearance-preview__composer {
 
@@ -160,8 +132,6 @@
   background: var(--mn-bg);
 
 }
-
-
 
 .settings-appearance-preview__input {
 
@@ -191,8 +161,6 @@
 
 }
 
-
-
 .settings-appearance-preview__send {
 
   display: inline-flex;
@@ -221,8 +189,6 @@
 
 }
 
-
-
 .settings-appearance-preview__chip {
 
   flex: none;
@@ -247,8 +213,6 @@
 
 }
 
-
-
 .settings-appearance-simplified {
 
   display: grid;
@@ -260,8 +224,6 @@
   margin-top: 12px;
 
 }
-
-
 
 /* `display: grid` / `display: flex` override the native [hidden] rule */
 
@@ -279,8 +241,6 @@
 
 }
 
-
-
 .settings-appearance-simplified__hint {
 
   margin: 10px 0 0;
@@ -288,8 +248,6 @@
   max-width: 72ch;
 
 }
-
-
 
 .settings-appearance-color-grid {
 
@@ -302,8 +260,6 @@
   margin-top: 12px;
 
 }
-
-
 
 .settings-appearance-color-group__title {
 
@@ -321,8 +277,6 @@
 
 }
 
-
-
 .settings-appearance-color-fields {
 
   display: grid;
@@ -332,8 +286,6 @@
   gap: 12px 16px;
 
 }
-
-
 
 .settings-appearance-color-field {
 
@@ -347,8 +299,6 @@
 
 }
 
-
-
 .settings-appearance-color-field.is-disabled {
 
   opacity: 0.5;
@@ -357,8 +307,6 @@
 
 }
 
-
-
 .settings-appearance-color-field__label {
 
   color: var(--mn-fg-muted);
@@ -366,8 +314,6 @@
   font-weight: 500;
 
 }
-
-
 
 .settings-appearance-color-control {
 
@@ -378,8 +324,6 @@
   gap: 10px;
 
 }
-
-
 
 .settings-appearance-color-swatch {
 
@@ -401,15 +345,11 @@
 
 }
 
-
-
 .settings-appearance-color-swatch::-webkit-color-swatch-wrapper {
 
   padding: 0;
 
 }
-
-
 
 .settings-appearance-color-swatch::-webkit-color-swatch {
 
@@ -419,8 +359,6 @@
 
 }
 
-
-
 .settings-appearance-color-swatch::-moz-color-swatch {
 
   border: none;
@@ -429,8 +367,6 @@
 
 }
 
-
-
 .settings-appearance-color-swatch:focus-visible {
 
   outline: 2px solid var(--mn-accent);
@@ -438,8 +374,6 @@
   outline-offset: 2px;
 
 }
-
-
 
 .settings-appearance-color-alpha {
 
@@ -454,8 +388,6 @@
   min-width: 0;
 
 }
-
-
 
 .settings-appearance-color-alpha__label {
 
@@ -473,8 +405,6 @@
 
 }
 
-
-
 .settings-appearance-color-alpha__range {
 
   flex: 1;
@@ -490,8 +420,6 @@
   cursor: pointer;
 
 }
-
-
 
 .settings-appearance-color-alpha__readout {
 
@@ -509,8 +437,6 @@
 
 }
 
-
-
 .settings-appearance-color-value {
 
   font-family: var(--font-mono);
@@ -523,15 +449,11 @@
 
 }
 
-
-
 .settings-appearance-warnings {
 
   margin-top: 12px;
 
 }
-
-
 
 .settings-appearance-warn {
 
@@ -539,13 +461,9 @@
 
 }
 
-
-
 .settings-appearance-import {
   cursor: pointer;
 }
-
-
 
 /* Font specimen + controls */
 
@@ -561,8 +479,6 @@
 
 }
 
-
-
 .settings-appearance-font-specimen__block {
 
   display: flex;
@@ -574,8 +490,6 @@
   min-width: 0;
 
 }
-
-
 
 .settings-appearance-font-specimen__label {
 
@@ -591,8 +505,6 @@
 
 }
 
-
-
 .settings-appearance-font-controls {
 
   display: flex;
@@ -602,8 +514,6 @@
   gap: 4px;
 
 }
-
-
 
 .settings-appearance-font-row {
 
@@ -619,8 +529,6 @@
 
 }
 
-
-
 .settings-appearance-font-row__label {
 
   min-width: 110px;
@@ -630,8 +538,6 @@
   color: var(--mn-fg-muted);
 
 }
-
-
 
 .settings-appearance-font-select,
 .settings-appearance-fit-select {
@@ -649,8 +555,6 @@
 .settings-appearance-font-upload {
   cursor: pointer;
 }
-
-
 
 .settings-appearance-font-preview {
 
@@ -670,8 +574,6 @@
 
 }
 
-
-
 .settings-appearance-font-preview--mono {
 
   font-size: 13px;
@@ -679,204 +581,6 @@
   white-space: pre-wrap;
 
 }
-
-
-
-/* Wallpaper picker */
-
-.settings-appearance-wallpaper-grid {
-
-  display: grid;
-
-  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-
-  gap: 12px;
-
-  margin-top: 12px;
-
-}
-
-
-
-.settings-appearance-wallpaper-card {
-
-  display: flex;
-
-  flex-direction: column;
-
-  gap: 8px;
-
-  padding: 8px;
-
-  border-radius: var(--radius-md);
-
-  border: 1px solid var(--mn-border);
-
-  background: var(--mn-surface-1);
-
-  cursor: pointer;
-
-  text-align: left;
-
-  transition:
-
-    border-color var(--duration-fast) var(--ease-out),
-
-    background-color var(--duration-fast) var(--ease-out);
-
-}
-
-
-
-.settings-appearance-wallpaper-card:hover {
-
-  border-color: var(--mn-border-strong);
-
-  background: var(--mn-surface-2);
-
-}
-
-
-
-.settings-appearance-wallpaper-card.is-active {
-
-  border-color: var(--mn-accent-border);
-
-  background: color-mix(in srgb, var(--mn-accent-soft) 35%, var(--mn-surface-1));
-
-}
-
-
-
-.settings-appearance-wallpaper-preview {
-
-  position: relative;
-
-  width: 100%;
-
-  aspect-ratio: 16 / 10;
-
-  min-height: 72px;
-
-  border-radius: var(--radius-sm);
-
-  overflow: hidden;
-
-  background: var(--mn-bg);
-
-}
-
-
-
-.settings-appearance-wallpaper-preview-inner {
-
-  position: absolute;
-
-  inset: 0;
-
-  transform: scale(1);
-
-  pointer-events: none;
-
-  /* Inherit OS wallpaper tokens for live thumbnail renders. */
-
-  color: var(--os-text);
-
-}
-
-
-
-.settings-appearance-wallpaper-preview-inner .mn-os-wall {
-
-  position: absolute;
-
-  inset: 0;
-
-}
-
-
-
-.settings-appearance-wallpaper-card__meta {
-
-  display: flex;
-
-  align-items: center;
-
-  justify-content: space-between;
-
-  gap: 6px;
-
-}
-
-
-
-.settings-appearance-wallpaper-card__label {
-
-  font-size: 12px;
-
-  font-weight: 500;
-
-}
-
-
-
-.settings-appearance-wallpaper-card__tag {
-
-  font-size: 9px;
-
-  letter-spacing: 0.04em;
-
-  text-transform: uppercase;
-
-  color: var(--mn-fg-muted);
-
-  border: 1px solid var(--mn-border);
-
-  border-radius: 4px;
-
-  padding: 1px 5px;
-
-}
-
-
-
-.settings-appearance-wallpaper-custom {
-
-  display: flex;
-
-  flex-wrap: wrap;
-
-  gap: 10px;
-
-  align-items: center;
-
-  margin-top: 16px;
-
-  padding-top: 14px;
-
-  border-top: 1px solid var(--mn-border);
-
-}
-
-
-
-.settings-appearance-wallpaper-custom__label {
-
-  flex: 1 1 100%;
-
-  font-size: 11px;
-
-  font-weight: 600;
-
-  letter-spacing: 0.06em;
-
-  text-transform: uppercase;
-
-  color: var(--mn-fg-muted);
-
-}
-
-
 
 @media (max-width: 640px) {
 
@@ -886,23 +590,17 @@
 
   }
 
-
-
   .settings-appearance-preview__input {
 
     flex: 1 1 100%;
 
   }
 
-
-
   .settings-appearance-font-specimen {
 
     grid-template-columns: 1fr;
 
   }
-
-
 
   .settings-theme-families--grid {
 
@@ -911,5 +609,4 @@
   }
 
 }
-
 

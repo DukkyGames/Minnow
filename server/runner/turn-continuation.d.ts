@@ -11,6 +11,17 @@ export declare const MAX_EMPTY_POST_TOOL_RETRIES = 1;
 export declare const EMPTY_POST_TOOL_CONTINUE_INSTRUCTION = "You have tool results above. Reply to the user in plain language; do not call more tools unless necessary.";
 /** Ephemeral API-only line after max_tokens truncation (not stored in session history). */
 export declare const CONTINUE_AFTER_TRUNCATION_INSTRUCTION = "Your previous reply was cut off because of the output token limit. Continue exactly where you left off without repeating what you already wrote.";
+/**
+ * Ephemeral API-only line after a failed turn (MIN-666).
+ * Not stored in history - Continue keeps the visible transcript and nudges the model
+ * to pick up from it instead of restarting from the last user message.
+ */
+export declare const CONTINUE_AFTER_FAILURE_INSTRUCTION = "The previous reply failed before it finished. Continue from the work above — keep its conclusions and pick up exactly where it stopped. Do not repeat it and do not start over.";
+/**
+ * Continue after a failure only needs an extra user line when the transcript
+ * already ends on assistant/tool output. An unanswered user prompt is retried as-is.
+ */
+export declare function resolveFailedTurnContinueInstruction(history: Message[]): string | undefined;
 /** Max extra model rounds when prose looks like multiple-choice but `ask_question` was not called. */
 export declare const MAX_PROSE_QUESTION_RETRIES = 1;
 /** Ephemeral API-only correction when the model asked for choices in prose. */

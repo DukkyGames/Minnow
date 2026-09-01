@@ -157,7 +157,7 @@
   min-width: 0;
   padding: 4px 6px;
   font-size: 0.75rem;
-  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   border: 1px solid var(--mn-border);
   border-radius: var(--mn-radius-sm, 4px);
   background: var(--mn-surface-0);

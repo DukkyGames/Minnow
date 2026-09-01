@@ -24,7 +24,7 @@ import {
   setModelsInspectorOpen,
 } from './models/inspector-visibility';
 import { restoreReparentedSettingsSections } from './models/settings-reparent';
-import { getModelsState, runningServes, subscribeModelsStore, teardownModelsStore } from './models/store';
+import { formatModelsHeaderLoadingLabel, getModelsState, runningServes, subscribeModelsStore, teardownModelsStore } from './models/store';
 import { teardownServerSection } from './models/server-panel';
 
 export type { ModelsSectionId };
@@ -86,7 +86,7 @@ function renderHeaderStatus(): void {
         ? `${running[0].modelLabel} · ${running[0].baseUrl}`
         : `${running.length} models serving`;
   } else if (loading) {
-    label.textContent = 'Loading a model…';
+    label.textContent = formatModelsHeaderLoadingLabel(loads);
   } else if (unhealthy.length) {
     label.textContent = 'Runtime unhealthy';
   } else if (crashed.length) {

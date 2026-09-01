@@ -30,6 +30,7 @@ import './styles/code-change-strip.css';
 import './styles/tool-call-diff.css';
 import './styles/input.css';
 import './styles/code-ref-link.css';
+import './styles/chat-link-chips.css';
 import './styles/context-usage.css';
 import './styles/settings.css';
 import './styles/stats.css';
@@ -120,8 +121,10 @@ import { initChatScroll } from './ui/chat-scroll';
 import { initMinnowBrowserLinkRouting } from './ui/minnow-browser-links';
 import { renderChatFromHistory, renderStatsForChat } from './ui/messages';
 import { refreshHubLiveData } from './ui/hub';
-import { bootGenerationResumeForChats } from './chat/generation-resume';
-import { bootIncompleteToolResumeForChats } from './chat/incomplete-tool-resume';
+import {
+  parkResumeCandidatesAtBoot,
+  startBootResumeGate,
+} from './boot/resume-gate-boot';
 import {
   bindAskQuestionPlanScreenHooks,
   notifyAskQuestionDisplayContextChanged,
@@ -164,6 +167,7 @@ import { bootstrapActiveChatOpenedTimestamp } from './ui/chat-item-dot';
 import { initStatsStrip, updateStatsExpandPreview } from './ui/stats';
 import { bindExpertsSettingsCheckbox } from './ui/experts-settings';
 import { syncComposerPinnedSkillFromActiveChat } from './ui/composer-pinned-skill';
+import { syncChatLinkChipsFromActiveChat } from './ui/chat-link-chips';
 import { syncGoalActiveHint } from './ui/goal-active-hint';
 import { syncLoopActiveHint } from './ui/loop-active-hint';
 import { syncTodoPanel } from './ui/todo-panel';
@@ -276,6 +280,8 @@ export async function initApp(): Promise<void> {
     './state/issues-store.ts'
   );
   await loadIssuesFromStorage();
+  const { loadPrReviewsFromStorage } = await import('./state/pr-review-store.ts');
+  await loadPrReviewsFromStorage();
   if (sessionState) {
     const chatsChanged = await migrateLegacyBugBoardsFromChats(sessionState.chats);
     if (chatsChanged) {
@@ -426,6 +432,7 @@ export async function initApp(): Promise<void> {
   syncWorkAgentDevFromActiveChat();
   void syncOrchestratePlanStripFromActiveChat();
   syncComposerPinnedSkillFromActiveChat();
+  syncChatLinkChipsFromActiveChat();
   syncViewModeToggleFromActiveChat();
   syncGoalActiveHint();
   syncLoopActiveHint();
@@ -453,8 +460,12 @@ export async function initApp(): Promise<void> {
   warmIssuesAppInBackground();
 
   if (sessionState) {
-    await bootGenerationResumeForChats(sessionState.chats);
-    await bootIncompleteToolResumeForChats(sessionState.chats);
+    // Arm the gate synchronously before anything below can restart a chat.
+    parkResumeCandidatesAtBoot(sessionState);
+    // Deliberately not awaited — the prompt must not hold up the loop ticker and
+    // window listeners registered below. The gate runs the generation and
+    // incomplete-tool resumes itself once the user answers.
+    startBootResumeGate(sessionState);
   }
 
   // Session-scoped /loop ticker (15s safety scan + dueAt wake timer)

@@ -1,13 +1,21 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import { Window } from 'happy-dom';
 
 import {
   countPatchLineStats,
   splitPatchIntoFiles,
 } from '../../src/ui/git-patch-files.ts';
 import {
+  GIT_COMMIT_DIFF_WORD_WRAP_KEY,
+  getGitCommitDiffWordWrap,
+  setGitCommitDiffWordWrap,
+} from '../../src/ui/git-commit-diff-prefs.ts';
+import {
   alignHunkLines,
   buildSideBySideRowsFromPatch,
+  renderSideBySidePatchDiff,
+  setSideBySidePatchDiffWordWrap,
 } from '../../src/ui/side-by-side-patch-diff.ts';
 
 describe('splitPatchIntoFiles', () => {
@@ -88,5 +96,78 @@ describe('buildSideBySideRowsFromPatch', () => {
     assert.equal(rows[0].right.text, 'after');
     assert.equal(rows[0].left.lineNumber, 10);
     assert.equal(rows[0].right.lineNumber, 10);
+  });
+});
+
+describe('git commit diff word wrap preference (MIN-675)', () => {
+  const memory = new Map<string, string>();
+
+  beforeEach(() => {
+    memory.clear();
+    // Prefer an in-memory store so tests stay deterministic across runners.
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {
+        getItem: (key: string) => (memory.has(key) ? memory.get(key)! : null),
+        setItem: (key: string, value: string) => {
+          memory.set(key, String(value));
+        },
+        removeItem: (key: string) => {
+          memory.delete(key);
+        },
+      },
+    });
+  });
+
+  afterEach(() => {
+    // Leave no leftover storage stub for other suites in the same process.
+    Reflect.deleteProperty(globalThis, 'localStorage');
+  });
+
+  it('defaults to wrap enabled when the key is missing', () => {
+    assert.equal(getGitCommitDiffWordWrap(), true);
+  });
+
+  it('reads and writes the wrap preference', () => {
+    setGitCommitDiffWordWrap(false);
+    assert.equal(memory.get(GIT_COMMIT_DIFF_WORD_WRAP_KEY), '0');
+    assert.equal(getGitCommitDiffWordWrap(), false);
+    setGitCommitDiffWordWrap(true);
+    assert.equal(memory.get(GIT_COMMIT_DIFF_WORD_WRAP_KEY), '1');
+    assert.equal(getGitCommitDiffWordWrap(), true);
+  });
+});
+
+describe('renderSideBySidePatchDiff word wrap class', () => {
+  let host: HTMLElement;
+  let happyWindow: Window | undefined;
+  const originalDocument = globalThis.document;
+
+  beforeEach(() => {
+    happyWindow = new Window({ url: 'http://localhost/' });
+    // renderSideBySidePatchDiff uses global document.createElement.
+    globalThis.document = happyWindow.document as unknown as Document;
+    host = document.createElement('div');
+  });
+
+  afterEach(() => {
+    globalThis.document = originalDocument;
+    happyWindow?.close();
+    happyWindow = undefined;
+  });
+
+  it('adds sbs-diff--wrap when wordWrap is true', () => {
+    renderSideBySidePatchDiff(host, `@@ -1 +1 @@\n-old\n+new\n`, { wordWrap: true });
+    assert.equal(host.classList.contains('sbs-diff'), true);
+    assert.equal(host.classList.contains('sbs-diff--wrap'), true);
+  });
+
+  it('omits wrap class by default and toggles via helper', () => {
+    renderSideBySidePatchDiff(host, `@@ -1 +1 @@\n-old\n+new\n`);
+    assert.equal(host.classList.contains('sbs-diff--wrap'), false);
+    setSideBySidePatchDiffWordWrap(host, true);
+    assert.equal(host.classList.contains('sbs-diff--wrap'), true);
+    setSideBySidePatchDiffWordWrap(host, false);
+    assert.equal(host.classList.contains('sbs-diff--wrap'), false);
   });
 });

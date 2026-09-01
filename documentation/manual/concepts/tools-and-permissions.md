@@ -73,6 +73,14 @@ This mitigates prompt injection; it does not make it impossible. Tools set to Fu
 
 Tool results are cached per session by default, so repeating the same read does not repeat the work. Directory listings are scoped by workspace root, so a listing from one folder is never reused for another. Toggle it in the composer tools popover or Settings → Tools.
 
+## How much of a result the model sees
+
+Each file read, search, or shell command is capped **when it runs**, before the text is stored in the chat. That is not the same as compressing old messages.
+
+Default limits (Settings → Integrations → Tools → **Tool result size**, on): about **128 000** characters per result, **2 000** characters per line, grep **500** lines (you can raise `head_limit` up to **2 000**), `find_files` **2 000** paths, page fetch **128 KB**. Turn the limit off, or have the model pass `full_result: true` on that call, to skip those automatic ceilings. Pagination you asked for still applies (`head_limit`, `read_file_range` line bounds, `read_command_log` `max_bytes`). Huge files and process output still have hard memory guards so one call cannot exhaust the host.
+
+Chat history compression is **Settings → Agents → Context policy**. See [Context, memory, and rules](context-and-memory.md).
+
 ## Tools that are not built in
 
 - **MCP servers** register tools as `mcp__<server>__<tool>`.

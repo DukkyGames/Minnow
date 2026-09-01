@@ -43,6 +43,7 @@ function mountCodeChatAreaForTests(): HTMLElement {
 }
 
 let activeWindow: Window | undefined;
+const originalFetch = globalThis.fetch;
 
 function installTestWindow(): void {
   activeWindow?.close();
@@ -50,6 +51,8 @@ function installTestWindow(): void {
   activeWindow = window;
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
+  const rejectPreview: typeof fetch = async () => new Response('', { status: 404 });
+  globalThis.fetch = rejectPreview;
 }
 
 describe('orchestrate plan screen', () => {
@@ -62,6 +65,7 @@ describe('orchestrate plan screen', () => {
     activeWindow?.close();
     activeWindow = undefined;
     setSessionStateForTests(null);
+    globalThis.fetch = originalFetch;
   });
 
   test('mount shows prompt and suppresses stream DOM', async () => {

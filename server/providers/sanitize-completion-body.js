@@ -27,6 +27,48 @@ function isThinkingExplicitlyDisabled(thinking) {
 }
 
 /**
+ * GLM-5.3 / GLM-5.3-Flash ids. Mirror of `isGlm53ModelId` in src/lib/reasoning-effort.ts.
+ * @param {string} modelId
+ */
+function isGlm53ModelId(modelId) {
+  if (!modelId) return false;
+  return /(?:^|[^a-z0-9])glm[-_.]?5[._-]?3(?:[^0-9]|$)/i.test(modelId);
+}
+
+/**
+ * GLM-5.3 last-line defense: thinking is always on; effort is low | high | max.
+ * @param {Record<string, unknown>} next
+ * @param {string} modelId
+ */
+function rewriteGlm53ThinkingBody(next, modelId) {
+  if (!isGlm53ModelId(modelId)) return;
+  const rawEffort = typeof next.reasoning_effort === 'string' ? next.reasoning_effort : undefined;
+  let wire = 'low';
+  if (rawEffort === 'high') wire = 'high';
+  else if (
+    rawEffort === 'max' ||
+    rawEffort === 'xhigh' ||
+    rawEffort === 'extra_high' ||
+    rawEffort === 'extra high'
+  ) {
+    wire = 'max';
+  } else if (rawEffort === 'low') {
+    wire = 'low';
+  }
+  next.thinking = { type: 'enabled' };
+  next.reasoning_effort = wire;
+  next.reasoning = { effort: wire };
+  if (next.enable_thinking === false) next.enable_thinking = true;
+  const kwargs = next.chat_template_kwargs;
+  if (kwargs && typeof kwargs === 'object') {
+    const nextKwargs = { ...kwargs };
+    if (nextKwargs.enable_thinking === false) nextKwargs.enable_thinking = true;
+    nextKwargs.reasoning_effort = wire;
+    next.chat_template_kwargs = nextKwargs;
+  }
+}
+
+/**
  * GPT models on OpenCode Zen / OpenAI Responses API reject custom temperature.
  * @param {string} modelId
  */
@@ -113,6 +155,7 @@ export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilit
   }
 
   const modelId = typeof next.model === 'string' ? next.model : '';
+  rewriteGlm53ThinkingBody(next, modelId);
   if (typeof next.max_tokens === 'number' && modelUsesMaxCompletionTokens(modelId)) {
     next.max_completion_tokens = next.max_tokens;
     delete next.max_tokens;

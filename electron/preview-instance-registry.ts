@@ -124,6 +124,12 @@ export class PreviewInstanceRegistry<TState> {
     record.lastTouchedAt = this.nextTouch();
   }
 
+  /** True when this instance is currently marked painted (renderer-gated show). */
+  isVisible(windowId: number, instanceId?: string): boolean {
+    const id = PreviewInstanceRegistry.resolveInstanceId(instanceId);
+    return this.byWindow.get(windowId)?.get(id)?.visible ?? false;
+  }
+
   /** Remove an instance from the registry, returning its state for caller-side teardown. */
   delete(windowId: number, instanceId?: string): TState | undefined {
     const id = PreviewInstanceRegistry.resolveInstanceId(instanceId);

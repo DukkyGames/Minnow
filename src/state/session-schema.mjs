@@ -622,7 +622,7 @@ function ensureOrchestrateBoard(raw) {
   if (typeof r.modelId === 'string' && r.modelId.trim()) {
     out.modelId = r.modelId.trim().slice(0, 200);
   }
-  const REASONING_EFFORT = new Set(['off', 'on', 'low', 'medium', 'high']);
+  const REASONING_EFFORT = new Set(['off', 'on', 'low', 'medium', 'high', 'max']);
   if (typeof r.reasoningEffort === 'string' && REASONING_EFFORT.has(r.reasoningEffort)) {
     out.reasoningEffort = r.reasoningEffort;
   }
@@ -905,6 +905,78 @@ function ensureActiveLoops(raw) {
   return out.length ? out : undefined;
 }
 
+/** Cap standing chat link chips so a drop loop cannot bloat the session blob. */
+const MAX_CHAT_LINKS = 32;
+const CHAT_LINK_PATH_MAX = 512;
+const CHAT_LINK_URL_MAX = 2048;
+const CHAT_LINK_LABEL_MAX = 200;
+const HTTP_URL_RE = /^https?:\/\//i;
+
+/**
+ * Normalize one durable chat link chip (MIN-630). Returns null when invalid.
+ * @param {unknown} raw
+ * @returns {{ id: string, kind: 'file' | 'url', path?: string, url?: string, label: string, addedAt: number } | null}
+ */
+function ensureChatLink(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = /** @type {Record<string, unknown>} */ (raw);
+  const kind = r.kind === 'url' ? 'url' : r.kind === 'file' ? 'file' : null;
+  if (!kind) return null;
+
+  const id = typeof r.id === 'string' && r.id.trim() ? r.id.trim() : '';
+  if (!id) return null;
+
+  const addedAt =
+    typeof r.addedAt === 'number' && Number.isFinite(r.addedAt) && r.addedAt > 0
+      ? Math.floor(r.addedAt)
+      : Date.now();
+
+  if (kind === 'file') {
+    const path =
+      typeof r.path === 'string' ? r.path.trim().replace(/\\/g, '/') : '';
+    if (!path || path.includes('\n') || path.length > CHAT_LINK_PATH_MAX) return null;
+    // Attachment-snapshot tabs are not workspace files.
+    if (path.startsWith('.minnow/attachments/')) return null;
+    const labelRaw = typeof r.label === 'string' ? r.label.trim() : '';
+    const fallback = path.split('/').filter(Boolean).pop() || path;
+    const label = (labelRaw || fallback).slice(0, CHAT_LINK_LABEL_MAX);
+    return { id, kind, path, label, addedAt };
+  }
+
+  const url = typeof r.url === 'string' ? r.url.trim() : '';
+  if (!url || url.length > CHAT_LINK_URL_MAX || !HTTP_URL_RE.test(url)) return null;
+  const labelRaw = typeof r.label === 'string' ? r.label.trim() : '';
+  let host = url;
+  try {
+    host = new URL(url).host || url;
+  } catch {
+    host = url;
+  }
+  const label = (labelRaw || host).slice(0, CHAT_LINK_LABEL_MAX);
+  return { id, kind, url, label, addedAt };
+}
+
+/**
+ * Normalize pinned chat links (MIN-630). Dedupes by path/URL. Empty → undefined.
+ * @param {unknown} raw
+ * @returns {Array<{ id: string, kind: 'file' | 'url', path?: string, url?: string, label: string, addedAt: number }> | undefined}
+ */
+export function ensureChatLinks(raw) {
+  if (!Array.isArray(raw)) return undefined;
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const link = ensureChatLink(item);
+    if (!link) continue;
+    const key = link.kind === 'file' ? `file:${link.path}` : `url:${link.url}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(link);
+    if (out.length >= MAX_CHAT_LINKS) break;
+  }
+  return out.length ? out : undefined;
+}
+
 /**
  * Normalize one Chat row for persistence (whole-blob PUT and PATCH).
  * Null/invalid input yields a placeholder chat (same as historical ensureChatShape).
@@ -941,6 +1013,8 @@ export function normalizeChatRow(raw) {
       : '';
 
   const currentGenerationId = ensureCurrentGenerationId(row.currentGenerationId);
+  // Boot resume gate: survives Quit Minnow after generations are cancelled.
+  const resumeInterrupted = row.resumeInterrupted === true;
 
   const orchestratePlanPath = normalizeOrchestratePlanPath(row.orchestratePlanPath);
   const orchestrateBoard = ensureOrchestrateBoard(row.orchestrateBoard);
@@ -963,6 +1037,7 @@ export function normalizeChatRow(raw) {
         : undefined;
   const superPlan = ensureSuperPlanPersisted(row.superPlan);
   const expertRuntime = ensureExpertRuntime(row.expertRuntime);
+  const links = ensureChatLinks(row.links);
 
   const out = {
     id: typeof row.id === 'string' && row.id ? row.id : newChatId(),
@@ -1015,6 +1090,7 @@ export function normalizeChatRow(raw) {
     ...(activeBranchByFork ? { activeBranchByFork } : {}),
     ...(terminalHistory?.length ? { terminalHistory } : {}),
     ...(currentGenerationId ? { currentGenerationId } : {}),
+    ...(resumeInterrupted ? { resumeInterrupted: true } : {}),
     ...(activeGoal ? { activeGoal } : {}),
     ...(activeLoops ? { activeLoops } : {}),
     ...(nextLoopId != null ? { nextLoopId } : {}),
@@ -1031,6 +1107,7 @@ export function normalizeChatRow(raw) {
     row.lastAssistantAt > 0
       ? { lastAssistantAt: row.lastAssistantAt }
       : {}),
+    ...(links ? { links } : {}),
     history,
     lastStats: row.lastStats && typeof row.lastStats === 'object' ? row.lastStats : null,
     modelInfo: row.modelInfo && typeof row.modelInfo === 'object' ? row.modelInfo : {},

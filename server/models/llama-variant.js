@@ -91,6 +91,56 @@ export function expectedAssetNames(variant, tag = LLAMA_CPP_RELEASE_TAG) {
   throw new Error(`Unknown llama variant: ${variant}`);
 }
 
+/** Arch token ggml-org uses in release asset names. */
+function hostArchToken() {
+  return process.arch === 'arm64' ? 'arm64' : 'x64';
+}
+
+/**
+ * Platform token from a ggml-org asset name (`win` / `ubuntu` / `macos`).
+ * @param {string} name
+ * @returns {'win' | 'macos' | 'ubuntu' | null}
+ */
+function llamaAssetPlatform(name) {
+  if (/(?:^|[-_])win(?:[-_.]|$)/i.test(name)) return 'win';
+  if (/macos/i.test(name)) return 'macos';
+  if (/ubuntu/i.test(name)) return 'ubuntu';
+  return null;
+}
+
+/**
+ * `x64` / `arm64` as a filename token. `arm64` is not a match for `x64`.
+ * @param {string} name
+ * @returns {'arm64' | 'x64' | null}
+ */
+function llamaAssetArch(name) {
+  if (/(?:^|[-_.])arm64(?:[-_.]|$)/i.test(name)) return 'arm64';
+  if (/(?:^|[-_.])x64(?:[-_.]|$)/i.test(name)) return 'x64';
+  return null;
+}
+
+/**
+ * True when `name` is for the same OS + CPU as `pattern` (the expected host zip).
+ * Without this, "newest cuda-13*" on b10448 picks win-cuda-13.4-arm64 over
+ * win-cuda-13.3-x64, and llama-server.exe cannot run on AMD64 Windows.
+ * @param {string} name
+ * @param {string} pattern
+ */
+export function assetMatchesExpectedHost(name, pattern) {
+  const wantArch = llamaAssetArch(pattern) ?? hostArchToken();
+  const wantPlat = llamaAssetPlatform(pattern);
+  if (llamaAssetArch(name) !== wantArch) return false;
+  if (wantPlat && llamaAssetPlatform(name) !== wantPlat) return false;
+  return true;
+}
+
+/** Sort key so cuda-13.10 beats cuda-13.9 (string sort does the opposite). */
+function cudaVersionScore(name) {
+  const match = String(name).match(/cuda-(\d+)(?:\.(\d+))?/i);
+  if (!match) return 0;
+  return Number(match[1]) * 1000 + Number(match[2] || 0);
+}
+
 /**
  * Pick the best matching asset from a release manifest.
  * @param {string} pattern — substring or exact name
@@ -102,17 +152,27 @@ function findAsset(pattern, assets) {
   if (exact) return exact.name;
 
   // cuda-13.x: pick newest cuda-13* asset when exact name differs (e.g. cuda-13.3).
+  // Must stay on this host's platform + arch — b10448 shipped 13.4 only for
+  // Windows ARM64, and a global sort() took that zip on AMD64 PCs.
   if (pattern.includes('cuda-13')) {
     const isCudart = pattern.startsWith('cudart-');
     const cuda13 = assets
       .map((a) => a.name)
-      .filter((n) => /cuda-13/i.test(n) && (isCudart ? n.startsWith('cudart-') : !n.startsWith('cudart-')))
-      .sort()
-      .pop();
-    if (cuda13) return cuda13;
+      .filter(
+        (n) =>
+          /cuda-13/i.test(n) &&
+          (isCudart ? n.startsWith('cudart-') : !n.startsWith('cudart-')) &&
+          assetMatchesExpectedHost(n, pattern),
+      );
+    cuda13.sort((a, b) => cudaVersionScore(a) - cudaVersionScore(b) || a.localeCompare(b));
+    const picked = cuda13.at(-1);
+    if (picked) return picked;
   }
 
-  const fuzzy = assets.find((a) => a.name.includes(pattern.split('-bin-')[1]?.split('.')[0] ?? pattern));
+  const needle = pattern.split('-bin-')[1]?.split('.')[0] ?? pattern;
+  const fuzzy = assets.find(
+    (a) => a.name.includes(needle) && assetMatchesExpectedHost(a.name, pattern),
+  );
   return fuzzy?.name ?? null;
 }
 
@@ -125,7 +185,7 @@ function findCudartCompanion(mainZip, assets) {
   const verMatch = mainZip.match(/cuda-([\d.]+)/i);
   if (!verMatch) return null;
   const cudaVer = verMatch[1];
-  const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
+  const arch = hostArchToken();
   const exact = `cudart-llama-bin-win-cuda-${cudaVer}-${arch}.zip`;
   const hit = assets.find((a) => a.name === exact);
   if (hit) return hit.name;
@@ -134,7 +194,8 @@ function findCudartCompanion(mainZip, assets) {
       (a) =>
         a.name.startsWith('cudart-') &&
         a.name.includes(`cuda-${cudaVer}`) &&
-        a.name.endsWith('.zip'),
+        a.name.endsWith('.zip') &&
+        llamaAssetArch(a.name) === arch,
     )?.name ?? null
   );
 }
@@ -156,7 +217,9 @@ export function resolveLlamaAssets({ variant, tag = LLAMA_CPP_RELEASE_TAG, asset
 
   let companionZip;
   if (expected.companion) {
-    companionZip = findAsset(expected.companion, assets) ?? findCudartCompanion(mainZip, assets) ?? undefined;
+    // Pair cudart to the CUDA patch we actually picked (13.3-x64 with 13.3-x64),
+    // not the newest cuda-13* cudart on the release (which may be another arch).
+    companionZip = findCudartCompanion(mainZip, assets) ?? findAsset(expected.companion, assets) ?? undefined;
   }
 
   const assetNames = companionZip ? [mainZip, companionZip] : [mainZip];

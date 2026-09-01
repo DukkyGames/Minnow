@@ -5,10 +5,12 @@
 
 import { appendIssueLinks } from '../../state/issues-store.ts';
 import { gitCheckout, gitPush, gitRemoteUrl } from '../../state/git-api.ts';
+import { forgeStatus } from '../../state/forge-api.ts';
 import { openWorkspacePr } from '../../state/worktree-service.ts';
 import { commitUrl, githubIssueWebUrl, pullRequestUrl } from '../../lib/git-remote-url.ts';
 import { executeTool } from '../../tools/client.ts';
 import type { IssueCard, IssueGitLink } from '../../types.ts';
+import { resolveIssuePrRef } from '../review/pr-review-target.ts';
 import {
   buildIssueCommitGrepCommand,
   buildIssuePrBody,
@@ -190,6 +192,90 @@ export async function createPrFromIssue(issue: IssueCard): Promise<IssueGitActio
   });
 
   return { ok: true, message: url ? `Opened PR ${url}` : 'Pull request created', url, branch: branchResult.branch };
+}
+
+export interface ResolvedIssuePr {
+  number: number;
+  url?: string;
+  repo: string;
+}
+
+/**
+ * Resolve the PR for an issue: stored git link / agent slot first, then
+ * `gh pr list --head <issue branch>`. A gh hit is remembered as a git link.
+ */
+export async function resolveIssuePrNumber(issue: IssueCard): Promise<ResolvedIssuePr | null> {
+  const stored = resolveIssuePrRef(issue);
+  if (stored) {
+    const repo = repoFromPrUrl(stored.url) || (await forgeRepo());
+    if (!repo) return null;
+    return { number: stored.number, url: stored.url, repo };
+  }
+
+  const hasGh = await detectGhAvailable();
+  if (!hasGh) return null;
+
+  const branch = resolveIssueBranchName(issue);
+  const cmd = `gh pr list --head ${JSON.stringify(branch)} --json number,url --limit 1`;
+  let content: string;
+  try {
+    const result = await executeTool('execute_command', { command: cmd });
+    content = result.content;
+  } catch {
+    return null;
+  }
+  if (content.trimStart().startsWith('Error:')) return null;
+
+  const parsed = parseGhPrListJson(content);
+  if (!parsed) return null;
+
+  const repo = repoFromPrUrl(parsed.url) || (await forgeRepo());
+  if (!repo) return null;
+
+  appendIssueLinks(issue.id, {
+    gitLinks: [
+      draftIssueGitLink('pr', String(parsed.number), {
+        url: parsed.url,
+        title: `PR #${parsed.number}`,
+      }),
+    ],
+  });
+
+  return { number: parsed.number, url: parsed.url, repo };
+}
+
+function repoFromPrUrl(url: string | undefined): string {
+  if (!url) return '';
+  const match = url.match(/github\.com\/([^/]+\/[^/]+)\/pull\//i);
+  return match?.[1] ?? '';
+}
+
+async function forgeRepo(): Promise<string> {
+  try {
+    const status = await forgeStatus();
+    return status.repo?.trim() ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function parseGhPrListJson(content: string): { number: number; url?: string } | null {
+  const start = content.indexOf('[');
+  const end = content.lastIndexOf(']');
+  if (start < 0 || end <= start) return null;
+  try {
+    const rows = JSON.parse(content.slice(start, end + 1)) as unknown;
+    if (!Array.isArray(rows) || !rows[0] || typeof rows[0] !== 'object') return null;
+    const row = rows[0] as { number?: unknown; url?: unknown };
+    const number = typeof row.number === 'number' ? row.number : Number(row.number);
+    if (!Number.isFinite(number) || number <= 0) return null;
+    return {
+      number,
+      url: typeof row.url === 'string' ? row.url : undefined,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Resolve a web URL for a git link chip (stored url, or build from origin). */

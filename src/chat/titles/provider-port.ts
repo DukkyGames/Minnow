@@ -14,7 +14,14 @@ export function applyTitleThinkingOffPatch(
   body: ChatCompletionBody,
   apiKind: ApiKind,
 ): ChatCompletionBody {
-  const { body: thinkingPatch } = thinkingToCompletionBody('off', apiKind);
+  const modelId = typeof body.model === 'string' ? body.model : undefined;
+  const { body: thinkingPatch } = thinkingToCompletionBody(
+    'off',
+    apiKind,
+    undefined,
+    null,
+    modelId,
+  );
   return { ...body, ...thinkingPatch };
 }
 

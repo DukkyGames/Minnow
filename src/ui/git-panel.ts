@@ -64,7 +64,12 @@ import {
   type GitGraphContextMenuCtx,
 } from './git-graph-context-menu';
 
-import { applyFileSidebarVisuals, isMobileLayout, openMobileFileSidebar } from './file-layout';
+import {
+  applyFileSidebarVisuals,
+  isMobileLayout,
+  openMobileFileSidebar,
+  syncFileSidebarFilesPaneButton,
+} from './file-layout';
 
 import { getActiveChat, sessionState } from '../state/sessions';
 
@@ -103,7 +108,7 @@ import { showToast } from './toast';
 
 import {
   closeGitPanelNamePopover,
-  openGitPanelNamePopover,
+  openGitRefNamePopover,
 } from './git-panel-name-popover';
 import { decorateGitSourceControlButton } from './git-source-control-icons';
 import {
@@ -389,11 +394,12 @@ function syncMergeToMainButton(
 }
 
 function openAddBranchPopover(anchor: HTMLButtonElement): void {
-  openGitPanelNamePopover({
+  openGitRefNamePopover({
     anchor,
     title: 'New branch',
-    label: 'Branch name',
-    placeholder: 'feature/my-branch',
+    kind: 'branch',
+    defaultPath: getEffectiveCwdArg() || getWorkspacePath(),
+    reserved: [currentBranchName, 'main', 'master'],
     onSubmit: async (branch) => {
       await runGitOp(
         () => gitCheckout({ branch, create: true, cwd: getEffectiveCwdArg() }),
@@ -446,11 +452,12 @@ async function handleDeleteBranch(): Promise<void> {
 }
 
 function openAddWorktreePopover(anchor: HTMLButtonElement): void {
-  openGitPanelNamePopover({
+  openGitRefNamePopover({
     anchor,
     title: 'Add worktree',
-    label: 'Branch name',
-    placeholder: 'feature/my-worktree',
+    kind: 'worktree',
+    defaultPath: getEffectiveCwdArg() || getWorkspacePath(),
+    reserved: [currentBranchName, 'main', 'master'],
     onSubmit: async (branch) => {
       const cwd = getEffectiveCwdArg();
       const addResult = await gitWorktreeAdd({ branch, cwd });
@@ -462,7 +469,7 @@ function openAddWorktreePopover(anchor: HTMLButtonElement): void {
       }
 
       setStatus('');
-      showToast('Worktree added', 'success');
+      showToast(`Worktree ${addResult.branch ?? branch} added`, 'success');
       if (addResult.path) {
         panelCwd = addResult.path;
       }
@@ -2119,13 +2126,15 @@ function syncToggleButtonState(): void {
 
   const toggleBtn = document.getElementById('btnGitPanelToggle');
 
-  if (!toggleBtn) return;
-
   const open = isGitSidePanelOpen();
 
-  toggleBtn.classList.toggle('is-active', open);
+  if (toggleBtn) {
+    toggleBtn.classList.toggle('is-active', open);
+    toggleBtn.setAttribute('aria-pressed', open ? 'true' : 'false');
+  }
 
-  toggleBtn.setAttribute('aria-pressed', open ? 'true' : 'false');
+  // Keep Files highlight in lockstep with Source Control (MIN-655).
+  syncFileSidebarFilesPaneButton({ gitOpen: open });
 
 }
 

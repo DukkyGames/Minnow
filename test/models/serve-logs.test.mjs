@@ -18,6 +18,7 @@ import {
   readServeLogTailForServe,
   resolveServeLogPath,
   subscribeServeLog,
+  subscribeServeLogForServe,
 } from '../../server/models/serve-logs.js';
 import { resetServesForTests } from '../../server/models/serve.js';
 
@@ -113,6 +114,33 @@ describe('serve log tail', () => {
     assert.ok(!events[1].text.includes('boot'), 'follow-up chunks are deltas, not the whole file');
   });
 
+  test('follow does not skip checkpoints after a dump larger than one read', async () => {
+    // Qwen3.8 dumps tokenizer.ggml.tokens (~248k strings) before `loading model
+    // tensors`. Returning EOF as the follow offset used to jump past that suffix.
+    const runId = 'run-big-dump';
+    const logPath = path.join(modelsLogDir(), `${runId}.log`);
+    await fs.writeFile(logPath, 'boot\n', 'utf8');
+
+    /** @type {string[]} */
+    const texts = [];
+    const unsub = subscribeServeLog(runId, (event) => {
+      texts.push(event.text ?? '');
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const dump = Buffer.concat([
+      Buffer.alloc(600 * 1024, 0x78),
+      Buffer.from('\nload_tensors: loading model tensors\nserver is listening\n'),
+    ]);
+    await fs.appendFile(logPath, dump);
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    unsub();
+
+    const joined = texts.join('');
+    assert.match(joined, /loading model tensors/);
+    assert.match(joined, /server is listening/);
+  });
+
   test('MLX serves resolve to the managed mlx-lm server log', async () => {
     const mlxLogPath = resolveServeLogPath({ runtime: 'mlx-lm', runId: null });
     assert.ok(mlxLogPath?.includes('mlx-lm.log'));
@@ -125,6 +153,67 @@ describe('serve log tail', () => {
     assert.equal(tail.size, (await fs.stat(mlxLogPath)).size);
     assert.equal(resolveServeLogPath({ runtime: 'llama-cpp' }), null);
     assert.equal(MLX_LM_MANAGED_SERVER_ID, 'mlx-lm');
+  });
+
+  test('follow waits until the serve gets a runId, then emits that log', async () => {
+    // Local Server opens /logs/stream on commitServes('llama-starting'), which
+    // is before createBackgroundRun assigns runId. A snapshot follow stayed empty.
+    const serve = { runtime: 'llama-cpp', runId: null };
+    /** @type {Array<{ text: string, initial?: boolean }>} */
+    const events = [];
+    const unsub = subscribeServeLogForServe(serve, (event) => {
+      events.push(event);
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    assert.equal(events.length, 0, 'must not emit a fake empty tail before spawn');
+
+    serve.runId = 'run-late-id';
+    const logPath = path.join(modelsLogDir(), 'run-late-id.log');
+    await fs.writeFile(logPath, 'print_info: starting llama-server\n', 'utf8');
+
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline && !events.some((e) => (e.text ?? '').includes('llama-server'))) {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    }
+    unsub();
+
+    const joined = events.map((e) => e.text ?? '').join('');
+    assert.match(joined, /starting llama-server/);
+    assert.equal(events[0].initial, true);
+  });
+
+  test('follow switches files when runId changes after a spawn retry', async () => {
+    const firstPath = path.join(modelsLogDir(), 'run-retry-a.log');
+    const secondPath = path.join(modelsLogDir(), 'run-retry-b.log');
+    await fs.writeFile(firstPath, 'first spawn died\n', 'utf8');
+
+    const serve = { runtime: 'llama-cpp', runId: 'run-retry-a' };
+    /** @type {string[]} */
+    const texts = [];
+    const unsub = subscribeServeLogForServe(
+      () => serve,
+      (event) => {
+        texts.push(event.text ?? '');
+      },
+    );
+
+    const sawFirst = Date.now() + 2000;
+    while (Date.now() < sawFirst && !texts.join('').includes('first spawn died')) {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    }
+    assert.match(texts.join(''), /first spawn died/);
+
+    serve.runId = 'run-retry-b';
+    await fs.writeFile(secondPath, 'second spawn listening\n', 'utf8');
+
+    const sawSecond = Date.now() + 2000;
+    while (Date.now() < sawSecond && !texts.join('').includes('second spawn listening')) {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    }
+    unsub();
+
+    assert.match(texts.join(''), /second spawn listening/);
   });
 });
 

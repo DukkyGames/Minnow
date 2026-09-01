@@ -209,4 +209,32 @@ describe('composeSystemPrompt mode part', () => {
     });
     assert.doesNotMatch(out, /Sub-agent delegation/);
   });
+
+  test('orchestrate with default orchestrator suppresses mode body', async () => {
+    assert.equal(
+      shouldSuppressModePart({
+        modeId: 'orchestrate',
+        workAgentId: 'orchestrator',
+      } as never),
+      true,
+    );
+    registerPromptFilesFromRaw(await loadBaseAndModeFixtures());
+    const out = composeSystemPrompt({
+      profile: 'full',
+      cwd: '/test',
+      modeId: 'orchestrate',
+      expertId: null,
+      workAgentId: 'orchestrator',
+      workAgentLabel: 'Orchestrator',
+      skillBody: null,
+      memoryBlock: null,
+      enabledToolIds: ['board_init', 'read_file'],
+      infoPresetId: null,
+      orchestratePlanPath: 'documentation/plans/fixture-plan.md',
+    });
+    assert.match(out, /Work agent: Orchestrator/);
+    assert.doesNotMatch(out, /Operating mode: Orchestrate/);
+    assert.match(out, /documentation\/plans\/fixture-plan\.md/);
+    assert.match(out, /do \*\*not\*\* ask the user to pick among plan files/);
+  });
 });

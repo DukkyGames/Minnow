@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  clearFailedAssistantOutput,
   clearPostToolTailBeforeSend,
   copyHistoryForOutboundApi,
+  indexOfLastFailedAssistantAtTail,
   repairSessionHistoryTail,
   rollbackFailedTurnHistory,
   turnProducedOutput,
@@ -126,5 +128,73 @@ describe('chat/history (MIN-184)', () => {
     const ok = rollbackFailedTurnHistory(chat, 0);
     assert.equal(ok, true);
     assert.equal(chat.history.length, 1);
+  });
+});
+
+describe('clearFailedAssistantOutput (MIN-666)', () => {
+  function failedTurnChat(): Chat {
+    const history: Message[] = [
+      { role: 'user', content: 'hello' },
+      { role: 'assistant', content: 'Hi there.' },
+      { role: 'user', content: 'now do X' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [
+          {
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'read_file', arguments: '{"path":"a.ts"}' },
+          },
+        ],
+      },
+      { role: 'tool', tool_call_id: 'call_1', content: 'file body' },
+      { role: 'assistant', content: 'Partial answer befo', failed: true },
+    ];
+    return {
+      id: 'chat_failed',
+      title: 'test',
+      modeId: 'general',
+      history,
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: 0,
+    };
+  }
+
+  test('drops only the failed assistant row and keeps the user prompt', () => {
+    const chat = failedTurnChat();
+    const ok = clearFailedAssistantOutput(chat, 2);
+    assert.equal(ok, true);
+    assert.equal(chat.history.length, 5);
+    assert.equal(chat.history[2].role, 'user');
+    assert.equal(chat.history[2].content, 'now do X');
+    assert.equal(chat.history.at(-1)?.role, 'tool');
+    assert.equal(
+      chat.history.some((m) => m.role === 'assistant' && 'failed' in m && m.failed),
+      false,
+    );
+  });
+
+  test('does not wipe earlier successful turns', () => {
+    const chat = failedTurnChat();
+    clearFailedAssistantOutput(chat, 2);
+    assert.equal(chat.history[0].content, 'hello');
+    assert.equal(chat.history[1].content, 'Hi there.');
+  });
+
+  test('is a no-op when there is no failed assistant after the fork', () => {
+    const chat = poisonedChat();
+    assert.equal(clearFailedAssistantOutput(chat, 0), false);
+    assert.equal(chat.history.length, 3);
+  });
+
+  test('indexOfLastFailedAssistantAtTail ignores a failed row after a later user message', () => {
+    const history: Message[] = [
+      { role: 'user', content: 'one' },
+      { role: 'assistant', content: 'partial', failed: true },
+      { role: 'user', content: 'two' },
+    ];
+    assert.equal(indexOfLastFailedAssistantAtTail(history), -1);
   });
 });

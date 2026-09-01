@@ -327,6 +327,9 @@ export async function browserPreviewNavigate(url: string, instance?: string): Pr
   }
 
   await consumeEphemeralNavigationGrant(url);
+  // Hide if still occluded (Issues, wiki, popover); show once Code panel layout is ready.
+  const { scheduleElectronPreviewHostVisibilitySync } = await import('../ui/preview-electron-visibility');
+  scheduleElectronPreviewHostVisibilitySync();
   const title = result.title || '(no title)';
   return `Navigated to: ${result.url}\nTitle: ${title}`;
 }

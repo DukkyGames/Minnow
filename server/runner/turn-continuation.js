@@ -3,6 +3,12 @@ const TURN_DEBUG_STORAGE_KEY = "minnowDebugTurns";
 const MAX_EMPTY_POST_TOOL_RETRIES = 1;
 const EMPTY_POST_TOOL_CONTINUE_INSTRUCTION = "You have tool results above. Reply to the user in plain language; do not call more tools unless necessary.";
 const CONTINUE_AFTER_TRUNCATION_INSTRUCTION = "Your previous reply was cut off because of the output token limit. Continue exactly where you left off without repeating what you already wrote.";
+const CONTINUE_AFTER_FAILURE_INSTRUCTION = "The previous reply failed before it finished. Continue from the work above — keep its conclusions and pick up exactly where it stopped. Do not repeat it and do not start over.";
+function resolveFailedTurnContinueInstruction(history) {
+  const last = history[history.length - 1];
+  if (!last || last.role === "user") return void 0;
+  return CONTINUE_AFTER_FAILURE_INSTRUCTION;
+}
 const MAX_PROSE_QUESTION_RETRIES = 1;
 const PROSE_QUESTION_RETRY_INSTRUCTION = "Your previous reply is already in the chat. You presented multiple-choice options in plain text. Do not repeat that list in prose. Call the ask_question tool now with a questions array (each item: id, prompt, options as {id, label} objects). Wait for the user to answer before continuing.";
 const SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION = "You must use the available tools to complete the task. Do not answer with prose only \u2014 call the appropriate tool(s) now, then summarize after you have tool results.";
@@ -59,6 +65,7 @@ function resolveFailedTurnPartialRow(input) {
   return row;
 }
 export {
+  CONTINUE_AFTER_FAILURE_INSTRUCTION,
   CONTINUE_AFTER_TRUNCATION_INSTRUCTION,
   EMPTY_POST_TOOL_CONTINUE_INSTRUCTION,
   MAX_EMPTY_POST_TOOL_RETRIES,
@@ -69,6 +76,7 @@ export {
   hasPostToolTail,
   isTurnDebugEnabled,
   logTurnDebug,
+  resolveFailedTurnContinueInstruction,
   resolveFailedTurnPartialRow,
   resolveFinalAssistantContent,
   resolveTurnContinuation

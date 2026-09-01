@@ -18,10 +18,11 @@ import {
   iconButton,
   textButton,
 } from './dom';
-import { showModelInInspector } from './inspector';
+import { showServeInInspector } from './inspector';
 import { serveFailureBlock } from './serve-failure-view';
 import {
   attentionServes,
+  getInspectedServe,
   getModelsState,
   refreshModels,
   retryServe,
@@ -31,6 +32,12 @@ import {
   type LoadProgress,
 } from './store';
 import type { ServeActivity } from '../../models/api-client';
+import { serveActivityChipLabels } from '../../models/serve-activity-chips';
+import { activityForLoadedServe } from '../../models/mlx-serve-activity';
+import {
+  getInFlightPromptOverlay,
+  subscribeInFlightPromptOverlay,
+} from '../../models/in-flight-prompt';
 
 /** OpenAI-compatible surface llama-server exposes. */
 const ENDPOINTS: Array<{ method: string; path: string; note: string }> = [
@@ -42,7 +49,10 @@ const ENDPOINTS: Array<{ method: string; path: string; note: string }> = [
 ];
 
 let bound = false;
+let overlayUnsub: (() => void) | null = null;
 let logSource: string | null = null;
+/** Last `runId` we opened EventSource for — null until spawn assigns the log file. */
+let logRunId: string | null = null;
 let logUnsub: (() => void) | null = null;
 let logBuffer = '';
 let autoScroll = true;
@@ -67,13 +77,29 @@ function isActive(): boolean {
   return Boolean(document.getElementById('modelsSection-server')?.classList.contains('is-active'));
 }
 
-/** Follow the log of whichever serve is selected in the log header. */
-function bindLogStream(serveId: string | null): void {
-  if (logSource === serveId && logUnsub) return;
+/** Live row whose log the pane should follow (sticky selection, else newest). */
+function preferredLogServe(serves: ServeRecord[]): ServeRecord | undefined {
+  return serves.find((s) => s.id === logSource) ?? serves[0];
+}
+
+/**
+ * Follow the log of whichever serve is selected in the log header.
+ * Identity is serve id **and** runId so a connect that beat spawn reconnects
+ * once the log file exists, instead of keeping a silent EventSource.
+ */
+function bindLogStream(serve: ServeRecord | null): void {
+  const serveId = serve?.id ?? null;
+  const runId = serve?.runId ?? null;
+  // Idle (no serve) has no EventSource; still treat it as bound so load-card
+  // patches do not clear the buffer every tick.
+  const alreadyBound =
+    logSource === serveId && logRunId === runId && (serveId === null || Boolean(logUnsub));
+  if (alreadyBound) return;
   logUnsub?.();
   logUnsub = null;
   logBuffer = '';
   logSource = serveId;
+  logRunId = runId;
   if (!serveId) {
     renderLogBody();
     return;
@@ -184,6 +210,12 @@ function statusBar(serves: ServeRecord[]): HTMLElement {
   return bar;
 }
 
+/** `CSS.escape` with a fallback — happy-dom and older runtimes may omit it. */
+function cssEscape(value: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value);
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
 /**
  * "~12s left" for a predicted remainder. Null once the model has overshot — a stuck
  * "0s left" is worse than saying nothing.
@@ -198,20 +230,131 @@ function formatEta(etaMs: number | null): string | null {
   return rest ? `~${minutes}m ${rest}s left` : `~${minutes}m left`;
 }
 
+/**
+ * Spawning starts at a modelled 0. Printing that as "Loading 0%" looks stuck
+ * before the first phase marker or time-model tick has anything to show.
+ */
+function shownLoadPercent(load: LoadProgress): number | null {
+  return load.percent != null && load.percent > 0 ? Math.round(load.percent) : null;
+}
+
+function loadChipLabel(load: LoadProgress): string {
+  if (load.error) return 'Failed';
+  const percent = shownLoadPercent(load);
+  return percent != null ? `Loading ${percent}%` : 'Loading';
+}
+
+function loadMetaText(load: LoadProgress): string {
+  const parts = [load.phase, formatElapsed(load.startedAt)];
+  const eta = formatEta(load.etaMs);
+  if (eta) parts.push(eta);
+  return parts.join(' · ');
+}
+
+/**
+ * Update percent / phase / bar on an existing loading card without replacing it.
+ * Recreating the node restarts `models-spin` (0.7s) every load tick (~250ms).
+ * The fill uses `--progress` + scaleX so ticks do not animate layout width.
+ */
+function applyLoadProgress(
+  card: HTMLElement,
+  load: LoadProgress,
+  serve: ServeRecord | undefined,
+): void {
+  const label = card.querySelector('.models-loaded__state-label');
+  if (label) {
+    const next = loadChipLabel(load);
+    if (label.textContent !== next) label.textContent = next;
+  }
+
+  const name = card.querySelector('.models-loaded__name');
+  if (name && serve?.modelLabel && name.textContent !== serve.modelLabel) {
+    name.textContent = serve.modelLabel;
+  }
+
+  const meta = card.querySelector('.models-loaded__meta');
+  if (meta) {
+    const next = loadMetaText(load);
+    if (meta.textContent !== next) meta.textContent = next;
+  }
+
+  const fill = card.querySelector('.models-progress__fill') as HTMLElement | null;
+  if (!fill) return;
+  const percent = shownLoadPercent(load);
+  if (percent != null) {
+    fill.classList.remove('is-indeterminate');
+    const progress = String(Math.min(100, percent) / 100);
+    if (fill.style.getPropertyValue('--progress') !== progress) {
+      fill.style.setProperty('--progress', progress);
+    }
+  } else if (!fill.classList.contains('is-indeterminate')) {
+    fill.classList.add('is-indeterminate');
+    fill.style.removeProperty('--progress');
+  }
+}
+
+/**
+ * True when every in-flight load already has a card we can patch.
+ * Failures, new rows, and settled serves still take the full redraw.
+ */
+function tryPatchInFlightLoads(
+  host: HTMLElement,
+  loads: LoadProgress[],
+  serves: ServeRecord[],
+): boolean {
+  if (!loads.length || loads.some((entry) => entry.error)) return false;
+  const list = host.querySelector('.models-loaded-list');
+  if (!list) return false;
+  const existing = list.querySelectorAll('.models-loaded.is-loading');
+  if (existing.length !== loads.length) return false;
+  for (const load of loads) {
+    const card = list.querySelector(
+      `.models-loaded.is-loading[data-serve-id="${cssEscape(load.serveId)}"]`,
+    );
+    if (!card) return false;
+  }
+  for (const load of loads) {
+    const card = list.querySelector(
+      `.models-loaded.is-loading[data-serve-id="${cssEscape(load.serveId)}"]`,
+    ) as HTMLElement;
+    applyLoadProgress(
+      card,
+      load,
+      serves.find((row) => row.id === load.serveId),
+    );
+  }
+  return true;
+}
+
+/**
+ * Local Server cards open the inspector by serve id. Buttons inside the card
+ * keep their own handlers; the card itself is not a button so Eject / Cancel
+ * stay valid nested controls.
+ */
+function makeServeCardSelectable(card: HTMLElement, serveId: string): void {
+  card.classList.add('is-selectable');
+  if (getInspectedServe()?.id === serveId) card.classList.add('is-selected');
+  card.addEventListener('click', (event) => {
+    if ((event.target as HTMLElement).closest('button')) return;
+    showServeInInspector(serveId);
+  });
+}
+
 function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLElement {
   const card = el('article', 'models-loaded is-loading');
+  card.dataset.serveId = load.serveId;
 
   const head = el('div', 'models-loaded__head');
   const stateChip = el('span', 'models-loaded__state');
-  // Spawning starts at a modelled 0. Printing that as "Loading 0%" looks stuck
-  // before the first phase marker or time-model tick has anything to show.
-  const shownPercent = load.percent != null && load.percent > 0 ? Math.round(load.percent) : null;
   if (load.error) {
     stateChip.classList.add('is-error');
     stateChip.textContent = 'Failed';
   } else {
-    stateChip.textContent = shownPercent != null ? `Loading ${shownPercent}%` : 'Loading';
-    stateChip.appendChild(el('span', 'models-spinner'));
+    // Label is its own node so progress ticks can change the copy without
+    // wiping `.models-spinner` and restarting the rotation.
+    const spinner = el('span', 'models-spinner');
+    spinner.setAttribute('aria-hidden', 'true');
+    stateChip.append(el('span', 'models-loaded__state-label', loadChipLabel(load)), spinner);
   }
   head.appendChild(stateChip);
   head.appendChild(el('span', 'models-loaded__name', serve?.modelLabel ?? 'Model'));
@@ -255,10 +398,7 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
     if (failure) card.appendChild(failure);
     else card.appendChild(el('p', 'models-loaded__meta', load.error));
   } else {
-    const parts = [load.phase, formatElapsed(load.startedAt)];
-    const eta = formatEta(load.etaMs);
-    if (eta) parts.push(eta);
-    card.appendChild(el('p', 'models-loaded__meta', parts.join(' · ')));
+    card.appendChild(el('p', 'models-loaded__meta', loadMetaText(load)));
   }
 
   if (!load.error) {
@@ -266,56 +406,47 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
     const fill = el('div', 'models-progress__fill');
     // A 0-width modelled bar reads as stuck. Stay indeterminate until the model
     // has moved off the spawning floor.
-    if (shownPercent != null) fill.style.width = `${Math.min(100, shownPercent)}%`;
-    else fill.classList.add('is-indeterminate');
+    const percent = shownLoadPercent(load);
+    if (percent != null) {
+      fill.style.setProperty('--progress', String(Math.min(100, percent) / 100));
+    } else {
+      fill.classList.add('is-indeterminate');
+    }
     track.appendChild(fill);
     card.appendChild(track);
   }
+  makeServeCardSelectable(card, serve?.id ?? load.serveId);
   return card;
 }
 
-/** `1.2k` / `917` — token counts read at a glance without a jumping column width. */
-function formatTokenCount(tokens: number): string {
-  if (tokens >= 10_000) return `${Math.round(tokens / 1000)}k`;
-  if (tokens >= 1_000) return `${(tokens / 1000).toFixed(1)}k`;
-  return String(tokens);
-}
-
 /**
- * One chip per working slot, plus `Ready` when nothing is.
- *
- * Prompt processing shows a token *count*, not a percentage: `/slots` reports the same
- * running number in `n_prompt_tokens` and `n_prompt_tokens_processed` during prefill, so
- * there is no total to divide by. Inventing one would be the only way to show a percent
- * here, and a made-up bar is worse than an honest counter.
+ * One chip per working slot, Ready when idle, plus queue depth when the host
+ * is deferring requests. Copy lives in {@link serveActivityChipLabels}.
  */
 function activityChips(activity: ServeActivity | undefined): HTMLElement[] {
-  if (!activity?.available) return [el('span', 'models-loaded__state is-ready', 'Ready')];
-
-  const busy = activity.slots.filter((slot) => slot.state !== 'idle');
-  if (!busy.length) {
-    const chipEl = el('span', 'models-loaded__state is-ready', 'Ready');
-    // A saturated server stops answering /slots. Say the reading is old rather than
-    // claim it is idle.
-    if (activity.stale) chipEl.textContent = 'Ready · stale';
-    return [chipEl];
-  }
-
-  return busy.map((slot) => {
-    const chipEl = el('span', 'models-loaded__state is-busy');
-    if (slot.state === 'prompt') {
-      chipEl.textContent = `${slot.id} PP ${formatTokenCount(slot.promptProcessed)} tok`;
-    } else {
-      chipEl.textContent = `${slot.id} GEN ${formatTokenCount(slot.decoded)} tok`;
+  return serveActivityChipLabels(activity, getInFlightPromptOverlay()).map((label) => {
+    const queued = /\bqueued$/i.test(label);
+    const ready = /^Ready/i.test(label);
+    const chipEl = el(
+      'span',
+      `models-loaded__state${queued ? ' is-queued' : ready ? ' is-ready' : ' is-busy'}`,
+      label,
+    );
+    if (!queued && !ready) {
+      chipEl.appendChild(el('span', 'models-spinner'));
     }
-    chipEl.appendChild(el('span', 'models-spinner'));
     return chipEl;
   });
 }
 
 function loadedCard(serve: ServeRecord): HTMLElement {
   const card = el('article', 'models-loaded');
-  const activity = getModelsState().activity.get(serve.id);
+  const overlay = getInFlightPromptOverlay();
+  const activity = activityForLoadedServe(
+    serve,
+    getModelsState().activity.get(serve.id),
+    overlay,
+  );
 
   const head = el('div', 'models-loaded__head');
   for (const chipEl of activityChips(activity)) head.appendChild(chipEl);
@@ -359,6 +490,9 @@ function loadedCard(serve: ServeRecord): HTMLElement {
     | { ctx?: number; parallel?: number; spec_type?: string }
     | null;
   if (settings?.ctx) meta.appendChild(chip(`ctx ${settings.ctx}`));
+  if (serve.mlxSettings?.contextLength) {
+    meta.appendChild(chip(`ctx ${serve.mlxSettings.contextLength}`));
+  }
   if (settings?.parallel) meta.appendChild(chip(`parallel ${settings.parallel}`));
   if (settings?.spec_type && settings.spec_type !== 'none') {
     meta.appendChild(chip(settings.spec_type));
@@ -370,15 +504,7 @@ function loadedCard(serve: ServeRecord): HTMLElement {
 
   card.appendChild(copyField(serve.baseUrl, 'Copy base URL'));
 
-  // Selecting the row wires the inspector to the matching library entry.
-  const model = getModelsState().library.find((m) => m.path === serve.modelPath);
-  if (model) {
-    card.addEventListener('click', (event) => {
-      if ((event.target as HTMLElement).closest('button')) return;
-      showModelInInspector(model.id);
-    });
-    card.classList.add('is-selectable');
-  }
+  makeServeCardSelectable(card, serve.id);
   return card;
 }
 
@@ -443,6 +569,8 @@ function attentionCard(serve: ServeRecord): HTMLElement {
     if (serve.error) bits.push(serve.error);
     card.appendChild(el('p', 'models-loaded__meta', bits.join(' · ')));
   }
+
+  makeServeCardSelectable(card, serve.id);
   return card;
 }
 
@@ -493,7 +621,9 @@ function logsBlock(serves: ServeRecord[]): HTMLElement {
       if (serve.id === logSource) option.selected = true;
       select.appendChild(option);
     }
-    select.addEventListener('change', () => bindLogStream(select.value));
+    select.addEventListener('change', () => {
+      bindLogStream(serves.find((s) => s.id === select.value) ?? null);
+    });
     head.appendChild(select);
   }
 
@@ -535,6 +665,14 @@ export function render(): void {
   if (!host) return;
 
   const state = getModelsState();
+  // Load ticks fire ~4×/s. Replacing the tree cancels the spinner animation.
+  // Still (re)bind the log stream: a patch-only tick is how runId arrives after
+  // llama-starting, and skipping bind here left Runtime log empty on reload.
+  if (tryPatchInFlightLoads(host, state.loads, state.serves)) {
+    bindLogStream(preferredLogServe(runningServes()) ?? null);
+    return;
+  }
+
   const serves = runningServes();
   const running = serves.filter((s) => s.status === 'running');
   const attention = attentionServes();
@@ -590,8 +728,7 @@ export function render(): void {
 
   host.replaceChildren(fragment);
 
-  const preferred = serves.find((s) => s.id === logSource) ?? serves[0];
-  bindLogStream(preferred?.id ?? null);
+  bindLogStream(preferredLogServe(serves) ?? null);
   renderLogBody();
 }
 
@@ -600,6 +737,9 @@ export function mountServerSection(): void {
   if (!bound) {
     bound = true;
     subscribeModelsStore(() => {
+      if (isActive()) render();
+    });
+    overlayUnsub = subscribeInFlightPromptOverlay(() => {
       if (isActive()) render();
     });
   }
@@ -620,6 +760,9 @@ export function teardownServerSection(): void {
   logUnsub?.();
   logUnsub = null;
   logSource = null;
+  logRunId = null;
+  overlayUnsub?.();
+  overlayUnsub = null;
   if (elapsedTimer != null) window.clearInterval(elapsedTimer);
   elapsedTimer = null;
 }

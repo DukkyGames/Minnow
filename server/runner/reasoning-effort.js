@@ -3,32 +3,53 @@ const REASONING_EFFORT_OPTIONS = [
   "on",
   "low",
   "medium",
-  "high"
+  "high",
+  "max"
 ];
 const EFFORT_SET = new Set(REASONING_EFFORT_OPTIONS);
+const COMPOSER_REASONING_LEVELS = [
+  "low",
+  "medium",
+  "high",
+  "max"
+];
 const QWEN38_REASONING_OPTIONS = [
   "off",
   "low",
   "medium",
   "high"
 ];
+const GLM53_REASONING_OPTIONS = [
+  "low",
+  "high",
+  "max"
+];
 function isQwen38ModelId(modelId) {
   if (!modelId) return false;
   return /(?:^|[^a-z0-9])qwen3[._]8(?![0-9])/i.test(modelId);
 }
-function normalizeReasoningCatalogValue(value) {
-  if (value === "xhigh") return "high";
+function isGlm53ModelId(modelId) {
+  if (!modelId) return false;
+  return /(?:^|[^a-z0-9])glm[-_.]?5[._-]?3(?:[^0-9]|$)/i.test(modelId);
+}
+function isComposerReasoningLevel(value) {
+  return value === "low" || value === "medium" || value === "high" || value === "max";
+}
+function normalizeReasoningCatalogValue(value, modelId) {
+  if (value === "xhigh" || value === "extra_high" || value === "extra high") {
+    return isGlm53ModelId(modelId) ? "max" : "high";
+  }
   if (value === "none") return "off";
   return isReasoningEffortOption(value) ? value : void 0;
 }
 function isReasoningEffortOption(value) {
   return typeof value === "string" && EFFORT_SET.has(value);
 }
-function normalizeReasoningAllowedOptions(raw) {
+function normalizeReasoningAllowedOptions(raw, modelId) {
   const seen = /* @__PURE__ */ new Set();
   for (const value of raw) {
     if (typeof value !== "string") continue;
-    const mapped = value === "xhigh" ? "high" : value === "none" ? "off" : value;
+    const mapped = normalizeReasoningCatalogValue(value, modelId) ?? value;
     seen.add(mapped);
   }
   return REASONING_EFFORT_OPTIONS.filter((option) => seen.has(option));
@@ -38,7 +59,7 @@ function modelHasSelectableReasoningEffort(caps) {
 }
 function modelHasReasoningEffortLevels(caps) {
   const allowed = caps?.reasoningAllowedOptions ?? [];
-  return allowed.some((o) => o === "low" || o === "medium" || o === "high");
+  return allowed.some((o) => isComposerReasoningLevel(o));
 }
 function modelUsesComposerReasoningDropdown(caps) {
   return modelUsesComposerReasoningLevelDropdown(caps);
@@ -49,11 +70,17 @@ function modelUsesComposerThinkingToggle(caps) {
   if (allowed.includes("off") && allowed.includes("on")) return true;
   return allowed.length === 0 && caps?.reasoning !== false;
 }
+function modelUsesAlwaysOnReasoning(caps) {
+  const allowed = caps?.reasoningAllowedOptions ?? [];
+  if (allowed.length === 0) return false;
+  return !allowed.includes("off") && allowed.includes("max");
+}
 function modelShowsComposerBrainToggle(caps) {
+  if (modelUsesAlwaysOnReasoning(caps)) return false;
   return modelUsesComposerReasoningDropdown(caps) || modelUsesComposerThinkingToggle(caps);
 }
 function getComposerReasoningLevelOptions(allowed) {
-  return allowed.filter((o) => o === "low" || o === "medium" || o === "high");
+  return COMPOSER_REASONING_LEVELS.filter((o) => allowed.includes(o));
 }
 function getComposerReasoningBinaryOptions(allowed) {
   const normalized = normalizeReasoningAllowedOptions(allowed);
@@ -88,6 +115,8 @@ function formatReasoningEffortLabel(option) {
       return "Medium";
     case "high":
       return "High";
+    case "max":
+      return "Max";
     default:
       return option;
   }
@@ -97,6 +126,9 @@ function isThinkingTypeOnlyOpenAiModel(modelId) {
   return /kimi|moonshot|deepseek|minimax/.test(id);
 }
 function inferReasoningOptionsFromModelId(modelId, apiKind) {
+  if (isGlm53ModelId(modelId)) {
+    return [...GLM53_REASONING_OPTIONS];
+  }
   if (isQwen38ModelId(modelId)) {
     return [...QWEN38_REASONING_OPTIONS];
   }
@@ -108,16 +140,23 @@ function inferReasoningOptionsFromModelId(modelId, apiKind) {
 }
 function ensureQwen38ReasoningAllowedOptions(modelId, allowed) {
   if (!isQwen38ModelId(modelId)) return allowed;
-  const hasLevels = allowed.some((o) => o === "low" || o === "medium" || o === "high");
+  const hasLevels = allowed.some((o) => isComposerReasoningLevel(o));
   if (hasLevels) {
-    return normalizeReasoningAllowedOptions([...allowed, ...QWEN38_REASONING_OPTIONS]);
+    return normalizeReasoningAllowedOptions(
+      [...allowed, ...QWEN38_REASONING_OPTIONS],
+      modelId
+    );
   }
   return [...QWEN38_REASONING_OPTIONS];
+}
+function ensureGlm53ReasoningAllowedOptions(modelId, allowed) {
+  if (!isGlm53ModelId(modelId)) return allowed;
+  return [...GLM53_REASONING_OPTIONS];
 }
 function resolveEffectiveReasoningEffort(chat, caps, inheritedResolved) {
   const allowed = caps?.reasoningAllowedOptions ?? [];
   if (allowed.length === 0) return void 0;
-  if (chat.reasoningEffort === "off") {
+  if (chat.reasoningEffort === "off" && !modelUsesAlwaysOnReasoning(caps)) {
     return "off";
   }
   if (chat.reasoningEffort && allowed.includes(chat.reasoningEffort)) {
@@ -129,6 +168,7 @@ function resolveEffectiveReasoningEffort(chat, caps, inheritedResolved) {
       return catalogDefault2;
     }
     if (allowed.includes("medium")) return "medium";
+    if (allowed.includes("max")) return "max";
     if (allowed.includes("on")) return "on";
   }
   const catalogDefault = caps?.reasoningDefault;
@@ -141,19 +181,24 @@ function resolveEffectiveReasoningEffort(chat, caps, inheritedResolved) {
   return allowed[0];
 }
 export {
+  GLM53_REASONING_OPTIONS,
   QWEN38_REASONING_OPTIONS,
   REASONING_EFFORT_OPTIONS,
   defaultComposerReasoningLevel,
+  ensureGlm53ReasoningAllowedOptions,
   ensureQwen38ReasoningAllowedOptions,
   formatReasoningEffortLabel,
   getComposerReasoningBinaryOptions,
   getComposerReasoningLevelOptions,
   inferReasoningOptionsFromModelId,
+  isComposerReasoningLevel,
+  isGlm53ModelId,
   isQwen38ModelId,
   isReasoningEffortOption,
   modelHasReasoningEffortLevels,
   modelHasSelectableReasoningEffort,
   modelShowsComposerBrainToggle,
+  modelUsesAlwaysOnReasoning,
   modelUsesComposerReasoningBinaryDropdown,
   modelUsesComposerReasoningDropdown,
   modelUsesComposerReasoningLevelDropdown,

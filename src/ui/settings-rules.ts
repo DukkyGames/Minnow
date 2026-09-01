@@ -9,8 +9,10 @@ import {
   loadUserRules,
   MAX_USER_RULES_BYTES,
   normalizeUserRules,
+  removeUserRuleGroup,
   saveUserRules,
   getUserRulesSync,
+  type UserRuleGroup,
   type UserRuleItem,
   type UserRulesSettings,
 } from '../config/user-rules';
@@ -18,6 +20,7 @@ import { detectConfigServer } from '../config/storage-mode';
 import { appendSettingsGroup } from './settings-layout';
 import { appendSettingsOfflineHint } from './settings-controls';
 import { createSettingsSwitch, createSettingsToggleRow } from './settings-switch';
+import { appAlert, appConfirm } from './app-dialog';
 import {
   closeUserRulePopover,
   openUserRuleGroupPopover,
@@ -85,6 +88,9 @@ function renderRulesList(
     title.textContent = group.name;
     head.appendChild(title);
 
+    const actions = document.createElement('div');
+    actions.className = 'settings-rules-group__actions';
+
     const addBtn = document.createElement('button');
     addBtn.type = 'button';
     addBtn.className = 'settings-inline-btn';
@@ -114,7 +120,24 @@ function renderRulesList(
         },
       });
     });
-    head.appendChild(addBtn);
+    actions.appendChild(addBtn);
+
+    // Delete is hidden on the last remaining group: persist recreates General
+    // when groups is empty, so that delete would not stay gone after reload.
+    if (settings.groups.length > 1) {
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'settings-inline-btn settings-inline-btn--danger';
+      deleteBtn.textContent = 'Delete group';
+      deleteBtn.setAttribute('aria-label', `Delete group ${group.name}`);
+      deleteBtn.dataset.settingsSearchKey = 'agents.rules.deleteGroup';
+      deleteBtn.addEventListener('click', () => {
+        void deleteRuleGroup(group, settings, setStatus, onChange);
+      });
+      actions.appendChild(deleteBtn);
+    }
+
+    head.appendChild(actions);
     section.appendChild(head);
 
     const list = document.createElement('ul');
@@ -141,6 +164,47 @@ function renderRulesList(
     }
 
     mount.appendChild(section);
+  }
+}
+
+/**
+ * Delete a group from Settings → Rules after a confirm.
+ * Non-empty groups are blocked with a message; other groups' rules are not rewritten.
+ */
+async function deleteRuleGroup(
+  group: UserRuleGroup,
+  settings: UserRulesSettings,
+  setStatus: StatusFn,
+  onChange: (next: UserRulesSettings) => void,
+): Promise<void> {
+  const preview = removeUserRuleGroup(settings, group.id);
+  if (!preview.ok) {
+    setStatus('err', preview.error);
+    await appAlert(preview.error, 'Cannot delete group');
+    return;
+  }
+
+  if (
+    !(await appConfirm(`Delete the "${group.name}" group?`, {
+      confirmLabel: 'Delete',
+      danger: true,
+      title: 'Delete rule group',
+    }))
+  ) {
+    return;
+  }
+
+  // Re-read after the dialog so a concurrent edit cannot drop rules that landed
+  // in this group while the confirm was open.
+  const result = removeUserRuleGroup(getUserRulesSync(), group.id);
+  if (!result.ok) {
+    setStatus('err', result.error);
+    await appAlert(result.error, 'Cannot delete group');
+    return;
+  }
+
+  if (await persistRules(result.settings, setStatus, 'Group deleted')) {
+    onChange(result.settings);
   }
 }
 

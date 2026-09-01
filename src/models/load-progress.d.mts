@@ -7,6 +7,7 @@ export interface LoadPhaseSpec {
 }
 
 export declare const LOAD_PHASES: ReadonlyArray<LoadPhaseSpec>;
+export declare const MLX_LOAD_PHASE: LoadPhaseSpec;
 export declare const MAX_PERCENT_BEFORE_HEALTHY: number;
 
 export interface MatchedLoadPhase {
@@ -16,9 +17,15 @@ export interface MatchedLoadPhase {
   ceiling: number;
 }
 
-export declare function matchLoadPhase(text: string | null | undefined): MatchedLoadPhase;
+export declare function matchLoadPhase(
+  text: string | null | undefined,
+  runtime?: string | null,
+): MatchedLoadPhase;
 
 export declare function parseSpecContextBytes(text: string | null | undefined): number | null;
+
+/** Tensor-copy percent from a run of 10+ dots, or null. */
+export declare function parseWeightLoadDots(text: string | null | undefined): number | null;
 
 export declare function resolveBytesPerMs(priors: {
   lastLoadMs?: unknown;
@@ -38,17 +45,27 @@ export interface LoadProgressInput {
   elapsedMs: number;
   /** Size of the weights being loaded. */
   weightsBytes?: number;
-  /** From `resolveBytesPerMs`; 0 disables the time model. */
+  /**
+   * From `resolveBytesPerMs`. Floored at the first-load rate when `weightsBytes`
+   * is known so a slow `lastLoadMs` cannot paint 35% on a 7s reload.
+   */
   bytesPerMs?: number;
   /** Last value shown, to hold the bar monotonic. */
   previousPercent?: number | null;
+  /** Elapsed ms on the previous tick, so skipped-phase catch-up can be rate-limited. */
+  lastElapsedMs?: number | null;
   /**
    * Runtime-printed percent. Null or omitted means none — never coerce that to 0
    * (`Number(null) === 0` pins the Local Server chip at 0% for the whole load).
    */
   reportedPercent?: number | null;
-  /** `/health` has answered — the only way to reach 100. */
+  /**
+   * Serve is ready (`/health` for llama.cpp, warmup POST for mlx-lm).
+   * The only way to reach 100.
+   */
   healthy?: boolean;
+  /** `mlx-lm` uses a single Loading-weights band instead of llama log phases. */
+  runtime?: string | null;
 }
 
 export interface LoadProgressResult {
@@ -63,3 +80,6 @@ export interface LoadProgressResult {
 }
 
 export declare function computeLoadProgress(input: LoadProgressInput): LoadProgressResult;
+
+/** Compact percent for chips and chat (`37%`). Empty at 0. */
+export declare function formatLoadPercentLabel(percent: unknown): string;

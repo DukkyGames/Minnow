@@ -69,6 +69,22 @@ describe('server sanitizeCompletionBodyForProvider', () => {
     assert.deepEqual(out.thinking, { type: 'disabled' });
     assert.deepEqual(out.chat_template_kwargs, { enable_thinking: false });
   });
+
+  test('rewrites GLM-5.3 disabled / none into enabled + low', () => {
+    const out = sanitizeCompletionBodyForProvider(
+      {
+        model: 'glm-5.3-flash',
+        thinking: { type: 'disabled' },
+        reasoning_effort: 'none',
+        enable_thinking: false,
+      },
+      OPENAI,
+      { reasoning: true },
+    );
+    assert.deepEqual(out.thinking, { type: 'enabled' });
+    assert.equal(out.reasoning_effort, 'low');
+    assert.deepEqual(out.reasoning, { effort: 'low' });
+  });
 });
 
 describe('extended sampler keep vs strip (shared fixtures)', () => {

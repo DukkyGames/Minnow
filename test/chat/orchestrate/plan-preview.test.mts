@@ -5,7 +5,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
-import { Window } from 'happy-dom';
 import {
   buildPlanPreviewDom,
   mountPlanPreviewContent,
@@ -132,6 +131,21 @@ describe('readPlanArtifactMarkdown', () => {
     globalThis.window = { location: { origin: 'http://localhost:9473' } } as Window;
     globalThis.fetch = async () => new Response('missing', { status: 404 });
     assert.equal(await readPlanArtifactMarkdown('documentation/plans/missing.md'), '');
+  });
+
+  test('cacheBust is forwarded as a preview query param', async () => {
+    globalThis.window = { location: { origin: 'http://localhost:9473' } } as Window;
+    let seen = '';
+    globalThis.fetch = async (input: RequestInfo | URL) => {
+      seen = String(input);
+      return new Response('# Spec\n', { status: 200, headers: { 'Content-Type': 'text/plain' } });
+    };
+    const markdown = await readPlanArtifactMarkdown('documentation/plans/references/demo-spec.md', {
+      cacheBust: 7,
+    });
+    assert.equal(markdown, '# Spec\n');
+    assert.match(seen, /[?&]v=7/);
+    assert.match(seen, /[?&]raw=1/);
   });
 });
 

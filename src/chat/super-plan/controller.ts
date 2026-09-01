@@ -547,3 +547,8 @@ export function resetSuperPlanControllerForTests(): void {
   }
   listeners.clear();
 }
+
+/** Test helper — push a controller update to Activity / UI subscribers. */
+export function notifySuperPlanControllerForTests(chat: Chat): void {
+  notifyListeners(chat);
+}

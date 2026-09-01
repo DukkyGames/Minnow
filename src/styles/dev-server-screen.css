@@ -336,7 +336,7 @@
 }
 
 .dev-server-screen__row-cmd {
-  font-family: var(--mn-font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--mn-fg-muted);
   white-space: nowrap;
@@ -582,7 +582,7 @@
   margin: 0;
   padding: 10px 12px;
   overflow: auto;
-  font-family: var(--mn-font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.45;
   white-space: pre;
@@ -621,7 +621,7 @@
   text-align: left;
   padding: 6px 8px;
   border-bottom: 1px solid var(--mn-border);
-  font-family: var(--mn-font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-family: var(--font-mono);
 }
 
 .dev-server-ports__table th {

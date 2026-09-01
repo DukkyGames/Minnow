@@ -349,6 +349,54 @@
         "topP": 0.9,
         "topK": 20
       }
+    },
+    "pr-reviewer": {
+      "label": "PR reviewer",
+      "thinkingMode": "on",
+      "enabled": true,
+      "providerId": "",
+      "modelId": "",
+      "maxConcurrent": 1,
+      "timeoutMs": 900000,
+      "workAgentId": null,
+      "allowedTools": [
+        "read_file",
+        "read_file_range",
+        "find_files",
+        "search_in_file",
+        "grep",
+        "list_directory",
+        "get_file_metadata",
+        "repo_map",
+        "find_symbol",
+        "git_status",
+        "git_log",
+        "git_diff",
+        "execute_command"
+      ],
+      "deniedTools": [
+        "spawn_sub_agent",
+        "cancel_sub_agent",
+        "save_file",
+        "append_file",
+        "insert_at_line",
+        "replace_text_in_file",
+        "delete_path",
+        "move_file",
+        "git_commit",
+        "git_add",
+        "git_push",
+        "git_checkout"
+      ],
+      "systemPromptPath": null,
+      "maxInputTokens": null,
+      "contextEnforcementPolicy": "summarize",
+      "summarySchema": "minnow.pr-review.v1",
+      "sampler": {
+        "temperature": 0.5,
+        "topP": 0.9,
+        "topK": 20
+      }
     }
   }
 }

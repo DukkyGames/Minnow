@@ -8,16 +8,24 @@ import { isServerStorageMode } from '../config/storage-mode';
 import { contextLengthFromModelRow } from '../lib/context-length';
 import { anthropicModelUsesAdaptiveThinking } from '../lib/anthropic-thinking-style';
 import {
+  ensureGlm53ReasoningAllowedOptions,
   ensureQwen38ReasoningAllowedOptions,
   inferReasoningOptionsFromModelId,
+  isGlm53ModelId,
   isQwen38ModelId,
   modelHasReasoningEffortLevels,
   normalizeReasoningAllowedOptions,
   normalizeReasoningCatalogValue,
+  GLM53_REASONING_OPTIONS,
   QWEN38_REASONING_OPTIONS,
 } from '../lib/reasoning-effort';
 import { decodeModelSelectKey, encodeModelSelectKey, findFirstSelectKeyForCanonicalModelId } from '../lib/model-select-key';
-import type { ApiKind } from './types';
+import { LIBRARY_MODEL_PROVIDER_ID } from '../models/model-select-library';
+import {
+  LLAMA_CPP_LOCAL_PROVIDER_ID,
+  MLX_LM_LOCAL_PROVIDER_ID,
+  type ApiKind,
+} from './types';
 import type { LmModelRecord, ModelCapabilities } from '../types';
 import { getCachedProviderList } from './store';
 
@@ -36,6 +44,8 @@ const providerCapabilitiesCache = new Map<string, ProviderCapabilitiesFile>();
 let lastAppliedCapabilities: ProviderCapabilitiesFile | null = null;
 
 let probeAbort: AbortController | null = null;
+/** True while Settings → Probe models owns `probeAbort` (auto-probe must not steal it). */
+let probeIsManual = false;
 
 /** Match chat model ids to catalog rows when slash-prefixed ids differ (e.g. deepseek/deepseek-v4-flash). */
 function modelIdsMatchForCapabilities(chatModelId: string, catalogModelId: string): boolean {
@@ -84,13 +94,34 @@ export function getCachedProviderCapabilities(
 /** Apply fetched capabilities file to cache and merge into model rows. */
 export function applyProviderCapabilities(file: ProviderCapabilitiesFile): void {
   providerCapabilitiesCache.set(file.providerId, file);
+  stampModelCacheFromCapabilitiesFile(file);
+}
+
+/**
+ * Probe files are keyed by the upstream provider (`llama-cpp-local` / `mlx-lm-local`).
+ * My Models picker rows use `minnow-library` + the same model id — stamp those too
+ * so a first-load probe can show a Vision badge on the row the user selected.
+ */
+function cacheRowAcceptsCapabilitiesFile(
+  fileProviderId: string,
+  rowProviderId: string | undefined,
+): boolean {
+  if (rowProviderId === undefined || rowProviderId === fileProviderId) return true;
+  if (rowProviderId !== LIBRARY_MODEL_PROVIDER_ID) return false;
+  return (
+    fileProviderId === LLAMA_CPP_LOCAL_PROVIDER_ID ||
+    fileProviderId === MLX_LM_LOCAL_PROVIDER_ID
+  );
+}
+
+/** Write each file entry onto matching modelCache rows. */
+function stampModelCacheFromCapabilitiesFile(file: ProviderCapabilitiesFile): void {
   for (const [modelId, caps] of Object.entries(file.models)) {
     for (const [cacheKey, row] of modelCache.entries()) {
       const decoded = decodeModelSelectKey(cacheKey);
       const logicalId = decoded?.modelId ?? cacheKey;
-      const rowProvider = decoded?.providerId;
-      if (rowProvider !== undefined && rowProvider !== file.providerId) continue;
       if (logicalId !== modelId) continue;
+      if (!cacheRowAcceptsCapabilitiesFile(file.providerId, decoded?.providerId)) continue;
       row.capabilities = mergeModelCapabilities(row, caps);
     }
   }
@@ -106,10 +137,14 @@ function reasoningCatalogFromRow(
   const allowedRaw = Array.isArray(block.allowed_options)
     ? block.allowed_options
     : [];
-  const allowed = normalizeReasoningAllowedOptions(allowedRaw);
-  const def = normalizeReasoningCatalogValue(block.default);
+  const allowed = normalizeReasoningAllowedOptions(allowedRaw, row.id);
+  const def = normalizeReasoningCatalogValue(block.default, row.id);
   const reasoningOnDefault =
-    def === 'on' || def === 'low' || def === 'medium' || def === 'high';
+    def === 'on' ||
+    def === 'low' ||
+    def === 'medium' ||
+    def === 'high' ||
+    def === 'max';
   const reasoning =
     allowed.length > 0 ? true : reasoningOnDefault ? true : def === 'off' ? false : null;
   return {
@@ -124,14 +159,14 @@ export function catalogRowHasVision(row: LmModelRecord): boolean {
   return row.type === 'vlm' || row.catalogVision === true;
 }
 
-/** Catalog default: Qwen3.8 prefers High; ignore off/on when levels exist. */
+/** Catalog default: Qwen3.8 prefers High; GLM-5.3 prefers Max; ignore off/on when levels exist. */
 function resolveCatalogReasoningDefault(
   modelId: string,
   allowed: ModelCapabilities['reasoningAllowedOptions'],
   catalogDefault: ModelCapabilities['reasoningDefault'],
 ): ModelCapabilities['reasoningDefault'] {
   const options = allowed ?? [];
-  // Level defaults (low/medium/high) win; off/on are toggle states, not effort.
+  // Level defaults (low/medium/high/max) win; off/on are toggle states, not effort.
   if (
     catalogDefault &&
     options.includes(catalogDefault) &&
@@ -141,6 +176,7 @@ function resolveCatalogReasoningDefault(
     return catalogDefault;
   }
   if (isQwen38ModelId(modelId) && options.includes('high')) return 'high';
+  if (isGlm53ModelId(modelId) && options.includes('max')) return 'max';
   if (options.includes('medium')) return 'medium';
   return catalogDefault;
 }
@@ -155,7 +191,7 @@ export function catalogCapabilitiesFromRow(
   const vision = catalogRowHasVision(row);
   const reasoningCaps = reasoningCatalogFromRow(row);
   let reasoningAllowedOptions = reasoningCaps.reasoningAllowedOptions;
-  // Infer when catalog is empty. Qwen3.8 does not need apiKind (My Models / llama.cpp rows).
+  // Infer when catalog is empty. Qwen3.8 / GLM-5.3 do not need apiKind (My Models / llama.cpp rows).
   if (!reasoningAllowedOptions || reasoningAllowedOptions.length === 0) {
     const inferred = inferReasoningOptionsFromModelId(row.id, resolvedApi);
     if (inferred.length > 0) {
@@ -165,6 +201,13 @@ export function catalogCapabilitiesFromRow(
   // LM Studio often advertises Qwen3.8 as off/on; still expose Low/Medium/High.
   if (isQwen38ModelId(row.id)) {
     reasoningAllowedOptions = ensureQwen38ReasoningAllowedOptions(
+      row.id,
+      reasoningAllowedOptions ?? [],
+    );
+  }
+  // Z.ai GLM-5.3 catalogs may still list off/medium; force Low/High/Max.
+  if (isGlm53ModelId(row.id)) {
+    reasoningAllowedOptions = ensureGlm53ReasoningAllowedOptions(
       row.id,
       reasoningAllowedOptions ?? [],
     );
@@ -206,6 +249,23 @@ export function catalogCapabilitiesFromRow(
   };
 }
 
+/** Empty capability shell used when GLM-5.3 is selected but not in modelCache. */
+function glm53AssumedCapabilities(): ModelCapabilities {
+  return {
+    vision: null,
+    tools: null,
+    streaming: null,
+    grammar: null,
+    reasoning: true,
+    reasoningAllowedOptions: [...GLM53_REASONING_OPTIONS],
+    reasoningDefault: 'max',
+    contextLength: null,
+    loadState: null,
+    sources: { reasoning: 'assumed' },
+    probeErrors: {},
+  };
+}
+
 /** Empty capability shell used when Qwen3.8 is selected but not in modelCache. */
 function qwen38AssumedCapabilities(): ModelCapabilities {
   return {
@@ -220,6 +280,28 @@ function qwen38AssumedCapabilities(): ModelCapabilities {
     loadState: null,
     sources: { reasoning: 'assumed' },
     probeErrors: {},
+  };
+}
+
+/** Force GLM-5.3 Low/High/Max onto a capability object (composer dropdown). */
+function withGlm53ReasoningLevels(
+  modelId: string,
+  caps: ModelCapabilities,
+): ModelCapabilities {
+  if (!isGlm53ModelId(modelId)) return caps;
+  const reasoningAllowedOptions = ensureGlm53ReasoningAllowedOptions(
+    modelId,
+    caps.reasoningAllowedOptions ?? [],
+  );
+  return {
+    ...caps,
+    reasoning: true,
+    reasoningAllowedOptions,
+    reasoningDefault: resolveCatalogReasoningDefault(
+      modelId,
+      reasoningAllowedOptions,
+      caps.reasoningDefault,
+    ),
   };
 }
 
@@ -245,6 +327,14 @@ function withQwen38ReasoningLevels(
   };
 }
 
+/** Apply family-specific reasoning option overrides (Qwen3.8, then GLM-5.3). */
+function withFamilyReasoningLevels(
+  modelId: string,
+  caps: ModelCapabilities,
+): ModelCapabilities {
+  return withGlm53ReasoningLevels(modelId, withQwen38ReasoningLevels(modelId, caps));
+}
+
 /**
  * Resolve send-time capabilities for a provider-bound model row.
  * Re-applies openai-v1 inference when cached caps lack selectable reasoning options.
@@ -261,6 +351,7 @@ export function resolveSendCapabilities(
   const row = findModelCacheRow(pid, mid);
   // My Models / llama.cpp may rebind to a label that is no longer in modelCache.
   if (!row) {
+    if (isGlm53ModelId(mid)) return glm53AssumedCapabilities();
     return isQwen38ModelId(mid) ? qwen38AssumedCapabilities() : undefined;
   }
 
@@ -268,9 +359,10 @@ export function resolveSendCapabilities(
     apiKind ?? getCachedProviderList()?.providers.find((p) => p.id === pid)?.apiKind;
   const fromCatalog = catalogCapabilitiesFromRow(row, kind);
   const cached = row.capabilities;
-  const qwen38Id = isQwen38ModelId(mid) ? mid : row.id;
+  const familyId =
+    isGlm53ModelId(mid) || isQwen38ModelId(mid) ? mid : row.id;
 
-  if (!cached) return withQwen38ReasoningLevels(qwen38Id, fromCatalog);
+  if (!cached) return withFamilyReasoningLevels(familyId, fromCatalog);
 
   const cachedHasLevels = modelHasReasoningEffortLevels(cached);
   const catalogHasLevels = modelHasReasoningEffortLevels(fromCatalog);
@@ -279,7 +371,7 @@ export function resolveSendCapabilities(
   // Prefer catalog when it has selectable options the probe/cache lacks, or
   // when catalog has effort levels and cache only has off/on.
   if ((catalogAllowed >= 2 && cachedAllowed < 2) || (catalogHasLevels && !cachedHasLevels)) {
-    return withQwen38ReasoningLevels(qwen38Id, {
+    return withFamilyReasoningLevels(familyId, {
       ...cached,
       reasoning: fromCatalog.reasoning ?? cached.reasoning,
       reasoningAllowedOptions: fromCatalog.reasoningAllowedOptions,
@@ -290,13 +382,13 @@ export function resolveSendCapabilities(
   }
 
   if (!cached.reasoningThinkingEnabledValue && fromCatalog.reasoningThinkingEnabledValue) {
-    return withQwen38ReasoningLevels(qwen38Id, {
+    return withFamilyReasoningLevels(familyId, {
       ...cached,
       reasoningThinkingEnabledValue: fromCatalog.reasoningThinkingEnabledValue,
     });
   }
 
-  return withQwen38ReasoningLevels(qwen38Id, cached);
+  return withFamilyReasoningLevels(familyId, cached);
 }
 
 /**
@@ -362,20 +454,13 @@ export function mergeModelCapabilities(
     merged.api = catalog.api;
   }
 
-  return withQwen38ReasoningLevels(row.id, merged);
+  return withFamilyReasoningLevels(row.id, merged);
 }
 
-/** Attach merged capabilities to every row in modelCache for a provider file. */
+/** Attach merged capabilities to every matching modelCache row for a provider file. */
 export function mergeCapabilitiesIntoModelCache(file: ProviderCapabilitiesFile): void {
   lastAppliedCapabilities = file;
   applyProviderCapabilities(file);
-  for (const [cacheKey, row] of modelCache.entries()) {
-    const decoded = decodeModelSelectKey(cacheKey);
-    const logicalId = decoded?.modelId ?? cacheKey;
-    if (decoded && decoded.providerId !== file.providerId) continue;
-    const fromFile = file.models[logicalId];
-    row.capabilities = mergeModelCapabilities(row, fromFile);
-  }
 }
 
 /** GET persisted capabilities for a provider. */
@@ -526,6 +611,11 @@ export function prioritizeModelIdsForProbe(
 export const NO_LOADED_MODEL_MATRIX_PROBE_MSG =
   'No loaded model found. Load a model in LM Studio, then run the probe again.';
 
+/** True while a Settings-initiated matrix probe is in flight. */
+export function isManualCapabilityProbeInFlight(): boolean {
+  return probeAbort !== null && probeIsManual;
+}
+
 /** Run capability matrix probe (Settings → Providers button; optional model id filter). */
 export async function runCapabilityProbeForProvider(
   providerId: string,
@@ -533,13 +623,24 @@ export async function runCapabilityProbeForProvider(
     modelIds?: string[];
     selectedModelId?: string;
     apiKind?: ApiKind;
+    /** Settings button — may abort an in-flight first-load probe. */
+    manual?: boolean;
   } = {},
-): Promise<void> {
-  if (!isServerStorageMode()) return;
+): Promise<boolean> {
+  if (!isServerStorageMode()) return false;
 
-  if (probeAbort) probeAbort.abort();
+  const isManual = options.manual === true;
+  if (probeAbort) {
+    if (isManual) {
+      probeAbort.abort();
+    } else {
+      // First-load probes are queued serially; do not abort a Settings probe.
+      return false;
+    }
+  }
   const controller = new AbortController();
   probeAbort = controller;
+  probeIsManual = isManual;
 
   try {
     let modelIds = options.modelIds;
@@ -564,13 +665,15 @@ export async function runCapabilityProbeForProvider(
     if (probeAbort === controller) {
       mergeCapabilitiesIntoModelCache(file);
     }
+    return true;
   } catch (err) {
     const e = err as { name?: string };
-    if (e?.name === 'AbortError') return;
+    if (e?.name === 'AbortError') return false;
     throw err;
   } finally {
     if (probeAbort === controller) {
       probeAbort = null;
+      probeIsManual = false;
     }
   }
 }

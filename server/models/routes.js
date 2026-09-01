@@ -454,7 +454,10 @@ export async function handleModelsRequest(req, res, pathname) {
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
     });
-    const unsubscribe = subscribeServeLogForServe(serve, (event) => {
+    const serveId = serve.id;
+    // Re-read the row each poll: the first commit is `starting` with no runId,
+    // and a spawn retry writes a different log file.
+    const unsubscribe = subscribeServeLogForServe(() => getServe(serveId), (event) => {
       try {
         res.write(`data: ${JSON.stringify(event)}\n\n`);
       } catch {

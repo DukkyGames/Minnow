@@ -1,5 +1,5 @@
 /**
- * Desktop-only browser tools for Minnow appearance (theme, fonts, wallpaper).
+ * Desktop-only browser tools for Minnow appearance (theme, fonts).
  */
 
 import {
@@ -33,8 +33,6 @@ import {
   type MonoFontPresetId,
   type UiFontPresetId,
 } from '../appearance/types';
-import { loadDesktopPrefs, saveDesktopPref, saveDesktopPrefs } from '../os/desktop-prefs';
-import type { WallpaperImageFit, WallpaperMode } from '../os/wallpaper';
 import { getLocalServerAvailable } from './client';
 import {
   getFollowSystem,
@@ -49,18 +47,6 @@ import {
   type ThemeMode,
 } from '../theme';
 import { applyResolvedTheme } from '../ui/theme';
-
-const WALLPAPER_MODES = new Set<WallpaperMode>([
-  'flat',
-  'gradient',
-  'underwater',
-  'minnow',
-  'aurora',
-  'starfield',
-  'custom',
-]);
-
-const WALLPAPER_FITS = new Set<WallpaperImageFit>(['cover', 'contain']);
 
 function dispatchAppearanceChanged(keys: string[]): void {
   try {
@@ -83,7 +69,6 @@ export function toolGetAppearance(): string {
       : 'dark';
 
   const tokens = getCustomThemeTokens();
-  const prefs = loadDesktopPrefs();
 
   return JSON.stringify(
     {
@@ -99,11 +84,6 @@ export function toolGetAppearance(): string {
         tokens,
       },
       fonts: getAppearanceFonts(),
-      wallpaper: {
-        mode: prefs.wallpaper,
-        imageAssetId: prefs.wallpaperImageId ?? null,
-        imageFit: prefs.wallpaperImageFit ?? 'cover',
-      },
     },
     null,
     2,
@@ -122,11 +102,6 @@ interface UpdateAppearancePatch {
   fonts?: {
     ui?: string | FontUploadPatch;
     mono?: string | FontUploadPatch;
-  };
-  wallpaper?: {
-    mode?: string;
-    imageAssetId?: string | null;
-    imageFit?: string;
   };
 }
 
@@ -237,49 +212,6 @@ export async function toolUpdateAppearance(args: Record<string, unknown>): Promi
     }
   }
 
-  if (patch.wallpaper) {
-    const wp = patch.wallpaper;
-    const prefs = loadDesktopPrefs();
-    let next = { ...prefs };
-
-    if (wp.mode !== undefined) {
-      const mode = String(wp.mode).trim() as WallpaperMode;
-      if (!WALLPAPER_MODES.has(mode)) {
-        errors.push(`Invalid wallpaper.mode "${wp.mode}"`);
-      } else {
-        next.wallpaper = mode;
-        applied.push(`wallpaper.mode=${mode}`);
-      }
-    }
-    if (wp.imageFit !== undefined) {
-      const fit = String(wp.imageFit).trim() as WallpaperImageFit;
-      if (!WALLPAPER_FITS.has(fit)) {
-        errors.push(`Invalid wallpaper.imageFit "${wp.imageFit}"`);
-      } else {
-        next.wallpaperImageFit = fit;
-        applied.push(`wallpaper.imageFit=${fit}`);
-      }
-    }
-    if (wp.imageAssetId !== undefined) {
-      if (wp.imageAssetId === null || wp.imageAssetId === '') {
-        next.wallpaperImageId = undefined;
-        applied.push('wallpaper.imageAssetId=cleared');
-      } else {
-        const assetId = String(wp.imageAssetId).trim();
-        next.wallpaper = 'custom';
-        next.wallpaperImageId = assetId;
-        applied.push(`wallpaper.imageAssetId=${assetId}`);
-      }
-    }
-
-    if (
-      applied.some((a) => a.startsWith('wallpaper.')) &&
-      !errors.some((e) => e.startsWith('Invalid wallpaper'))
-    ) {
-      saveDesktopPrefs(next);
-    }
-  }
-
   applyResolvedTheme(getStoredTheme());
   dispatchAppearanceChanged(applied.map((a) => `appearance.${a}`));
 
@@ -300,8 +232,8 @@ export async function toolUploadAppearanceAsset(
 ): Promise<string> {
   const kindRaw = args.kind;
   const pathRaw = args.path;
-  if (kindRaw !== 'wallpaper' && kindRaw !== 'font') {
-    return 'Error: "kind" must be "wallpaper" or "font"';
+  if (kindRaw !== 'font') {
+    return 'Error: "kind" must be "font"';
   }
   if (typeof pathRaw !== 'string' || !pathRaw.trim()) {
     return 'Error: "path" is required (workspace-relative file path)';
@@ -328,10 +260,7 @@ export async function toolUploadAppearanceAsset(
   }
 
   const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
-  if (kindRaw === 'wallpaper' && !['png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
-    return 'Error: wallpaper must be PNG, JPEG, or WebP';
-  }
-  if (kindRaw === 'font' && !['woff2', 'woff', 'ttf', 'otf'].includes(ext)) {
+  if (!['woff2', 'woff', 'ttf', 'otf'].includes(ext)) {
     return 'Error: font must be WOFF2, WOFF, TTF, or OTF';
   }
 
@@ -348,7 +277,7 @@ export async function toolUploadAppearanceAsset(
   }
 
   const slot = args.slot;
-  if (kindRaw === 'font' && (slot === 'ui' || slot === 'mono')) {
+  if (slot === 'ui' || slot === 'mono') {
     const familyName =
       typeof args.familyName === 'string' && args.familyName.trim()
         ? args.familyName.trim()
@@ -459,13 +388,6 @@ function normalizeWorkspacePath(path: string): string {
 
 function mimeForExtension(ext: string): string {
   switch (ext) {
-    case 'png':
-      return 'image/png';
-    case 'jpg':
-    case 'jpeg':
-      return 'image/jpeg';
-    case 'webp':
-      return 'image/webp';
     case 'woff2':
       return 'font/woff2';
     case 'woff':
@@ -528,7 +450,3 @@ export function resetAppearanceToolTestHooks(): void {
   localServerAvailableImpl = getLocalServerAvailable;
 }
 
-/** Test hook: inject wallpaper pref without full patch flow. */
-export function applyWallpaperModeForTests(mode: WallpaperMode): void {
-  saveDesktopPref('wallpaper', mode);
-}

@@ -33,6 +33,7 @@ import {
   snapshotRestore,
   worktreeAdd,
   worktreeRemove,
+  checkout,
 } from '../../server/git/git-ops.js';
 import { handleGitRequest } from '../../server/git/middleware.js';
 import { setWorkspaceRoot } from '../../server/workspace/root.js';
@@ -326,6 +327,40 @@ describe('git API', () => {
     const removed = await worktreeRemove({ cwd: repoDir, path: repoDir });
     assert.equal(removed.ok, false);
     assert.match(removed.error ?? '', /Cannot remove the main worktree|is a main working tree/i);
+  });
+
+  test('worktreeAdd slugifies invalid branch names', async () => {
+    const added = await worktreeAdd({
+      cwd: repoDir,
+      branch: 'Test Worktree',
+    });
+    assert.equal(added.ok, true);
+    assert.equal(added.branch, 'test-worktree');
+    assert.match(String(added.path ?? '').replace(/\\/g, '/'), /test-worktree$/);
+
+    const removed = await worktreeRemove({
+      cwd: repoDir,
+      path: added.path,
+    });
+    assert.equal(removed.ok, true);
+  });
+
+  test('checkout create slugifies invalid branch names', async () => {
+    const before = await branches({ cwd: repoDir });
+    const original = before.current;
+    const created = await checkout({
+      cwd: repoDir,
+      branch: 'Test Branch',
+      create: true,
+    });
+    assert.equal(created.ok, true);
+    assert.equal(created.branch, 'test-branch');
+
+    const listed = await branches({ cwd: repoDir });
+    assert.ok(listed.local?.includes('test-branch'));
+
+    const back = await checkout({ cwd: repoDir, branch: original });
+    assert.equal(back.ok, true);
   });
 
   test('POST /api/git status honors cwd', async () => {

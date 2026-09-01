@@ -2,7 +2,7 @@
  * Smart git diff truncation — stat summary, complete file hunks, omitted-file footer (MIN-345).
  */
 
-import { DEFAULT_MAX_OUTPUT_CHARS } from './output-cap.js';
+import { getOutputCapPolicy } from './output-cap.js';
 import { parseGitNumstat } from './git-change-stats.js';
 
 /**
@@ -119,7 +119,7 @@ function buildOmittedFooter(omitted, staged) {
   const stagedHint = staged ? ' staged=true' : '';
   const lines = [
     '---',
-    `Truncated: omitted ${omitted.length} file(s) — call git_diff with path= for each file${stagedHint}:`,
+    `Truncated: omitted ${omitted.length} file(s) — call git_diff with path= for each file${stagedHint}, or pass full_result: true:`,
   ];
 
   for (const entry of omitted) {
@@ -146,12 +146,14 @@ function buildOmittedFooter(omitted, staged) {
  * @returns {{ text: string, truncated: boolean, includedFiles: number, omittedFiles: number }}
  */
 export function truncateGitDiff(patch, rawNumstat, options = {}) {
-  const maxChars = options.maxChars ?? DEFAULT_MAX_OUTPUT_CHARS;
+  const policy = getOutputCapPolicy();
+  const apply = options.maxChars != null ? true : policy.applyResultCap;
+  const maxChars = options.maxChars ?? policy.maxOutputChars;
   const staged = options.staged === true;
   const scopePath = options.scopePath;
   const trimmedPatch = String(patch ?? '').trimEnd();
 
-  if (trimmedPatch.length <= maxChars) {
+  if (!apply || trimmedPatch.length <= maxChars) {
     return {
       text: trimmedPatch,
       truncated: false,

@@ -26,6 +26,7 @@ import { detectEmbedBlockedFrame } from './preview-embed-detect';
 import { resolvePreviewLoadUrl, workspacePreviewUrl } from './preview-load-url';
 import { getFileTreeListingWorkspaceRoot } from './file-tree-listing-root';
 import {
+  canAgentRevealPreviewPanel,
   isFullscreenOverlayObscuringWorkspace,
   isPreviewPaneDomVisible,
   scheduleElectronPreviewHostLayoutSync,
@@ -1203,8 +1204,9 @@ export function loadPreviewSource(source: PreviewSource, options?: { cacheBust?:
 }
 
 /**
- * Show the preview split + Electron guest when browser_navigate runs.
+ * Show the preview split + Electron guest when browser_navigate runs on Code / Orchestrate.
  * Does not load the URL — caller uses navigateAndWait (avoids double fetch).
+ * On Issues / other apps / wiki: background navigation only; never paint the guest overlay.
  */
 export async function revealPreviewPanelForAgentNavigation(url: string): Promise<void> {
   const trimmed = url.trim();
@@ -1221,29 +1223,35 @@ export async function revealPreviewPanelForAgentNavigation(url: string): Promise
 async function applyAgentPreviewNavigation(url: string, desktopHosted: boolean): Promise<void> {
   if (!desktopHosted && !(await dismissFileViewerForPreview())) return;
 
-  if (isFullscreenOverlayObscuringWorkspace()) {
-    loadPreviewSource({ kind: 'url', url });
-    hidePreviewStatus();
-    setPreviewLoading(true);
-    const input = getUrlInput();
-    if (input) input.value = url;
+  const tabId = getActivePreviewTabId() ?? ensureDefaultPreviewTab().id;
+  // Persist intended URL without loading — Electron navigation is navigateAndWait.
+  updatePreviewTabSource(tabId, { kind: 'url', url });
+  hidePreviewStatus();
+  setPreviewLoading(true);
+  const input = getUrlInput();
+  if (input) input.value = url;
+
+  const allowedToShow = desktopHosted || canAgentRevealPreviewPanel();
+  if (!allowedToShow) {
+    // Issues / Settings / wiki / other apps: keep the guest hidden; do not open the pane.
+    if (usesElectronPreview()) {
+      const api = getPreviewApi();
+      await api?.hide();
+    }
     return;
   }
 
   if (!desktopHosted) {
     showPreviewSplit();
   }
-  loadPreviewSource({ kind: 'url', url });
-  hidePreviewStatus();
-  setPreviewLoading(true);
 
-  const input = getUrlInput();
-  if (input) input.value = url;
-
-  if (usesElectronPreview()) {
-    await showPreviewHost();
-    await syncElectronPreviewHostLayout();
+  if (!usesElectronPreview()) {
+    loadPreviewSource({ kind: 'url', url });
+    return;
   }
+
+  // Wait for stable #previewBody bounds so show(bounds) is the only paint path.
+  await syncElectronPreviewHostLayout(tabId);
 }
 
 /**
