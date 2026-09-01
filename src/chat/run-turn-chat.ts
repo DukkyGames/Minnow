@@ -1145,8 +1145,23 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       removeOrphanStreamingRow(wrap, streamStatus);
     }
     streamStatus.dispose();
+    // A failed outcome carries its reason in `result.error`; showing the bare
+    // outcome word ("crashed") strands the only diagnostic the turn produced.
+    const failure =
+      result.outcome === 'crashed' || result.outcome === 'timeout'
+        ? ('error' in result && typeof result.error === 'string' && result.error.trim()
+            ? result.error.trim()
+            : result.outcome)
+        : null;
+    if (failure) {
+      console.error(`[chat ${chat.id}] turn ${result.outcome}:`, failure);
+    }
     if (isStreamDomVisible(chat.id)) {
-      setStatus('ok', result.outcome === 'no_report' ? 'Done' : result.outcome);
+      if (failure) {
+        setStatus('err', failure);
+      } else {
+        setStatus('ok', result.outcome === 'no_report' ? 'Done' : result.outcome);
+      }
       scrollChatIfPinned();
     }
 

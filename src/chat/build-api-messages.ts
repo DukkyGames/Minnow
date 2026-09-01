@@ -470,10 +470,13 @@ export function buildApiMessages(
 /**
  * Persist-aligned prior transcript for `runTurn({ messages })`.
  *
- * Same length as `chat.history` (no extra tool-screenshot follow-ups, no
- * skipped injection rows) so suffix persist stays aligned. Overlays VLM
- * `image_url` parts onto existing user rows. Inner `runTurn` injects new
- * tool-screenshot follow-ups from `execute` attachments.
+ * Adds no rows of its own (no extra tool-screenshot follow-ups) and drops the
+ * same UI-only notice rows `createSessionTranscriptStore().load` drops, so this
+ * array and the store's `have` count agree and suffix persist stays aligned.
+ * Sending an `injection` / `context` row verbatim fails the completion with
+ * HTTP 400 (unknown role), so it cannot ride along just to keep the length.
+ * Overlays VLM `image_url` parts onto existing user rows. Inner `runTurn`
+ * injects new tool-screenshot follow-ups from `execute` attachments.
  */
 export function overlayMultimodalHistoryForRunTurn(
   chat: Chat,
@@ -485,7 +488,9 @@ export function overlayMultimodalHistoryForRunTurn(
   const pending = (options?.attachments ?? getPendingAttachments()).filter(
     (a) => a.kind !== 'error',
   );
-  const history = chat.history.map((m) => ({ ...m }));
+  const history = chat.history
+    .filter((m) => !isUiOnlyTranscriptMessage(m))
+    .map((m) => ({ ...m }));
   const multimodalUserIdx = indexOfMultimodalUserMessage(history, pending);
   const sendUserImages = options?.vision ?? true;
   const replayIndices = sendUserImages
