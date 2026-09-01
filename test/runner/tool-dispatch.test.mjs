@@ -203,8 +203,13 @@ describe('in-process tool dispatch', { concurrency: false }, () => {
   });
 
   test('output-cap truncation matches HTTP byte for byte', async () => {
+    // Line count is derived from the cap, not a literal: MIN-667 made the cap
+    // configurable and raised the default 32k -> 128k, which left a fixed
+    // 500-line fixture under the threshold and stopped testing truncation.
+    const LINE_CHARS = 78;
+    const lineCount = Math.ceil((DEFAULT_MAX_OUTPUT_CHARS * 2) / LINE_CHARS);
     const lines = Array.from(
-      { length: 500 },
+      { length: lineCount },
       (_, i) => `line-${String(i + 1).padStart(3, '0')}-${'x'.repeat(70)}`,
     );
     const body = `${lines.join('\n')}\n`;

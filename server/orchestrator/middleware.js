@@ -10,6 +10,8 @@
  * | ------ | ----------------------------------- | ----------------------------------------- |
  * | POST   | `/api/boards`                       | Create from a plan path; 400 + ParseError[] |
  * | GET    | `/api/boards`                       | List                                      |
+ * | GET    | `/api/boards/resume/pending`        | Boards held by the boot resume gate       |
+ * | POST   | `/api/boards/resume/resolve`        | `{ decision: 'resume' | 'decline' }`      |
  * | GET    | `/api/boards/:id`                   | Current derived state                     |
  * | GET    | `/api/boards/:id/events`            | SSE stream                                |
  * | POST   | `/api/boards/:id/start`             | `{ concurrency }` (omit → default 2)      |
@@ -42,6 +44,7 @@ import { makeEvent } from './core/events.js';
 import { stateToJSON } from './core/snapshot.js';
 import { createScriptedEffector } from './effector-scripted.js';
 import { disposeEngines, getEngine, peekEngine } from './engine.js';
+import { listPendingBoardResumes, resolveAllBoardResumes } from './resume-gate.js';
 import {
   appendEvent,
   boardExists,
@@ -148,6 +151,10 @@ function serialiseState(state) {
 export const ROUTES = [
   { method: 'POST', pattern: /^\/api\/boards$/, name: 'create' },
   { method: 'GET', pattern: /^\/api\/boards$/, name: 'list' },
+  // Boot resume gate. Two segments, so neither collides with the `:id` routes
+  // below — but they must stay above them to keep that obvious.
+  { method: 'GET', pattern: /^\/api\/boards\/resume\/pending$/, name: 'resumePending' },
+  { method: 'POST', pattern: /^\/api\/boards\/resume\/resolve$/, name: 'resumeResolve' },
   { method: 'GET', pattern: /^\/api\/boards\/([^/]+)$/, name: 'get' },
   { method: 'GET', pattern: /^\/api\/boards\/([^/]+)\/events$/, name: 'events' },
   { method: 'GET', pattern: /^\/api\/boards\/([^/]+)\/journal$/, name: 'journal' },
@@ -272,6 +279,31 @@ async function dispatch(route, req, res) {
         });
       }
       return json(res, 200, { ok: true, boards });
+    }
+
+    case 'resumePending': {
+      // Boards `load()` held because they were `running` when the process died.
+      // Scoped like `list` so another workspace's board is never offered here.
+      const rows = [];
+      for (const row of listPendingBoardResumes()) {
+        const state = peekEngine(row.boardId)?.getState();
+        if (state && !(await boardBelongsToWorkspace(state))) continue;
+        rows.push(row);
+      }
+      return json(res, 200, { ok: true, boards: rows });
+    }
+
+    case 'resumeResolve': {
+      const body = await readJsonBody(req);
+      const decision = body.decision === 'decline' ? 'decline' : 'resume';
+      if (body.decision !== 'resume' && body.decision !== 'decline') {
+        return json(res, 400, {
+          ok: false,
+          error: "decision must be 'resume' or 'decline'",
+        });
+      }
+      const boardIds = await resolveAllBoardResumes(decision);
+      return json(res, 200, { ok: true, decision, boardIds });
     }
 
     case 'create':

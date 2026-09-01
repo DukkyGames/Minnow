@@ -39,20 +39,20 @@ export const BOARD_ONBOARDING_KICKOFF_MESSAGE =
  * builder output, and older transcripts that used the bare constant.
  */
 export const BOARD_ONBOARDING_KICKOFF_MARKER =
-  "call board_init with each task's build and test spec and category. Do not start any tasks.";
+  "each task's build and test spec and category. Do not start any tasks.";
 
 /** Legacy alias for onboarding kickoff (historical transcripts / init-split detection). */
 export const BOARD_BUILD_KICKOFF_MESSAGE = BOARD_ONBOARDING_KICKOFF_MESSAGE;
 
 /**
- * Build the board_init kickoff user turn. When a plan path is already bound, name it
+ * Build the board-init kickoff user turn. When a plan path is already bound, name it
  * so the model does not invent an ask_question plan picker.
  */
 export function buildBoardOnboardingKickoffMessage(planPath?: string | null): string {
   const normalized = normalizeOrchestratePlanPath(planPath ?? '');
   if (!normalized) return BOARD_ONBOARDING_KICKOFF_MESSAGE;
   return (
-    `Parse the selected plan at \`${normalized}\` and call board_init with each task's ` +
+    `Parse the selected plan at \`${normalized}\` and initialize the board with each task's ` +
     'build and test spec and category. Do not start any tasks. Do not ask which plan to use.'
   );
 }

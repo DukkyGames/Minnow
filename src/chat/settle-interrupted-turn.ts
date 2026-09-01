@@ -252,7 +252,7 @@ export function settleStoppedTurn(chrome: InterruptedTurnChrome): SettleStoppedR
   tearDownLiveStreamChrome(chrome);
   chrome.thoughtController?.abort();
 
-  // Keep the generation id on a system Stop (Quit Minnow) so the boot-resume
+  // Keep the generation id on a system Stop (Quit Minnow) so the resume
   // gate still has a marker. User/timeout Stop must drop it or reload resumes.
   if (stopReason !== 'system') {
     chat.currentGenerationId = undefined;

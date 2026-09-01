@@ -49,6 +49,7 @@ import {
   createBoardsMiddleware,
   setEffectorFactory,
 } from '../orchestrator/middleware.js';
+import { armBoardResumeGate } from '../orchestrator/resume-gate.js';
 import {
   cancelOrphanedRunnerGenerations,
   createRunnerEffector,
@@ -82,6 +83,10 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   // has an empty generations store; this is a no-op on a real boot.
   cancelOrphanedRunnerGenerations();
   setEffectorFactory((boardId) => createRunnerEffector({ boardId }));
+  // A board left `running` by a crash or a quit must not restart on whatever
+  // request happens to build its engine. Armed only here: the engine suites
+  // load-and-run as before unless they opt in.
+  armBoardResumeGate();
   // P8-F: sub-agents are a view of /api/agents. Spawn/cancel are POSTs;
   // delivery tickAll re-offers pending completions after a restart.
   cancelOrphanedSubAgentGenerations();

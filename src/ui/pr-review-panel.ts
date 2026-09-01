@@ -14,7 +14,6 @@ import { getSubAgentRun } from '../agents/orchestrator.ts';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events.ts';
 import type { SubAgentFinding } from '../agents/sub-agent-structured-outcome.ts';
 import type { PrReviewRecord } from '../state/pr-review-store.ts';
-import { openFileInViewer } from './file-viewer.ts';
 import { openSubAgentDrawer } from './sub-agent-drawer.ts';
 import { subAgentLiveStatusLine } from './sub-agent-live-status.ts';
 
@@ -206,7 +205,9 @@ function findingRow(finding: SubAgentFinding, severity: string): HTMLElement {
       chip.textContent = path;
       chip.title = `Open ${path}`;
       chip.addEventListener('click', () => {
-        void openFileInViewer(path);
+        // Dynamic: a static edge would pull CodeMirror into the boot bundle
+        // (test/boot/eager-graph.test.mts). Nothing here needs it until a click.
+        void import('./file-viewer.ts').then((m) => m.openFileInViewer(path));
       });
       paths.appendChild(chip);
     }

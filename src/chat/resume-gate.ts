@@ -1,6 +1,6 @@
 /**
  * Boot-time hold on every auto-resume path until the user answers the resume prompt.
- * Mirrors oom-recovery.ts: a single flag the auto-start paths bail out on.
+ * A single flag the auto-start paths bail out on.
  */
 
 /**

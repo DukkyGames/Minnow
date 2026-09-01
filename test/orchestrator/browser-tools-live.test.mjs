@@ -24,6 +24,7 @@ import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { resetBrowserConfigCache } from '../../server/cdp/browser-config.js';
 import { discoverBrowser } from '../../server/browser-driver/index.js';
 import { executeInProcessTool } from '../../server/runner/node.js';
+import { DEFAULT_MAX_OUTPUT_CHARS } from '../../server/tools/output-cap.js';
 import { FINAL_TESTER_TOOL_IDS } from '../../server/runner/tool-set.js';
 import {
   BROWSER_BLOCKED_PREFIX,
@@ -66,10 +67,17 @@ const PAGE_HTML = `<!doctype html>
   </script>
 </body></html>`;
 
-/** A page whose DOM comfortably exceeds the shared 32k output cap. */
+/**
+ * A page whose DOM comfortably exceeds the shared output cap.
+ *
+ * Sized from `DEFAULT_MAX_OUTPUT_CHARS` rather than a literal: MIN-667 made the
+ * cap configurable and raised the default from 32k to 128k, which silently made
+ * a fixed-size fixture too small to truncate at all.
+ */
+const BIG_PARAGRAPH_COUNT = Math.ceil((DEFAULT_MAX_OUTPUT_CHARS * 2) / 190);
 const BIG_HTML = `<!doctype html>
 <html><head><title>Big</title><link rel="icon" href="data:,"></head><body>
-${Array.from({ length: 400 }, (_, i) => `<p id="p${i}">paragraph ${i} ${'z'.repeat(160)}</p>`).join('\n')}
+${Array.from({ length: BIG_PARAGRAPH_COUNT }, (_, i) => `<p id="p${i}">paragraph ${i} ${'z'.repeat(160)}</p>`).join('\n')}
 </body></html>`;
 
 function startFixtureServer() {
@@ -269,7 +277,11 @@ describe('browser tools — live, through the real dispatch', { skip: skipReason
     await callTool('browser_drive_navigate', { url: `${fixture.origin}/big` });
     const content = await callTool('browser_drive_read_page', { mode: 'dom' });
     assert.match(content, /\[truncated — \d+ of \d+ chars;/, content.slice(0, 400));
-    assert.ok(content.length < 40_000, `capped read was ${content.length} chars`);
+    // Cap plus the fence and truncation footer — not a fixed byte count.
+    assert.ok(
+      content.length < DEFAULT_MAX_OUTPUT_CHARS * 1.05,
+      `capped read was ${content.length} chars`,
+    );
     assert.match(content, /UNTRUSTED_SOURCE_DATA/, 'page text must be fenced as untrusted');
   });
 

@@ -6,9 +6,10 @@
  * streaming, one with an unfinished tool batch, or one stamped `resumeInterrupted`
  * by Quit Minnow all resumed on their own. They now wait for an answer here.
  *
- * Orchestrate boards are not gated here. Under Orchestrator V2 the client no
- * longer resumes boards at boot at all — the server engine owns board lifecycle
- * through its own journal + reconcile, so there is nothing on this side to park.
+ * Orchestrate boards are gated too, but the hold lives on the server
+ * (`server/orchestrator/resume-gate.js`): under V2 a board resumes when its
+ * engine loads, which any request can trigger, so the renderer can only ask
+ * which boards are held and relay the answer.
  */
 
 import { getActiveChat, saveSessionsNow } from '../state/sessions.ts';
@@ -16,6 +17,11 @@ import type { Chat, SessionState } from '../types.ts';
 import { listChatsWithGenerationId } from '../chat/generation-resume.ts';
 import { hasIncompleteToolBatchForBoot } from '../chat/incomplete-tool-resume.ts';
 import { setResumeGateState } from '../chat/resume-gate.ts';
+import {
+  fetchPendingBoardResumes,
+  resolveBoardResumes,
+  type PendingBoardResume,
+} from './board-resume-gate-client.ts';
 import {
   clearResumeInterruptedForChats,
   isChatResumeInterrupted,
@@ -33,10 +39,11 @@ export interface ResumeChatCandidate {
 
 export interface ResumeCandidates {
   chats: ResumeChatCandidate[];
+  boards: PendingBoardResume[];
 }
 
 function hasCandidates(candidates: ResumeCandidates): boolean {
-  return candidates.chats.length > 0;
+  return candidates.chats.length > 0 || candidates.boards.length > 0;
 }
 
 /**
@@ -76,7 +83,7 @@ export async function collectResumeCandidates(state: SessionState): Promise<Resu
     pushChat(chat, 'interrupted');
   }
 
-  return { chats };
+  return { chats, boards: await fetchPendingBoardResumes() };
 }
 
 /**
@@ -106,8 +113,19 @@ function describeChatCandidate(candidate: ResumeChatCandidate): ResumePromptItem
   };
 }
 
+function describeBoardCandidate(candidate: PendingBoardResume): ResumePromptItem {
+  const count = candidate.taskCount;
+  return {
+    label: `${candidate.name?.trim() || 'Board'} — orchestrate board`,
+    detail: count ? `${count} task${count === 1 ? '' : 's'}, still running` : 'Still running',
+  };
+}
+
 /** Drop stale generation / interrupt markers ("Don't resume"). */
 function declineResume(candidates: ResumeCandidates): void {
+  // Server-side stop, so the board shows Stopped and the next boot stays quiet.
+  if (candidates.boards.length) void resolveBoardResumes('decline');
+
   clearResumeInterruptedForChats(
     candidates.chats.map((c) => c.chat),
     { clearGenerationId: true },
@@ -133,7 +151,10 @@ export async function runBootResumeGate(state: SessionState): Promise<void> {
 
   setResumeGateState('pending');
 
-  const choice = await showResumePromptModal(candidates.chats.map(describeChatCandidate));
+  const choice = await showResumePromptModal([
+    ...candidates.chats.map(describeChatCandidate),
+    ...candidates.boards.map(describeBoardCandidate),
+  ]);
 
   if (choice === 'decline') {
     declineResume(candidates);
@@ -142,6 +163,9 @@ export async function runBootResumeGate(state: SessionState): Promise<void> {
   }
 
   setResumeGateState('resumed');
+
+  // Releases the tick timers `engine.load()` withheld for these boards.
+  if (candidates.boards.length) await resolveBoardResumes('resume');
 
   await bootGenerationResumeForChats(state.chats);
   await bootIncompleteToolResumeForChats(state.chats);
@@ -155,7 +179,7 @@ export async function runBootResumeGate(state: SessionState): Promise<void> {
 /** Boot entry point — never rejects, never blocks the rest of `initApp`. */
 export function startBootResumeGate(state: SessionState): void {
   void runBootResumeGate(state).catch((err) => {
-    reportBackgroundError('boot-resume-gate', err);
+    reportBackgroundError('resume-gate', err);
     // Leave the hold in place: failing open would restart work unprompted, which
     // is the exact behavior this gate exists to prevent.
     setResumeGateState('declined');

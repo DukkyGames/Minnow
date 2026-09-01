@@ -210,13 +210,17 @@ describe('composeSystemPrompt mode part', () => {
     assert.doesNotMatch(out, /Sub-agent delegation/);
   });
 
-  test('orchestrate with default orchestrator suppresses mode body', async () => {
+  test('orchestrate has no default work agent, so the mode body survives', async () => {
+    // V2 deleted the `orchestrator` work-agent (prompts and registry entry) —
+    // the server engine owns board execution now. With no default agent for the
+    // mode there is nothing carrying deliverable instructions, so suppressing
+    // the mode body would leave the turn with no operating instructions at all.
     assert.equal(
       shouldSuppressModePart({
         modeId: 'orchestrate',
         workAgentId: 'orchestrator',
       } as never),
-      true,
+      false,
     );
     registerPromptFilesFromRaw(await loadBaseAndModeFixtures());
     const out = composeSystemPrompt({
@@ -224,17 +228,21 @@ describe('composeSystemPrompt mode part', () => {
       cwd: '/test',
       modeId: 'orchestrate',
       expertId: null,
-      workAgentId: 'orchestrator',
-      workAgentLabel: 'Orchestrator',
+      workAgentId: null,
       skillBody: null,
       memoryBlock: null,
-      enabledToolIds: ['board_init', 'read_file'],
+      enabledToolIds: ['read_file'],
       infoPresetId: null,
       orchestratePlanPath: 'documentation/plans/fixture-plan.md',
     });
-    assert.match(out, /Work agent: Orchestrator/);
-    assert.doesNotMatch(out, /Operating mode: Orchestrate/);
-    assert.match(out, /documentation\/plans\/fixture-plan\.md/);
-    assert.match(out, /do \*\*not\*\* ask the user to pick among plan files/);
+    assert.match(out, /Operating mode: Orchestrate/);
+  });
+
+  test('a mode with a default work agent still suppresses its mode body', async () => {
+    // The suppression rule itself is unchanged; only orchestrate lost its agent.
+    assert.equal(
+      shouldSuppressModePart({ modeId: 'build', workAgentId: 'builder' } as never),
+      true,
+    );
   });
 });
