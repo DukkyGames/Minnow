@@ -282,7 +282,12 @@ export function subscribeToGenerationRaw(
           }
 
           if (block.trim()) {
-            handlers.onChunk(block.endsWith('\n') ? block : `${block}\n`);
+            // Preserve SSE event boundaries (`\n\n`). The inner runner's
+            // feedSseEventBuffer will not parse a `data:` line until the blank
+            // line arrives — a single trailing newline left tool_streaming
+            // stuck until the generation ended (P6-D).
+            const framed = `${block.replace(/\n+$/, '')}\n\n`;
+            handlers.onChunk(framed);
           }
 
           endIndex = buffer.indexOf('\n\n');
@@ -295,7 +300,7 @@ export function subscribeToGenerationRaw(
           handlers.onEnd?.(endPayload);
           return;
         }
-        handlers.onChunk(buffer.endsWith('\n') ? buffer : `${buffer}\n`);
+        handlers.onChunk(`${buffer.replace(/\n+$/, '')}\n\n`);
       }
 
       handlers.onEnd?.();

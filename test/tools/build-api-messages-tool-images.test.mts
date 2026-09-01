@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 
-import { buildApiMessages } from '../../src/tools/loop.ts';
+import { buildApiMessages } from '../../src/chat/build-api-messages.ts';
 import {
   TOOL_IMAGE_FOLLOW_UP_TEXT,
   TOOL_IMAGE_NO_VISION_HINT,

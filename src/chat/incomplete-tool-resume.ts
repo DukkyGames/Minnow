@@ -212,7 +212,7 @@ export async function resumeIncompleteToolBatch(
 
 
 
-    const { runChatTurn } = await import('../tools/loop');
+    const { runChatTurn } = await import('./run-turn-chat');
 
     await runChatTurn({
 

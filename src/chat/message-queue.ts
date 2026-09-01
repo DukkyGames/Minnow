@@ -105,7 +105,7 @@ export function pushQueuedMessageNow(chat: Chat, id: string): boolean {
     return enqueueSteerMessage(chat, item.text);
   }
 
-  void import('../tools/loop').then(({ resumeParentChatWithMessage }) =>
+  void import('./run-turn-chat').then(({ resumeParentChatWithMessage }) =>
     resumeParentChatWithMessage(chat, item.text),
   );
   return true;
@@ -129,7 +129,7 @@ export async function flushPendingMessageQueue(chat: Chat): Promise<void> {
   scheduleSaveSessions();
   if (!item?.text.trim()) return;
 
-  const { resumeParentChatWithMessage } = await import('../tools/loop');
+  const { resumeParentChatWithMessage } = await import('./run-turn-chat');
   await resumeParentChatWithMessage(chat, item.text);
 }
 

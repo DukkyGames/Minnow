@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { replaceArchivedRangesWithPlaceholder } from '../../../src/chat/archive/collapse.ts';
-import { buildApiMessages } from '../../../src/tools/loop.ts';
+import { buildApiMessages } from '../../../src/chat/build-api-messages.ts';
 import type { ApiMessage, Chat, Message } from '../../../src/types.ts';
 
 function makeChat(history: Message[]): Chat {

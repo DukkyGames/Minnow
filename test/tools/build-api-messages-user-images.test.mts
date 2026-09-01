@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 
-import { buildApiMessages, persistableUserImages } from '../../src/tools/loop.ts';
+import { buildApiMessages, persistableUserImages } from '../../src/chat/build-api-messages.ts';
 import { USER_IMAGE_NO_VISION_HINT } from '../../src/chat/tool-image-follow-up.ts';
 import { clearAttachments, pushAttachment } from '../../src/attachments/store.ts';
 import type { Attachment } from '../../src/attachments/types.ts';

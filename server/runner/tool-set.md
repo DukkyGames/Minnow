@@ -21,7 +21,7 @@ each default id is not answered with `Not implemented: <name>`.
 | `get_datetime`, `calculate` | `src/tools/browser-executor.ts` | Exclude. Agents can use `execute_command` (`date`, `node -e`) if they need a clock or math. |
 | `get_system_info` | Browser executor (UA / `navigator`) | Exclude. Node `execute_command` covers OS facts. |
 | `read_clipboard`, `write_clipboard` | DOM clipboard | Exclude. Unattended runs have no clipboard. |
-| `ask_question` | Composer card; P6-B is the injected-capability work | Exclude. AFK / unattended must not block on a UI. |
+| `ask_question` | Composer card; P6-B injects `AskCapability` on interactive `runTurn` callers | Exclude from the default headless set. Unattended `runTurn` passes `ask: null`; a fabricated call is an immediate tool error (no hang). |
 | `wikipedia_search` | Browser executor (CORS fetch) | Exclude. Use `fetch_web_content` / `web_search_ddg`. |
 | `web_search` | **Client router** to Brave (browser) or `web_search_ddg` / Tavily / SearXNG | Exclude the router name. Include the **server backends** (`web_search_ddg`, `web_search_tavily`, `web_search_searxng`). |
 | `spawn_sub_agent`, `cancel_sub_agent`, `list_sub_agents`, `get_sub_agent_status` | Nested loops in the renderer adapter | Exclude. V2 attempts are processes started by the effector (P2-F), not sub-agent tools. |

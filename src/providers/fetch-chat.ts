@@ -20,11 +20,28 @@ import { resolveProviderEndpoints } from './resolve';
 export interface PostChatOptions {
   stream?: boolean;
   fallbackRole?: FallbackRole;
+  /**
+   * Persist the generation after terminal (main chat reload re-subscribe). Default
+   * false — sub-agents / titles keep the short eviction window.
+   */
+  persist?: boolean;
+  /** Active chat id for webhook chat.completed payloads. */
+  chatId?: string;
+  /**
+   * Re-subscribe to an existing generation (boot resume) instead of POST.
+   * Later tool-loop rounds omit this so they create a new generation (MIN-187).
+   */
+  resumeGenerationId?: string;
+  /** Fired once the generation id is known (new or resumed). */
+  onGenerationId?: (generationId: string) => void;
 }
 
 /**
- * POST chat/completions for the given provider via backend generations (persist: false).
+ * POST chat/completions for the given provider via backend generations.
  * Returns a Response whose body replays upstream SSE bytes from the generation stream.
+ *
+ * P6-D: pass `resumeGenerationId` to skip POST and subscribe to `/api/generations/:id/stream`.
+ * Main chat passes `persist: true` so reload can re-subscribe.
  */
 export async function postChatCompletions(
   provider: ProviderPublic,
@@ -37,12 +54,19 @@ export async function postChatCompletions(
     stream: options.stream ?? body.stream ?? true,
   };
 
-  const { generationId } = await retryOnceOnTransientFetch(() =>
-    createGeneration(provider.id, payload, {
-      persist: false,
-      fallbackRole: options.fallbackRole,
-    }),
-  );
+  const resumeId = options.resumeGenerationId?.trim();
+  const generationId = resumeId
+    ? resumeId
+    : (
+        await retryOnceOnTransientFetch(() =>
+          createGeneration(provider.id, payload, {
+            persist: options.persist === true,
+            fallbackRole: options.fallbackRole,
+            chatId: options.chatId,
+          }),
+        )
+      ).generationId;
+  options.onGenerationId?.(generationId);
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {

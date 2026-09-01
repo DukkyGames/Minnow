@@ -93,11 +93,16 @@ export function scheduleChatTitleGeneration(
 
   emitTitleJobStarted(chatId, scheduleContextByChatId.get(chatId) ?? context);
 
-  void runTitleJob(chatId, seed, controller.signal).finally(() => {
-    scheduleContextByChatId.delete(chatId);
-    releaseTitleJobInflight(chatId, controller);
-    emitTitleJobEnded(chatId);
-  });
+  // Fire-and-forget: a missing config server must not reject after the turn.
+  void runTitleJob(chatId, seed, controller.signal)
+    .catch(() => {
+      /* titles are best-effort */
+    })
+    .finally(() => {
+      scheduleContextByChatId.delete(chatId);
+      releaseTitleJobInflight(chatId, controller);
+      emitTitleJobEnded(chatId);
+    });
 }
 
 function resolveTitleGenerationOptions(

@@ -52,7 +52,7 @@ import type { Chat } from '../types';
 import {
   buildHistoryUserContent,
   runChatTurn,
-} from '../tools/loop';
+} from '../chat/messaging';
 import { detectLocalServer, executeTool } from '../tools/client';
 import { isLocalServerAvailable } from '../tools/config';
 import { setChatMode } from './mode-selector';

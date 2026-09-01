@@ -41,7 +41,7 @@ No UI framework — direct TypeScript + DOM with CSS tokens. Boot order in [`src
 
 - **`src/os/`** — workspace-first shell: stage, app rail, menubar, router, workspace gate, app registry; released apps mount as full-stage layers in `#osAppsLayer`. Scheduler is the one side-panel overlay; nothing floats.
 - **`src/chat/`** — chat orchestration, composer **modes** (`modes/registry.ts`; four in the composer strip), prompt composition (`prompts/`).
-- **`src/tools/`** — the tool catalog ([`definitions.ts`](../../src/tools/definitions.ts); 113 built-in tools — entries with an `appId` are filtered while that app is hidden or disabled), executors, permission gating, and the agent loop ([`loop.ts`](../../src/tools/loop.ts)).
+- **`src/tools/`** — the tool catalog ([`definitions.ts`](../../src/tools/definitions.ts); 113 built-in tools — entries with an `appId` are filtered while that app is hidden or disabled), executors, and permission gating. Product chat send is [`runChatTurn`](../../src/chat/run-turn-chat.ts) around [`runTurn()`](../../server/runner/run-turn.js) — not a client copy of the stream/tool loop.
 - **`src/agents/`** — sub-agent runner/controller, work agents, sampler resolution, UI Designer.
 - **`src/api/`** — provider/model fetching, SSE parsing (`sse-parse.ts`), generations client.
 - **Feature modules** — `models/`, `research/`, `scheduler/`, `voice/`, `memory/`, `notifications/`, `webhooks/`, `oauth/`, `lsp/`, `mcp/`, `skills/`, plus `compare/`, `benchmark/`, `calendar/`, `email/` for release-gated apps.

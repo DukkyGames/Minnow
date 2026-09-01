@@ -8,9 +8,14 @@ function isTruthyFlag(value: string | undefined): boolean {
   return trimmed === '1' || trimmed === 'true' || trimmed === 'yes';
 }
 
-/** Settings → Advanced → Board testing (requires MINNOW_DEBUG at build/runtime). */
-export function isBoardTestingSettingsVisible(): boolean {
+/** True when Vite/`MINNOW_DEBUG` is set — maintainer surfaces and P6-A spike. */
+export function isMinnowDebugEnabled(): boolean {
   const env =
     typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : undefined;
   return isTruthyFlag(env?.MINNOW_DEBUG);
+}
+
+/** Settings → Advanced → Board testing (requires MINNOW_DEBUG at build/runtime). */
+export function isBoardTestingSettingsVisible(): boolean {
+  return isMinnowDebugEnabled();
 }

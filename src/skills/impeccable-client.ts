@@ -262,7 +262,7 @@ export async function composeImpeccableSkillBody(
   return composed;
 }
 
-/** Whether loop.ts should run composeImpeccableSkillBody for this skill + user text. */
+/** Whether the send path should run composeImpeccableSkillBody for this skill + user text. */
 export function shouldComposeImpeccableBody(
   skillId: string | null,
   userText: string,

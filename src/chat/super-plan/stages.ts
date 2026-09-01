@@ -23,7 +23,8 @@ import {
 } from '../../research/client';
 import type { Chat } from '../../types';
 import { detectLocalServer, executeTool } from '../../tools/client';
-import { buildHistoryUserContent, runChatTurn } from '../../tools/loop';
+import { buildHistoryUserContent } from '../build-api-messages';
+import { runChatTurn } from '../run-turn-chat';
 import { newestRun } from '../../state/runs-store';
 import {
   adaptGrillingSkillForSuperPlan,

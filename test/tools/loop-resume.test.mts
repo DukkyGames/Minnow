@@ -196,7 +196,7 @@ describe('runChatTurn boot resume tool loop (MIN-187)', () => {
       chats: [chat],
     });
 
-    const { runChatTurn } = await import('../../src/tools/loop.ts');
+    const { runChatTurn } = await import('../../src/chat/run-turn-chat.ts');
 
     await runChatTurn({
       chat,

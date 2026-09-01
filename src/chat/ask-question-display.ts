@@ -12,16 +12,11 @@ import {
 import { isMainColumnOverlaySuppressingChatDom } from '../ui/main-column-overlay';
 import { isBoardChatEmbedOpenForChat } from '../ui/orchestrate-board-chat-state';
 import { isBoardViewActive } from '../ui/view-mode-toggle';
+import {
+  runAskQuestionDisplayContextSync,
+} from './ask-question-display-sync';
 
-type AskQuestionDisplayContextSync = () => void;
-let displayContextSync: AskQuestionDisplayContextSync | null = null;
-
-/** Wire modal park/unpark from question-cards-modal without a circular import. */
-export function registerAskQuestionDisplayContextSync(
-  sync: AskQuestionDisplayContextSync,
-): void {
-  displayContextSync = sync;
-}
+export { registerAskQuestionDisplayContextSync } from './ask-question-display-sync';
 
 type AskQuestionDisplayListener = () => void;
 const displayListeners = new Set<AskQuestionDisplayListener>();
@@ -55,7 +50,7 @@ export function notifyAskQuestionDisplayContextChanged(): void {
       /* ignore subscriber errors */
     }
   }
-  displayContextSync?.();
+  runAskQuestionDisplayContextSync();
 }
 
 /** Subscribe to chat / app context changes that affect ask_question visibility. */

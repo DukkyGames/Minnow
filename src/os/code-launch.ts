@@ -4,7 +4,7 @@
 
 import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { setWorkspacePath } from '../config/workspace-api';
-import { sendMessageWithTools } from '../tools/loop';
+import { sendMessageWithTools } from '../chat/messaging';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { getWorkspacePath } from '../state/workspace';
 import { clearForegroundSeed } from './instances';

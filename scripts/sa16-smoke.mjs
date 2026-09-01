@@ -54,7 +54,7 @@ async function main() {
 
   // Attachment helpers
   try {
-    const { buildHistoryUserContent } = await import('../src/tools/loop.ts');
+    const { buildHistoryUserContent } = await import('../src/chat/build-api-messages.ts');
     const { processFile } = await import('../src/attachments/reader.ts');
     const { setLocalServerAvailable } = await import('../src/tools/config.ts');
 

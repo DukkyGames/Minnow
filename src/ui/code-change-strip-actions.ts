@@ -14,7 +14,8 @@ import {
   getPerFileChangeSummary,
   hasCodeChangeTotals,
 } from '../usage/code-change-ledger';
-import { buildHistoryUserContent, runChatTurn } from '../tools/loop';
+import { buildHistoryUserContent } from '../chat/build-api-messages';
+import { runChatTurn } from '../chat/run-turn-chat';
 import { setStatus } from './status';
 import { syncCodeChangeStripWrapVisibility } from './code-change-strip';
 

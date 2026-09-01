@@ -129,7 +129,7 @@ describe('runChatTurn resumeGenerationId errors', () => {
     sText.id = 'sText';
     document.body.appendChild(sText);
 
-    const { runChatTurn } = await import('../../src/tools/loop.ts');
+    const { runChatTurn } = await import('../../src/chat/run-turn-chat.ts');
 
     await runChatTurn({
       chat,

@@ -242,7 +242,7 @@ async function defaultDeliverResume(
   // Category-3: hydrate before resume mutates history (runChatTurn also awaits).
   const { ensureChatHistoryLoaded } = await import('../state/sessions');
   await ensureChatHistoryLoaded(chatId);
-  const { resumeParentChatWithMessage } = await import('../tools/loop');
+  const { resumeParentChatWithMessage } = await import('../chat/run-turn-chat');
   await resumeParentChatWithMessage(chat, message, { suppressUserEcho: true });
 }
 

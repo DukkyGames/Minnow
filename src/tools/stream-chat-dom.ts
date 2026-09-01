@@ -21,7 +21,7 @@ type RemountListener = (row: StreamDomHandles) => void;
 
 const remountListeners = new Map<string, RemountListener>();
 
-/** Loop registers while a turn runs; cleared in finally. */
+/** runChatTurn registers while a turn runs; cleared in finally. */
 export function registerStreamDomRemount(
   chatId: string,
   listener: RemountListener | null,

@@ -1450,7 +1450,8 @@ function syncCreateChatChrome(chatId: string): void {
 /** Start an LLM turn when the user message was already pushed into history. */
 async function kickoffSeededChatTurn(chat: Chat, message: string): Promise<void> {
   const { detectLocalServer } = await import('../tools/client');
-  const { buildHistoryUserContent, runChatTurn } = await import('../tools/loop');
+  const { buildHistoryUserContent } = await import('../chat/build-api-messages');
+  const { runChatTurn } = await import('../chat/run-turn-chat');
   const { isFirstUserMessagePending } = await import('../chat/titles/schedule');
 
   await detectLocalServer();

@@ -303,6 +303,12 @@ describe('P2-F source contract', () => {
     assert.equal(source.includes('30 * 60 * 1000'), false);
     assert.match(source, /attemptLimits/);
   });
+
+  test('P6-B: unattended runTurn passes ask: null', () => {
+    const source = fs.readFileSync(EFFECTOR_JS, 'utf8');
+    assert.match(source, /ask:\s*null/);
+    assert.equal(/\bisBoard\b/.test(source), false);
+  });
 });
 
 describe('runner effector', { concurrency: false }, () => {
@@ -646,6 +652,34 @@ describe('runner effector', { concurrency: false }, () => {
       engine.dispose();
       await longFake.close();
       await restoreFake();
+    }
+  });
+
+  test('P6-B: start() injects ask: null on the real runTurn options', { timeout: 20_000 }, async () => {
+    const boardId = 'p2f-ask-null';
+    const journal = await openBoard(boardId);
+    /** @type {unknown[]} */
+    const seenAsk = [];
+    const box = { engine: /** @type {ReturnType<typeof createEngine> | null} */ (null) };
+    const effector = makeEffector({
+      boardId,
+      journal,
+      cwd,
+      getState: () => box.engine.getState(),
+      runTurn: async (options) => {
+        seenAsk.push(options.ask);
+        return { outcome: 'pass', summary: 'ok', evidence: [] };
+      },
+    });
+    const engine = createEngine({ boardId, effector, journal, tickMs: 100_000 });
+    box.engine = engine;
+    await engine.load();
+    try {
+      await engine.startBoard(1);
+      await waitFor(() => seenAsk.length >= 1, 10_000);
+      assert.equal(seenAsk[0], null);
+    } finally {
+      engine.dispose();
     }
   });
 

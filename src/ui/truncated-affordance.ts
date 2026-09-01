@@ -18,7 +18,7 @@ export function markMessageTruncated(wrap: HTMLElement, chat: Chat): void {
   action.textContent = 'Continue';
   action.addEventListener('click', () => {
     action.disabled = true;
-    void import('../tools/loop').then(({ runChatTurn }) =>
+    void import('../chat/run-turn-chat').then(({ runChatTurn }) =>
       runChatTurn({
         chat,
         pushUser: false,

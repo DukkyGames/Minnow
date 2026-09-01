@@ -498,9 +498,102 @@ rather than asserting it, both fixed here:
   process trees — enough idle, not enough under suite load. It polls now.
 
 ### Phase 6 — Normal chat adopts the runner
-*Proves: one engine for all chat. Written now, scheduled after Phase 5.*
+*Proves: one engine for all chat. Scheduled after Phase 5 (Linear: Done 2026-08-31).*
 
 **MIN-683** · MIN-723 P6-A Non-board `runTurn()` spike · MIN-724 P6-B `ask_question` as an injected capability · MIN-725 P6-C Strangle the client loop · MIN-726 P6-D Delete the client loop
+
+#### Phase 6 status
+
+**Phase 6 complete in this worktree** (2026-08-31). All four sub-issues verify PASS. Chat send is a caller around `runTurn()`; `src/tools/loop.ts` is deleted. Dual-path flag is gone.
+
+Orchestration was from worktree `Orchestrator-V2-7b4e9c2a` on detached `HEAD` `901726b7` (Phases 0–5 and 9 Done in Linear). Not committed. Not pushed.
+
+**Known findings (do not re-discover):** `parseReport`, `systemPrompt`, `AskCapability` / `askTimeoutMs`, `seedKind: 'continue'` / `messages`, `injectReportTool`, `nudgeToolUse` / `finalizeStructuredOutcome`, `TurnEvent.tool_streaming`, resume as a `postChatCompletions` wrap (not a `runTurn` option), SSE `\n\n` framing on `subscribeToGenerationRaw`. Boards still inject `report_outcome` and pass `ask: null`. No `isBoard` in `server/runner/`.
+
+**Phase 8 is not filed.** The sub-agent controller is **kept** (spawn-from-within-a-turn). P8-G deletes it.
+
+**Open sibling:** MIN-752 (workspace switch leak) is In Progress on this branch; not folded into Phase 6.
+
+**Open sibling:** MIN-752 (workspace switch leak) is In Progress on this branch. Do not fold it into Phase 6.
+
+| Todo | Issue | Depends on | Status |
+| ---- | ----- | ---------- | ------ |
+| P6-A Non-board `runTurn()` spike | [MIN-723](https://linear.app/minnowai/issue/MIN-723) | P5-D (done) | **done** (verify PASS 2026-08-31; Electron flag-on QA still remaining in this worktree) |
+| P6-B `ask_question` as an injected capability | [MIN-724](https://linear.app/minnowai/issue/MIN-724) | P6-A | **done** (verify PASS 2026-08-31; 53 tests) |
+| P6-C Strangle the client loop | [MIN-725](https://linear.app/minnowai/issue/MIN-725) | P6-A, P6-B | **done** (verify PASS 2026-08-31; 97 scoped tests) |
+| P6-D Delete the client loop | [MIN-726](https://linear.app/minnowai/issue/MIN-726) | P6-C | **done** (verify PASS 2026-08-31; tsc + 82 handoff tests + build) |
+
+#### P6-A (MIN-723) — done
+
+- [x] One simple non-board chat (user message, model reply, 1–2 tool calls, no attachments, no steering) routes through `runTurn()` behind an **off-by-default** flag (`MINNOW_DEBUG` + `localStorage['minnow.p6a.runTurnChat']`)
+- [x] Renderer session store passed as `TranscriptStore` (P2-A seam extracted to `src/agents/session-transcript-store.ts`; chat wraps it with an isolated buffer — see gap list)
+- [x] `onEvent` drives the **existing** chat DOM (streaming / thinking / tool rows) via `src/chat/run-turn-chat-paint.ts`
+- [x] Classified gap list at [`orchestrator-v2-p6a-gap-list.md`](./orchestrator-v2-p6a-gap-list.md) — each gap is *belongs in the runner* / *belongs in the caller* / *needs an interface change*
+- [x] **No `runTurn` / `TurnEvent` / `TurnResult` signature change.** Interface findings for P6-C: optional report-tool injection; `seed` as history continuation; skip inner sub-agent nudge/finalization; `execute` attachments; transcript suffix vs replace
+- [x] Tests: simple turn through `runTurn()`; default path still uses `runChatTurn`; flag on asserts `runTurn` is invoked
+
+**Todos**
+
+- [x] Extract shared `createSessionTranscriptStore` + renderer `RunnerDeps`
+- [x] Flag + simple-shape gate in `runChatTurn`
+- [x] Adapter maps `onEvent` onto existing DOM helpers without forking a painter
+- [x] Gap list complete enough to scope P6-C
+- [x] Record findings; do not quietly patch the runner
+- [x] Verify PASS (tsc + 43 scoped tests). Live Code-chat with the flag on was not run against this worktree (main checkout holds port 9473).
+
+#### P6-B (MIN-724) — done
+
+- [x] `AskCapability` `{ ask(question) -> Promise<Answer> } | null` on `runTurn()` options (record as the PRD §9 Phase 6 finding)
+- [x] Capability present → `ask_question` in the resolved tool list and routed to the handler
+- [x] Capability `null` → tool **absent** from the resolved list (injection, not `if (isBoard)`)
+- [x] Board / headless effector injects `null`; fabricated `ask_question` call is an immediate tool error, not a hang
+- [x] Chat spike (P6-A flag path) injects a handler backed by `src/tools/ask-question-queue.ts`
+- [x] Unanswered interactive question times out; the turn resolves
+- [x] Audit: approval queue / destructive confirm — document out of scope ([`orchestrator-v2-p6b-human-tools.md`](./orchestrator-v2-p6b-human-tools.md))
+- [x] Tests covering the MIN-724 bullets; grep runner for no board-vs-chat branch
+- [x] Verify PASS (tsc + 53 scoped tests). Approval-queue hangs remain documented out of scope.
+
+#### P6-C (MIN-725) — done
+
+Scope from [`orchestrator-v2-p6a-gap-list.md`](./orchestrator-v2-p6a-gap-list.md), not from Linear's "every mode including Super Plan" sentence. Super Plan, resume/fork, and replacing the sub-agent controller stay on `runChatTurn` / Phase 8.
+
+- [x] Interface finding 1: continue from prior transcript (`messages[]` / `seedKind: 'continue'`) — not an isolated `[system, seed]` every turn
+- [x] Interface finding 2: optional report-tool injection (`reportToolName: null` / `injectReportTool: false`); boards still inject `report_outcome`; **no** product-shaped branch in `server/runner/`
+- [x] Interface finding 4: chat can disable inner sub-agent tool-use nudge + structured-outcome finalization
+- [x] Chat caller: compose `systemPrompt` + mode tool catalog; `AskCapability` from P6-B; interactive `executeTool`
+- [x] Eligible shapes (flag still forceable both ways, default **off**): General/Build/Debug/Plan text+tools; queue, goal, `/loop`, steer-as-abort+follow-up as **overlays** around `runTurn`. Attachments and exclusive skill compose stay on `loop.ts` (listed leftovers).
+- [x] Stream-end order on the `runTurn` path: `setStreaming(false)` **before** `notifyChatStreamEnded`
+- [x] `src/tools/loop.ts` kept; excluded shapes still use it; leftover exclusive behavior listed for P6-D in the gap list
+- [x] Board `runTurn` callers unchanged in behaviour (report tool, `ask: null`, nudge/finalization as today)
+
+**Todos**
+
+- [x] Runner interface 1 + 2 + 4 with unit tests; board default proven
+- [x] Chat adapter: real history, no report tool, no nudge/finalization, mode catalog, composed system prompt
+- [x] Stream-end order test
+- [x] Gap list + this plan + `documentation/context.md` + `server/runner/README.md`
+- [x] Verify PASS (tsc + 97 scoped tests). Live Electron on port 9473 is the main checkout — not used.
+
+#### P6-D (MIN-726) — done
+
+One turn loop for chat. Leftover exclusive `loop.ts` behaviour is a **caller overlay** around `runTurn()`, then the second implementation is deleted.
+
+- [x] Every previous exclusive shape is a caller overlay (or a moved helper), not a second stream/tool loop: Super Plan, resume/fork, attachments/VLM, skill compose, `suppressUserEcho`, queue/goal/`/loop`, steer
+- [x] Delete `src/tools/loop.ts` as the turn loop. Keepers (`buildApiMessages`, `buildHistoryUserContent`, `sendMessageWithTools`, …) live in `src/chat/build-api-messages.ts` / `src/chat/run-turn-chat.ts` / `src/chat/messaging.ts`. `grep` for `tools/loop` under `src/` returns nothing
+- [x] Delete the P6-A/P6-C dual-path flag — one path
+- [x] Satellites verified: keep `chat-tool-batch.ts`, `turn-continuation.ts` (re-export of server), `tool-wrap-dom.ts`, `stream-chat-dom.ts`, `streaming-state.ts` (other callers). Keep `src/api/board-testing.ts` (V2 Settings → Board testing)
+- [x] **Keep** `src/agents/controller/` and the renderer `sub-agent-runner.ts` adapter — Phase 8. Sub-agents spawn *from within a turn*; they are not the board scheduler. Deleting them here would drop in-turn spawn with nothing to replace it
+- [x] Resume uses HTTP `/api/generations` re-subscribe inside wrapped `postChatCompletions` (first call only; later tool rounds POST). No `runTurn` resume option. No `isBoard`
+- [x] Forward inner `onToolCallDelta` / `onLiveActivity.currentToolName` as `TurnEvent.tool_streaming` so chat can paint "Calling {tool}…" without a second SSE parser (Phase 6 finding: the wrapper was dropping a name the inner loop already had)
+- [x] Update `documentation/context.md`; AGENTS.md / DESIGN.md / user manual did not describe a client turn loop as the engine
+- [x] Tests: adapter / flag-removed / stream-end / resume / build-api-messages; `npx tsc --noEmit`
+- [x] Verify PASS (tsc + 82 handoff tests + package-guard + effector `ask: null` + `npm run build`). `package:dir` skipped. Live Electron on port 9473 is the main checkout — not used.
+
+**Phase 6 finding (resume):** boot resume is a caller wrap of `postChatCompletions({ resumeGenerationId })`, not a `runTurn` option. Later tool-loop rounds still POST a new generation (MIN-187).
+
+**Phase 6 finding (tool name while args stream):** `runTurn` now forwards inner `onLiveActivity.currentToolName` as `{ type: 'tool_streaming', name }`. Chat's painter maps that onto `attachToolStartIndicator` (including remount). This is not a second stream parser — the inner loop already had `onToolCallDelta`. Boards that omit `onEvent` are unchanged.
+
+**Phase 6 finding (SSE framing through `/api/generations`):** `subscribeToGenerationRaw` must forward each upstream block with a trailing `\n\n`. A single newline left `feedSseEventBuffer` unparsed until the generation ended, so mid-stream `tool_streaming` never fired.
 
 ### Phase 7 — Chat-stream UI stays responsive mid-generation
 *Proves: typing, scrolling, and clicking stay live while a chat streams, without giving back local tok/s. Can start now.*
@@ -561,7 +654,7 @@ Ordering note: **before Phase 4.** Phase 4 deletes `orchestrate-board.ts` and it
 ## Verification Checklist
 
 - [ ] `npm test` passes (orchestrator suite still has known flakes: client list-poll, snapshot timing, Windows `UV_HANDLE_CLOSING`)
-- [x] `npm run build` passes (Phase 4 worktree)
+- [x] `npm run build` passes (Phase 4 worktree; re-run PASS in Phase 6 worktree)
 - [x] The scheduler suite runs to completion with **zero model calls** (Phase 1 gate)
 - [x] Killing the server mid-run and restarting reproduces identical derived state (Phase 1 gate)
 - [x] A 3-task board completes at concurrency 1 with the UI closed, in-process tools, and typed exits (Phase 2 gate; fake host, 10/10)
@@ -569,6 +662,7 @@ Ordering note: **before Phase 4.** Phase 4 deletes `orchestrate-board.ts` and it
 - [x] No file under `src/state/orchestrate-*` or `src/chat/orchestrate/` remains (Phase 4 gate)
 - [x] `board_set_autonomy` / `delegate_tasks` gone from `src` + `server`; `board_init` remains only as leftover V1 session-log vocabulary in `session-schema.mjs` (hydrate, not a live tool) (Phase 4 gate)
 - [ ] An overnight AFK run finishes, reports once, and stalls on nothing (Phase 5 gate)
+- [x] A normal chat turn runs through `runTurn()`; `src/tools/loop.ts` is deleted; `ask_question` is injection-only (Phase 6 gate)
 - [ ] Cloud and local streams leave composer/scroll/clicks responsive; local tok/s not regressed (Phase 7 gate)
 - [ ] A sub-agent spawned from a chat survives a renderer reload and a server restart, and finishes (Phase 8 gate)
 - [ ] A sub-agent that runs past its wall-clock limit is retried by policy, not cancelled with its work discarded (Phase 8 gate)

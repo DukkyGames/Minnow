@@ -12,7 +12,7 @@ import {
   touchChat,
 } from '../../state/sessions';
 import type { ActiveGoalState, Chat } from '../../types';
-import { resumeParentChatWithMessage } from '../../tools/loop';
+import { resumeParentChatWithMessage } from '../run-turn-chat';
 import { isStreamDomVisible } from '../streaming-state';
 import { appendBubble } from '../../ui/messages';
 import { scrollChatIfPinned } from '../../ui/chat-scroll';

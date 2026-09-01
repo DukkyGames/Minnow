@@ -285,6 +285,19 @@ export interface SubAgentRunner {
     parentChatId?: string | null;
     contextBudget?: AgentContextBudgetConfig;
     summarySchema?: string;
+    /**
+     * Prior transcript for a continuation (P6-C). Omit for isolated
+     * `[system, user(task)]`.
+     */
+    priorMessages?: unknown[];
+    /**
+     * When false, skip the tool-use nudge user row. Default true.
+     */
+    nudgeToolUse?: boolean;
+    /**
+     * When false, skip structured-outcome finalization. Default true.
+     */
+    finalizeStructuredOutcome?: boolean;
     modelContextLimit?: number | null;
     signal: AbortSignal;
     /** Passed into each nested tool call (chat id, sub-agent label). */

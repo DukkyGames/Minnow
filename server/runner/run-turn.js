@@ -8,6 +8,19 @@
  * Phase 6 finding and must be recorded as one.** Phase 6 is "all chat eventually";
  * baking a domain concept into this entry point would force a rewrite.
  *
+ * P6-A (MIN-723) did not edit this file. P6-B (MIN-724) adds `ask` on options
+ * — the PRD §9 injected-capability finding. P6-C (MIN-725) adds history
+ * continuation (`messages` / `seedKind: 'continue'`), optional report-tool
+ * injection, and gates for the inner tool-use nudge + structured-outcome
+ * finalization. There is still no board-vs-chat branch: the caller supplies
+ * flags, not a product name.
+ *
+ * P6-D (MIN-726): `onLiveActivity.currentToolName` is forwarded as
+ * `TurnEvent.tool_streaming`. The inner loop already parsed the name from SSE
+ * (`onToolCallDelta`); this wrapper was dropping it. Chat paints
+ * "Calling {tool}…" from that event — not a second stream parser. Boards that
+ * omit `onEvent` are unchanged.
+ *
  * Outcomes: `pass` / `fail` / `blocked` come only from a successful report-tool
  * call. This file never imports the sub-agent prose JSON parser — if the tool
  * was not called, the answer is `no_report`, not a guess from assistant text.
@@ -19,9 +32,28 @@
 
 import { sumUsageSegments } from './stats-math.js';
 import { createSubAgentRunner } from './sub-agent-runner.js';
+import { buildOpeningMessages } from './opening-messages.js';
+import {
+  ASK_QUESTION_TIMEOUT_ERROR,
+  ASK_QUESTION_TOOL_NAME,
+  ASK_QUESTION_UNAVAILABLE_ERROR,
+  DEFAULT_ASK_TIMEOUT_MS,
+  isAskCapability,
+  parseAskQuestionArgs,
+  resolveAskTimeoutMs,
+  stringifyAskAnswer,
+  withAskQuestionTool,
+} from './ask-question-tool.js';
 
 /** Default injected report tool. Generic on purpose — P2-E owns real schemas. */
 export const DEFAULT_REPORT_TOOL_NAME = 'report_outcome';
+
+export {
+  ASK_QUESTION_TIMEOUT_ERROR,
+  ASK_QUESTION_TOOL_NAME,
+  ASK_QUESTION_UNAVAILABLE_ERROR,
+  DEFAULT_ASK_TIMEOUT_MS,
+};
 
 const AGENT_OUTCOMES = new Set(['pass', 'fail', 'blocked']);
 
@@ -29,6 +61,8 @@ const AGENT_OUTCOMES = new Set(['pass', 'fail', 'blocked']);
 const TURN_REPORTED = Symbol('turn-reported');
 /** Distinguishes maxTurns / wall-clock abort from a provider crash. */
 const TURN_TIMEOUT = Symbol('turn-timeout');
+/** Distinguishes the interactive-ask watchdog from composer Stop / wall-clock. */
+const ASK_TIMEOUT = Symbol('ask-timeout');
 
 /**
  * @param {unknown} value
@@ -201,6 +235,44 @@ function withReportTool(tools, reportToolName) {
 }
 
 /**
+ * Whether this caller wants a report tool on the wire. Default is inject-on
+ * so board-shaped callers stay unchanged. `reportToolName: null` or
+ * `injectReportTool: false` omits it. Injection is a caller flag, not a
+ * product-shaped branch.
+ *
+ * @param {{ reportToolName?: string | null, injectReportTool?: boolean }} [options]
+ * @returns {{ inject: boolean, reportToolName: string | null }}
+ */
+function resolveReportInjection(options = {}) {
+  if (options.injectReportTool === false || options.reportToolName === null) {
+    return { inject: false, reportToolName: null };
+  }
+  const reportToolName =
+    typeof options.reportToolName === 'string' && options.reportToolName.trim()
+      ? options.reportToolName.trim()
+      : DEFAULT_REPORT_TOOL_NAME;
+  return { inject: true, reportToolName };
+}
+
+/**
+ * Resolve the tool list the model actually sees. `ask_question` is added or
+ * stripped here from the capability, then the report tool is ensured unless
+ * the caller opted out.
+ *
+ * @param {import('./run-turn').TurnToolDefinition[] | undefined} tools
+ * @param {{ reportToolName?: string | null, injectReportTool?: boolean, ask?: unknown }} [options]
+ * @returns {import('./run-turn').TurnToolDefinition[]}
+ */
+export function resolveTurnTools(tools, options = {}) {
+  const withAsk = withAskQuestionTool(tools, options.ask);
+  const injection = resolveReportInjection(options);
+  if (!injection.inject || !injection.reportToolName) return withAsk;
+  return withReportTool(withAsk, injection.reportToolName);
+}
+
+export { buildOpeningMessages } from './opening-messages.js';
+
+/**
  * @param {AbortSignal[]} signals
  * @returns {AbortSignal}
  */
@@ -221,6 +293,89 @@ function anySignal(signals) {
 
 function isAbortError(err) {
   return Boolean(err) && (err.name === 'AbortError' || err.code === 'ABORT_ERR');
+}
+
+/**
+ * Reject when `signal` aborts so a hanging `ask()` cannot stall the race.
+ *
+ * @param {AbortSignal} signal
+ * @returns {Promise<never>}
+ */
+function waitForAbort(signal) {
+  return new Promise((_, reject) => {
+    const fail = () => {
+      const err = new Error('aborted');
+      err.name = 'AbortError';
+      err.cause = signal.reason;
+      reject(err);
+    };
+    if (signal.aborted) {
+      fail();
+      return;
+    }
+    signal.addEventListener('abort', fail, { once: true });
+  });
+}
+
+/**
+ * Route `ask_question` through the injected capability (or fail immediately).
+ * The unattended path never waits on `askTimeoutMs`.
+ *
+ * @param {unknown} rawArgs
+ * @param {{
+ *   ask: unknown,
+ *   askTimeoutMs?: number,
+ *   signal?: AbortSignal,
+ *   turnTimeoutSignal?: AbortSignal,
+ *   chatId: string,
+ * }} opts
+ * @returns {Promise<string>}
+ */
+async function runAskCapability(rawArgs, opts) {
+  if (!isAskCapability(opts.ask)) {
+    return ASK_QUESTION_UNAVAILABLE_ERROR;
+  }
+  const timeoutMs = resolveAskTimeoutMs(opts.askTimeoutMs);
+  const askTimeoutCtrl = new AbortController();
+  const timer = setTimeout(() => {
+    askTimeoutCtrl.abort(ASK_TIMEOUT);
+  }, timeoutMs);
+  const combined = anySignal(
+    [opts.signal, opts.turnTimeoutSignal, askTimeoutCtrl.signal].filter(Boolean),
+  );
+  try {
+    const askPromise = Promise.resolve().then(() =>
+      opts.ask.ask(parseAskQuestionArgs(rawArgs), {
+        signal: combined,
+        chatId: opts.chatId,
+      }),
+    );
+    const abortPromise = waitForAbort(combined);
+    try {
+      const answer = await Promise.race([askPromise, abortPromise]);
+      return stringifyAskAnswer(answer);
+    } catch (err) {
+      if (opts.turnTimeoutSignal?.aborted) {
+        const timeoutErr = new Error('maxTurns or wallClockMs exceeded');
+        timeoutErr[TURN_TIMEOUT] = true;
+        throw timeoutErr;
+      }
+      if (opts.signal?.aborted) {
+        throw isAbortError(err) ? err : Object.assign(new Error('aborted'), { name: 'AbortError' });
+      }
+      if (askTimeoutCtrl.signal.aborted) {
+        return ASK_QUESTION_TIMEOUT_ERROR;
+      }
+      if (isAbortError(err)) throw err;
+      return `Error: ask_question failed (${errorMessage(err)}).`;
+    } finally {
+      // The loser of the race must not become an unhandledRejection later.
+      askPromise.catch(() => {});
+      abortPromise.catch(() => {});
+    }
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function errorMessage(err) {
@@ -246,15 +401,30 @@ function emit(onEvent, event) {
  * Persist only the new tail. The inner loop owns the in-memory transcript;
  * this store is the durable seam for callers (and P2-F).
  *
+ * Isolated turns persist every inner row (including the leading system).
+ * Continue turns skip that leading system so we suffix product history
+ * instead of splicing `[system, user(seed)]` into a live chat.
+ *
  * @param {import('./transcript-store').TranscriptStore} store
  * @param {string} chatId
  * @param {unknown[]} messages
+ * @param {{ skipLeadingSystem?: boolean }} [opts]
  */
-function persistNewMessages(store, chatId, messages) {
+function persistNewMessages(store, chatId, messages, opts = {}) {
   if (!store || typeof store.append !== 'function') return;
   const have = store.load(chatId)?.messages?.length ?? 0;
-  if (!Array.isArray(messages) || messages.length <= have) return;
-  for (let i = have; i < messages.length; i += 1) {
+  // Inner loop always prepends systemPrompt. Chat transcripts do not store it.
+  const offset =
+    opts.skipLeadingSystem &&
+    Array.isArray(messages) &&
+    messages[0] &&
+    typeof messages[0] === 'object' &&
+    /** @type {{ role?: string }} */ (messages[0]).role === 'system'
+      ? 1
+      : 0;
+  const aligned = have + offset;
+  if (!Array.isArray(messages) || messages.length <= aligned) return;
+  for (let i = aligned; i < messages.length; i += 1) {
     store.append(chatId, messages[i]);
   }
 }
@@ -282,23 +452,40 @@ export async function runTurn(options) {
     return { outcome: 'crashed', error: 'runTurn: model.providerId and model.id are required' };
   }
 
-  const reportToolName =
-    typeof options.reportToolName === 'string' && options.reportToolName.trim()
-      ? options.reportToolName.trim()
-      : DEFAULT_REPORT_TOOL_NAME;
-  const tools = withReportTool(options.tools, reportToolName);
+  const injection = resolveReportInjection(options);
+  const reportToolName = injection.reportToolName;
+  // P6-B: capability injection, not list-presence, decides ask_question.
+  // P6-C: report-tool injection is optional (chat omits; board default stays on).
+  const tools = resolveTurnTools(options.tools, {
+    reportToolName: options.reportToolName,
+    injectReportTool: options.injectReportTool,
+    ask: options.ask,
+  });
   const seed = typeof options.seed === 'string' ? options.seed : '';
   const limits = options.limits ?? {};
   const transcript = options.transcript ?? deps.transcriptStore;
   const onEvent = options.onEvent;
   const cwd = options.cwd;
+  // Continue vs isolated: explicit `messages` wins; `seedKind: 'continue'`
+  // loads the store. Board callers that pass only `seed` stay isolated.
+  /** @type {unknown[] | undefined} */
+  let priorMessages;
+  if (Array.isArray(options.messages)) {
+    priorMessages = options.messages;
+  } else if (options.seedKind === 'continue') {
+    priorMessages = transcript.load(chatId)?.messages ?? [];
+  }
+  const skipLeadingSystemPersist = priorMessages !== undefined;
   // Phase 6 finding: optional `systemPrompt` so a caller can inject Builder /
   // Tester instructions without the runner knowing what a role is. Default
-  // stays domain-free. Recorded in orchestrator-v2-implementation.md.
+  // stays domain-free. When the report tool is omitted, do not tell the model
+  // to call it. Recorded in orchestrator-v2-implementation.md.
   const systemPrompt =
     typeof options.systemPrompt === 'string' && options.systemPrompt.trim()
       ? options.systemPrompt
-      : 'When you have a result, call the report tool. Do not put the outcome only in assistant text.';
+      : injection.inject
+        ? 'When you have a result, call the report tool. Do not put the outcome only in assistant text.'
+        : 'You are a helpful assistant.';
 
   /** @type {import('./run-turn').TurnResult | null} */
   let captured = null;
@@ -343,15 +530,33 @@ export async function runTurn(options) {
       });
     }
 
-    // Report tool is owned here, not forwarded to `execute`. `report_outcome`
-    // is not a server tool; sending it through in-process dispatch would
-    // surface "unknown tool" instead of a schema error the model can fix.
+    // Report + ask_question are owned here, not forwarded to `execute`.
+    // Both are renderer-only ("Not implemented" on the server). A fabricated
+    // ask_question with no capability must error immediately — never hang on
+    // in-process dispatch or a missing modal.
     /** @type {Array<{ toolCall: unknown, result: { content: string } }>} */
     const outcomes = [];
     /** @type {unknown[]} */
     const otherCalls = [];
     for (const toolCall of toolCalls) {
       const inspected = inspectToolCall(toolCall);
+      if (inspected.name === ASK_QUESTION_TOOL_NAME) {
+        const content = await runAskCapability(inspected.arguments, {
+          ask: options.ask,
+          askTimeoutMs: options.askTimeoutMs,
+          signal: options.signal,
+          turnTimeoutSignal: timeoutCtrl.signal,
+          chatId,
+        });
+        emit(onEvent, {
+          type: 'tool_result',
+          name: ASK_QUESTION_TOOL_NAME,
+          id: inspected.id,
+          content,
+        });
+        outcomes.push({ toolCall, result: { content } });
+        continue;
+      }
       if (inspected.name !== reportToolName) {
         otherCalls.push(toolCall);
         continue;
@@ -439,6 +644,9 @@ export async function runTurn(options) {
 
   let lastDelta = '';
   let lastThinking = '';
+  let lastStreamingTool = '';
+  /** Last onMessagesChange snapshot — continue-mode persist runs once at end. */
+  let lastSnapshot = null;
 
   const runner = createSubAgentRunner(wrappedDeps);
 
@@ -489,6 +697,12 @@ export async function runTurn(options) {
       modelContextLimit: limits.modelContextLimit,
       signal: combinedSignal,
       toolExecuteContext: { chatId, cwd },
+      // P6-C: prior transcript + nudge/finalization gates. Omitted = isolated
+      // start with today's sub-agent nudge and structured-outcome pass.
+      priorMessages,
+      nudgeToolUse: options.nudgeToolUse,
+      finalizeStructuredOutcome: options.finalizeStructuredOutcome,
+      summarySchema: options.summarySchema,
       executeTool: async (name, args, ctx) => {
         if (typeof options.execute === 'function') {
           return options.execute(name, args, {
@@ -500,7 +714,13 @@ export async function runTurn(options) {
         return { content: '' };
       },
       onMessagesChange: (messages) => {
-        persistNewMessages(transcript, chatId, messages);
+        lastSnapshot = messages;
+        // Isolated turns persist live (board default). Continue turns wait
+        // until the loop settles so streaming partials are not appended as
+        // extra assistant rows on the product transcript.
+        if (!skipLeadingSystemPersist) {
+          persistNewMessages(transcript, chatId, messages);
+        }
         if (!Array.isArray(messages) || messages.length === 0) return;
         const last = messages[messages.length - 1];
         if (last?.role !== 'assistant') return;
@@ -518,6 +738,16 @@ export async function runTurn(options) {
           lastThinking = thinking;
           emit(onEvent, { type: 'thinking', text: thinking });
         }
+        // Inner `onToolCallDelta` already named the tool; chat paints the
+        // "Calling {tool}…" indicator from this event (P6-D overlay).
+        const toolName =
+          typeof activity?.currentToolName === 'string'
+            ? activity.currentToolName.trim()
+            : '';
+        if (toolName && toolName !== lastStreamingTool) {
+          lastStreamingTool = toolName;
+          emit(onEvent, { type: 'tool_streaming', name: toolName });
+        }
       },
     });
     // Prefer the runner's own sum when the turn returned normally; the
@@ -534,6 +764,11 @@ export async function runTurn(options) {
     }
     return withUsage({ outcome: 'crashed', error: errorMessage(err) });
   } finally {
+    if (skipLeadingSystemPersist && lastSnapshot) {
+      persistNewMessages(transcript, chatId, lastSnapshot, {
+        skipLeadingSystem: true,
+      });
+    }
     if (wallTimer) clearTimeout(wallTimer);
   }
 

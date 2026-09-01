@@ -222,8 +222,14 @@ describe('server/runner package guard', () => {
   });
 
   it('the renderer adapter does not import in-process tool dispatch', () => {
+    // P6-A extracted HTTP completions + headless batch into renderer-runner-deps.ts.
+    // Both files are renderer wiring; neither may pull Node-only adapters into Vite.
     const adapter = fs.readFileSync(path.join(PROJECT_ROOT, ADAPTER_ENTRY), 'utf8');
-    const specifiers = importSpecifiers(adapter);
+    const deps = fs.readFileSync(
+      path.join(PROJECT_ROOT, 'src', 'agents', 'renderer-runner-deps.ts'),
+      'utf8',
+    );
+    const specifiers = [...importSpecifiers(adapter), ...importSpecifiers(deps)];
     assert.equal(
       specifiers.some((s) => s.includes('tool-dispatch')),
       false,
@@ -236,7 +242,7 @@ describe('server/runner package guard', () => {
     );
     assert.ok(
       specifiers.some((s) => s.includes('headless-tool-batch')),
-      'adapter must keep src/tools/headless-tool-batch.ts',
+      'renderer RunnerDeps must keep src/tools/headless-tool-batch.ts',
     );
     assert.equal(
       specifiers.some((s) => s.includes('runner/node')),

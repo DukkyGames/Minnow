@@ -153,7 +153,7 @@ export interface ActiveGoalState {
 
 /**
  * Persistent /loop timer on a chat (session-scoped repeating prompt).
- * Distinct from {@link ActiveGoalState} and from `src/tools/loop.ts` (tool-call loop).
+ * Distinct from {@link ActiveGoalState} and from the chat send path (`runTurn`).
  */
 export interface ActiveLoopState {
   /** Per-chat counter for loop panel stop controls. */

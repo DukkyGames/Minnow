@@ -1,6 +1,6 @@
 /**
  * Parse persisted user message content (text, file blocks, image placeholders).
- * Format matches {@link buildHistoryUserContent} in tools/loop.ts.
+ * Format matches {@link buildHistoryUserContent} in `src/chat/build-api-messages.ts`.
  */
 
 /** One inlined text/PDF attachment from history. */

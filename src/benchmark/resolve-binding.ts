@@ -30,7 +30,7 @@ export function resetBenchmarkModelSource(): void {
   benchmarkModelSource = readModelSelectFromDom;
 }
 
-/** Active top-bar model select value, matching tools/loop send path. */
+/** Active top-bar model select value, matching the chat send path. */
 export function getActiveModelIdFromDom(): string {
   return benchmarkModelSource();
 }

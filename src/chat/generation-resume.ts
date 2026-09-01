@@ -73,7 +73,7 @@ export async function bootGenerationResumeForChat(
     return;
   }
 
-  const { runChatTurn } = await import('../tools/loop');
+  const { runChatTurn } = await import('./run-turn-chat');
 
   try {
     await runChatTurn({

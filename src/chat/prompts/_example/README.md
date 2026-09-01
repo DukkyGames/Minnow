@@ -27,7 +27,7 @@
 | `interpolate.ts` | `{{token}}` replacement |
 | `init-prompts.ts` | Boot from bundle + `GET /api/prompts/registry` |
 
-Send path: `resolveComposedSystemPrompt()` in `compose-context.ts` → `buildApiMessages()` in `src/tools/loop.ts`.
+Send path: `resolveComposedSystemPrompt()` in `compose-context.ts` → `buildApiMessages()` in `src/chat/build-api-messages.ts`.
 
 ## Forward references
 

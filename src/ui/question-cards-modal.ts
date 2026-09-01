@@ -6,8 +6,8 @@ import { getChatAbort } from '../app-state';
 import {
   isAskQuestionDomVisible,
   notifyAskQuestionDisplayContextChanged,
-  registerAskQuestionDisplayContextSync,
 } from '../chat/ask-question-display';
+import { registerAskQuestionDisplayContextSync } from '../chat/ask-question-display-sync';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { notifyAskQuestionShown } from '../notifications/ask-question';
 import { getActiveChat } from '../state/sessions';

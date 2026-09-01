@@ -94,7 +94,7 @@ describe('runChatTurn abandoned setup', () => {
     const { getChatAbort } = await import('../../src/app-state.ts');
     const { getMainTurnActivity } = await import('../../src/chat/main-turn-activity.ts');
     const { isChatStreaming } = await import('../../src/chat/streaming-state.ts');
-    const { runChatTurn } = await import('../../src/tools/loop.ts');
+    const { runChatTurn } = await import('../../src/chat/run-turn-chat.ts');
 
     /*
      * `pushUser: false` leaves the outbound-prompt build (well after the activity

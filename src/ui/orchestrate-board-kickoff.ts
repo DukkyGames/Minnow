@@ -12,7 +12,8 @@ import { initializeWorkspaceGit } from '../state/initialize-git';
 import { getActiveChat } from '../state/sessions';
 import { getWorkspacePath } from '../state/workspace';
 import { detectLocalServer } from '../tools/client';
-import { buildHistoryUserContent, runChatTurn } from '../tools/loop';
+import { buildHistoryUserContent } from '../chat/build-api-messages';
+import { runChatTurn } from '../chat/run-turn-chat';
 import {
   getBoardKickoffAbortSignal,
   isBoardKickoffInProgress,

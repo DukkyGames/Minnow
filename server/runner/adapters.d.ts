@@ -17,6 +17,10 @@ export interface RunnerProvider {
 export interface PostChatCompletionsOptions {
   stream?: boolean;
   fallbackRole?: string;
+  persist?: boolean;
+  chatId?: string;
+  resumeGenerationId?: string;
+  onGenerationId?: (generationId: string) => void;
 }
 
 /**

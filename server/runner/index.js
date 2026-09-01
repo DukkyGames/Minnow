@@ -19,7 +19,16 @@
 export { createSubAgentRunner, cloneSubAgentMessages } from './sub-agent-runner.js';
 export { createMemoryTranscriptStore } from './transcript-store.js';
 export { postChatCompletionsHttp, runHeadlessToolBatchStub } from './adapters.js';
-export { runTurn, DEFAULT_REPORT_TOOL_NAME } from './run-turn.js';
+export {
+  runTurn,
+  DEFAULT_REPORT_TOOL_NAME,
+  ASK_QUESTION_TOOL_NAME,
+  DEFAULT_ASK_TIMEOUT_MS,
+  ASK_QUESTION_UNAVAILABLE_ERROR,
+  ASK_QUESTION_TIMEOUT_ERROR,
+  resolveTurnTools,
+  buildOpeningMessages,
+} from './run-turn.js';
 export { executeToolCallBatch, STOPPED_TOOL_MSG } from './tool-batch.js';
 export {
   MAX_PARALLEL_READ_TOOLS,

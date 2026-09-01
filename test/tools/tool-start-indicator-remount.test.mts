@@ -131,6 +131,16 @@ async function settle(): Promise<void> {
   }
 }
 
+/** runChatTurn does a lot of setup before it subscribes; poll instead of a short tick budget. */
+async function waitUntil(pred: () => boolean, label: string): Promise<void> {
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) {
+    if (pred()) return;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error(`timed out waiting for ${label}`);
+}
+
 function chatArea(): HTMLElement | null {
   return document.getElementById('chatArea');
 }
@@ -158,14 +168,19 @@ async function startTurnWithPendingToolCall(
   // The post-tool round parks on an open stream; each case ends by aborting the turn.
   const postToolRound = scriptedSseResponse();
 
+  let resumeStreamOpened = false;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.includes('/api/models/cached')) return Response.json({ models: [] });
     if (url.includes('/api/models/serve')) return Response.json({ serves: [] });
     if (url.includes('/api/memory/')) return Response.json({ enabled: false });
     if (url.includes('/api/config/ping')) return Response.json({ ok: true });
+    if (url.includes('/api/config/meta')) return Response.json({ titles: { enabled: false } });
     if (url.includes('/models/load')) return Response.json({ ok: true });
-    if (url.includes(ids.genResume) && url.includes('/stream')) return toolRound.response;
+    if (url.includes(ids.genResume) && url.includes('/stream')) {
+      resumeStreamOpened = true;
+      return toolRound.response;
+    }
     if (url.endsWith('/api/generations') && init?.method === 'POST') {
       return Response.json({ generationId: ids.genRound2 });
     }
@@ -175,7 +190,8 @@ async function startTurnWithPendingToolCall(
     return new Response('not found', { status: 404 });
   }) as typeof globalThis.fetch;
 
-  const { runChatTurn } = await import('../../src/tools/loop.ts');
+  const { runChatTurn } = await import('../../src/chat/run-turn-chat.ts');
+  const { getMainTurnActivity } = await import('../../src/chat/main-turn-activity.ts');
 
   const turn = runChatTurn({
     chat,
@@ -190,6 +206,7 @@ async function startTurnWithPendingToolCall(
     ownsGlobalStreaming: true,
   });
 
+  await waitUntil(() => resumeStreamOpened, 'resume stream subscribe');
   // The model names the tool, then streams its arguments — the long window for a file write.
   toolRound.push(
     dataChunk({
@@ -209,7 +226,10 @@ async function startTurnWithPendingToolCall(
       ],
     }),
   );
-  await settle();
+  await waitUntil(
+    () => getMainTurnActivity(ids.chatId)?.currentTool === 'get_datetime',
+    'tool_streaming currentTool',
+  );
 
   return { toolRound, postToolRound, turn };
 }

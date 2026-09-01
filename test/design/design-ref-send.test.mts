@@ -1,12 +1,11 @@
 /**
  * Draw & Comment tool send-serialization path (MIN-367 acceptance): a queued designRef
  * attachment must produce a composited-image placeholder + structured intent text in both the
- * persisted-history string builder and the VLM multimodal payload builder — the exact functions
- * tools/loop.ts's send path calls for a `designRef` attachment.
+ * persisted-history string builder and the VLM multimodal payload builder.
  */
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { buildHistoryUserContent, buildVlmUserApiContent } from '../../src/tools/loop.ts';
+import { buildHistoryUserContent, buildVlmUserApiContent } from '../../src/chat/build-api-messages.ts';
 import type { Attachment } from '../../src/attachments/types.ts';
 import type { DesignShape } from '../../src/design/shape-model.ts';
 

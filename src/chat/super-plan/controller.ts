@@ -325,12 +325,9 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
  * pending or stale-running stage with no loop in flight, kick the loop.
  */
 export async function onSuperPlanStreamEnd(chatId: string): Promise<void> {
-  // notifyChatStreamEnded fires *before* setStreaming(false) in the same
-  // synchronous block (src/tools/loop.ts), so isChatStreaming(chat.id) below
-  // would still read true without yielding first. This previously worked only
-  // because `await import(...)` happened to defer past that block — make the
-  // ordering explicit instead of relying on that coincidence (same hazard
-  // documented in the Super Plan sequential loop).
+  // notifyChatStreamEnded used to fire *before* setStreaming(false) on the
+  // deleted client loop. The `runTurn` path ends streaming first (PRD §1.3).
+  // Yield anyway so Super Plan advance never races the stream-end listener.
   await new Promise((resolve) => setTimeout(resolve, 0));
   const { findChatById } = await import('../../state/sessions');
   const chat = findChatById(chatId);

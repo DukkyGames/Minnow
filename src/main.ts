@@ -459,7 +459,7 @@ export async function initApp(): Promise<void> {
 
   // Session-scoped /loop ticker (15s safety scan + dueAt wake timer)
   const { startLoopTicker } = await import('./chat/loop/ticker');
-  const { sendProgrammaticChatText } = await import('./tools/loop');
+  const { sendProgrammaticChatText } = await import('./chat/messaging');
   startLoopTicker({
     send: (chat, text) => sendProgrammaticChatText(chat, text),
   });

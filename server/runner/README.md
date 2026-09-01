@@ -59,7 +59,7 @@ object so a caller can reject without teaching this package a role name.
 |------|------|
 | `chatId` | Opaque correlation id. Transcript key only. |
 | `seed` | Opening user message. |
-| `tools` | Resolved OpenAI function-tool list. Capabilities are present or absent here — never hardcoded. |
+| `tools` | Caller OpenAI function-tool list. `ask_question` is added or stripped by `ask` (not by this array). |
 | `model` | `providerId` + `id` + optional sampler / thinking. |
 | `onEvent` | Presentation-free typed events (`delta`, `thinking`, `tool_call`, `tool_result`). The caller chooses DOM, SSE, or nothing. |
 | `cwd` | Forwarded to tool execute context. This wrapper does not `chdir`. |
@@ -67,11 +67,72 @@ object so a caller can reject without teaching this package a role name.
 | `signal` | Caller abort. Distinct from wall-clock timeout. |
 | `limits` | `maxTurns`, `wallClockMs`, context budget, model context limit. |
 | `deps` | P2-A `RunnerDeps` — completions and tool dispatch stay injected. |
-| `reportToolName` | Injected report tool (default `report_outcome`). Not a role name. |
+| `reportToolName` | Injected report tool (default `report_outcome`). Pass `null` to omit. Not a role name. **P6-C.** |
+| `injectReportTool` | When `false`, do not append a report tool. Default `true` (board unchanged). **P6-C.** |
 | `parseReport` | Optional. How to accept a report payload. Default: PRD union. A `{ ok: false, error }` result is a tool error, not `no_report`. Phase 6 finding. |
+| `ask` | **P6-B / MIN-724 (Phase 6 finding, PRD §9).** `{ ask(question, ctx) -> Promise<Answer> } \| null`. Presence of `ask()` puts `ask_question` on the resolved tool list and routes the call to the handler (never through in-process `executeServerTool`). `null` / omitted **strips** the tool even if the caller passed it in `tools`. Unattended callers (board effector) pass `null`. |
+| `askTimeoutMs` | Watchdog for an unanswered interactive question. Default `DEFAULT_ASK_TIMEOUT_MS` (60 min, same as Settings → Watchdog `chat.generationIdleTimeoutMs`). Ignored when `ask` is null (immediate tool error). Never `0` — a chat turn must not hang forever. Test hook: pass a small positive number. |
+| `messages` | Prior transcript for a continuation (no leading system required). **P6-C.** Wins over `seedKind`. |
+| `seedKind` | `'continue'` loads `transcript.load(chatId).messages` and appends `user(seed)` unless that user row is already last. Default / omitted is isolated `[system, user(seed)]` (board callers that pass only `seed`). **P6-C.** |
+| `nudgeToolUse` | When `false`, skip the inner `SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION` user row. Default `true`. Chat passes `false`. **P6-C.** |
+| `finalizeStructuredOutcome` | When `false`, skip `requestStructuredOutcome`. Default `true`. Chat passes `false`. **P6-C.** |
+| `summarySchema` | Forwarded to the inner loop when finalization is on. Chat omits it. |
 
-`ask_question` is callable when it is in `tools` and unavailable when it is not.
-There is no product-shaped branch for it in `run-turn.js`.
+`ask_question` is callable when an `AskCapability` is injected, and unavailable
+when it is not. The runner still has no `isBoard` / chat-vs-board branch.
+A fabricated call with `ask: null` returns an `Error:` tool result immediately
+and the turn continues.
+
+## Phase 6 — P6-A chat spike (MIN-723)
+
+P6-A did **not** change this signature. A flag-gated renderer adapter
+(`src/chat/run-turn-chat.ts`) called `runTurn` for a simple interactive chat
+and mapped `onEvent` onto the existing chat DOM. P6-C closed the interface
+gaps that spike recorded (see the P6-C section below).
+
+## Phase 6 — P6-B `AskCapability` (MIN-724)
+
+P6-B **did** change this signature: `ask` / `askTimeoutMs` on `RunTurnOptions`.
+That is the intended PRD §9 change ("`ask_question` treated as an injected
+capability rather than a hardcoded absence").
+
+The P6-A spike injects a handler backed by `enqueueAskQuestion`. It does **not**
+put `ask_question` in `spikeChatToolDefinitions()` — the capability is what
+adds the schema. Board `createRunnerEffector` passes `ask: null`. Human-gated
+tools that are not this injection (`enqueueToolApproval`, destructive confirm)
+are documented in
+[`documentation/plans/orchestrator-v2-p6b-human-tools.md`](../../documentation/plans/orchestrator-v2-p6b-human-tools.md).
+
+## Phase 6 — P6-C strangle (MIN-725)
+
+P6-C **did** change this signature (findings 1, 2, 4 from the gap list):
+
+- **History continuation.** `messages[]` or `seedKind: 'continue'` (loads the
+  transcript store and appends `user(seed)` unless that user row is already
+  last). Persist suffixes product rows and does not splice a second
+  `[system, user]` into chat history. Board callers that pass only `seed` keep
+  isolated start. Finding 3: chat maps `no_report` → turn complete (no new
+  `TurnResult` outcome). Finding 5 falls out of suffix persist.
+- **Optional report tool.** `injectReportTool: false` or `reportToolName: null`
+  omits injection. Default remains inject-on. There is no product-shaped
+  branch in this package.
+- **Nudge + finalization gates.** `nudgeToolUse: false` and
+  `finalizeStructuredOutcome: false` skip the inner sub-agent tool-use nudge
+  and structured-outcome extra completion. Chat passes both `false`. Board
+  callers omit them (today's defaults).
+
+The chat adapter (`src/chat/run-turn-chat.ts`) is the product send path around
+`runTurn()` (P6-D / MIN-726). Completions: HTTP `/api/generations` via
+`postChatCompletions` (`persist: true` for main chat; first call of a boot
+resume passes `resumeGenerationId` so it subscribes instead of POST). Tools:
+existing `executeTool` / `runHeadlessToolBatch`. Super Plan, attachments/VLM,
+exclusive skill compose, and `suppressUserEcho` are caller overlays. There is
+no dual-path flag. Stream-end order is `setStreaming(false)` **before**
+`notifyChatStreamEnded`. Board `runTurn` is unchanged (report tool, `ask: null`,
+nudge/finalization defaults on).
+
+Finding 6 (`execute` attachments) and finding 7 (lifecycle events): caller wrap
+and the `runTurn` promise remain enough — `TurnEvent` is unchanged.
 
 ## Completions — in-process binding (MIN-700 / P2-C)
 

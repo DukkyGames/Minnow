@@ -14,7 +14,7 @@ import {
   touchChat,
 } from '../state/sessions';
 import { getActiveRun } from '../state/runs-store';
-import { runChatTurn } from '../tools/loop';
+import { runChatTurn } from './run-turn-chat';
 import type { TurnSnapshot } from '../types';
 import { truncateChatHistory } from './history-truncate';
 import { renderChatFromHistory } from '../ui/messages';

@@ -6,7 +6,16 @@ export { createMemoryTranscriptStore } from './transcript-store';
 export type { TranscriptStore, TranscriptRecord, TranscriptMeta, TranscriptMessage } from './transcript-store';
 export { postChatCompletionsHttp, runHeadlessToolBatchStub } from './adapters';
 export type { RunnerDeps, PostChatCompletions, RunHeadlessToolBatch, RunnerProvider } from './adapters';
-export { runTurn, DEFAULT_REPORT_TOOL_NAME } from './run-turn';
+export {
+  runTurn,
+  DEFAULT_REPORT_TOOL_NAME,
+  ASK_QUESTION_TOOL_NAME,
+  DEFAULT_ASK_TIMEOUT_MS,
+  ASK_QUESTION_UNAVAILABLE_ERROR,
+  ASK_QUESTION_TIMEOUT_ERROR,
+  resolveTurnTools,
+  buildOpeningMessages,
+} from './run-turn';
 export type {
   TurnResult,
   AttemptResult,
@@ -14,9 +23,11 @@ export type {
   TurnModel,
   TurnLimits,
   TurnToolDefinition,
+  TurnSeedKind,
   RunTurnOptions,
   ParseReport,
   ParseReportResult,
+  AskCapability,
 } from './run-turn';
 export { executeToolCallBatch, STOPPED_TOOL_MSG } from './tool-batch';
 export {

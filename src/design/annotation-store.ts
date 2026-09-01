@@ -268,7 +268,7 @@ export async function linkAnnotationsToTurn(
 
 /**
  * Stamp every `designRef` attachment in a sent turn with a link to that chat turn (MIN-368).
- * This is the exact function tools/loop.ts's send path calls once the user message has been
+ * This is the exact function the chat send path calls once the user message has been
  * pushed to history — `turnId` is the pushed message's history index (as a string), the same
  * identity {@link jumpToChatTurn}-style navigation and message-actions.ts already key off of.
  * `elementRef` picks (Select tool) have no annotation-store entry to link — only drawn

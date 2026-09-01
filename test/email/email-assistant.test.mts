@@ -11,7 +11,7 @@ import type {
   EmailNarrativeDigest,
   EmailPendingAction,
 } from '../../src/email/client.ts';
-import { buildApiMessages } from '../../src/tools/loop.ts';
+import { buildApiMessages } from '../../src/chat/build-api-messages.ts';
 import type { Chat } from '../../src/types.ts';
 import {
   buildEmailAssistantContextPrompt,

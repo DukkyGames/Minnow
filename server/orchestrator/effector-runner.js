@@ -740,6 +740,8 @@ export function createRunnerEffector(options = {}) {
             reportToolName: REPORT_TOOL_NAME,
             parseReport: parseReportFor(desired.role),
             systemPrompt: prompt,
+            // Unattended: no human. Fabricated ask_question must fail immediately.
+            ask: null,
             onEvent: (event) => {
               if (!boardId) return;
               emitLive({

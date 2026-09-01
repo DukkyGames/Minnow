@@ -83,6 +83,7 @@ import {
 import { retryOnceOnTransientFetch } from "./transient-fetch-retry.js";
 import { LLAMA_CPP_LOCAL_PROVIDER_ID } from "./provider-ids.js";
 import { applySamplerToBody } from "./sampler-types.js";
+import { buildOpeningMessages } from "./opening-messages.js";
 import {
   modelUsesComposerReasoningDropdown,
   resolveEffectiveReasoningEffort
@@ -439,10 +440,13 @@ function createSubAgentRunner(deps) {
   }
   const defaultSubAgentRunner = {
     async run(input) {
-      const messages = [
-        { role: "system", content: input.systemPrompt },
-        { role: "user", content: input.task }
-      ];
+      // Isolated (no priorMessages): [system, user(task)]. Continue: prior
+      // transcript plus this turn's systemPrompt (P6-C).
+      const messages = buildOpeningMessages(
+        input.systemPrompt,
+        input.task,
+        input.priorMessages
+      );
       let toolTurns = 0;
       let proseQuestionRetries = 0;
       let emptyPostToolRetries = 0;
@@ -1015,7 +1019,7 @@ function createSubAgentRunner(deps) {
           emitProgress(void 0, true);
           continue;
         }
-        if (input.tools.length > 0 && toolTurns === 0 && !toolUseNudgeSent) {
+        if (input.nudgeToolUse !== false && input.tools.length > 0 && toolTurns === 0 && !toolUseNudgeSent) {
           toolUseNudgeSent = true;
           messages.push({ role: "user", content: SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION });
           emitProgress(void 0, true);
@@ -1031,6 +1035,23 @@ function createSubAgentRunner(deps) {
             usage: usageSegments.length ? sumUsageSegments(usageSegments) : void 0,
             stats: statsSegments.length ? averageStatsSegments(statsSegments) : void 0
           };
+        }
+        const returnProseWithoutFinalization = () => {
+          messages.push({ role: "assistant", content: prose });
+          emitProgress(void 0, true);
+          return {
+            summary: prose || "",
+            toolTurns,
+            messages,
+            budgetEvents: budgetEvents.length ? budgetEvents : void 0,
+            usage: usageSegments.length ? sumUsageSegments(usageSegments) : void 0,
+            stats: statsSegments.length ? averageStatsSegments(statsSegments) : void 0
+          };
+        };
+        // Chat (P6-C) skips structured-outcome finalization. Board / sub-agent
+        // callers leave this unset so today's extra completion still runs.
+        if (input.finalizeStructuredOutcome === false) {
+          return returnProseWithoutFinalization();
         }
         const proseOutcome = tryParseStructuredOutcomeFromAssistantProse(prose, summarySchema);
         if (proseOutcome) {
