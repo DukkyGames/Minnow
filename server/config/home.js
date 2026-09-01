@@ -129,7 +129,7 @@ const DEFAULT_META = {
     minP: 0,
     repetitionPenalty: 1,
     presencePenalty: 0,
-    maxTokens: 32768,
+    maxTokens: 64000,
   },
   thinking: {
     defaultMode: 'on',

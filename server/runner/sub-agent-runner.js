@@ -48,10 +48,20 @@ import { toolImageFollowUpFromAttachments } from "./tool-image-follow-up.js";
 import { resolveModelApi } from "../generations/resolve-model-api.js";
 import {
   DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
+  SAFETY_MARGIN,
   estimateApiMessagesTokens,
   resolveContextBudget
 } from "./context-budget.js";
 import { estimateToolsTokens } from "./token-estimate-core.js";
+import {
+  contextRetryMessageLimit,
+  isContextOverflowText,
+  parseContextOverflowNumbers
+} from "./context-overflow-error.js";
+import {
+  contextCalibratedMessageLimit,
+  recordContextEstimateBias
+} from "./estimate-calibration.js";
 import { SUB_AGENT_CONTEXT_BUDGET_ERROR } from "./sub-agent-outcome.js";
 import { buildSubAgentOutcomeResponseFormat } from "./sub-agent-outcome-response-format.js";
 import {
@@ -81,13 +91,40 @@ import {
   stripPrefillEchoFromDelta
 } from "./thinking-budget.js";
 import { retryOnceOnTransientFetch } from "./transient-fetch-retry.js";
-import { LLAMA_CPP_LOCAL_PROVIDER_ID } from "./provider-ids.js";
+import { LLAMA_CPP_LOCAL_PROVIDER_ID, MLX_LM_LOCAL_PROVIDER_ID } from "./provider-ids.js";
 import { applySamplerToBody } from "./sampler-types.js";
 import { buildOpeningMessages } from "./opening-messages.js";
 import {
   modelUsesComposerReasoningDropdown,
   resolveEffectiveReasoningEffort
 } from "./reasoning-effort.js";
+/** Compact-and-retry after a provider overflow 400 — then fail the turn. */
+const MAX_CONTEXT_OVERFLOW_RETRIES = 2;
+
+function errorText(err) {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function isAbortLikeStreamError(err, signal) {
+  if (signal?.aborted) return true;
+  const name = err instanceof Error ? err.name : "";
+  return name === "AbortError" || name === "TimeoutError";
+}
+
+/**
+ * llama.cpp (and mlx-lm when it enforces n_ctx) count prompt + generation
+ * against the loaded window. Cloud providers typically reserve generation
+ * separately; leaving max_tokens out of the local reserve is how a 90%
+ * message budget still 400s.
+ */
+function localGenerationReserveTokens(providerId, maxTokens) {
+  if (providerId !== LLAMA_CPP_LOCAL_PROVIDER_ID && providerId !== MLX_LM_LOCAL_PROVIDER_ID) {
+    return 0;
+  }
+  const n = Math.floor(maxTokens ?? 0);
+  return n > 0 ? n : 0;
+}
+
 function createSubAgentRunner(deps) {
   const postChatCompletions = (provider, body, signal, options) => deps.postChatCompletions(provider, body, signal, options);
   const runHeadlessToolBatch = (options) => deps.runHeadlessToolBatch(options);
@@ -683,11 +720,30 @@ function createSubAgentRunner(deps) {
         toolCallsMeta
       );
       const toolsReserveTokens = estimateToolsTokens(input.tools);
-      const enforceContextBudget = async (turnIndex) => {
+      const reservedTokens =
+        toolsReserveTokens +
+        localGenerationReserveTokens(input.providerId, resolvedSampler.maxTokens);
+      const noteContextStatus = (turnIndex, label, estimatedTokens) => {
+        if (!label) return;
+        budgetEvents.push({
+          turn: turnIndex,
+          label,
+          estimatedTokens
+        });
+      };
+      const enforceContextBudget = async (turnIndex, effectiveLimitOverride) => {
+        const calibrated = contextCalibratedMessageLimit(
+          input.modelId,
+          modelContextLimit,
+          SAFETY_MARGIN,
+          reservedTokens
+        );
+        const override = effectiveLimitOverride ?? calibrated ?? void 0;
         const budgetResolved = resolveContextBudget({
           agentConfig: contextBudget,
           modelLimit: modelContextLimit,
-          reservedTokens: toolsReserveTokens
+          reservedTokens,
+          effectiveLimitOverride: override
         });
         const budgetApplied = await applyContextPolicy({
           messages,
@@ -697,17 +753,17 @@ function createSubAgentRunner(deps) {
           providerId: input.providerId,
           modelId: input.modelId,
           signal: input.signal,
-          reservedTokens: toolsReserveTokens
+          reservedTokens,
+          effectiveLimitOverride: override,
+          onStatus: (_level, message) => {
+            noteContextStatus(turnIndex, message, estimateApiMessagesTokens(messages));
+          }
         });
         if (budgetApplied.applied) {
           messages.length = 0;
           messages.push(...budgetApplied.messages);
           if (budgetApplied.statusMessage) {
-            budgetEvents.push({
-              turn: turnIndex,
-              label: budgetApplied.statusMessage,
-              estimatedTokens: budgetApplied.tokensAfter
-            });
+            noteContextStatus(turnIndex, budgetApplied.statusMessage, budgetApplied.tokensAfter);
           }
         }
         const limit = budgetResolved.effectiveLimit;
@@ -863,6 +919,7 @@ function createSubAgentRunner(deps) {
       };
       let turnThinkingBudgetTracker = null;
       let turnBudgetContinuationAttempts = 0;
+      let overflowRetries = 0;
       for (let turn = 0; ; turn++) {
         spliceRoundBoundaryRows();
         if (!await enforceContextBudget(turn)) {
@@ -982,6 +1039,8 @@ function createSubAgentRunner(deps) {
                 currentBody = stripResponseFormatFromBody(currentBody);
                 turnResult2 = await runSubTurn(currentBody, streamOpts());
               } else {
+                // Overflow (and every other stream failure) is recovered in the
+                // outer catch so compact-and-retry can rebuild `body.messages`.
                 throw streamErr;
               }
             }
@@ -1045,22 +1104,44 @@ function createSubAgentRunner(deps) {
           turnResult = await runSubTurnWithThinkingBudget();
         } catch (streamErr) {
           // Abort is a real cancel — do not mint a degraded complete.
-          if (input.signal?.aborted) throw streamErr;
-          const errName = streamErr instanceof Error ? streamErr.name : "";
-          if (errName === "AbortError" || errName === "TimeoutError") throw streamErr;
+          if (isAbortLikeStreamError(streamErr, input.signal)) throw streamErr;
+          const reason = errorText(streamErr);
+          if (isContextOverflowText(reason) && overflowRetries < MAX_CONTEXT_OVERFLOW_RETRIES) {
+            const sentEstimate = estimateApiMessagesTokens(messages);
+            const numbers = parseContextOverflowNumbers(reason);
+            if (numbers) {
+              recordContextEstimateBias(
+                input.modelId,
+                numbers.requestTokens,
+                sentEstimate,
+                reservedTokens
+              );
+            }
+            const retryLimit = contextRetryMessageLimit(sentEstimate, numbers, SAFETY_MARGIN);
+            const fit = await enforceContextBudget(turn, retryLimit);
+            const after = estimateApiMessagesTokens(messages);
+            if (fit && after < sentEstimate) {
+              overflowRetries += 1;
+              logSubAgentDebug("context_overflow_retry", {
+                retry: overflowRetries,
+                sentEstimate,
+                after,
+                retryLimit
+              });
+              continue;
+            }
+            // Compact could not shrink — fall through: salvage this round or crash.
+          }
           const prose = streamingAssistant.trim();
-          const hasPartial =
-            toolTurns > 0 ||
-            prose.length > 0 ||
-            messages.some((m) => m.role === "assistant");
-          // Empty first-turn HTTP still throws so board `runTurn` maps it to
-          // `crashed`. Mid-run failure keeps the transcript instead of discarding it.
+          // Only this round's streamed prose / tool turns count as salvage —
+          // prior assistant rows in history used to swallow llama.cpp 400s as
+          // a finished turn (`no_report`).
+          const hasPartial = toolTurns > 0 || prose.length > 0;
           if (!hasPartial) throw streamErr;
           if (prose) {
             messages.push({ role: "assistant", content: prose });
           }
           emitProgress(void 0, true);
-          const reason = streamErr instanceof Error ? streamErr.message : String(streamErr);
           const legacy = legacyOutcomeFromSummary(prose || reason);
           logSubAgentDebug("stream_error_partial_transcript", {
             reason,
@@ -1077,6 +1158,7 @@ function createSubAgentRunner(deps) {
             stats: statsSegments.length ? averageStatsSegments(statsSegments) : void 0
           };
         }
+        overflowRetries = 0;
         const subFinishReason = turnResult.finishReason || (turnResult.toolCalls.length > 0 ? "tool_calls" : void 0);
         const subStreamEnd = classifyStreamEnd({
           finishReason: subFinishReason,

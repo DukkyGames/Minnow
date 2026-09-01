@@ -385,6 +385,11 @@ export interface ThoughtsToggleOptions {
    * X.Xs" toggles stay static; only the current reasoning indicator animates.
    */
   pulse?: boolean;
+  /**
+   * Override the collapsed toggle label (e.g. live "Thinking…").
+   * When omitted, uses duration ("Thought for …") or the default "Thoughts".
+   */
+  label?: string;
 }
 
 export function renderThoughtsToggle(
@@ -401,6 +406,9 @@ export function renderThoughtsToggle(
 
   const panelWrap = document.createElement('div');
   panelWrap.className = 'thoughts-panel-wrap';
+  if (resolved.pulse === true) {
+    panelWrap.classList.add('thoughts-panel-wrap--live');
+  }
 
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -411,7 +419,11 @@ export function renderThoughtsToggle(
   labelSpan.className = 'thoughts-toggle__label';
 
   const durationMs = resolved.durationMs;
-  if (durationMs != null && durationMs > 0) {
+  const customLabel = typeof resolved.label === 'string' ? resolved.label.trim() : '';
+  if (customLabel) {
+    labelSpan.textContent = customLabel;
+    btn.setAttribute('aria-label', expanded ? 'Hide reasoning' : customLabel);
+  } else if (durationMs != null && durationMs > 0) {
     const label = `Thought for ${formatThinkingDuration(durationMs)}`;
     labelSpan.textContent = label;
     btn.setAttribute('aria-label', expanded ? 'Hide reasoning' : label);

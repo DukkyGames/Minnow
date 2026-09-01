@@ -100,6 +100,13 @@ describe('panelPathsEqual', () => {
   test('normalizes slashes and trailing separators', () => {
     assert.equal(panelPathsEqual('a/b/', 'a\\b'), true);
   });
+
+  test('treats Windows drive-letter casing as equal', () => {
+    assert.equal(
+      panelPathsEqual('C:/Users/me/repo', 'c:\\Users\\me\\repo'),
+      true,
+    );
+  });
 });
 
 describe('resolvePanelBrowseRunTargetSeed', () => {

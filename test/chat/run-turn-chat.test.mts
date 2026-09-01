@@ -147,6 +147,9 @@ describe('P6-D runTurn chat adapter (MIN-726)', () => {
       'P10-I: adapter must inject onRoundBoundary',
     );
     assert.ok(typeof calls[0]?.askTimeoutMs === 'number' && calls[0].askTimeoutMs > 0);
+    assert.ok(calls[0]?.limits, 'product chat must pass context policy + model window');
+    assert.ok('modelContextLimit' in (calls[0]?.limits ?? {}));
+    assert.ok('contextBudget' in (calls[0]?.limits ?? {}));
     assert.ok(chat.history.some((m) => m.role === 'user'));
     const area = document.getElementById('chatArea');
     assert.ok(area?.querySelector('.msg-bubble'), 'delta must paint the assistant bubble');

@@ -90,7 +90,7 @@ export function resolveSamplerPreset(input: ResolveSamplerInput): ResolvedSample
       : input.global.maxTokens;
   if (!Number.isFinite(maxTokens) || maxTokens < 1) {
     maxTokens =
-      input.kind === 'sub-agent' ? DEFAULT_SUB_AGENT_MAX_TOKENS : 32768;
+      input.kind === 'sub-agent' ? DEFAULT_SUB_AGENT_MAX_TOKENS : 64000;
   }
 
   const { maxTokens: _drop, ...preset } = merged;

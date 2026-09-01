@@ -165,8 +165,12 @@ describe('capability cell transcript panel', () => {
       'The ball costs $0.05.',
     );
     assert.equal(
-      document.querySelector('.transcript-view__thinking-body')?.textContent,
+      document.querySelector('.thoughts-segment')?.textContent,
       '1.10 - 1.00 = 0.10',
+    );
+    assert.equal(
+      document.querySelector('.thoughts-toggle__label')?.textContent,
+      'Thoughts',
     );
   });
 });

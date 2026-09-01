@@ -2,18 +2,22 @@
  * Shared git-panel / file-tree worktree cwd resolution (avoids circular imports).
  */
 
+import {
+  normalizeWorktreePath,
+  worktreePathsEqual,
+} from '../lib/worktree-list-parse';
 import { resolveChatWorktreeRoot } from '../state/chat-worktree';
 import { getWorkspacePath } from '../state/workspace';
 import type { Chat, ChatGroup } from '../types';
 
-/** Normalize path separators and trailing slashes for panel comparisons. */
+/** Normalize path separators, drive casing, and trailing slashes for panel comparisons. */
 export function normalizePanelPath(p: string): string {
-  return p.replace(/\\/g, '/').replace(/\/+$/, '');
+  return normalizeWorktreePath(p);
 }
 
-/** True when two panel paths refer to the same directory. */
+/** True when two panel paths refer to the same directory (Windows-safe). */
 export function panelPathsEqual(a: string, b: string): boolean {
-  return normalizePanelPath(a) === normalizePanelPath(b);
+  return worktreePathsEqual(a, b);
 }
 
 /**

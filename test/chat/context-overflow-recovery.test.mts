@@ -40,6 +40,10 @@ describe('isContextOverflowText', () => {
       true,
     );
     assert.equal(isContextOverflowText('prompt is too long: 210000 tokens > 200000'), true);
+    assert.equal(
+      isContextOverflowText('Prompt too long: 40016 tokens exceeds max context window of 32768 tokens'),
+      true,
+    );
   });
 
   test('does not match unrelated failures', () => {

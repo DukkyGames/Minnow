@@ -116,19 +116,6 @@ export function initShellHandlers(): void {
   wireClick('btnOrchestrate', () => {
     void import('./orchestrate-hub').then((m) => m.toggleOrchestrateHubFromTopbar());
   });
-  wireClick('btnOrchestratorBoards', () => {
-    void import('../orchestrator/boards-view').then(async (m) => {
-      if (m.isBoardsViewOpen()) {
-        await m.closeBoardsView();
-        const { navigateToCodeChat } = await import('../os/router');
-        navigateToCodeChat();
-        return;
-      }
-      await m.openBoardsView();
-      const { navigateToCodeBoards } = await import('../os/router');
-      navigateToCodeBoards();
-    });
-  });
 
   // Composer — #msgInput keydown/input wired in initComposerInput() from main.ts
   wireClick('sendBtn', handleComposerPrimaryAction);

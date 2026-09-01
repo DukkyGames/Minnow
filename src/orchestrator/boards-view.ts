@@ -41,6 +41,8 @@
  */
 
 import '../styles/orchestrator-boards.css';
+import '../styles/orchestrate-hub.css';
+import '../styles/orchestrate-plan-screen.css';
 
 import type { BoardState } from '../../server/orchestrator/core/types';
 import { DEFAULT_BOARD_CONCURRENCY } from '../../server/orchestrator/core/derive.js';
@@ -92,6 +94,12 @@ import {
   teardownV2BoardHeaderInstruments,
 } from './board-header-v2';
 import { isBoardJournalReasoning } from './board-journal-reasoning';
+import { isExecutableOrchestratePlan } from '../chat/plans/plan-path';
+import {
+  mountPlanPreviewContent,
+  readPlanArtifactMarkdown,
+} from '../chat/plans/plan-preview';
+import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
 
 /** UI copy for discoverOrchestratePlans error codes (kept here so V2 does not import V1 picker UI). */
 const PLAN_LIST_HINTS: Record<string, string> = {
@@ -102,6 +110,43 @@ const PLAN_LIST_HINTS: Record<string, string> = {
 /** Strip documentation/plans/ so the dropdown shows the basename, matching Orchestrate. */
 function shortPlanLabel(fullPath: string): string {
   return fullPath.replace(/^documentation\/plans\//, '');
+}
+
+/** Ignore stale plan-preview fetches when the select changes quickly. */
+let askPlanPreviewRequestId = 0;
+
+async function refreshAskPlanPreview(
+  planPath: string,
+  elements: { section: HTMLElement; pathChip: HTMLElement; previewMount: HTMLElement },
+): Promise<void> {
+  const trimmed = planPath.trim();
+  if (!trimmed || !isExecutableOrchestratePlan(trimmed)) {
+    elements.section.hidden = true;
+    elements.pathChip.textContent = '';
+    elements.pathChip.removeAttribute('title');
+    elements.previewMount.replaceChildren();
+    return;
+  }
+
+  const requestId = (askPlanPreviewRequestId += 1);
+  elements.section.hidden = false;
+  elements.pathChip.textContent = shortPlanLabel(trimmed);
+  elements.pathChip.title = trimmed;
+  elements.previewMount.replaceChildren();
+  const loading = el('p', 'orchestrate-hub__plan-preview-loading', 'Loading plan…');
+  elements.previewMount.appendChild(loading);
+
+  try {
+    const markdown = await readPlanArtifactMarkdown(trimmed);
+    if (requestId !== askPlanPreviewRequestId) return;
+    mountPlanPreviewContent(elements.previewMount, markdown, { modeId: 'plan' });
+  } catch {
+    if (requestId !== askPlanPreviewRequestId) return;
+    elements.previewMount.replaceChildren();
+    elements.previewMount.appendChild(
+      el('p', 'orchestrate-plan-screen__preview-empty', 'Could not load plan file.'),
+    );
+  }
 }
 
 export const BOARDS_ROOT_ID = 'orchestratorBoardsRoot';
@@ -240,6 +285,7 @@ export function teardownBoardsView(): void {
   list?.stop();
   list = null;
 
+  askPlanPreviewRequestId = 0;
   teardownV2BoardHeaderInstruments();
   document.getElementById(BOARDS_ROOT_ID)?.remove();
   const area = document.getElementById('chatArea');
@@ -287,14 +333,61 @@ function selectTaskDetail(taskId: string | null): void {
   }
 }
 
-export async function closeBoardsView(): Promise<void> {
-  const { notifyCodeStageViewChanged } = await import('../ui/main-column-overlay');
+/**
+ * Leave the V2 Boards surface. By default restores the last active chat into
+ * `#chatArea` and stamps `#/app/code/chat` so the Chats view-bar control does
+ * not leave a blank column (same contract as Overview / Dev Servers).
+ */
+export async function closeBoardsView(options?: {
+  skipNavigate?: boolean;
+  restoreChat?: boolean;
+}): Promise<void> {
+  if (!isBoardsViewOpen()) return;
+
   teardownBoardsView();
+
+  // Leftover V1 board folders can keep viewMode `board` under the V2 surface.
+  // Clear that focus before painting, or renderChatFromHistory redirects back.
+  const { dismissActiveBoardView } = await import('../state/chat-groups');
+  dismissActiveBoardView();
+
+  const { notifyCodeStageViewChanged } = await import('../ui/main-column-overlay');
+
+  if (!options?.skipNavigate) {
+    const { navigateToCodeChatIfCurrentSection } = await import('../os/router');
+    // Both hashes open this surface (`showCodeStageSection`).
+    navigateToCodeChatIfCurrentSection('boards');
+    navigateToCodeChatIfCurrentSection('orchestrate');
+  }
+
+  if (options?.restoreChat === false) {
+    notifyCodeStageViewChanged();
+    return;
+  }
+
+  const { sessionState } = await import('../state/sessions');
+  const targetId = sessionState?.activeId;
+  const chat = targetId ? sessionState?.chats.find((c) => c.id === targetId) : undefined;
+  const area = document.getElementById('chatArea');
+  if (chat) {
+    const { renderChatFromHistory } = await import('../ui/messages');
+    renderChatFromHistory(chat);
+  } else if (area) {
+    area.replaceChildren();
+  }
+
+  const { notifyAskQuestionDisplayContextChanged } = await import(
+    '../chat/ask-question-display'
+  );
+  notifyAskQuestionDisplayContextChanged();
+  void import('../ui/preview-electron-visibility').then((m) =>
+    m.scheduleElectronPreviewHostVisibilitySync(),
+  );
   notifyCodeStageViewChanged();
 }
 
 function syncRailButton(): void {
-  const btn = document.getElementById('btnOrchestratorBoards');
+  const btn = document.getElementById('btnOrchestrate');
   if (!btn) return;
   const open = isBoardsViewOpen();
   btn.setAttribute('aria-pressed', open ? 'true' : 'false');
@@ -367,14 +460,14 @@ function paintList(): void {
       label: 'New board',
       title: 'Create a board from a plan file',
       variant: 'primary',
-      onClick: () => openCreateForm(),
+      onClick: () => openAskPane(),
     }),
   );
   pane.appendChild(head);
 
   const boards = list?.getBoards() ?? [];
   if (boards.length === 0) {
-    pane.appendChild(empty('No boards yet. Create one from a plan file.'));
+    pane.appendChild(empty('No boards yet. Pick a plan in the main pane to start one.'));
   } else {
     const items = el('ul', 'ov2__boards');
     for (const board of boards) items.appendChild(renderListItem(board));
@@ -522,6 +615,210 @@ export interface CreateFormHandlers {
   onCancel: () => void;
 }
 
+export interface AskPaneHandlers {
+  discoverPlans?: () => Promise<DiscoverOrchestratePlansResult>;
+  createBoard?: (
+    planPath: string,
+    options?: { boardId?: string; markdown?: string },
+  ) => Promise<{ boardId: string }>;
+  onCreated: (boardId: string) => void;
+}
+
+/**
+ * V1 Orchestrate hub ask/start pane, wired to V2 `createBoardFromPlan`.
+ *
+ * Shown in the main column when no board is selected. The rail stays the V2
+ * journal list; this pane is only the plan picker, preview, and Open board.
+ */
+export async function mountBoardsAskPane(
+  pane: HTMLElement,
+  handlers: AskPaneHandlers,
+): Promise<void> {
+  const createBoard = handlers.createBoard ?? createBoardFromPlan;
+  pane.replaceChildren();
+
+  const wrap = el('div', 'ob-pane--ask');
+  const ask = el('div', 'ob-ask');
+
+  ask.appendChild(el('p', 'ob-ask__eyebrow orchestrate-hub__eyebrow', 'Orchestrate'));
+  ask.appendChild(el('h1', 'ob-ask__title orchestrate-hub__title', 'Boards & plans'));
+  ask.appendChild(
+    el(
+      'p',
+      'ob-ask__lede orchestrate-hub__lede',
+      'Run a plan as a board, or resume work already listed in the rail.',
+    ),
+  );
+
+  const workspaceLine = el('p', 'ob-ask__workspace orchestrate-hub__workspace');
+  workspaceLine.id = 'orchestrateHubWorkspace';
+  const workspaceLabel = getWorkspaceLabel().trim();
+  const workspacePath = getWorkspacePath().trim();
+  const workspaceDisplay = workspaceLabel || workspacePath;
+  if (workspaceDisplay) {
+    workspaceLine.textContent = workspaceDisplay;
+    if (workspacePath && workspacePath !== workspaceDisplay) {
+      workspaceLine.title = workspacePath;
+    }
+  } else {
+    workspaceLine.classList.add('hidden');
+    workspaceLine.setAttribute('aria-hidden', 'true');
+  }
+  ask.appendChild(workspaceLine);
+
+  const sec = el('span', 'ob-ask__sec hub-strip__label', 'Start from plan');
+  sec.id = 'orchestrateHubPlanLabel';
+
+  const workflow = el('section', 'orchestrate-hub__workflow');
+  workflow.setAttribute('aria-labelledby', 'orchestrateHubPlanLabel');
+
+  const field = el('div', 'ob-ask__field orchestrate-hub__workflow-body');
+  const sel = el('select', 'orchestrate-hub__plan-select') as HTMLSelectElement;
+  sel.id = 'orchestrateHubPlanSelect';
+  sel.setAttribute('aria-label', 'Orchestrate plan file');
+  const loadingOpt = el('option');
+  loadingOpt.value = '';
+  loadingOpt.textContent = 'Loading plans…';
+  sel.appendChild(loadingOpt);
+  sel.disabled = true;
+
+  const workflowActions = el('div', 'ob-ask__actions orchestrate-hub__workflow-actions');
+  const secondaryActions = el('div', 'orchestrate-hub__workflow-secondary');
+
+  const refreshBtn = el('button', 'orchestrate-hub__plan-refresh', 'Refresh') as HTMLButtonElement;
+  refreshBtn.type = 'button';
+  refreshBtn.id = 'orchestrateHubPlanRefresh';
+  refreshBtn.title = 'Reload plan list from workspace';
+
+  const makePlanBtn = el(
+    'button',
+    'orchestrate-hub__make-plan-btn',
+    'Make a plan',
+  ) as HTMLButtonElement;
+  makePlanBtn.type = 'button';
+  makePlanBtn.id = 'orchestrateHubMakePlan';
+
+  secondaryActions.append(refreshBtn, makePlanBtn);
+
+  const startBtn = el('button', 'orchestrate-hub__start-btn', 'Open board') as HTMLButtonElement;
+  startBtn.type = 'button';
+  startBtn.id = 'orchestrateHubStartBoard';
+  startBtn.disabled = true;
+
+  workflowActions.append(secondaryActions, startBtn);
+  field.append(sel, workflowActions);
+
+  const hint = el('p', 'orchestrate-hub__plan-hint hidden');
+  hint.id = 'orchestrateHubPlanHint';
+  hint.setAttribute('role', 'status');
+
+  const errors = el('div', 'ov2-create__errors');
+  errors.id = 'orchestrateBoardsAskErrors';
+
+  const previewSection = el('div', 'orchestrate-hub__plan-preview');
+  previewSection.id = 'orchestrateHubPlanPreview';
+  previewSection.hidden = true;
+  previewSection.setAttribute('aria-live', 'polite');
+
+  const pathChip = el('p', 'orchestrate-plan-screen__path');
+  pathChip.id = 'orchestrateHubPlanPreviewPath';
+
+  const previewWrap = el('div', 'orchestrate-plan-screen__preview-wrap');
+  const previewMount = el('div', 'orchestrate-plan-screen__preview');
+  previewMount.id = 'orchestrateHubPlanPreviewMount';
+  previewWrap.appendChild(previewMount);
+  previewSection.append(pathChip, previewWrap);
+
+  workflow.append(sec, field, hint, errors, previewSection);
+  ask.appendChild(workflow);
+  wrap.appendChild(ask);
+  pane.appendChild(wrap);
+
+  const previewElements = {
+    section: previewSection,
+    pathChip,
+    previewMount,
+  };
+
+  const syncStartDisabled = () => {
+    const path = sel.value.trim();
+    startBtn.disabled = !path || !isExecutableOrchestratePlan(path);
+  };
+
+  const syncPlanPreview = () => {
+    void refreshAskPlanPreview(sel.value, previewElements);
+  };
+
+  const loadPlans = async () => {
+    sel.disabled = true;
+    await fillBoardsPlanSelect(sel, hint, {
+      ...(handlers.discoverPlans ? { discoverPlans: handlers.discoverPlans } : {}),
+    });
+    sel.disabled = false;
+    syncStartDisabled();
+    syncPlanPreview();
+  };
+
+  sel.addEventListener('change', () => {
+    errors.replaceChildren();
+    syncStartDisabled();
+    syncPlanPreview();
+  });
+
+  refreshBtn.addEventListener('click', () => {
+    void loadPlans();
+  });
+
+  // Blank Super Plan composer — same as the V1 hub, not the last live run.
+  makePlanBtn.addEventListener('click', () => {
+    void import('../ui/super-plan-entry').then((m) => m.openSuperPlanScreen({ preferNew: true }));
+  });
+
+  startBtn.addEventListener('click', () => {
+    const planPath = sel.value.trim();
+    if (!planPath || !isExecutableOrchestratePlan(planPath)) return;
+    errors.replaceChildren();
+    startBtn.disabled = true;
+    startBtn.textContent = 'Creating…';
+    void createBoard(planPath)
+      .then(({ boardId }) => {
+        handlers.onCreated(boardId);
+      })
+      .catch((err: unknown) => {
+        errors.replaceChildren(renderCreateError(err));
+      })
+      .finally(() => {
+        startBtn.textContent = 'Open board';
+        syncStartDisabled();
+      });
+  });
+
+  await loadPlans();
+  sel.focus();
+}
+
+function paintAskErrors(pane: HTMLElement): void {
+  const slot = pane.querySelector('#orchestrateBoardsAskErrors');
+  if (!(slot instanceof HTMLElement)) return;
+  slot.replaceChildren();
+  if (!notice) return;
+  const line = el('p', `ov2-notice ov2-notice--${notice.tone}`, notice.text);
+  line.setAttribute('role', 'status');
+  slot.appendChild(line);
+}
+
+/** Show the ask/start pane and put the plan picker in focus (rail New board). */
+function openAskPane(): void {
+  if (!surface) return;
+  if (selectedBoardId) {
+    selectBoard(null);
+  } else {
+    paintBoard();
+  }
+  const sel = document.getElementById('orchestrateHubPlanSelect');
+  if (sel instanceof HTMLSelectElement) sel.focus();
+}
+
 /**
  * The create form, with the parse errors shown where they belong.
  *
@@ -642,17 +939,6 @@ export async function mountCreateForm(
   pathSelect.focus();
 }
 
-function openCreateForm(): void {
-  if (!surface) return;
-  void mountCreateForm(surface.boardPane, {
-    onCreated: (boardId) => {
-      void list?.refresh();
-      selectBoard(boardId);
-    },
-    onCancel: () => paintBoard(),
-  });
-}
-
 function renderCreateError(err: unknown): HTMLElement {
   if (err instanceof PlanParseFailure) {
     const wrap = el('div', 'ov2-create__parse');
@@ -720,9 +1006,23 @@ function paintBoard(): void {
     detachV2BoardHeaderInstruments();
     surface.root.classList.remove('is-detail-open');
     surface.root.querySelector('.ov2-detail-overlay')?.remove();
-    pane.replaceChildren(renderNoSelection());
+    pane.classList.add('ov2__board--ask');
+    // Keep an in-progress picker (and its preview) across list/notice repaints.
+    if (pane.querySelector('.ob-pane--ask')) {
+      paintAskErrors(pane);
+      return;
+    }
+    void mountBoardsAskPane(pane, {
+      onCreated: (boardId) => {
+        pane.classList.remove('ov2__board--ask');
+        void list?.refresh();
+        selectBoard(boardId);
+      },
+    });
     return;
   }
+
+  pane.classList.remove('ov2__board--ask');
 
   const state = client?.getState() ?? null;
   if (!state) {
@@ -819,28 +1119,6 @@ function paintBoard(): void {
   syncLogPolling(state);
 
   restoreFocus(focused);
-}
-
-/** The pane with no board selected — P9-I. */
-function renderNoSelection(): HTMLElement {
-  const wrap = el('div', 'ov2-blank ob-pane--ask');
-  wrap.appendChild(el('p', 'ov2-blank__title', 'No board open.'));
-  wrap.appendChild(
-    el(
-      'p',
-      'ov2-blank__body',
-      'Pick one from the rail, or create a board from a plan under documentation/plans/. ' +
-        'A board is a snapshot of the plan it was made from, and its journal is kept forever.',
-    ),
-  );
-  wrap.appendChild(
-    button({
-      label: 'New board',
-      variant: 'primary',
-      onClick: () => openCreateForm(),
-    }),
-  );
-  return wrap;
 }
 
 /** Everything the detail panel holds about one task. Cleared when it changes. */

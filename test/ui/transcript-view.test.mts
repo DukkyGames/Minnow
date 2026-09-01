@@ -43,7 +43,7 @@ describe('renderTranscriptView', () => {
     assert.equal(assistantEl?.textContent, assistant);
   });
 
-  test('shows assistant reasoning when content is empty', () => {
+  test('shows Thoughts toggle for reasoning-only assistant (not as prose)', () => {
     setupDom();
     const body = document.getElementById('transcriptBody')!;
     renderTranscriptView(body, [
@@ -55,14 +55,19 @@ describe('renderTranscriptView', () => {
       },
     ]);
 
+    assert.equal(body.querySelector('.transcript-view__assistant'), null);
     assert.equal(
-      body.querySelector('.transcript-view__assistant')?.textContent,
+      body.querySelector('.thoughts-toggle__label')?.textContent,
+      'Thoughts',
+    );
+    assert.equal(
+      body.querySelector('.thoughts-segment')?.textContent,
       'One, two, three.',
     );
     assert.equal(body.textContent?.includes('(empty assistant message)'), false);
   });
 
-  test('shows collapsible reasoning when prose and reasoning both exist', () => {
+  test('shows Thoughts toggle before prose when both exist', () => {
     setupDom();
     const body = document.getElementById('transcriptBody')!;
     renderTranscriptView(body, [
@@ -79,9 +84,46 @@ describe('renderTranscriptView', () => {
       'The ball costs $0.05.',
     );
     assert.equal(
-      body.querySelector('.transcript-view__thinking-body')?.textContent,
+      body.querySelector('.thoughts-segment')?.textContent,
       '1.10 - 1.00 = 0.10',
     );
+    const turn = body.querySelector('.transcript-view__assistant-turn');
+    assert.ok(turn);
+    const thoughts = turn!.querySelector('.thoughts-panel-wrap');
+    const prose = turn!.querySelector('.transcript-view__assistant');
+    assert.ok(thoughts && prose);
+    assert.equal(
+      thoughts!.compareDocumentPosition(prose!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  test('reads main-chat thinking[] segments for Thoughts', () => {
+    setupDom();
+    const body = document.getElementById('transcriptBody')!;
+    renderTranscriptView(body, [
+      {
+        role: 'assistant',
+        content: null,
+        thinking: ['First check the fixtures.', 'Then list sizes.'],
+        tool_calls: [
+          {
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'list_directory', arguments: '{"path":"tool-test/fixtures"}' },
+          },
+        ],
+      },
+    ]);
+
+    assert.equal(body.querySelector('.thoughts-toggle__label')?.textContent, 'Thoughts');
+    const segments = [...body.querySelectorAll('.thoughts-segment')].map((el) => el.textContent);
+    assert.deepEqual(segments, ['First check the fixtures.', 'Then list sizes.']);
+    const turn = body.querySelector('.transcript-view__assistant-turn');
+    assert.ok(turn);
+    // Thoughts + tools are siblings under the transcript body; Thoughts comes first.
+    const afterTurn = turn!.nextElementSibling;
+    assert.ok(afterTurn?.classList.contains('tool-call-msg'));
   });
 
   test('shows full multimodal user prompt text, not a single token', () => {
@@ -133,14 +175,51 @@ describe('renderTranscriptView', () => {
     );
 
     body.replaceChildren();
+    // Live thinking with no messages yet → Thoughts toggle in the live tail.
     renderTranscriptView(body, [{ role: 'user', content: 'Go' }], {
       isLive: true,
       phase: 'thinking',
       partialReasoning: 'Need to check package.json first.',
     });
 
-    assert.ok(body.querySelector('.stream-status--thinking'));
-    assert.ok(body.querySelector('.transcript-view__thinking-body'));
+    assert.equal(
+      body.querySelector('.thoughts-toggle__label')?.textContent,
+      'Thinking…',
+    );
+    assert.ok(body.querySelector('.thoughts-panel-wrap--live'));
+    assert.equal(
+      body.querySelector('.thoughts-segment')?.textContent,
+      'Need to check package.json first.',
+    );
+  });
+
+  test('live thinking pulses message Thoughts and does not duplicate in the tail', () => {
+    setupDom();
+    const body = document.getElementById('transcriptBody')!;
+    renderTranscriptView(
+      body,
+      [
+        {
+          role: 'assistant',
+          content: '',
+          reasoning: 'Need to check package.json first.',
+        },
+      ],
+      {
+        isLive: true,
+        phase: 'thinking',
+        partialReasoning: 'Need to check package.json first.',
+      },
+    );
+
+    const toggles = body.querySelectorAll('.thoughts-toggle');
+    assert.equal(toggles.length, 1);
+    assert.equal(
+      body.querySelector('.thoughts-toggle__label')?.textContent,
+      'Thinking…',
+    );
+    assert.ok(body.querySelector('.thoughts-panel-wrap--live'));
+    assert.equal(body.querySelector('.transcript-view__live-tail'), null);
   });
 
   test('subAgentTranscriptLiveFromRun maps orchestrator live fields', () => {

@@ -33,6 +33,12 @@ import {
 } from './settle-interrupted-turn';
 import { createRendererRunnerDeps } from '../agents/renderer-runner-deps';
 import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
+import { getGlobalContextEnforcementPolicySync } from '../agents/sub-agent-config';
+import {
+  agentContextBudgetFromWorkAgent,
+  DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
+} from './context-budget';
+import { resolveWorkAgentContextPolicy } from './resolve-context-policy';
 import { resolveWorkAgentBinding } from '../agents/resolve-work-agent-binding';
 import { UI_DESIGNER_AGENT_ID } from '../agents/ui-designer/constants';
 import { resolveUiDesignerBinding } from '../agents/ui-designer/config';
@@ -496,6 +502,25 @@ export function chatToolDefinitionsForTurn(
       parameters: def.function.parameters as Record<string, unknown>,
     },
   }));
+}
+
+/**
+ * Work-agent / global context policy + the window for this send model.
+ * Omitted `limits` made the runner fall back to default summarize + catalog
+ * lookup, so Agents settings never applied on product chat (MIN-783).
+ */
+function chatTurnContextLimits(chat: Chat, sendModelId: string): NonNullable<RunTurnOptions['limits']> {
+  const workAgent = resolveActiveWorkAgent(chat);
+  const policy = workAgent
+    ? resolveWorkAgentContextPolicy(workAgent.id)
+    : getGlobalContextEnforcementPolicySync() ?? DEFAULT_CONTEXT_ENFORCEMENT_POLICY;
+  const contextBudget = workAgent
+    ? agentContextBudgetFromWorkAgent(workAgent, policy)
+    : { enforcementPolicy: policy };
+  return {
+    contextBudget,
+    modelContextLimit: sendModelId ? resolveContextLimit(sendModelId, chat) : null,
+  };
 }
 
 /**
@@ -1334,6 +1359,20 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     });
     store = chatStore;
     const deps = createRendererRunnerDeps(chatStore);
+    const applyPolicy = deps.applyContextPolicy;
+    deps.applyContextPolicy = async (input) => {
+      const prev =
+        input && typeof input === 'object'
+          ? (input as { onStatus?: (level: 'spin' | 'ok', message: string) => void })
+          : {};
+      return applyPolicy({
+        ...(typeof input === 'object' && input ? input : {}),
+        onStatus: (level: 'spin' | 'ok', message: string) => {
+          prev.onStatus?.(level, message);
+          setStatus(level, message);
+        },
+      });
+    };
     // Inner loop would otherwise attribute this completion to a sub-agent
     // helper (`recordSubAgentTurnUsage`). Record as main-chat instead.
     deps.recordTurnUsage = async (_input, turn) => {
@@ -1535,6 +1574,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       transcript: chatStore,
       signal: chatSignal,
       deps,
+      limits: chatTurnContextLimits(chat, sendModelId),
       ask: createChatAskCapability({ chatId: chat.id }),
       askTimeoutMs: resolveSpikeAskTimeoutMs(),
       onRoundBoundary: createChatRoundBoundary(chat),

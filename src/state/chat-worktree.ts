@@ -15,6 +15,7 @@ import {
   slugifyGitRefName,
   suggestGitRefName,
 } from '../lib/git-branch-slug.mjs';
+import { worktreePathsEqual } from '../lib/worktree-list-parse.ts';
 import { gitBranches } from './git-api.ts';
 import { getWorkspacePath } from './workspace.ts';
 import {
@@ -42,9 +43,10 @@ export function sanitizeRefFragment(raw: string | number): string {
  */
 export function resolveChatToolWorkspaceRoot(
   chat: Pick<Chat, 'worktreeRoot' | 'boardGroupId' | 'workspacePath'>,
-  _groups?: ChatGroup[],
+  groups?: ChatGroup[],
 ): string | undefined {
-  const direct = chat.worktreeRoot?.trim();
+  // Isolated worktree when set — ignore case/slash twins of the Code workspace.
+  const direct = resolveChatWorktreeRoot(chat, groups);
   if (direct) return direct;
 
   const ws = chat.workspacePath?.trim();
@@ -56,17 +58,26 @@ export function resolveChatToolWorkspaceRoot(
   return undefined;
 }
 
-/** Direct chat worktree path (no leftover board-task fallback). */
+/**
+ * Direct chat worktree path (no leftover board-task fallback).
+ * A worktreeRoot that is only a case/slash variant of the Code workspace is
+ * treated as Local so path-normalization drift cannot stick a chat in
+ * “Worktree” mode on the principal checkout (MIN-780).
+ */
 export function resolveChatWorktreeRoot(
   chat: Pick<Chat, 'worktreeRoot'>,
   _groups?: ChatGroup[],
 ): string | undefined {
-  return chat.worktreeRoot?.trim() || undefined;
+  const direct = chat.worktreeRoot?.trim();
+  if (!direct) return undefined;
+  const ws = getWorkspacePath().trim();
+  if (ws && worktreePathsEqual(direct, ws)) return undefined;
+  return direct;
 }
 
 /** True when the chat runs tools inside an isolated git worktree. */
 export function isChatWorktreeMode(chat: Pick<Chat, 'worktreeRoot'>): boolean {
-  return Boolean(chat.worktreeRoot?.trim());
+  return Boolean(resolveChatWorktreeRoot(chat));
 }
 
 /** Short label for the composer run-target button. */

@@ -25,8 +25,10 @@ import { listWorktrees } from '../state/worktree-service';
 import {
   filterUserFacingBranches,
   filterUserFacingWorktrees,
+  getPrincipalWorktree,
   parseWorktreeListPorcelain,
   type ParsedWorktree,
+  worktreePathsEqual,
 } from '../lib/worktree-list-parse';
 import { isProtectedBranchName, resolveTrunkBranchName } from '../lib/git-trunk-branch';
 import { panelPathsEqual } from './panel-worktree-cwd';
@@ -547,11 +549,15 @@ export function createWorktreesView(
     const result = await listWorktrees();
     if (destroyed) return;
 
-    const worktrees: ParsedWorktree[] = result.ok && result.output
-      ? filterUserFacingWorktrees(parseWorktreeListPorcelain(result.output), workspace)
-      : workspace
-        ? [{ path: workspace, head: '', branch: undefined, detached: false }]
-        : [];
+    const parsed =
+      result.ok && result.output ? parseWorktreeListPorcelain(result.output) : [];
+    const principal = getPrincipalWorktree(parsed);
+    const worktrees: ParsedWorktree[] =
+      parsed.length > 0
+        ? filterUserFacingWorktrees(parsed, workspace)
+        : workspace
+          ? [{ path: workspace, head: '', branch: undefined, detached: false }]
+          : [];
 
     ctx.setBadge('worktrees', worktrees.length > 1 ? { kind: 'count', value: worktrees.length } : null);
 
@@ -566,13 +572,20 @@ export function createWorktreesView(
     const frag = document.createDocumentFragment();
 
     for (const worktree of worktrees) {
-      const isMain = Boolean(workspace && panelPathsEqual(worktree.path, workspace));
+      // Code workspace folder (may be a linked worktree).
+      const isWorkspace = Boolean(workspace && panelPathsEqual(worktree.path, workspace));
+      // Git principal checkout — always listed and labeled even when the Code
+      // workspace is a different linked worktree (MIN-780).
+      const isPrincipal = Boolean(
+        principal?.path && worktreePathsEqual(worktree.path, principal.path),
+      );
       const isActive = panelPathsEqual(worktree.path, active);
 
       const meta: (HTMLElement | string)[] = [];
       if (worktree.branch) meta.push(chip(worktree.branch, 'branch'));
       else if (worktree.detached) meta.push(chip('detached', 'warn'));
-      if (isMain) meta.push(chip('main worktree', 'trunk'));
+      if (isPrincipal) meta.push(chip('main worktree', 'trunk'));
+      else if (isWorkspace) meta.push(chip('workspace', 'trunk'));
       meta.push(worktree.path);
 
       const actions: HTMLElement[] = [];
@@ -581,13 +594,15 @@ export function createWorktreesView(
           button({
             label: 'Work here',
             onClick: () => {
-              options.onSelectWorktree(isMain ? undefined : worktree.path);
+              // Local browse when selecting the Code workspace path.
+              options.onSelectWorktree(isWorkspace ? undefined : worktree.path);
               void ctx.refreshAll();
             },
           }),
         );
       }
-      if (!isMain) {
+      // Never offer remove for the git principal or the Code workspace folder.
+      if (!isPrincipal && !isWorkspace) {
         actions.push(
           button({
             icon: 'trash',
@@ -608,7 +623,7 @@ export function createWorktreesView(
           onActivate: isActive
             ? undefined
             : () => {
-                options.onSelectWorktree(isMain ? undefined : worktree.path);
+                options.onSelectWorktree(isWorkspace ? undefined : worktree.path);
                 void ctx.refreshAll();
               },
         }),

@@ -48,7 +48,12 @@ import {
 } from './dev-server-screen-view';
 import { subAgentLiveStatusLine } from './sub-agent-live-status';
 import { notifyCodeStageViewChanged, stripMainColumnOverlayClasses } from './main-column-overlay';
-import { filterUserFacingWorktrees, formatWorktreeOptionLabel, parseWorktreeListPorcelain } from '../lib/worktree-list-parse';
+import {
+  filterUserFacingWorktrees,
+  formatWorktreeOptionLabel,
+  getPrincipalWorktree,
+  parseWorktreeListPorcelain,
+} from '../lib/worktree-list-parse';
 import { listWorktrees } from '../state/worktree-service';
 import { getWorkspacePath } from '../state/workspace';
 import type { ParsedWorktree } from '../lib/worktree-list-parse';
@@ -373,9 +378,10 @@ function buildWorktreeSelectOptions(): Array<{ value: string; label: string }> {
   if (!knownWorktrees.length && ws) {
     return [{ value: ws, label: 'workspace' }];
   }
+  const principal = getPrincipalWorktree(knownWorktrees);
   return knownWorktrees.map((wt) => ({
     value: wt.path,
-    label: formatWorktreeOptionLabel(wt, ws),
+    label: formatWorktreeOptionLabel(wt, ws, { principalPath: principal?.path }),
   }));
 }
 

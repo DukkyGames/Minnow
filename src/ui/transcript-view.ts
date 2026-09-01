@@ -1,5 +1,7 @@
 /**
  * Shared read-only transcript renderer (messages, tool calls, tool results).
+ * Sub-agent Activity and benchmark drawers share this path; reasoning uses the
+ * same Thoughts toggle as main chat (`renderThoughtsToggle`).
  */
 
 import { apiMessageContentToText } from '../api/message-content.ts';
@@ -7,7 +9,6 @@ import { isHiddenTranscriptUserMessage } from '../chat/hidden-transcript-user-me
 import type {
   ApiMessageContent,
   CodeChangeStats,
-  ContentPart,
   ToolImageAttachment,
 } from '../types';
 import { normalizeCodeChangePayload } from '../usage/code-change-payload';
@@ -18,6 +19,7 @@ import {
   STREAM_LABEL_GENERATING,
   STREAM_LABEL_THINKING,
 } from './stream-status';
+import { renderThoughtsToggle } from './thought-bubbles';
 
 /** Parse stored tool `arguments` JSON for display. */
 export function parseToolArgsForTranscriptDisplay(raw: string): Record<string, unknown> {
@@ -76,7 +78,7 @@ function appendUserTranscriptRow(body: HTMLElement, content: ApiMessageContent):
   body.appendChild(wrap);
 }
 
-/** Reasoning channel text stored on an assistant message. */
+/** Reasoning channel text stored on an assistant message (wire / hydrate fields). */
 function assistantTranscriptReasoning(msg: Record<string, unknown>): string {
   if (typeof msg.reasoning === 'string' && msg.reasoning.trim()) {
     return msg.reasoning.trim();
@@ -87,49 +89,73 @@ function assistantTranscriptReasoning(msg: Record<string, unknown>): string {
   return '';
 }
 
-/** Assistant display text from `content` or provider reasoning fields. */
-function assistantTranscriptProse(msg: Record<string, unknown>): string {
-  const fromContent = apiMessageContentToText(msg.content as ApiMessageContent).trim();
-  if (fromContent) return fromContent;
-  return assistantTranscriptReasoning(msg);
-}
-
-/** Collapsible reasoning block below assistant prose. */
-function appendAssistantReasoningBlock(body: HTMLElement, reasoning: string): void {
-  const thoughts = document.createElement('details');
-  thoughts.className = 'transcript-view__thinking';
-  const summary = document.createElement('summary');
-  summary.textContent = STREAM_LABEL_THINKING;
-  const pre = document.createElement('pre');
-  pre.className = 'transcript-view__thinking-body';
-  pre.textContent = reasoning;
-  thoughts.appendChild(summary);
-  thoughts.appendChild(pre);
-  body.appendChild(thoughts);
-}
-
-/** Render assistant prose (string or multimodal-shaped content). */
-function appendAssistantTranscriptRow(body: HTMLElement, msg: Record<string, unknown>): void {
-  const prose = apiMessageContentToText(msg.content as ApiMessageContent).trim();
+/**
+ * Thinking segments for the Thoughts toggle — main-chat `thinking[]` first,
+ * then sub-agent hydrate `reasoning` / `reasoning_content`.
+ */
+export function assistantTranscriptThinkingSegments(
+  msg: Record<string, unknown>,
+): string[] {
+  if (Array.isArray(msg.thinking)) {
+    const fromArray = msg.thinking.filter(
+      (s): s is string => typeof s === 'string' && s.trim().length > 0,
+    );
+    if (fromArray.length > 0) return fromArray;
+  }
   const reasoning = assistantTranscriptReasoning(msg);
+  return reasoning ? [reasoning] : [];
+}
+
+/** Visible assistant prose from `content` only (never the reasoning channel). */
+function assistantTranscriptContentProse(msg: Record<string, unknown>): string {
+  return apiMessageContentToText(msg.content as ApiMessageContent).trim();
+}
+
+/** Options when painting a settled assistant row inside a live run. */
+interface AssistantTranscriptPaintOpts {
+  /** Pulse the Thoughts caret while this row is the live reasoning turn. */
+  liveThinking?: boolean;
+  thinkingDurationMs?: number;
+}
+
+/**
+ * Paint Thoughts (main-chat toggle) then prose. Callers append tool rows after
+ * so reasoning stays before tool calls for the turn.
+ */
+function appendAssistantTranscriptRow(
+  body: HTMLElement,
+  msg: Record<string, unknown>,
+  opts: AssistantTranscriptPaintOpts = {},
+): void {
+  const prose = assistantTranscriptContentProse(msg);
+  const segments = assistantTranscriptThinkingSegments(msg);
+  if (!prose && segments.length === 0) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'transcript-view__assistant-turn';
+
+  // Match main chat: Thoughts above the bubble, then tools (caller) below.
+  if (segments.length > 0) {
+    renderThoughtsToggle(wrap, segments, {
+      pulse: opts.liveThinking === true,
+      label: opts.liveThinking === true ? STREAM_LABEL_THINKING : undefined,
+      durationMs:
+        !opts.liveThinking &&
+        opts.thinkingDurationMs != null &&
+        opts.thinkingDurationMs > 0
+          ? opts.thinkingDurationMs
+          : undefined,
+    });
+  }
 
   if (prose) {
     const row = document.createElement('div');
     row.className = 'transcript-view__assistant';
     row.textContent = prose;
-    body.appendChild(row);
-    if (reasoning && reasoning !== prose) {
-      appendAssistantReasoningBlock(body, reasoning);
-    }
-    return;
+    wrap.appendChild(row);
   }
 
-  if (reasoning) {
-    const row = document.createElement('div');
-    row.className = 'transcript-view__assistant';
-    row.textContent = reasoning;
-    body.appendChild(row);
-  }
+  body.appendChild(wrap);
 }
 
 /** Build the animated dots + label row used during live sub-agent turns. */
@@ -191,9 +217,21 @@ function appendGeneratingPartial(tail: HTMLElement, live: SubAgentTranscriptLive
   tail.appendChild(row);
 }
 
+/** True when any assistant row already carries thinking for the live Thoughts toggle. */
+function messagesHaveThinking(messages: unknown[]): boolean {
+  for (const raw of messages) {
+    if (!raw || typeof raw !== 'object') continue;
+    const msg = raw as Record<string, unknown>;
+    if (msg.role !== 'assistant') continue;
+    if (assistantTranscriptThinkingSegments(msg).length > 0) return true;
+  }
+  return false;
+}
+
 export function appendTranscriptLiveTail(
   body: HTMLElement,
   live: SubAgentTranscriptLive | undefined,
+  messages: unknown[] = [],
 ): void {
   body.querySelector('.transcript-view__live-tail')?.remove();
   if (!live?.isLive) return;
@@ -205,19 +243,18 @@ export function appendTranscriptLiveTail(
   const toolName = live.currentToolName?.trim();
 
   if (phase === 'thinking') {
-    tail.appendChild(createTranscriptStreamStatus('thinking'));
-    const reasoning = live.partialReasoning?.trim();
-    if (reasoning) {
-      const thoughts = document.createElement('details');
-      thoughts.className = 'transcript-view__thinking';
-      const summary = document.createElement('summary');
-      summary.textContent = STREAM_LABEL_THINKING;
-      const pre = document.createElement('pre');
-      pre.className = 'transcript-view__thinking-body';
-      pre.textContent = reasoning;
-      thoughts.appendChild(summary);
-      thoughts.appendChild(pre);
-      tail.appendChild(thoughts);
+    // When thinking events already landed on messages, the assistant row owns
+    // the pulsing Thoughts toggle — avoid a second copy in the live tail.
+    if (!messagesHaveThinking(messages)) {
+      const reasoning = live.partialReasoning?.trim();
+      if (reasoning) {
+        renderThoughtsToggle(tail, [reasoning], {
+          pulse: true,
+          label: STREAM_LABEL_THINKING,
+        });
+      } else {
+        tail.appendChild(createTranscriptStreamStatus('thinking'));
+      }
     }
   } else if (phase === 'generating') {
     tail.appendChild(createTranscriptStreamStatus('generating'));
@@ -232,6 +269,16 @@ export function appendTranscriptLiveTail(
   if (tail.childNodes.length > 0) {
     body.appendChild(tail);
   }
+}
+
+/** Index of the last assistant row (for live Thinking… pulse on that turn). */
+function lastAssistantMessageIndex(messages: unknown[]): number {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const raw = messages[i];
+    if (!raw || typeof raw !== 'object') continue;
+    if ((raw as Record<string, unknown>).role === 'assistant') return i;
+  }
+  return -1;
 }
 
 /** Render API-shaped messages into a scrollable transcript body. */
@@ -266,7 +313,11 @@ export function renderTranscriptView(
     }
   }
 
-  for (const raw of messages) {
+  const liveThinkingIdx =
+    live?.isLive && live.phase === 'thinking' ? lastAssistantMessageIndex(messages) : -1;
+
+  for (let i = 0; i < messages.length; i += 1) {
+    const raw = messages[i];
     if (!raw || typeof raw !== 'object') continue;
     const msg = raw as Record<string, unknown>;
     const role = msg.role;
@@ -294,7 +345,20 @@ export function renderTranscriptView(
     }
     if (role === 'assistant') {
       const toolCalls = msg.tool_calls;
-      appendAssistantTranscriptRow(body, msg);
+      const contentProse = assistantTranscriptContentProse(msg);
+      const segments = assistantTranscriptThinkingSegments(msg);
+      const durationRaw = msg.thinkingDurationMs;
+      const thinkingDurationMs =
+        typeof durationRaw === 'number' && Number.isFinite(durationRaw)
+          ? durationRaw
+          : undefined;
+
+      // Thoughts + prose first, then tool calls — same order as main chat.
+      appendAssistantTranscriptRow(body, msg, {
+        liveThinking: i === liveThinkingIdx && segments.length > 0,
+        thinkingDurationMs,
+      });
+
       if (Array.isArray(toolCalls) && toolCalls.length > 0) {
         for (const tc of toolCalls as Array<{
           id: string;
@@ -315,8 +379,11 @@ export function renderTranscriptView(
           }
         }
       }
-      const prose = assistantTranscriptProse(msg);
-      if (!prose && (!Array.isArray(toolCalls) || toolCalls.length === 0)) {
+      if (
+        !contentProse &&
+        segments.length === 0 &&
+        (!Array.isArray(toolCalls) || toolCalls.length === 0)
+      ) {
         const row = document.createElement('div');
         row.className = 'transcript-view__assistant';
         row.textContent = '(empty assistant message)';
@@ -329,5 +396,5 @@ export function renderTranscriptView(
     }
   }
 
-  appendTranscriptLiveTail(body, live);
+  appendTranscriptLiveTail(body, live, messages);
 }

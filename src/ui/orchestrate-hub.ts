@@ -107,7 +107,8 @@ function syncTopBarOrchestrateButton(): void {
   if (typeof document === 'undefined') return;
   const btn = document.getElementById('btnOrchestrate');
   if (!btn) return;
-  const open = isOrchestrateHubMounted();
+  const open =
+    isOrchestrateHubMounted() || Boolean(document.getElementById('orchestratorBoardsRoot'));
   btn.setAttribute('aria-pressed', open ? 'true' : 'false');
   btn.setAttribute('aria-expanded', open ? 'true' : 'false');
   btn.classList.toggle('icon-btn--active', open);
@@ -523,9 +524,8 @@ export function closeOrchestrateHub(): void {
 export function toggleOrchestrateHubFromTopbar(): void {
   void import('../orchestrator/boards-view').then(async (m) => {
     if (m.isBoardsViewOpen()) {
+      // closeBoardsView restores the last chat and stamps #/app/code/chat.
       await m.closeBoardsView();
-      const { navigateToCodeChat } = await import('../os/router');
-      navigateToCodeChat();
       return;
     }
     await m.openBoardsView();

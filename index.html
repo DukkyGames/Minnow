@@ -327,7 +327,7 @@
       </div>
       <div class="field">
         <label for="maxTokens">Max tokens per reply</label>
-        <input type="number" id="maxTokens" value="32768" min="1" max="131072">
+        <input type="number" id="maxTokens" value="64000" min="1" max="131072">
         <p class="field-hint">Upper bound for a single assistant message.</p>
       </div>
     </div>
@@ -2338,11 +2338,6 @@
       <button type="button" class="code-views__btn" id="btnOrchestrate" aria-pressed="false" aria-expanded="false" title="Orchestrate">
         <i class="fi fi-rr-network icon-svg" aria-hidden="true"></i>
         <span class="code-views__label-track"><span class="code-views__label">Orchestrate</span></span>
-      </button>
-      <!-- Orchestrator V2's surface. Sits beside Orchestrate rather than replacing it: V1 goes in Phase 4. -->
-      <button type="button" class="code-views__btn" id="btnOrchestratorBoards" aria-pressed="false" aria-expanded="false" title="Boards">
-        <i class="fi fi-rr-apps icon-svg" aria-hidden="true"></i>
-        <span class="code-views__label-track"><span class="code-views__label">Boards</span></span>
       </button>
     </nav>
     <!-- Chat messages + jump chip anchored to bottom of scroll viewport -->
