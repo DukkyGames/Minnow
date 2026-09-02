@@ -11,6 +11,13 @@
  * rows themselves.
  */
 
+/* Shared transcript column rhythm (matches sub-agent / benchmark drawer bodies). */
+.transcript-view__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .transcript-view__system,
 .transcript-view__user,
 .transcript-view__assistant {
