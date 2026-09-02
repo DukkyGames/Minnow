@@ -174,6 +174,8 @@ beforeEach(async () => {
   borrows.length = 0;
 });
 
+// ── bodyStructure helpers ────────────────────────────────────────────────────
+
 describe('bodyStructure helpers', () => {
   test('pickPreviewPart prefers text/plain and skips attachments', async () => {
     const { pickPreviewPart, structureHasAttachments } = await import('../../server/email/imap.js');
@@ -207,6 +209,8 @@ describe('bodyStructure helpers', () => {
     assert.equal(pickPreviewPart(huge), null, 'a giant text part is left for the lazy body fetch');
   });
 });
+
+// ── syncFolderMessages ───────────────────────────────────────────────────────
 
 describe('syncFolderMessages', () => {
   test('cold start fills the newest page and records uidvalidity', async () => {
@@ -402,6 +406,8 @@ describe('syncFolderMessages', () => {
   });
 });
 
+// ── ensureMessageBody ────────────────────────────────────────────────────────
+
 describe('ensureMessageBody', () => {
   test('downloads the full source once and caches html + attachments', async () => {
     const { syncFolderMessages, ensureMessageBody } = await import('../../server/email/imap.js');
@@ -431,6 +437,8 @@ describe('ensureMessageBody', () => {
     assert.equal(again.cached, true, 'a second open is served from the store');
   });
 });
+
+// ── connection reuse ─────────────────────────────────────────────────────────
 
 describe('connection reuse', () => {
   test('a bulk flag action opens one mailbox borrow per folder', async () => {

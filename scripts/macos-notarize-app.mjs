@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Notarize a signed .app with xcrun notarytool (retries, optional --no-s3-acceleration).
- * Used by the electron-builder afterSign hook and `npm run signing:notarize`.
- */
 
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -14,15 +10,15 @@ import {
   loadSigningEnvFile,
 } from './macos-signing-env.mjs';
 
-/** Transient upload failures from Apple's Soto-based notarytool client. */
 export const TRANSIENT_NOTARIZE_UPLOAD_RE =
   /abortedUpload|deadlineExceeded|connection reset|connectionReset|timed out|Connection refused|networkConnectionLost/i;
 
 const DEFAULT_MAX_ATTEMPTS = 4;
 const DEFAULT_WAIT_TIMEOUT = '3h';
 
+// ── Auth ─────────────────────────────────────────────────────────────────────
+
 /**
- * Build `notarytool submit` auth flags from process.env (after .env.signing load).
  * @returns {string[]}
  */
 export function notarytoolAuthorizationArgs() {
@@ -65,7 +61,6 @@ export function isTransientNotarizeUploadError(output) {
 }
 
 /**
- * Run a command and stream stdout/stderr live (notarytool progress bar needs this).
  * @param {string} cmd
  * @param {string[]} args
  * @param {{ cwd?: string }} [options]
@@ -104,8 +99,9 @@ function run(cmd, args, options = {}) {
   return { code: result.status ?? 1, output };
 }
 
+// ── Zip app ──────────────────────────────────────────────────────────────────
+
 /**
- * Zip a .app the same way @electron/notarize does (ditto + sequesterRsrc).
  * @param {string} appPath Absolute path to Foo.app
  * @returns {string} Path to zip inside a temp directory (caller should delete parent when done)
  */
@@ -148,9 +144,9 @@ function stapleApp(appPath) {
   }
 }
 
+// ── Submit ───────────────────────────────────────────────────────────────────
+
 /**
- * Submit zip to Apple and wait for processing.
- * Uses normal output (not JSON) so notarytool can show upload progress.
  * @param {string} zipPath
  * @param {{ useS3Acceleration: boolean; waitTimeout: string; verbose: boolean }} options
  * @returns {Promise<{ ok: boolean; output: string; parsed: null }>}
@@ -181,8 +177,9 @@ export async function submitNotarizationZip(zipPath, options) {
   return { ok: accepted, output: result.output, parsed: null };
 }
 
+// ── Notarize ─────────────────────────────────────────────────────────────────
+
 /**
- * Notarize a signed .app in place (upload, wait, staple).
  * @param {string} appPath Absolute path to the .app bundle
  * @param {{ maxAttempts?: number; waitTimeout?: string }} [opts]
  */
@@ -229,7 +226,6 @@ export async function notarizeMacApp(appPath, opts = {}) {
   const zipStat = fs.statSync(zipPath);
   const zipMb = (zipStat.size / (1024 * 1024)).toFixed(1);
   const zipBytes = zipStat.size;
-  // Rough upload ETA at common home uplink speeds (upload + Apple scan adds more time).
   const etaMinSlow = Math.ceil((zipBytes * 8) / (2 * 1_000_000) / 60);
   const etaMinFast = Math.ceil((zipBytes * 8) / (20 * 1_000_000) / 60);
   console.log(
@@ -238,7 +234,6 @@ export async function notarizeMacApp(appPath, opts = {}) {
   console.log('[notarize] You should see a notarytool progress bar below during upload.\n');
 
   try {
-    // Direct S3 is the safer default: Transfer Acceleration often triggers deadlineExceeded on large uploads.
     let useS3Acceleration = process.env.MINNOW_NOTARIZE_S3_ACCELERATION === '1';
     let lastOutput = '';
 
@@ -282,6 +277,8 @@ export async function notarizeMacApp(appPath, opts = {}) {
     }
   }
 }
+
+// ── CLI ──────────────────────────────────────────────────────────────────────
 
 async function main() {
   const appPath = process.argv[2];

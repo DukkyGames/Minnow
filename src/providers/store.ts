@@ -53,6 +53,8 @@ let providersAvailable = false;
 
 const PROVIDERS_CACHE_TTL_MS = 30_000;
 
+// ── Fallback ─────────────────────────────────────────────────────────────────
+
 /** Whether /api/providers was reachable (npm start). */
 export function isProvidersApiAvailable(): boolean {
   return providersAvailable;
@@ -72,6 +74,8 @@ export function getViteOnlyFallbackProvider(): ProviderPublic {
     hasBearer: false,
   };
 }
+
+// ── List ─────────────────────────────────────────────────────────────────────
 
 async function fetchProvidersList(): Promise<ProviderListResponse> {
   const controller = new AbortController();
@@ -136,6 +140,8 @@ export class UnknownProviderError extends Error {
   }
 }
 
+// ── Resolve ──────────────────────────────────────────────────────────────────
+
 /**
  * Resolve which provider record to use for chat, benchmarks, and generations.
  * Ignores persisted `activeProviderId` — routing is driven by explicit `chat.providerId`
@@ -189,6 +195,8 @@ export async function setActiveProvider(id: string): Promise<void> {
   }
   cachedList = null;
 }
+
+// ── CRUD ─────────────────────────────────────────────────────────────────────
 
 /** PUT /api/providers/:id — update profile fields (not secrets). */
 export async function updateProvider(

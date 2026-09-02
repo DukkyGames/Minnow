@@ -56,6 +56,8 @@ const reindexJobByRepo = new Map();
 
 const STALE_STAT_CONCURRENCY = 32;
 
+// ── Merkle ───────────────────────────────────────────────────────────────────
+
 /**
  * Hash one Merkle leaf from a workspace-relative file path and content hash.
  * @param {string} file
@@ -177,6 +179,8 @@ async function hashFileOnDisk(root, relFile) {
   const hash = createHash('sha256').update(text, 'utf8').digest('hex');
   return { hash, mtimeMs: stat.mtimeMs };
 }
+
+// ── Drift ────────────────────────────────────────────────────────────────────
 
 /**
  * Detect workspace files whose disk content differs from the code index.
@@ -430,6 +434,8 @@ export function isCascadeTriggerEnabled(trigger, codeConfig) {
   return false;
 }
 
+// ── Cascade ──────────────────────────────────────────────────────────────────
+
 /**
  * Main cascade entry — all reindex triggers route through here.
  * @param {{ trigger?: CascadeTrigger, files?: string[], codeConfig?: ReturnType<typeof normalizeBrainCodeConfig>, force?: boolean }} [opts]
@@ -513,6 +519,7 @@ function pickRunSummary(result) {
  * A full index runs for minutes; holding the HTTP response open for it meant the client
  * timed out and reported failure while the work was still going. Callers poll
  * /api/brain/code/status for progress and the final `lastRun` outcome instead.
+ * Always clear the indexing flag in finally — a crashed worker never sends a closing frame.
  * @param {Parameters<typeof runCascade>[0]} [opts]
  */
 export function startReindexJob(opts = {}) {
@@ -560,8 +567,6 @@ export function startReindexJob(opts = {}) {
     })
     .finally(() => {
       reindexJobByRepo.delete(repo);
-      // A crashed worker never sends its closing progress frame — clear it here so the
-      // status line cannot stay stuck on "indexing" forever.
       const progress = getIndexProgress(repo);
       if (progress.indexing) {
         reportIndexProgress(repo, { ...progress, indexing: false, phase: 'idle' });
@@ -610,6 +615,8 @@ export async function getChangedFilesFromGit(workspaceRoot) {
     .map((line) => line.trim().replace(/\\/g, '/'))
     .filter(Boolean);
 }
+
+// ── Git hook ─────────────────────────────────────────────────────────────────
 
 /** Absolute path to the post-commit hook script shipped with Minnow. */
 export function getGitHookScriptPath() {

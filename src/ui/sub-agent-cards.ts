@@ -1,7 +1,3 @@
-/**
- * Sub-agent status cards in the parent chat (live updates via events + persisted replay).
- */
-
 import { normalizeModeId } from '../chat/modes/types';
 import { listActiveSubAgentRuns, getSubAgentRun, hydrateSubAgentRunsForParentChat, listSubAgentRunsForParentChat } from '../agents/orchestrator';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
@@ -28,6 +24,8 @@ const cards = new Map<string, HTMLElement>();
 
 let liveSubscriptionBound = false;
 
+// ── Landing ──────────────────────────────────────────────────────────────────
+
 /** Empty-chat landing pages (Vibe / Orchestrate hub) — not the transcript. */
 function isEmptyChatLandingMounted(): boolean {
   return isHubMounted() || isOrchestrateHubMounted();
@@ -46,6 +44,8 @@ function taskPreview(task: string): string {
   const t = task.trim();
   return t.length > 120 ? `${t.slice(0, 120)}…` : t;
 }
+
+// ── Card fill ────────────────────────────────────────────────────────────────
 
 /** Fills the card DOM from a live or persisted run row. */
 function fillCard(
@@ -83,7 +83,6 @@ function fillCard(
   const liveLine = live ? subAgentLiveStatusLine(run, true) : '';
   const activeRun = run as SubAgentRun;
   if (live && activeRun.startError) {
-    // Consecutive start failures are a counter, not one toast per tick (P9-A).
     subtitle.className = 'sub-agent-card__subtitle sub-agent-card__error';
     subtitle.textContent = `${activeRun.startError.message} (${activeRun.startError.consecutive})`;
   } else if (liveLine) {
@@ -123,15 +122,11 @@ function fillCard(
   el.appendChild(hint);
 }
 
-/**
- * Escape for a double-quoted attribute selector value.
- *
- * Not `CSS.escape` — that is an identifier escaper, and it is missing from
- * some DOM shims the tests run against (same helper as `tool-wrap-dom.ts`).
- */
 function escapeAttributeValue(value: string): string {
   return value.replace(/["\\]/g, '\\$&');
 }
+
+// ── Placement ────────────────────────────────────────────────────────────────
 
 /** Parent `spawn_sub_agent` tool-call id used to sit the card under that row. */
 function parentToolCallAnchorId(
@@ -142,11 +137,7 @@ function parentToolCallAnchorId(
   return trimmed || null;
 }
 
-/**
- * The spawn tool row in this transcript, if it is mounted.
- *
- * Prefer `.tool-call-msg` so a stray dataset elsewhere cannot steal the card.
- */
+/** The spawn tool row in this transcript, if it is mounted. */
 function findSpawnToolAnchor(area: HTMLElement, anchorId: string): HTMLElement | null {
   const selector = `[data-tool-call-id="${escapeAttributeValue(anchorId)}"]`;
   return (
@@ -155,22 +146,13 @@ function findSpawnToolAnchor(area: HTMLElement, anchorId: string): HTMLElement |
   );
 }
 
-/**
- * Sit the card directly under the spawn tool row.
- *
- * Placement used to be creation-only (`if (!el)`). After `renderChatFromHistory`
- * the registry element is detached (or still in the map while the transcript
- * was rebuilt), so a later upsert left the card at the bottom. Re-anchor on
- * every upsert when the node is detached or the anchor exists and the card
- * is not already the next sibling (P10-K / MIN-776).
- */
+/** Sit the card directly under the spawn tool row. */
 function placeSubAgentCard(
   el: HTMLElement,
   area: HTMLElement,
   run: SubAgentRun | PersistedSubAgentRun,
   persisted?: SubAgentRun | PersistedSubAgentRun,
 ): void {
-  // Live overlay can omit parentToolCallId while the session row still has it.
   const anchorId =
     parentToolCallAnchorId(run) ?? (persisted ? parentToolCallAnchorId(persisted) : null);
   const anchor = anchorId ? findSpawnToolAnchor(area, anchorId) : null;
@@ -185,13 +167,12 @@ function placeSubAgentCard(
     return;
   }
 
-  // No tool row yet (issue expand passes parentToolCallId: null): insert
-  // before the queued-messages block, same as live transcript rows.
-  // Re-anchor on a later upsert once the spawn tool row exists (P10-K).
   if (!inThisTranscript) {
     appendChatTranscriptNode(el, area);
   }
 }
+
+// ── Upsert ───────────────────────────────────────────────────────────────────
 
 /**
  * Creates or updates the card for this run when it belongs to the active chat.
@@ -217,7 +198,6 @@ export function upsertSubAgentCardForRun(
   if (!isBoardChatEmbedOpenForChat(chatId) && isMainColumnOverlaySuppressingChatDom()) {
     return null;
   }
-  // Background sub-agents still run, but cards belong in the transcript — not on hub.
   if (isEmptyChatLandingMounted()) return null;
 
   const area = getActiveChatMountElement();
@@ -245,7 +225,6 @@ export function upsertSubAgentCardForRun(
   }
 
   const displayRun = orchestratorRun ?? run;
-  // Re-anchor on every upsert, not only on first create (P10-K).
   placeSubAgentCard(el, area, displayRun, run);
   el.setAttribute(
     'aria-label',
@@ -266,8 +245,6 @@ export function renderPersistedSubAgentCardsForChat(chat: Chat): void {
       upsertSubAgentCardForRun(run, chat.id);
     }
   }
-  // Reload source of truth: fold state from the server, including runs that
-  // completed while this chat was not painted.
   void hydrateSubAgentRunsForParentChat(chat.id).then(() => {
     for (const run of listSubAgentRunsForParentChat(chat.id)) {
       upsertSubAgentCardForRun(run, chat.id);
@@ -286,7 +263,6 @@ export function initSubAgentUi(): void {
     const chat = getActiveChat();
     if (chat?.id) void hydrateSubAgentRunsForParentChat(chat.id);
   } catch {
-    // Boot can run before a session exists.
   }
   if (liveSubscriptionBound) return;
   liveSubscriptionBound = true;

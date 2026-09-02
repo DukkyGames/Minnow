@@ -1,8 +1,3 @@
-/**
- * Types and validation for the browser-native `ask_question` tool.
- * Preset options only; "Other" is added in the UI and returned as selectedIds: ["__other__"].
- */
-
 /** Reserved id when the user selects the synthetic "Other" row. */
 export const ASK_QUESTION_OTHER_ID = '__other__';
 

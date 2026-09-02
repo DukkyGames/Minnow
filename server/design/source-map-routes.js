@@ -48,7 +48,6 @@ export async function handleSourceMapRequest(req, res, pathname, deps) {
   const page = (url.searchParams.get('page') ?? '').trim();
 
   if (!page || !/\.html?$/i.test(page.split(/[?#]/)[0])) {
-    // Not a static HTML workspace page — the client's dev-server ladder step handles this case.
     sendJson(res, 200, { confidence: 'guess' });
     return true;
   }
@@ -71,7 +70,6 @@ export async function handleSourceMapRequest(req, res, pathname, deps) {
     sendJson(res, 200, { file: page, line: match.line, confidence: match.confidence });
     return true;
   } catch {
-    // Missing file, outside-workspace path, unreadable, etc. — best-effort, never a hard error.
     sendJson(res, 200, { confidence: 'guess' });
     return true;
   }

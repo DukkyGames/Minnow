@@ -1,8 +1,3 @@
-/**
- * Brain tool ids (keep in sync with server/config/tool-ids.js).
- * Seeded at permission `full` on first run and back-filled on config load.
- */
-
 export const BRAIN_WIKI_TOOL_IDS = [
   'brain_search',
   'brain_read_page',

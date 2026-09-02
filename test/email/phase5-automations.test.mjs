@@ -75,6 +75,8 @@ function insertMessage(overrides = {}) {
   return row;
 }
 
+// ── normalizeRule ────────────────────────────────────────────────────────────
+
 describe('normalizeRule', () => {
   test('migrates a v1 single-action rule to the v2 shape', () => {
     const rule = normalizeRule({
@@ -120,6 +122,8 @@ describe('normalizeRule', () => {
     assert.deepEqual(rule.actions, [{ type: 'archive' }]);
   });
 });
+
+// ── matchCondition ───────────────────────────────────────────────────────────
 
 describe('matchCondition', () => {
   const message = {
@@ -184,6 +188,8 @@ describe('matchCondition', () => {
   });
 });
 
+// ── triggerMatches ───────────────────────────────────────────────────────────
+
 describe('triggerMatches', () => {
   const base = { enabled: true, accountId: ACCOUNT_ID, trigger: 'on_new_message', config: {} };
 
@@ -197,6 +203,8 @@ describe('triggerMatches', () => {
     assert.equal(triggerMatches({ ...base, enabled: false }, { accountId: ACCOUNT_ID }), false);
   });
 });
+
+// ── dryRunAutomation ─────────────────────────────────────────────────────────
 
 describe('dryRunAutomation', () => {
   test('counts messages the rule would match this week', async () => {
@@ -223,6 +231,8 @@ describe('dryRunAutomation', () => {
   });
 });
 
+// ── audit log ────────────────────────────────────────────────────────────────
+
 describe('audit log', () => {
   test('records and lists runs newest first', async () => {
     const db = getMailDb(ACCOUNT_ID);
@@ -236,6 +246,8 @@ describe('audit log', () => {
     assert.equal(runs[1].action, 'archive');
   });
 });
+
+// ── evaluateAutomationsForMessage ────────────────────────────────────────────
 
 describe('evaluateAutomationsForMessage', () => {
   test('untrusted mail-op routes to the review queue and records queued', async () => {

@@ -1,7 +1,3 @@
-/**
- * web_search provider routing — respects search.json (then tools.json) without silent fallback.
- */
-
 import type { ToolConfig, WebSearchProvider } from './tool-settings-types';
 import { mergeWebSearchSettings } from '../config/search-config';
 
@@ -38,10 +34,6 @@ export function hasTavilyApiKey(keys: { tavilyApiKey?: string }): boolean {
   return Boolean(keys.tavilyApiKey?.trim());
 }
 
-/**
- * Resolve how `web_search` should run for the current settings.
- * Prefers search.json via {@link mergeWebSearchSettings}; tools.json is the fallback.
- */
 export function resolveWebSearchExecution(
   toolsConfig: ToolConfig,
   args: Record<string, unknown>,

@@ -1,7 +1,3 @@
-/**
- * Settings → General: agent shell sandbox (MIN-553 Phase 3).
- */
-
 import { detectConfigServer } from '../config/storage-mode';
 import {
   loadToolSecurityMeta,

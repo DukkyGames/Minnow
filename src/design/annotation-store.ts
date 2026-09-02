@@ -19,6 +19,8 @@ import type {
   ShapeRect,
 } from './shape-model';
 
+// ── Cache ────────────────────────────────────────────────────────────────────
+
 export interface PageAnnotations {
   shapes: DesignShape[];
   pins: CommentPin[];
@@ -109,15 +111,15 @@ async function persist(pageKey: string): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ page: pageKey, annotations: state.data }),
     });
-  } catch {
-    /* best-effort — annotations stay in memory even if the write fails */
-  }
+  } catch {}
 }
 
 function pushUndoSnapshot(pageKey: string): void {
   const state = getState(pageKey);
   state.undoStack.push(cloneAnnotations(state.data));
 }
+
+// ── Mutations ────────────────────────────────────────────────────────────────
 
 /** Append a drawn shape to the page's annotations and persist. */
 export async function addShape(pageKey: string, shape: DesignShape): Promise<PageAnnotations> {
@@ -323,6 +325,8 @@ export interface HealAnnotationsResult {
   data: PageAnnotations;
   entries: AnchorHealEntry[];
 }
+
+// ── Heal ─────────────────────────────────────────────────────────────────────
 
 /**
  * Anchor healing ladder (MIN-370): re-run {@link reanchorShape}/{@link reanchorPin}'s uid→selector

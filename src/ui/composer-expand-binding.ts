@@ -1,7 +1,3 @@
-/**
- * Model binding for the composer prompt expander (routing override + per-chat model).
- */
-
 import type { PromptExpanderConfig } from '../config/prompt-expander-meta';
 import { computeEffectivePromptExpanderBinding } from '../settings/model-routing-effective';
 

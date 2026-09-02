@@ -1,21 +1,3 @@
-/**
- * Parent-completion adapter (P8-E / P8-F / MIN-758 / MIN-759).
- *
- * The durable queue is the server journal fold (`pendingDeliveries` /
- * `result.delivered` / `run.nudged`). Production does **not** keep a
- * renderer-side memory journal — that was the P8-E interim until `/api/agents`
- * existed. Completions now arrive as SSE `event: deliver` (never journaled);
- * the server appends `result.delivered` after the notify returns.
- *
- * Session-local coalesce: if the parent is streaming when the frame arrives,
- * delay the resume until stream end. The server cannot see streaming, so a
- * reload during that delay is a known gap (document, do not invent a second
- * queue).
- *
- * Tests may still inject a `DeliveryHandle` (`setSubAgentDeliveryHandleForTests`)
- * so delivery.js can be driven without SSE. Production never installs one.
- */
-
 import { normalizeModeId } from '../chat/modes/types';
 import { buildSubAgentParentResumeMessage } from './sub-agent-resume-message';
 import { isChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state';
@@ -50,15 +32,11 @@ type CompletionNotifyFn = (chatId: string, run: SubAgentRun) => void;
 let deliverHook: CompletionDeliverFn | null = null;
 let notifyHook: CompletionNotifyFn | null = null;
 
-/**
- * Test-only journal handle. Production is `null` — the server journal + SSE
- * is the source of truth. Creating a memory journal here is what made a reload
- * drop MIN-639's queue.
- */
 let delivery: DeliveryHandle | null = null;
 
-/** Session-local delay while the parent streams. Not durable. */
 const delayedByChat = new Map<string, Array<DeliverFrame & { parentChatId: string }>>();
+
+// ── Adapter ──────────────────────────────────────────────────────────────────
 
 function createAdapterDelivery(): DeliveryHandle {
   const journal = createMemoryJournal();
@@ -168,20 +146,16 @@ async function defaultDeliverResume(
   await resumeParentChatWithMessage(chat, message, { suppressUserEcho: true });
 }
 
-/** Tests: capture delivery without running the full chat loop. */
+// ── Hooks ────────────────────────────────────────────────────────────────────
+
 export function setSubAgentCompletionDeliverHook(fn: CompletionDeliverFn | null): void {
   deliverHook = fn;
 }
 
-/** Tests: capture the undeliverable-completion fallback without the notification stack. */
 export function setSubAgentCompletionNotifyHook(fn: CompletionNotifyFn | null): void {
   notifyHook = fn;
 }
 
-/**
- * Tests: replace the handle so a disk journal can back the adapter.
- * Production never installs one — the server journal is the queue.
- */
 export function setSubAgentDeliveryHandleForTests(handle: DeliveryHandle | null): void {
   delivery = handle;
 }
@@ -192,10 +166,8 @@ function parseRequestedAt(run: SubAgentRun): number {
   return Number.isSafeInteger(ms) ? ms : 0;
 }
 
-/**
- * Bridge a store `SubAgentRun` onto a test journal. Production spawn
- * POSTs `/api/agents` and never takes this path.
- */
+// ── Ingest ───────────────────────────────────────────────────────────────────
+
 async function ingestControllerRun(run: SubAgentRun): Promise<void> {
   if (!delivery) return;
   const chatId = run.parentChatId?.trim();
@@ -281,8 +253,6 @@ async function ingestAndTick(run: SubAgentRun): Promise<void> {
 }
 
 function onSubAgentRunUpdated(run: SubAgentRun): void {
-  // Production does not ingest into a renderer journal. Tests that inject a
-  // handle still need this bridge for unit coverage of coalesce / retry.
   if (!delivery) return;
   if (!run.parentChatId) return;
   if (!isSubAgentRunTerminal(run.status)) return;
@@ -297,9 +267,6 @@ async function resumeDeliverFrame(frame: DeliverFrame & { parentChatId: string }
     if (run && notifyHook) notifyHook(chatId, run);
     return;
   }
-  // Orchestrate-mode parents resume like any other chat. V1 boards consumed
-  // these frames; V2 boards do not use this path, but spawn_sub_agent is
-  // still allowed in orchestrate, so discarding here deleted the completion.
   const deliver = deliverHook ?? defaultDeliverResume;
   await deliver(chatId, frame.message, frame.runIds);
 }
@@ -320,16 +287,14 @@ function onDeliverFrame(frame: DeliverFrame & { runId: string }): void {
   void follow(() => resumeDeliverFrame(packed));
 }
 
+// ── Flush ────────────────────────────────────────────────────────────────────
+
 async function flushDelayed(chatId: string): Promise<void> {
   const queued = delayedByChat.get(chatId) ?? [];
   delayedByChat.delete(chatId);
   for (const frame of queued) await resumeDeliverFrame(frame);
 }
 
-/**
- * Drain every queued chat — called on chat switch, where a parent that was
- * streaming when its sub-agent settled becomes deliverable again.
- */
 export function flushAllPendingSubAgentCompletions(): void {
   void follow(async () => {
     for (const chatId of [...delayedByChat.keys()]) await flushDelayed(chatId);
@@ -337,7 +302,6 @@ export function flushAllPendingSubAgentCompletions(): void {
   });
 }
 
-/** Fire a single check-in nudge for a long-running sub-agent (test helper). */
 export function fireSubAgentCheckInNudge(runId: string): Promise<void> {
   const run = getSubAgentRun(runId);
   if (!run?.parentChatId) return Promise.resolve();
@@ -361,7 +325,8 @@ function elapsedSeconds(run: SubAgentRun): number {
   return Math.max(0, Math.round((Date.now() - start) / 1000));
 }
 
-/** Subscribe once: SSE deliver frames, plus the test ingest path when a handle is set. */
+// ── Init ─────────────────────────────────────────────────────────────────────
+
 export function initSubAgentCompletionPush(): void {
   if (pushInitialized) return;
   pushInitialized = true;
@@ -382,7 +347,6 @@ export function initSubAgentCompletionPush(): void {
   });
 }
 
-/** Test reset. Installs a memory journal so existing unit tests keep working. */
 export function resetSubAgentCompletionPushForTests(): void {
   pushInitialized = false;
   deliverHook = null;
@@ -393,14 +357,12 @@ export function resetSubAgentCompletionPushForTests(): void {
   delivery = createAdapterDelivery();
 }
 
-/** Tests: flush pending completions for a chat (after mocking streaming idle). */
 export async function flushSubAgentCompletionPushForChat(chatId: string): Promise<void> {
   await ingestChain;
   await flushDelayed(chatId);
   if (delivery) await delivery.tick(chatId);
 }
 
-/** Resolve a run for parent tools: live orchestrator row or persisted session snapshot. */
 export function resolveSubAgentRunForParentSession(
   runId: string,
   parentChatId: string,
@@ -439,7 +401,6 @@ function persistedRowToSubAgentRun(
   };
 }
 
-/** Tests: inspect the adapter fold without reaching into Sets. */
 export async function adapterDeliveryStateForTests(parentChatId: string) {
   if (!delivery?.journal.readEvents) {
     return derive([]);

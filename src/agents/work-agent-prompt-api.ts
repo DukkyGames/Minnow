@@ -1,7 +1,3 @@
-/**
- * Client helpers for Work Agent prompt editor API.
- */
-
 import { mergeUserWorkAgentOverride } from './work-agent-registry';
 import type { ContextEnforcementPolicy } from '../chat/context-budget';
 
@@ -12,7 +8,6 @@ export interface WorkAgentPromptResponse {
   source: 'builtin' | 'override';
 }
 
-/** Fetch prompt body for an agent (built-in or user override). */
 export async function fetchWorkAgentPrompt(
   agentId: string,
   profile: WorkAgentPromptProfile = 'full',
@@ -29,7 +24,6 @@ export async function fetchWorkAgentPrompt(
   }
 }
 
-/** Shipped repo prompt only (ignores ~/.minnow overrides). */
 export async function fetchWorkAgentBuiltinBaseline(
   agentId: string,
   profile: WorkAgentPromptProfile = 'full',
@@ -46,7 +40,6 @@ export async function fetchWorkAgentBuiltinBaseline(
   }
 }
 
-/** Remove user prompt override for a profile. */
 export async function resetWorkAgentPromptOverride(
   agentId: string,
   profile: WorkAgentPromptProfile,
@@ -63,7 +56,6 @@ export async function resetWorkAgentPromptOverride(
   }
 }
 
-/** Persist user prompt override under ~/.minnow/prompts/work-agents/. */
 export async function saveWorkAgentPromptOverride(
   agentId: string,
   profile: WorkAgentPromptProfile,
@@ -81,7 +73,6 @@ export async function saveWorkAgentPromptOverride(
   }
 }
 
-/** Patch provider/model/disabled overrides in ~/.minnow/work-agents.json. */
 export async function patchWorkAgentOverride(
   agentId: string,
   patch: {
@@ -112,7 +103,6 @@ export async function patchWorkAgentOverride(
   }
 }
 
-/** List agents from server registry (invalidates client cache on success). */
 export async function fetchWorkAgentsList(): Promise<{
   agents: import('./work-agent-types').WorkAgentDefinition[];
 } | null> {

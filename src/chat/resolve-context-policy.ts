@@ -1,7 +1,3 @@
-/**
- * Resolve effective context enforcement policy: user override → global → shipped default.
- */
-
 import {
   DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
   type ContextEnforcementPolicy,

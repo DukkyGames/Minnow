@@ -1,7 +1,3 @@
-/**
- * UI Designer turn orchestration (slash + Work Agent dual entry, Step 15).
- */
-
 import { getWorkAgent } from '../work-agent-registry';
 import type { Chat } from '../../types';
 import type { OpenAIFunctionDefinition } from '../../tools/definitions';
@@ -24,7 +20,6 @@ export interface UiDesignerTurnContext {
   statusHint: string;
 }
 
-/** True when slash skill or pinned Work Agent is UI Designer. */
 export function isUiDesignerTurn(
   skillId: string | null,
   workAgentId: string | null | undefined,
@@ -34,7 +29,6 @@ export function isUiDesignerTurn(
   return false;
 }
 
-/** Prepare one UI Designer send turn (mode, preflight, tool filter). */
 export function prepareUiDesignerTurn(
   chat: Chat,
   options: {
@@ -86,7 +80,6 @@ export function prepareUiDesignerTurn(
   };
 }
 
-/** Merge UI Designer instructions into skill body for send. */
 export function augmentSkillBodyForUiDesigner(
   skillBody: string,
   ctx: UiDesignerTurnContext,
@@ -95,7 +88,6 @@ export function augmentSkillBodyForUiDesigner(
   return `${skillBody.trim()}\n${ctx.skillBodySuffix}`;
 }
 
-/** Apply restricted tool list for UI Designer. */
 export function applyUiDesignerToolFilter(
   tools: OpenAIFunctionDefinition[],
   ctx: UiDesignerTurnContext,
@@ -104,17 +96,14 @@ export function applyUiDesignerToolFilter(
   return filterToolsForUiDesigner(tools);
 }
 
-/** Resolve Work Agent row for UI Designer (registry). */
 export function getUiDesignerWorkAgent() {
   return getWorkAgent(UI_DESIGNER_AGENT_ID);
 }
 
-/** User-facing text after mode prefix strip. */
 export function normalizeUiDesignerUserText(userText: string): string {
   return stripUiDesignerModePrefix(userText);
 }
 
-/** Picker modes after /ui-designer is selected. */
 export function listUiDesignerPickerOptions(): Array<{
   id: string;
   label: string;

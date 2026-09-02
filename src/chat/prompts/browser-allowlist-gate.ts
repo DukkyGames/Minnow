@@ -1,7 +1,3 @@
-/**
- * Gate the browser-allowlist prompt fragment until a preview browser tool runs.
- */
-
 import type { Message } from '../../types';
 
 /** Tool ids that imply built-in preview browser automation (navigation allowlist rules apply). */

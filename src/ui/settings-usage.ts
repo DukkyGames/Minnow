@@ -1,7 +1,3 @@
-/**
- * Settings → Usage & cost (token ledger rollups and cost estimates).
- */
-
 import '../styles/settings-general.css';
 import '../styles/settings-usage.css';
 
@@ -18,6 +14,8 @@ import {
 import type { TokenLedgerBySource, TokenLedgerEntry, TokenLedgerTotals } from '../usage/types';
 import { appendSettingsGroup, linkToSettingsSection } from './settings-layout';
 import { appendSettingsOfflineHint } from './settings-controls';
+
+// ── Format ───────────────────────────────────────────────────────────────────
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -70,6 +68,8 @@ function formatSourceKey(key: string): string {
   if (key === 'orchestrate-board') return 'Orchestrate board';
   return key;
 }
+
+// ── Metrics ──────────────────────────────────────────────────────────────────
 
 /** Flat instrument row for ledger totals (stats-strip vocabulary, no nested cards). */
 function appendUsageMetrics(mount: HTMLElement, totals: TokenLedgerTotals): void {
@@ -220,6 +220,8 @@ function appendUsageRollup(
 function appendUsageEmpty(mount: HTMLElement, message: string): void {
   mount.appendChild(el('p', 'usage-empty', message));
 }
+
+// ── Render ───────────────────────────────────────────────────────────────────
 
 /** Render Usage panel into #settingsUsageBody. */
 export async function renderUsageSettingsSection(): Promise<void> {

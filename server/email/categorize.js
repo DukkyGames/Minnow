@@ -1,23 +1,9 @@
-/**
- * Gmail-style inbox categories (Primary / Social / Other) — local labeling only.
- *
- * Classification never creates IMAP folders or writes server labels. Category is
- * stored beside triage_json / snooze_until and rolled up onto threads for
- * server-side tab filtering. Deterministic rules run at ingest; an optional AI
- * `bucket` rides the existing triage call for ambiguous mail.
- */
-
 import { splitAddressHeader } from './contacts.js';
 import { normalizeOverrideKey, resolveOverride } from './priority.js';
 import { getMailDb, recomputeThread, readMeta, writeMeta } from './store.js';
 
-/** Closed set of inbox tabs. */
 export const INBOX_CATEGORIES = ['primary', 'social', 'other'];
 
-/**
- * Sources strong enough that AI refinement must not override them.
- * Manual pins (`user`) are also protected by applyMessageCategory.
- */
 export const STRONG_CATEGORY_SOURCES = new Set([
   'user',
   'override',
@@ -26,7 +12,6 @@ export const STRONG_CATEGORY_SOURCES = new Set([
   'bulk-headers',
 ]);
 
-/** Well-known social / network notification domains (suffix-matched). */
 export const SOCIAL_DOMAINS = [
   'linkedin.com',
   'facebookmail.com',
@@ -47,7 +32,6 @@ export const SOCIAL_DOMAINS = [
   'medium.com',
 ];
 
-/** Rollup precedence: any Primary message makes the thread Primary. */
 const CATEGORY_RANK = { primary: 3, social: 2, other: 1 };
 
 /**
@@ -59,7 +43,6 @@ export function isInboxCategory(value) {
 }
 
 /**
- * Match a From domain against the social seed list (exact or subdomain suffix).
  * @param {string} domain
  */
 export function isSocialDomain(domain) {
@@ -72,9 +55,6 @@ export function isSocialDomain(domain) {
 }
 
 /**
- * Derive bulk-mail booleans from a mailparser header Map (or plain object).
- * Transient only — never persisted raw.
- *
  * @param {Map<string, unknown> | Record<string, unknown> | null | undefined} headers
  */
 export function deriveBulkSignals(headers) {
@@ -116,17 +96,7 @@ export function isBulk(sig) {
 }
 
 /**
- * Pure classifier — first matching precedence rung wins.
- *
- * @param {{
- *   categoryOverride?: string,
- *   senderOverride?: string,
- *   fromDomain?: string,
- *   repliedCount?: number,
- *   bulkSignals?: ReturnType<typeof deriveBulkSignals> | null,
- *   aiBucket?: string,
- *   triage?: { bucket?: string, category?: string } | null,
- * }} input
+ * @param {{ categoryOverride?: string, senderOverride?: string, fromDomain?: string, repliedCount?: number, bulkSignals?: ReturnType<typeof deriveBulkSignals> | null, aiBucket?: string, triage?: { bucket?: string, category?: string } | null, }} input
  * @returns {{ category: 'primary' | 'social' | 'other', source: string }}
  */
 export function classifyCategory(input = {}) {
@@ -168,7 +138,6 @@ export function classifyCategory(input = {}) {
 }
 
 /**
- * Pick the strongest category among messages in a thread.
  * @param {Iterable<string>} categories
  */
 export function rollupThreadCategory(categories) {
@@ -186,7 +155,6 @@ export function rollupThreadCategory(categories) {
 }
 
 /**
- * Resolve a category pin: exact address, then `@domain`.
  * @param {Map<string, string>} overrides
  * @param {string} address
  */
@@ -195,7 +163,6 @@ export function resolveCategoryOverride(overrides, address) {
 }
 
 /**
- * Load From-domain / contact / pin / priority-override signals for one header.
  * @param {import('better-sqlite3').Database} db
  * @param {string} fromHeader
  */
@@ -217,7 +184,6 @@ export function loadCategorySignalsForAddress(db, fromHeader) {
       categoryOverrides.set(row.sender, row.category);
     }
   } catch {
-    // Table may be absent before migrateAddedColumns on a brand-new handle.
   }
 
   /** @type {Map<string, string>} */
@@ -235,17 +201,9 @@ export function loadCategorySignalsForAddress(db, fromHeader) {
 }
 
 /**
- * Classify and persist category on one message row. Never overwrites a manual pin.
- *
  * @param {import('better-sqlite3').Database} db
  * @param {number} rowId
- * @param {{
- *   fromHeader?: string,
- *   bulkSignals?: ReturnType<typeof deriveBulkSignals> | null,
- *   triage?: { bucket?: string, category?: string } | null,
- *   categoryOverride?: string,
- *   force?: boolean,
- * }} [options]
+ * @param {{ fromHeader?: string, bulkSignals?: ReturnType<typeof deriveBulkSignals> | null, triage?: { bucket?: string, category?: string } | null, categoryOverride?: string, force?: boolean, }} [options]
  * @returns {{ category: string, source: string } | null}
  */
 export function applyMessageCategory(db, rowId, options = {}) {
@@ -257,7 +215,6 @@ export function applyMessageCategory(db, rowId, options = {}) {
     .get(id);
   if (!existing) return null;
 
-  // Protect a manual conversation pin unless the caller forces a reclassify.
   if (!options.force && existing.category_source === 'user') {
     return { category: existing.category || 'primary', source: 'user' };
   }
@@ -291,7 +248,6 @@ export function applyMessageCategory(db, rowId, options = {}) {
 }
 
 /**
- * AI bucket refinement — only when the current source is weak/ambiguous.
  * @param {string} accountId
  * @param {string} messageKey
  * @param {string} aiBucket
@@ -342,7 +298,6 @@ export async function reclassifyWithAiBucket(accountId, messageKey, aiBucket) {
 }
 
 /**
- * One-time backfill for rows that predate the category columns.
  * @param {string} accountId
  */
 export async function backfillCategoriesIfNeeded(accountId) {
@@ -370,7 +325,6 @@ export async function backfillCategoriesIfNeeded(accountId) {
           triage = null;
         }
       }
-      // Old rows have no stored header signals — lean on domain / contacts / triage.
       applyMessageCategory(db, row.message_row_id, {
         fromHeader: row.from_addr,
         bulkSignals: null,
@@ -389,7 +343,6 @@ export async function backfillCategoriesIfNeeded(accountId) {
 }
 
 /**
- * Pin a sender (or @domain) to an inbox tab. Empty category clears the pin.
  * @param {string} accountId
  * @param {string} sender
  * @param {'primary' | 'social' | 'other' | ''} category
@@ -417,8 +370,6 @@ export async function setCategoryOverride(accountId, sender, category) {
 }
 
 /**
- * Reclassify every cached message from a sender after a pin change.
- * Skips rows already manually pinned (`category_source = 'user'`).
  * @param {string} accountId
  * @param {string} sender
  */
@@ -432,7 +383,6 @@ export async function reclassifySenderMessages(accountId, sender) {
 
   let rows;
   if (address) {
-    // Exact address match on the bare addr inside from_addr.
     rows = db
       .prepare(
         `SELECT message_row_id, thread_id, from_addr, triage_json, category_source
@@ -486,8 +436,6 @@ export async function reclassifySenderMessages(accountId, sender) {
 }
 
 /**
- * Manually file a conversation into a tab (local label only).
- *
  * @param {string} accountId
  * @param {string} threadId
  * @param {'primary' | 'social' | 'other'} category

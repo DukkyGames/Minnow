@@ -1,19 +1,3 @@
-/**
- * Mail body rendering.
- *
- * Bodies are hostile documents written by strangers, so they are never injected
- * into the app DOM. Each one renders inside a sandboxed iframe with its own
- * reset stylesheet, which fixes three things at once: sender CSS can no longer
- * restyle the app (and app CSS can no longer mangle the mail), a newsletter
- * built for a white background stays readable under a dark app theme, and the
- * frame's CSP gives a second, browser-enforced guarantee that nothing is
- * fetched from the sender's servers.
- *
- * Remote content is parked server-side at sanitize time (see
- * `server/email/remote-content.js`); the same parking is repeated here so that
- * bodies cached before that landed are covered too.
- */
-
 import DOMPurify from 'dompurify';
 import type { EmailMessage } from '../../email/client';
 import { emailAttachmentPath } from '../../email/client';
@@ -59,18 +43,11 @@ export interface EmailBodyRenderOptions {
   viewMode?: EmailBodyViewMode;
   /** Re-attach parked images through the local proxy. */
   loadRemoteImages?: boolean;
-  /**
-   * Recolour the mail to sit in a dark theme via a safe smart-invert (images
-   * are re-inverted so they stay right-way-round). The reader enables this
-   * automatically when the app theme is dark; callers may also set it directly.
-   */
+  /** Recolour the mail to sit in a dark theme via a safe smart-invert (images are re-inverted so they stay right-way-round). */
   matchTheme?: boolean;
   /** Reports how many remote references were withheld, for the "load images" bar. */
   onRemoteContent?: (info: { blockedCount: number }) => void;
-  /**
-   * Identifies the message so `cid:` parts can be resolved to the attachment
-   * route. Omit and inline images collapse to the withheld-image marker.
-   */
+  /** Identifies the message so `cid:` parts can be resolved to the attachment route. */
   inlineParts?: { accountId: string; messageKey: string };
 }
 
@@ -112,17 +89,14 @@ function rewriteCssUrls(style: string, load: boolean): { style: string; blocked:
   return { style: next, blocked };
 }
 
-/**
- * Park or re-attach every remote reference on one element.
- * @returns how many references were withheld
- */
+// ── Remote policy ────────────────────────────────────────────────────────────
+
+/** Park or re-attach every remote reference on one element. */
 function applyRemotePolicy(el: Element, load: boolean): number {
   let blocked = 0;
 
   for (const attr of URL_ATTRS) {
     const parkedName = `${REMOTE_ATTR_PREFIX}${attr}`;
-    // Either the server already parked it, or this is a legacy cached body
-    // where the live attribute is still pointing at the sender's host.
     const parked = el.getAttribute(parkedName);
     const live = el.getAttribute(attr);
     const original = parked ?? (isRemoteUrl(live) ? live : null);
@@ -157,15 +131,6 @@ function applyRemotePolicy(el: Element, load: boolean): number {
   return blocked;
 }
 
-/**
- * Apply the remote-content policy across a parsed body.
- *
- * Takes an inert root (a `<template>`'s content) so nothing has been fetched by
- * the time it runs.
- *
- * @param load re-attach images through the proxy instead of withholding them
- * @returns how many remote references were withheld
- */
 export function applyRemoteContentPolicy(root: ParentNode, load: boolean): number {
   let blocked = 0;
   root.querySelectorAll('*').forEach((el) => {
@@ -175,17 +140,9 @@ export function applyRemoteContentPolicy(root: ParentNode, load: boolean): numbe
   return blocked;
 }
 
-/**
- * Point `cid:` image sources at the attachment route.
- *
- * A `cid:` URL means "a part of this same message"; browsers cannot resolve it,
- * so an untouched inline image renders as a broken icon. The bytes come from
- * the local server, so unlike a remote image this leaks nothing to the sender
- * and needs no allowlist. The token goes in the query because a sandboxed
- * frame's subresource loads carry no headers from the fetch interceptor.
- *
- * @returns how many inline parts were wired up
- */
+// ── CID images ───────────────────────────────────────────────────────────────
+
+/** Point `cid:` image sources at the attachment route. */
 export function resolveInlineCidImages(
   root: ParentNode,
   context: { accountId: string; messageKey: string },
@@ -218,14 +175,7 @@ function secureLink(anchor: Element): void {
   anchor.setAttribute('rel', 'noopener noreferrer');
 }
 
-/**
- * Reset stylesheet for the frame.
- *
- * Deliberately theme-independent: mail is authored against a white background,
- * so recolouring it to match a dark app theme is what makes newsletters
- * unreadable. The surface stays light in both themes and the app frame around
- * it carries the theming instead.
- */
+/** Reset stylesheet for the frame. */
 const MAIL_RESET_CSS = `
   html, body {
     margin: 0;
@@ -280,13 +230,7 @@ const MAIL_RESET_CSS = `
   }
 `;
 
-/**
- * Build the frame document.
- *
- * The CSP is the backstop for the whole remote-content story: even if the
- * parking above missed an attribute, `img-src` permits only same-origin (the
- * proxy) and inline data, so the sender's host is unreachable from here.
- */
+/** Build the frame document. */
 function buildSrcdoc(bodyHtml: string, dark: boolean): string {
   const csp = [
     "default-src 'none'",
@@ -315,10 +259,9 @@ function fitFrameToContent(frame: HTMLIFrameElement): void {
   frame.style.height = `${height}px`;
 }
 
-/**
- * Render a message body into the reading pane.
- * Defaults to HTML when available; plain mode shows only the text alternative.
- */
+// ── Body render ──────────────────────────────────────────────────────────────
+
+/** Render a message body into the reading pane. */
 export function renderEmailBody(
   mount: HTMLElement,
   message: BodySource,
@@ -347,26 +290,18 @@ export function renderEmailBody(
   mount.classList.add('html-body');
   const clean = DOMPurify.sanitize(html, EMAIL_PURIFY_CONFIG);
 
-  // A <template> fragment is inert: parsing into it does not fetch anything, so
-  // the rewrite below happens before any URL could be dereferenced.
   const template = document.createElement('template');
   template.innerHTML = clean;
 
   const load = opts.loadRemoteImages === true;
   const blockedCount = applyRemoteContentPolicy(template.content, load);
-  // After the remote pass: `cid:` is not a remote URL, so the policy above
-  // leaves it alone, and rewriting here cannot re-expose a parked host.
   if (opts.inlineParts) {
     resolveInlineCidImages(template.content, opts.inlineParts);
   }
 
   const frame = document.createElement('iframe');
   frame.className = 'email-body-frame';
-  // Match the inverted canvas so the frame edges don't flash white in dark mode.
   if (opts.matchTheme) frame.classList.add('email-body-frame--dark');
-  // No allow-scripts, ever. allow-same-origin is what lets us measure the
-  // content height; on its own it grants no script execution, but the two
-  // together would let the frame reach out of the sandbox.
   frame.setAttribute('sandbox', 'allow-same-origin allow-popups allow-popups-to-escape-sandbox');
   frame.setAttribute('referrerpolicy', 'no-referrer');
   frame.setAttribute('title', 'Message body');

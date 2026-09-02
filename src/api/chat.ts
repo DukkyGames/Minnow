@@ -105,6 +105,8 @@ import {
 
 export { parseSsePayloads } from './sse-parse';
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
 /** Accumulated metadata from SSE chunks (stats, usage, model_info). */
 export interface StreamMetaAccumulator {
   stats?: Stats;
@@ -142,9 +144,6 @@ export interface ChatCompletionBody {
   };
 }
 
-// --- Stream / stats helpers ---
-// LM Studio v0 streaming omits stats/model_info; usage arrives in a final chunk when requested.
-// Assistant prose uses `content` only; reasoning uses `extractReasoningDelta` (see `./reasoning`).
 
 /** Re-export reasoning helpers for callers that already import `chat.ts`. */
 export {
@@ -152,6 +151,8 @@ export {
   extractReasoningMessage,
   splitThinkingSegments,
 } from './reasoning';
+
+// ── Stream ───────────────────────────────────────────────────────────────────
 
 /** Provider error payload on an SSE chunk (OpenAI-style `error` or `finish_reason: error`). */
 export function extractStreamErrorMessage(chunk: ChatCompletionChunk): string | undefined {
@@ -241,6 +242,8 @@ export function finalizeToolCalls(acc: ToolCallAccumulator): ToolCall[] {
     .filter((tc) => Boolean(tc.function.name));
 }
 
+// ── Text ─────────────────────────────────────────────────────────────────────
+
 /** Plain message content from a non-streaming completion. */
 export function extractMessageText(
   message: { content?: string | unknown } | null | undefined,
@@ -282,13 +285,8 @@ export function extractAssistantCompletionText(
   return '';
 }
 
-/**
- * llama.cpp `timings` in the shape the stats reconciler already understands.
- *
- * Returns null until there is something worth trusting: the first chunk of a stream
- * reports `predicted_n: 1` over `predicted_ms: 0.001`, which is a million tokens per
- * second and not a measurement.
- */
+// ── Stats ────────────────────────────────────────────────────────────────────
+
 export function statsFromLlamaTimings(timings: LlamaTimings | undefined): Stats | null {
   if (!timings) return null;
   const predictedN = Number(timings.predicted_n);
@@ -302,8 +300,6 @@ export function statsFromLlamaTimings(timings: LlamaTimings | undefined): Stats 
         ? Number(timings.predicted_per_second)
         : (predictedN / predictedMs) * 1000,
   };
-  // Prefill time is the engine's own time-to-first-token, measured rather than
-  // inferred from when the browser saw the first byte.
   if (Number(timings.prompt_ms) > 0) out.time_to_first_token = Number(timings.prompt_ms) / 1000;
   if (Number(timings.prompt_per_second) > 0) {
     out.prompt_tokens_per_second = Number(timings.prompt_per_second);
@@ -322,16 +318,11 @@ export function mergeStreamMeta(
   chunk: ChatCompletionChunk
 ): StreamMetaAccumulator {
   const next: StreamMetaAccumulator = { ...(acc || {}) };
-  // llama.cpp sends these on every chunk once the request opts in; the last one is
-  // the complete picture. Folded into `stats` so the existing reconciler can weigh
-  // them against usage the same way it weighs any other server timing.
   if (chunk.timings) {
     next.timings = { ...next.timings, ...chunk.timings };
     const derived = statsFromLlamaTimings(next.timings);
     if (derived) next.stats = { ...next.stats, ...derived };
   } else if (deltaHasGeneratedText(chunk)) {
-    // mlx-lm (and other OpenAI streams) omit timings.predicted_n. Count each
-    // text-bearing delta so the live GEN chip and "Calling {tool}" stay honest.
     const prev = Number(next.timings?.predicted_n) || 0;
     next.timings = { ...next.timings, predicted_n: prev + 1 };
   }
@@ -363,11 +354,6 @@ export const MAX_PLAUSIBLE_TOKENS_PER_SECOND = 2000;
 
 const MIN_DECODE_SECONDS = 0.001;
 
-/**
- * Wall-clock decode window for tok/s. When the first visible token arrives in a
- * final burst (common with reasoning models), use full stream duration instead
- * of a sub-millisecond slice so throughput matches chat-style metrics.
- */
 export function resolveDecodeSeconds(
   t0: number,
   tFirst: number | null,
@@ -465,10 +451,6 @@ function recomputeTokensPerSecond(out: Stats, usage: Usage | undefined): void {
   }
 }
 
-/**
- * Prefer provider timing when usage-coherent (full or partial trust); otherwise
- * keep client timings and recompute tok/s from completion_tokens.
- */
 export function reconcileCompletionStats(
   clientStats: Stats,
   serverStats: Stats,
@@ -492,7 +474,6 @@ export function reconcileCompletionStats(
     return out;
   }
 
-  // Partial trust: engine decode window fits usage even when client prose-only tFirst disagrees.
   if (serverGenerationTimeMatchesUsage(serverStats, usage)) {
     if (serverStats.time_to_first_token != null) {
       out.time_to_first_token = serverStats.time_to_first_token;
@@ -502,7 +483,6 @@ export function reconcileCompletionStats(
     return out;
   }
 
-  // Client fallback when server timing is not usage-coherent.
   recomputeTokensPerSecond(out, usage);
   return out;
 }
@@ -525,6 +505,8 @@ export function finalizeResponseMeta(
   };
 }
 
+// ── Fallback ─────────────────────────────────────────────────────────────────
+
 /** Non-streaming fallback when SSE yields no assistant text. */
 export async function tryNonStreamingFallback(
   body: ChatCompletionBody,
@@ -534,6 +516,8 @@ export async function tryNonStreamingFallback(
   const provider = await getActiveProvider(chatProviderId);
   return completeNonStreamingViaGenerations(provider, body, signal);
 }
+
+// ── Send ─────────────────────────────────────────────────────────────────────
 
 /** Send the composer text to LM Studio with SSE streaming and optional JSON fallback. */
 export async function sendMessage(): Promise<void> {
@@ -576,7 +560,6 @@ export async function sendMessage(): Promise<void> {
   const chatSignal = controller.signal;
 
   chat.modelId = binding.modelId || chat.modelId;
-  // C.1: defensive hydrate before first history mutation (no-op when lazy flag is off).
   await ensureChatHistoryLoaded(chat.id);
   const shouldScheduleTitle = isFirstUserMessagePending(chat);
   const firstUserSend = shouldScheduleTitle;
@@ -687,7 +670,6 @@ export async function sendMessage(): Promise<void> {
   let streamMeta: StreamMetaAccumulator = {};
   const t0 = performance.now();
   let tFirst: number | null = null;
-  // Length only — joining thought-bubble segments every chunk is O(thinking).
   let thinkingLength = 0;
   const streamingStatsPublisher = createStreamingStatsPublisher(chat);
   const inlineRouter = new InlineContentThinkingRouter({
@@ -769,8 +751,6 @@ export async function sendMessage(): Promise<void> {
       if (contentDelta) {
         routeContentDelta(contentDelta);
       }
-      // Local llama.cpp streams carry prefill progress and a running token count.
-      // Everything else reports neither, and the view collapses to empty.
       const runtime = llamaRuntimeStatusView(streamMeta, tFirst != null);
       if (runtime.phase === 'prompt_processing' && tFirst == null) {
         streamStatus.setPhase('prompt_processing');

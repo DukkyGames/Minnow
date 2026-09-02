@@ -1,7 +1,3 @@
-/**
- * Headless tool batch helper for sub-agents, evals, benchmarks, and CLI.
- */
-
 import type { ToolCall, ToolExecutionResult } from '../types.ts';
 import {
   executeToolCallBatch,

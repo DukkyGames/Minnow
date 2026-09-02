@@ -1,7 +1,3 @@
-/**
- * SMTP draft and send (explicit user action only — no auto-send tools).
- */
-
 import nodemailer from 'nodemailer';
 import MailComposer from 'nodemailer/lib/mail-composer/index.js';
 import { getEmailAccount, readAccountPassword } from './accounts.js';
@@ -16,7 +12,6 @@ import { loadSynthesisConfig, resolveSynthesisModel } from '../memory/synthesis-
 import { computeReplyHeaders } from './reply-headers.js';
 
 /**
- * Infer nodemailer transport security from account SMTP settings.
  * @param {{ host: string, port: number, starttls: boolean }} smtp
  */
 function buildTransportOptions(smtp, username, password) {
@@ -40,7 +35,6 @@ Rules:
 - Match a professional, natural tone`;
 
 /**
- * Compose a reply draft for a thread (does not send).
  * @param {{ accountId: string, threadId: string, instructions?: string }} input
  */
 export async function draftReply(input) {
@@ -68,8 +62,6 @@ export async function draftReply(input) {
       )
       .join('\n\n---\n\n');
 
-    // Context recall (§3.6): the last couple of exchanges with this sender
-    // outside the current thread, so the draft can keep continuity.
     const senderAddress = splitAddressHeader(String(headers.to ?? '')).address;
     let historyBlock = '';
     try {
@@ -86,7 +78,6 @@ export async function draftReply(input) {
           .join('\n');
       }
     } catch {
-      /* history is a nicety; a store hiccup must not block drafting */
     }
 
     const styleBlock = await styleProfilePromptBlock(account, input.accountId).catch(() => '');
@@ -134,12 +125,6 @@ export async function draftReply(input) {
 }
 
 /**
- * Normalize compose attachments into nodemailer's shape.
- *
- * The UI uploads base64 because the compose payload is JSON; decoding here
- * keeps the size check in one place and means a malformed part is rejected
- * before anything is dispatched.
- *
  * @param {Array<Record<string, unknown>> | undefined} attachments
  */
 export function buildOutgoingAttachments(attachments) {
@@ -161,7 +146,6 @@ export function buildOutgoingAttachments(attachments) {
       content,
       contentType: String(att?.contentType ?? 'application/octet-stream'),
     };
-    // An inline part needs a cid the body's <img src="cid:…"> can reference.
     if (att?.contentId) {
       entry.cid = String(att.contentId);
       entry.contentDisposition = 'inline';
@@ -170,21 +154,9 @@ export function buildOutgoingAttachments(attachments) {
   });
 }
 
-/** Ceiling on one message's attachments; most providers refuse more anyway. */
 export const MAX_OUTGOING_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 /**
- * Deliver an email over SMTP and file a copy in Sent.
- *
- * Not the user-facing entry point: callers go through `enqueueSend` in
- * `outbox.js`, whose undo window is the actual send gate. This used to demand a
- * `confirmed: true` field, which proved nothing — any caller that could reach
- * the function could set it.
- *
- * The message is composed once, up front, and the same bytes are handed to SMTP
- * and to the Sent APPEND. Recomposing for the Sent copy would risk filing
- * something subtly different from what the recipient received.
- *
  * @param {{ accountId: string, to: string, subject: string, body: string, bodyHtml?: string, cc?: string, bcc?: string, inReplyTo?: string, references?: string, attachments?: Array<Record<string, unknown>> }} input
  */
 export async function sendEmail(input) {
@@ -215,9 +187,6 @@ export async function sendEmail(input) {
   const from = account.fromAddress?.trim() || account.username;
   const attachments = buildOutgoingAttachments(input.attachments);
 
-  // Compile once: `getEnvelope()` carries every recipient including Bcc, while
-  // the built bytes have the Bcc header stripped — so the Sent copy does not
-  // disclose blind recipients either.
   const compiled = new MailComposer({
     from,
     to,
@@ -236,7 +205,6 @@ export async function sendEmail(input) {
 
   const info = await transport.sendMail({ envelope, raw });
 
-  // Delivery has already happened; a filing failure must not fail the send.
   const sentCopy = await appendToSentFolder(input.accountId, raw);
 
   return {
@@ -249,11 +217,6 @@ export async function sendEmail(input) {
 }
 
 /**
- * Resolve a pre-generated reply variant into a ready-to-send payload.
- *
- * Kept separate from delivery so the caller can hand the payload to the outbox
- * and give the user an undo window, rather than sending straight away.
- *
  * @param {{ accountId: string, threadId: string, messageKey: string, variantId: string }} input
  */
 export async function resolveReplyVariantSend(input) {

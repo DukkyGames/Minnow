@@ -1,8 +1,3 @@
-/**
- * Per-chat model UI — composer triggers and active chat binding updates.
- * Kept separate from sidebar.ts to avoid circular imports with composer-model-trigger.
- */
-
 import { applyModelSelectValueToChat } from '../lib/model-select-key';
 import { isChatStreaming } from '../chat/streaming-state';
 import { stopGeneration } from '../chat/stop-generation';
@@ -37,7 +32,6 @@ export function onActiveChatModelChange(selectValue: string): void {
   applyModelSelectValueToChat(chat, raw);
   touchChat(chat);
   scheduleSaveSessions();
-  // Cloud (and local) rows get the same first-use matrix probe as catalog refresh.
   scheduleCapabilityProbeForSelectValue(raw);
   syncComposerModelTriggers();
   syncComposerReasoningEffortFromActiveChat();

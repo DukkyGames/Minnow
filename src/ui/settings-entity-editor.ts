@@ -1,7 +1,3 @@
-/**
- * Expandable settings editors: prompt body + provider/model binding per entity.
- */
-
 import {
   fetchWorkAgentPrompt,
   patchWorkAgentOverride,
@@ -58,6 +54,8 @@ const CONTEXT_POLICY_OPTIONS: { value: ContextEnforcementPolicy; label: string }
 
 const CONTEXT_POLICY_HINT =
   'Uses the active model\'s context window (90% safety margin). Requires a known context length.';
+
+// ── Selects ──────────────────────────────────────────────────────────────────
 
 function buildSummarySchemaSelect(initial: string): HTMLSelectElement {
   const sel = document.createElement('select');
@@ -126,6 +124,8 @@ export async function applyArchiveEmbeddingsGate(sel: HTMLSelectElement): Promis
     sel.value = 'summarize';
   }
 }
+
+// ── Archive ──────────────────────────────────────────────────────────────────
 
 function buildArchiveNumberInput(
   value: number,
@@ -294,6 +294,8 @@ interface PromptEditorOptions {
   entityId: string;
 }
 
+// ── Prompt ───────────────────────────────────────────────────────────────────
+
 /** Mode, expert, or sub-agent prompt editor (file API). */
 export function mountPromptFileEditor(
   container: HTMLElement,
@@ -418,6 +420,8 @@ interface WorkAgentEditorOptions {
   initialArchive?: ArchiveConfig;
   onModelSaved?: () => void;
 }
+
+// ── Work agent ───────────────────────────────────────────────────────────────
 
 /** Work agent Full/Lite prompt editor only (Models hub holds binding). */
 export function mountWorkAgentPromptEditor(
@@ -799,6 +803,8 @@ export function mountWorkAgentEditor(
 
   void fillProviders().then(() => reloadPrompt());
 }
+
+// ── List ─────────────────────────────────────────────────────────────────────
 
 /** Sub-agent type structural settings (prompt/model live in hubs). */
 export function mountSubAgentTypeEditor(

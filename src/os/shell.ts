@@ -72,7 +72,6 @@ function ensureShellDom(): { menubar: HTMLElement } {
     stage.appendChild(appsLayer);
   }
 
-  // Tear down legacy layers from pre–workspace-first shell.
   for (const legacyId of [
     'osDesktopLayer',
     'osWindowsLayer',

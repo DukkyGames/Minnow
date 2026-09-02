@@ -1,7 +1,3 @@
-/**
- * System tray menu, close-to-hide lifecycle, and one-time close notification.
- */
-
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -29,6 +25,8 @@ import {
 
 const CLOSE_NOTIFICATION_KEY = 'minnow.tray.closeNotificationShown';
 
+// ── Icons ────────────────────────────────────────────────────────────────────
+
 function loadImageFromPath(iconPath: string, asTemplate: boolean): Electron.NativeImage {
   const image = nativeImage.createFromPath(iconPath);
   if (asTemplate && !image.isEmpty()) {
@@ -37,7 +35,6 @@ function loadImageFromPath(iconPath: string, asTemplate: boolean): Electron.Nati
   return image;
 }
 
-/** Load a tray icon with platform template handling and a logo-ladder fallback. */
 function loadTrayIcon(
   platform: TrayPlatform,
   primaryPath: string,
@@ -75,7 +72,6 @@ export interface TrayManagerDeps {
   setCloseToTray: (enabled: boolean) => Promise<boolean>;
   getLoginItem: () => LoginItemSnapshot;
   setLoginItem: (enabled: boolean) => LoginItemSnapshot;
-  /** True when an explicit quit path is running (tray Quit, updater install). */
   isQuitInProgress: () => boolean;
 }
 
@@ -88,7 +84,8 @@ export interface TrayManager {
   wireWindowClose: (win: BrowserWindow) => void;
 }
 
-/** Persist one-time close notification in Electron userData (not Minnow home). */
+// ── Close notification ───────────────────────────────────────────────────────
+
 function hasShownCloseNotification(): boolean {
   try {
     const marker = path.join(app.getPath('userData'), CLOSE_NOTIFICATION_KEY);
@@ -103,7 +100,6 @@ function markCloseNotificationShown(): void {
     const marker = path.join(app.getPath('userData'), CLOSE_NOTIFICATION_KEY);
     fs.writeFileSync(marker, new Date().toISOString(), 'utf8');
   } catch {
-    /* ignore */
   }
 }
 
@@ -122,6 +118,9 @@ function showCloseNotificationOnce(): void {
   markCloseNotificationShown();
 }
 
+// ── Tray manager ─────────────────────────────────────────────────────────────
+
+/** On macOS, left-click focuses then pops the menu; setContextMenu would steal that. */
 export function createTrayManager(deps: TrayManagerDeps): TrayManager {
   let tray: Tray | null = null;
   let contextMenu: Menu | null = null;
@@ -180,7 +179,6 @@ export function createTrayManager(deps: TrayManagerDeps): TrayManager {
   function rebuildMenu(): void {
     if (!tray || tray.isDestroyed()) return;
     contextMenu = buildMenu();
-    // macOS: avoid setContextMenu so we can focus on left-click and pop up the menu ourselves.
     if (!isDarwin) {
       tray.setContextMenu(contextMenu);
     }
@@ -256,5 +254,4 @@ export function createTrayManager(deps: TrayManagerDeps): TrayManager {
   };
 }
 
-/** Test helpers for login-item re-exports. */
 export { readLoginItemSnapshot, writeLoginItemOpenAtLogin };

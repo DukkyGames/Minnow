@@ -1,7 +1,3 @@
-/**
- * Client API for mode/expert/sub-agent prompt bodies (built-in + ~/.minnow overrides).
- */
-
 import { bumpPromptConfigEpoch } from '../outbound-estimate-epochs';
 
 export type PromptFileFamily = 'modes' | 'experts' | 'sub-agents';

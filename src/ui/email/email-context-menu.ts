@@ -1,10 +1,3 @@
-/**
- * Accessible floating context menu for Email inbox rows.
- *
- * Uses role="menu", focuses the first item on open, supports Arrow / Home /
- * End / Enter / Space / Escape, and restores focus to the invoking element.
- */
-
 export interface EmailContextMenuItem {
   id: string;
   label: string;
@@ -37,10 +30,7 @@ export function closeEmailContextMenu(): void {
   activeMenu?.close();
 }
 
-/**
- * Open a context menu at the pointer (or keyboard synthetic) coordinates.
- * Replaces any previously open menu.
- */
+/** Open a context menu at the pointer (or keyboard synthetic) coordinates. */
 export function openEmailContextMenu(
   options: OpenEmailContextMenuOptions,
 ): EmailContextMenuHandle {
@@ -82,7 +72,6 @@ export function openEmailContextMenu(
 
   host.appendChild(root);
 
-  // Position then clamp so the menu stays inside the viewport.
   root.style.left = `${Math.max(0, options.clientX)}px`;
   root.style.top = `${Math.max(0, options.clientY)}px`;
   const rect = root.getBoundingClientRect();
@@ -164,7 +153,6 @@ export function openEmailContextMenu(
   window.addEventListener('resize', onResizeOrScroll);
   window.addEventListener('scroll', onResizeOrScroll, true);
 
-  // Focus the first enabled item (or the empty menu shell).
   const firstEnabled = items.findIndex((btn) => !btn.disabled);
   if (firstEnabled >= 0) focusItem(firstEnabled);
   else root.focus();

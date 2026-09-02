@@ -1,17 +1,3 @@
-/**
- * P5-C — Browser rung, live (MIN-721).
- *
- * A real Chromium, a real dev server started through `server/dev-server/`, and
- * the real `browser_drive_*` dispatch. On a machine with no Chromium these
- * **skip** rather than fail — the same degradation the rung itself performs.
- *
- * The ten-consecutive-runs test at the bottom is the acceptance criterion, not
- * a nicety: flakiness here is fatal to unattended operation, and it has to be
- * measured against a real browser and a real server rather than asserted.
- *
- * Nothing asserts on a screenshot. Screenshots are report evidence; the known
- * hazard is that those round-trips hang.
- */
 
 import assert from 'node:assert/strict';
 import fsp from 'node:fs/promises';
@@ -54,7 +40,6 @@ function freePort() {
   });
 }
 
-/** The fixture app. `MN_BROKEN=1` removes the header the plan asserts on. */
 const SERVE_MJS = `import http from 'node:http';
 
 const broken = process.env.MN_BROKEN === '1';
@@ -87,9 +72,6 @@ server.listen(Number(process.env.PORT), process.env.HOST || '127.0.0.1');
 `;
 
 /**
- * A plan whose Accept criteria are the browser assertions. The rung reads
- * exactly this and nothing else.
- *
  * @param {string} headerText
  */
 const planFor = (headerText) => `---
@@ -136,8 +118,6 @@ isProject: false
 - [ ] \`npm test\` passes
 `;
 
-// Module scope, not `before`: node:test evaluates a suite's `skip` when the
-// suite is defined, which is earlier than any hook.
 const previousHome = process.env.MINNOW_HOME;
 const homeDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mn-p5c-live-'));
 process.env.MINNOW_HOME = homeDir;
@@ -184,9 +164,6 @@ port: ${appPort}
 setWorkspaceRoot(workspace);
 resetDevServerRegistryForTests();
 resetDevServerManagerForTests();
-// The pin. `resolveEffectiveGuide` takes the port from settings, so this is
-// where "which port is the app on" is decided — not by whatever the server
-// happens to grab.
 await writeDevServerSettings(workspace, { port: appPort, network: 'local' });
 
 const capability = await discoverBrowser();
@@ -201,20 +178,12 @@ after(async () => {
   try {
     await stopDevServerById(workspace);
   } catch {
-    /* best-effort */
   }
-  // Before the rm, and not merely for tidiness: the manager's health-reconcile
-  // interval rewrites the registry under MINNOW_HOME. Leave it armed and a
-  // recursive rm of that tree livelocks on Windows — it deletes, the tick
-  // recreates, ENOTEMPTY, forever. Measured: `fsp.rm` never returned, and the
-  // whole file hung after every test had already passed.
   resetDevServerManagerForTests();
   if (previousHome === undefined) delete process.env.MINNOW_HOME;
   else process.env.MINNOW_HOME = previousHome;
   resetMinnowHomeCache();
   resetBrowserConfigCache();
-  // Bounded and best-effort even so. This is a temp directory the OS reclaims;
-  // no cleanup of it is worth a test file that never exits.
   await Promise.race([
     fsp
       .rm(homeDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
@@ -234,8 +203,6 @@ async function runRung(opts = {}) {
   return runBrowserRung({
     cwd: workspace,
     planMarkdown: opts.plan ?? planFor('Weekly totals'),
-    // A page that is already fully served needs no long settle; the assertion
-    // window still does the waiting where waiting is needed.
     settleMs: 100,
     assertTimeoutMs: 5_000,
     readyTimeoutMs: 30_000,
@@ -253,16 +220,12 @@ describe('P5-C browser rung — live', { skip: skipReason, timeout: 240_000 }, (
       true,
       JSON.stringify(result.assertions, null, 2),
     );
-    // T3's Accept is real but not browser-observable. It is reported, not
-    // silently dropped and not guessed at.
     assert.deepEqual(
       result.notObservable.map((n) => n.taskId),
       ['T3'],
     );
-    // Screenshots are captured as evidence for the human report.
     assert.ok(result.screenshots.length >= 1);
 
-    // Teardown: no browser session, no tracked browser process, no dev server.
     assert.deepEqual(browserToolSessionKeys(), []);
     assert.deepEqual(trackedBrowserPids(), []);
     const status = await getDevServerStatusById(workspace);
@@ -277,10 +240,6 @@ describe('P5-C browser rung — live', { skip: skipReason, timeout: 240_000 }, (
     assert.equal(failed?.describe, 'page text contains "Weekly totals"');
     assert.match(failed?.url ?? '', /\/dashboard$/);
     assert.match(result.summary, /Weekly totals/);
-    // The other assertion still ran and still held: a failure names the one
-    // thing that broke, not "the browser check failed". T2's absence check is
-    // unaffected by the broken header, and T3 is not browser-observable at all,
-    // so of the two derived assertions exactly one passes.
     assert.equal(result.assertions.length, 2);
     assert.deepEqual(
       result.assertions.filter((a) => a.outcome === 'pass').map((a) => a.taskId),
@@ -290,7 +249,6 @@ describe('P5-C browser rung — live', { skip: skipReason, timeout: 240_000 }, (
   });
 
   test('per-task Accept criteria drive the assertions — change one, the check changes', async () => {
-    // Same app, same rung, one word different in the plan.
     const result = await runRung({ plan: planFor('Monthly totals') });
     assert.equal(result.status, 'fail');
     const failed = result.assertions.find((a) => a.outcome === 'fail');
@@ -306,8 +264,6 @@ describe('P5-C browser rung — live', { skip: skipReason, timeout: 240_000 }, (
     assert.match(parsed.url ?? '', /\/dashboard$/);
     assert.ok((parsed.steps ?? []).length >= 4);
 
-    // Follow them: run that command in that cwd, open that url, and observe the
-    // same thing the rung observed.
     const { spawn } = await import('node:child_process');
     const manualPort = await freePort();
     const [bin, ...args] = parsed.command.split(' ');
@@ -350,7 +306,6 @@ describe('P5-C browser rung — live', { skip: skipReason, timeout: 240_000 }, (
       assert.equal(result.reason, 'browser-unavailable');
       assert.equal(result.assertions.every((a) => a.outcome === 'blocked'), true);
       assert.match(result.summary, /not a regression/);
-      // And it still tore the dev server down.
       const status = await getDevServerStatusById(workspace);
       assert.notEqual(status.status, 'running');
     } finally {
@@ -399,7 +354,7 @@ describe('P5-C browser rung — live', { skip: skipReason, timeout: 240_000 }, (
   });
 
   test('ten consecutive runs against an unchanged app give ten identical results', async () => {
-    /** @type {string[]} */
+/** @type {string[]} */
     const verdicts = [];
     for (let i = 0; i < 10; i += 1) {
       const result = await runRung();

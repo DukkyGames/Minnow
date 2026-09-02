@@ -1,7 +1,3 @@
-/**
- * Step 11 smoke: list_directory, read_file, read_file_range via POST /api/tools.
- * Usage: node scripts/step-11-smoke.mjs http://localhost:5173
- */
 import assert from 'node:assert/strict';
 
 const baseUrl = (process.argv[2] || 'http://localhost:5173').replace(/\/$/, '');

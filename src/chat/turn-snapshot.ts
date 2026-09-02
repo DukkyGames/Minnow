@@ -1,7 +1,3 @@
-/**
- * Capture semantic replay inputs at turn start.
- */
-
 import { normalizeModeId } from './modes/types';
 import { indexOfLastUserMessage } from './history-truncate-core';
 import type { ThinkingResolvedMode } from '../agents/thinking-types';

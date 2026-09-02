@@ -1,7 +1,3 @@
-/**
- * Human-readable tool result for ask_question bubbles (numbered list; full JSON stays in history).
- */
-
 import {
   ASK_QUESTION_OTHER_ID,
   type AskQuestionAnswerEntry,

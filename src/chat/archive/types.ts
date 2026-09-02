@@ -1,7 +1,3 @@
-/**
- * Archive policy types — Brain-backed context token reduction (MIN-139).
- */
-
 import type { ApiMessage } from '../../types';
 
 /** Per-agent archive tuning when contextEnforcementPolicy is `archive`. */

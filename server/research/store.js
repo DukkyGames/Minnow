@@ -156,7 +156,6 @@ export async function resolveResearchModel(overrides = {}) {
   let chatBinding = {};
   try {
     if (!useJsonSessionsStore()) {
-      // Narrow SELECT for active chat provider/model; decode stays in this caller.
       const binding = readActiveChatModelBinding();
       if (binding && typeof binding.modelId === 'string' && binding.modelId.trim()) {
         const decoded = decodeModelSelectKey(binding.modelId);
@@ -170,7 +169,6 @@ export async function resolveResearchModel(overrides = {}) {
         }
       }
     } else {
-      // JSON rollback: whole-blob resource read.
       const sessions = /** @type {Record<string, unknown>} */ (await readResource('sessions'));
       const activeId = typeof sessions.activeId === 'string' ? sessions.activeId : '';
       const chats = Array.isArray(sessions.chats) ? sessions.chats : [];

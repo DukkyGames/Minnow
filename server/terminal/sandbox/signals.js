@@ -1,8 +1,4 @@
 /**
- * Honest sandbox signals for tool results / UI / board log (MIN-553 Phase 3).
- */
-
-/**
  * @typedef {object} SandboxSignalMeta
  * @property {boolean} [applied]
  * @property {string} [kind]
@@ -16,11 +12,8 @@
  */
 
 /**
- * Trailer appended to tool results so the model sees containment status.
- * Empty when sandbox is off / disabled (no noise on the default path).
- *
  * @param {SandboxSignalMeta | null | undefined} meta
- * @returns {string} bare trailer without leading newlines, or ''
+ * @returns {string}
  */
 export function formatSandboxTrailer(meta) {
   if (!meta || typeof meta !== 'object') return '';
@@ -33,7 +26,6 @@ export function formatSandboxTrailer(meta) {
   }
 
   const mode = meta.mode;
-  // Only emit NOT-sandboxed when we attempted containment (prefer/require) or fell back.
   if (mode !== 'prefer' && mode !== 'require' && meta.fallbackUnsandboxed !== true) {
     return '';
   }
@@ -47,7 +39,6 @@ export function formatSandboxTrailer(meta) {
 }
 
 /**
- * Append trailer to a formatted process/tool result string.
  * @param {string} formatted
  * @param {SandboxSignalMeta | null | undefined} meta
  * @returns {string}
@@ -60,7 +51,6 @@ export function appendSandboxTrailer(formatted, meta) {
 }
 
 /**
- * Parse sandbox trailer from a tool-result string (UI badge).
  * @param {string} content
  * @returns {{ sandboxed: boolean, label: string } | null}
  */

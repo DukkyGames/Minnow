@@ -1,7 +1,3 @@
-/**
- * Map mutating filesystem tools to parent directory listings that need refresh.
- */
-
 import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
 import {
   dirname,
@@ -17,10 +13,7 @@ function pathArgFromTool(args: Record<string, unknown>, key: string): string | u
   return normalizeTreePath(value.trim());
 }
 
-/**
- * Map a mutating filesystem tool to the parent directory listing(s) that need refresh.
- * Returns null when the change is ambiguous and a full tree reload is safer.
- */
+/** Map a mutating filesystem tool to the parent directory listing(s) that need refresh. */
 export function affectedDirsFromTool(
   toolName: string,
   args: Record<string, unknown>,

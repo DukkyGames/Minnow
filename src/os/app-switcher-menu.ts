@@ -17,6 +17,8 @@ import type { AppId } from './types';
 
 export { APP_SWITCHER_DESKTOP_ID, type AppSwitcherItemId } from './surface-id';
 
+// ── Items ────────────────────────────────────────────────────────────────────
+
 /** One tile in the switcher grid (Desktop first, then dock apps). */
 export interface AppSwitcherItem {
   id: AppSwitcherItemId;
@@ -51,6 +53,8 @@ export function listAppSwitcherItems(options?: {
 
   return items;
 }
+
+// ── Panel ────────────────────────────────────────────────────────────────────
 
 let panelEl: HTMLDivElement | null = null;
 let gridEl: HTMLElement | null = null;
@@ -116,7 +120,6 @@ function buildTile(item: AppSwitcherItem): HTMLButtonElement {
   ico.className = 'mn-os-app-switcher__ico';
   ico.setAttribute('aria-hidden', 'true');
   if (item.id === APP_SWITCHER_DESKTOP_ID) {
-    // Brand glyph marks the Desktop home surface (same mark as the menubar logo).
     ico.innerHTML = MINNOW_GLYPH_HEADER_HTML;
   } else {
     ico.appendChild(createAppIcon(item.icon as 'code'));
@@ -187,8 +190,6 @@ function openMenu(): void {
   const btn = anchorBtn;
   if (!btn || btn.hidden) return;
 
-  // One chrome popover at a time — match notifications / model menu behavior.
-  // Dynamic import avoids a static cycle with notifications-menu.
   closeComposerModelMenu();
   void import('./notifications-menu').then((m) => m.closeOsNotificationsMenu());
 
@@ -208,6 +209,8 @@ function toggleMenu(): void {
   else openMenu();
 }
 
+// ── Init ─────────────────────────────────────────────────────────────────────
+
 /**
  * Wire the menubar Apps button to the switcher popover.
  * Returns cleanup for menubar unmount.
@@ -224,7 +227,6 @@ export function initAppSwitcherMenu(btn: HTMLButtonElement): () => void {
   const onClick = () => toggleMenu();
   btn.addEventListener('click', onClick);
 
-  // Keep an open grid in sync when the user toggles apps in Settings.
   unsubPrefs = subscribeAppPreferences(() => {
     if (menuOpen) rebuildGrid();
   });

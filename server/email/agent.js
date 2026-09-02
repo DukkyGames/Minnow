@@ -1,7 +1,3 @@
-/**
- * Email agent pipelines — inbox summary, reply variants, post-sync hooks.
- */
-
 import { randomUUID } from 'node:crypto';
 import { wrapUntrusted } from '../security/untrusted.js';
 import { completeStructuredJson } from './llm-json.js';
@@ -31,11 +27,8 @@ import { emitEmailEvent } from './events.js';
 import { evaluateAutomationsForMessage } from './automations.js';
 import { shouldDeferBackgroundEmailTriage } from './background-triage-guard.js';
 
-/** Max messages triaged/varianted per folder sync (newest first). */
 export const MAX_AGENT_MESSAGES_PER_SYNC = 8;
-/** Cooldown before retrying triage after a parse/upstream failure. */
 export const TRIAGE_RETRY_COOLDOWN_MS = 30 * 60_000;
-/** Pause between agent LLM calls to avoid provider rate limits. */
 const AGENT_LLM_GAP_MS = 250;
 
 export const VARIANTS_SYSTEM_PROMPT = `You draft reply options for a local email assistant.
@@ -50,7 +43,6 @@ Rules:
 - Do not include quoted original unless needed for clarity`;
 
 /**
- * Parse reply variant JSON from LLM output.
  * @param {string} raw
  */
 export function parseReplyVariantsJson(raw) {
@@ -110,12 +102,9 @@ export function parseReplyVariantsJson(raw) {
 }
 
 /**
- * Build rolling inbox digest from cached triage metadata.
  * @param {string} accountId
  */
 export async function buildInboxSummary(accountId) {
-  // The digest covers the most recent inbox page rather than the whole store —
-  // older mail contributes nothing to a "what needs me today" summary.
   const { messages: inboxRows } = await listCachedMessages(accountId, {
     folder: 'INBOX',
     limit: 200,
@@ -142,9 +131,6 @@ export async function buildInboxSummary(accountId) {
       override: signals?.override,
     });
 
-    // The instrumentation strip counts priority buckets, not raw LLM urgency,
-    // so a sender pinned always-low stops inflating "high" the moment the
-    // override lands.
     stats[priority.bucket] += 1;
 
     if (row.triage?.summary && !dismissedIds.has(String(row.id))) {
@@ -190,8 +176,6 @@ export async function buildInboxSummary(accountId) {
       ? 'Inbox is empty. Sync to fetch new mail.'
       : `${inboxRows.length} threads in inbox (${unread} unread). ${lines.join(', ')}.`;
 
-  // Up to 16 highlights are stored: the dashboard renders the first few, and
-  // the narrative digest (digest.js) consumes the top ~15 as its LLM input.
   const summary = {
     generatedAt: new Date().toISOString(),
     text,
@@ -205,7 +189,6 @@ export async function buildInboxSummary(accountId) {
 }
 
 /**
- * Generate 2-3 reply variants for a thread's latest message.
  * @param {string} accountId
  * @param {string} threadId
  * @param {{ instructions?: string, messageKey?: string }} [options]
@@ -272,7 +255,6 @@ export async function generateReplyVariants(accountId, threadId, options = {}) {
 }
 
 /**
- * Whether a cached message should be skipped for triage backfill (recent failure).
  * @param {Record<string, unknown> | null | undefined} cached
  * @param {number} [nowMs]
  */
@@ -292,7 +274,6 @@ export function shouldSkipTriageRetry(cached, nowMs = Date.now()) {
 }
 
 /**
- * Cap agent work per sync — newest UIDs first so the dashboard highlights recent mail.
  * @param {Array<Record<string, unknown>>} rows
  * @param {number} [limit]
  */
@@ -314,7 +295,6 @@ function sleep(ms) {
 }
 
 /**
- * Record a triage failure so backfill does not hammer the LLM every sync.
  * @param {string} accountId
  * @param {string} messageKey
  * @param {string} reason
@@ -327,7 +307,6 @@ export async function recordTriageFailure(accountId, messageKey, reason) {
 }
 
 /**
- * Pick synced rows that are new or still missing triage metadata.
  * @param {Array<Record<string, unknown>>} incoming
  * @param {string} folder
  * @param {number} prevHighestUid
@@ -365,8 +344,6 @@ export function filterMessagesForAgentProcessing(
 }
 
 /**
- * After a folder sync, run agent pipelines on new or untriaged messages.
- * Used by manual sync (Email app) and the background poller.
  * @param {string} accountId
  * @param {string} folder
  * @param {Array<Record<string, unknown>>} incoming
@@ -380,8 +357,6 @@ export async function runAgentHooksAfterFolderSync(
   prevHighestUid,
   options = {},
 ) {
-  // Follow-up satisfaction runs before any triage gating or deferral: a reply
-  // arriving must clear "Waiting on" even when background LLM work is paused.
   await satisfyIncomingFollowups(accountId, incoming, prevHighestUid);
 
   if (options.background && shouldDeferBackgroundEmailTriage().defer) {
@@ -436,7 +411,6 @@ export async function runAgentHooksAfterFolderSync(
 }
 
 /**
- * Process newly synced messages: triage, variants, summary, automations.
  * @param {string} accountId
  * @param {Array<Record<string, unknown>>} newMessages
  * @param {import('./accounts.js').EmailAccount} account
@@ -508,9 +482,6 @@ export async function onNewMessages(accountId, newMessages, account, options = {
 }
 
 /**
- * Satisfy waiting follow-ups from genuinely new inbound messages.
- * Skips mail authored by the account itself (a Sent-folder sync must not
- * count your own reply as the other side answering).
  * @param {string} accountId
  * @param {Array<Record<string, unknown>>} incoming
  * @param {number} prevHighestUid
@@ -546,7 +517,6 @@ async function satisfyIncomingFollowups(accountId, incoming, prevHighestUid) {
 }
 
 /**
- * Detect messages with UIDs higher than folder cursor before sync merge.
  * @param {string} accountId
  * @param {string} folder
  * @param {Array<Record<string, unknown>>} incoming
@@ -557,7 +527,6 @@ export async function diffNewMessages(accountId, folder, incoming) {
 }
 
 /**
- * Summarize inbox for agent tools / dashboard API.
  * @param {string} accountId
  */
 export async function getOrBuildInboxSummary(accountId) {

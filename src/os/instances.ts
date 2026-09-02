@@ -8,6 +8,8 @@ export interface InstanceSnapshot {
 
 type InstanceListener = (snapshot: InstanceSnapshot) => void;
 
+// ── State ────────────────────────────────────────────────────────────────────
+
 const listeners = new Set<InstanceListener>();
 
 let uidCounter = 0;
@@ -33,11 +35,11 @@ function emit(): void {
   for (const fn of listeners) {
     try {
       fn(snap);
-    } catch {
-      /* ignore subscriber errors */
-    }
+    } catch {}
   }
 }
+
+// ── Queries ──────────────────────────────────────────────────────────────────
 
 /** Current shell view (desktop launcher vs foreground app). */
 export function getOsView(): OsView {
@@ -100,6 +102,8 @@ function applyLaunchOptionsToInstance(inst: AppInstance, options?: LaunchOptions
   inst.launchOptions = { ...inst.launchOptions, ...options };
   if (options.seed) inst.seed = options.seed;
 }
+
+// ── Launch ───────────────────────────────────────────────────────────────────
 
 /** Ensure an app instance exists without changing the foreground surface. */
 export function ensureBackgroundInstance(appId: AppId, options?: LaunchOptions): string {
@@ -201,6 +205,8 @@ export function closeInstance(id: string): boolean {
   emit();
   return true;
 }
+
+// ── Unread ───────────────────────────────────────────────────────────────────
 
 /** Increment unread for background instances of the same app (agent notifications). */
 export function noteAgentMessage(appId: AppId, msg: string): void {

@@ -65,8 +65,6 @@ export async function resolveLibraryRequestBinding(
   const libraryModelId = resolveLibraryModelIdForChatBinding(pid, mid, library);
 
   if (libraryModelId == null) {
-    // A real llama-cpp-local / mlx-lm-local row that is not a library model.
-    // The synthetic id has no upstream at all, so refuse rather than misroute it.
     if (isLibraryModelBinding(pid, mid)) {
       return { kind: 'needsLoad', libraryModelId: mid };
     }

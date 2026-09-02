@@ -1,7 +1,3 @@
-/**
- * CodeMirror 6 baseline extensions for the file viewer (history, keymaps, folding, search).
- */
-
 import { closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
 import {
   defaultKeymap,

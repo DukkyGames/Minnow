@@ -1,7 +1,3 @@
-/**
- * Composer toolbar tools button — quick off/ask/full permissions popover.
- */
-
 import { loadToolConfigIntoDrawer, syncWebSearchProviderFromSearchConfig } from '../tools/config';
 import { ensureToolsSectionFilled } from './tools-list';
 
@@ -13,6 +9,8 @@ interface ToolsPopoverIds {
 
 const popoverState = new Map<string, boolean>();
 const registeredPopovers: ToolsPopoverIds[] = [];
+
+// ── Open ─────────────────────────────────────────────────────────────────────
 
 function isPopoverOpen(popoverId: string): boolean {
   return popoverState.get(popoverId) === true;
@@ -69,6 +67,8 @@ function openToolsPopover(ids: ToolsPopoverIds): void {
   first?.focus();
 }
 
+// ── Fill ─────────────────────────────────────────────────────────────────────
+
 /** Build the permission list without opening the floating popover. */
 function fillToolsPopover(ids: ToolsPopoverIds): void {
   const popover = getPopover(ids);
@@ -123,7 +123,6 @@ function initToolsPopover(ids: ToolsPopoverIds): void {
 
   document.addEventListener('click', (event) => {
     if (!isPopoverOpen(ids.popoverId)) return;
-    // Compact overflow inlines this popover; the cog sheet owns dismiss.
     if (
       ids.popoverId === 'composerToolsPopover' &&
       document.getElementById('composerControls')?.classList.contains('composer-controls--compact')
@@ -171,6 +170,8 @@ const DESKTOP_POPOVER_IDS: ToolsPopoverIds = {
   popoverId: 'desktopToolsPopover',
   settingsLinkId: 'desktopToolsOpenSettings',
 };
+
+// ── Init ─────────────────────────────────────────────────────────────────────
 
 /** Whether the Code composer tools popover is visible. */
 export function isComposerToolsPopoverOpen(): boolean {

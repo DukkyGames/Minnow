@@ -1,8 +1,3 @@
-/**
- * User-facing copy for the Benchmark app (labels, empty states, status text).
- * Keep terminology consistent: "run" not "campaign", "Minnow tests" for integration suites.
- */
-
 import type { SuiteId } from '../../benchmark/types.ts';
 
 /** Short names for integration test suites (Run tab + transcript). */

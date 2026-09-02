@@ -44,6 +44,5 @@ export function classifyServeExit(input = {}) {
   if (classifyOverrideForTests) {
     return classifyOverrideForTests(input);
   }
-  // Wrapper keeps shouldAutoRestartServe on `.code` while the UI reads title/remediation.
   return diagnoseLlamaFailure(input.logTail ?? '', input.exitCode ?? null, input.plan ?? null);
 }

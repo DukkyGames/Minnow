@@ -1,14 +1,3 @@
-/**
- * Board state → the issue's agent slot.
- *
- * Progress on an issue is a *fact* read from the board, not the guess derived
- * from status + run-id presence that `issueActivityChip` made. Issues never
- * writes board state here; it only translates it into the five things the brief
- * allows Issues to show: running, asked a question, opened a PR, failed, done.
- *
- * Phase 4 of `documentation/plans/issues-app-v2.md`.
- */
-
 import {
   findIssueById,
   listIssuesWithActiveAgents,
@@ -40,13 +29,6 @@ export function stepLabelForTask(task: LeftoverBoardTask | undefined): string | 
   }
 }
 
-/**
- * Collapse a whole board into one phase.
- *
- * A single-task board makes this nearly trivial, but a user who pointed a
- * multi-task plan at an issue still gets a sane answer: any failure wins,
- * then any running task, then all-complete.
- */
 export function phaseForBoardTasks(tasks: readonly LeftoverBoardTask[]): IssueAgentPhase | null {
   if (tasks.length === 0) return null;
   if (tasks.some((task) => task.status === 'failed' || task.status === 'quarantined')) {
@@ -93,7 +75,6 @@ function applyBoardToIssue(issue: IssueCard, group: ChatGroup): void {
   if (active?.chatId) patch.chatId = active.chatId;
   if (phase === 'failed') {
     patch.error = failureReasonForTasks(tasks) ?? 'The agent stopped without finishing.';
-    // A board that never produced a worktree failed to start, not to build.
     patch.envBlocked = !issue.agent?.worktreePath;
   }
 
@@ -144,18 +125,9 @@ async function stampIssuePrFromWatcher(issueId: string): Promise<void> {
       prUrl: resolved.url,
     });
     scheduleSaveIssues();
-  } catch {
-    // A missing PR must not take the board watcher down.
-  }
+  } catch {}
 }
 
-/**
- * Mark an issue as waiting on the user.
- *
- * This is the strongest state in the app, so it is the one place that always
- * raises a desktop notification when the window is unfocused: an agent blocked
- * on a question you never saw is the worst outcome the dispatch loop has.
- */
 export function markIssueAwaitingInput(chatId: string, questionId?: string): boolean {
   const issue = listIssuesWithActiveAgents().find(
     (card) => card.agent?.chatId === chatId || card.boardChatId === chatId,

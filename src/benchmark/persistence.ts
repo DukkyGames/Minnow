@@ -106,9 +106,7 @@ export async function listRuns(): Promise<BenchmarkRunSummary[]> {
         const serverRuns = Array.isArray(data.runs) ? data.runs : [];
         return mergeBenchmarkRunSummaries(serverRuns, localSummaries);
       }
-    } catch {
-      /* fall through */
-    }
+    } catch {}
   }
   return localSummaries;
 }
@@ -120,9 +118,7 @@ export async function clearAllRuns(): Promise<void> {
   if (!serverUp) return;
   try {
     await fetch('/api/benchmarks', { method: 'DELETE' });
-  } catch {
-    /* local history already cleared */
-  }
+  } catch {}
 }
 
 /** Load full run JSON by id. */
@@ -136,9 +132,7 @@ export async function loadRun(id: string): Promise<BenchmarkRun | null> {
       if (res.ok) {
         return (await res.json()) as BenchmarkRun;
       }
-    } catch {
-      /* fall through */
-    }
+    } catch {}
   }
   return readLocalRuns().find((r) => r.id === id) ?? null;
 }

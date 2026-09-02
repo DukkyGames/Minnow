@@ -1,7 +1,3 @@
-/**
- * Preview guest load URLs without pulling in the full preview panel / file editor graph.
- */
-
 import type { PreviewSource } from '../state/file-panel';
 import { withSessionToken } from '../api/session-token.ts';
 
@@ -20,10 +16,7 @@ function appendQueryParam(url: string, key: string, value: string): string {
 export interface WorkspacePreviewUrlOptions {
   cacheBust?: number;
   workspaceRoot?: string;
-  /**
-   * Skip HTML `<base>` injection (file viewer / editor loads).
-   * Browser preview must leave this unset so relative assets resolve.
-   */
+  /** Skip HTML `<base>` injection (file viewer / editor loads). */
   raw?: boolean;
 }
 

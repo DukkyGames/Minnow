@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-/**
- * Validate orchestrate board diagnostic JSONL logs against structural invariants.
- *
- * Usage:
- *   node --import tsx scripts/check-board-log.mjs <groupId|path> [--plan plan.json] [--json]
- */
 
 import { pathToFileURL } from 'node:url';
 import {
@@ -42,7 +36,7 @@ Exit codes: 0 when all checked invariants pass, 1 on violations or errors.
  * @param {string[]} argv
  */
 function parseCliArgs(argv) {
-  /** @type {{ target?: string; plan?: string; json: boolean; help: boolean }} */
+/** @type {{ target?: string; plan?: string; json: boolean; help: boolean }} */
   const out = { json: false, help: false };
 
   for (let i = 0; i < argv.length; i += 1) {

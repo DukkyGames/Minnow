@@ -1,7 +1,3 @@
-/**
- * Benchmark roster add row: provider + model selects from the live catalog.
- */
-
 import { getActiveTargetFromDom } from '../../benchmark/roster.ts';
 import { fillModelSelect, fillProviderSelect } from '../settings-model-binding.ts';
 

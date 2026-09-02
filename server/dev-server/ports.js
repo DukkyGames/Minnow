@@ -81,7 +81,6 @@ export function parseNetstatListening(stdout) {
   for (const line of String(stdout).split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!/LISTENING/i.test(trimmed)) continue;
-    // Proto  Local Address          Foreign Address        State           PID
     const parts = trimmed.split(/\s+/);
     if (parts.length < 5) continue;
     const local = parts[1];
@@ -108,8 +107,6 @@ export function parseLsofListening(stdout) {
   const rows = [];
   for (const line of String(stdout).split(/\r?\n/)) {
     if (!line.trim() || /^COMMAND\b/i.test(line)) continue;
-    // COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
-    // NAME may be "*:5173 (LISTEN)" — split would put "(LISTEN)" as last part.
     const parts = line.trim().split(/\s+/);
     if (parts.length < 8) continue;
     const processName = parts[0];
@@ -138,7 +135,6 @@ export function parseTasklistCsv(stdout) {
   for (const line of String(stdout).split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    // "Image Name","PID","Session Name","Session#","Mem Usage"
     const match = trimmed.match(/^"([^"]+)","(\d+)"/);
     if (!match) continue;
     map.set(Number(match[2]), match[1]);
@@ -191,7 +187,6 @@ export async function listListeningPorts() {
       }));
     }
 
-    // Deduplicate port+pid pairs.
     const seen = new Set();
     rows = rows.filter((r) => {
       const key = `${r.port}:${r.pid}`;
@@ -233,7 +228,6 @@ export async function killPortOwner(pid, port) {
       } catch {
         /* already gone */
       }
-      // Best-effort tree kill when we only have a PID (no ChildProcess handle).
       try {
         process.kill(-nPid, 'SIGKILL');
       } catch {

@@ -1,19 +1,4 @@
-/**
- * P2-E — seed builders (MIN-702 / P0-E `SeedKind`).
- *
- * Seeds are **pure functions of derived task state**. No model call builds a
- * seed, and this file does no I/O — the same inputs always produce the same
- * string. That is load-bearing: `state = fold(journal)` only recovers a crashed
- * run if replay reseeds the same way live did.
- *
- * Lives here, not in `server/runner/`, because seeds know what a task is.
- * Lives outside `core/` because they produce prompt text, not a decision.
- *
- * Every retry in the policy table targets the builder. Tester's first attempt
- * also uses `initial` — the *system* prompt is what distinguishes the roles;
- * the seed is the task spec plus whatever history that kind needs.
- * `integration-fix` is the scheduler seed for a reopened task, not a policy-table cell.
- */
+/** Build the prompt seed for the next attempt. */
 
 import { lastEndedAttempt } from './core/derive.js';
 
@@ -27,13 +12,6 @@ export const SEED_KINDS = /** @type {const} */ ([
   'rebase',
   'integration-fix',
 ]);
-
-/**
- * Worktree reuse is not a property of this module — `wantsSameWorktree` in
- * `core/policy.js` is the mapping (MIN-705 / MIN-707): `repair`, `continue`,
- * and `rebase` reuse; `failure-aware` and `fix` start fresh. Seeds stay
- * pure prompt text.
- */
 
 /**
  * @param {unknown} value
@@ -95,9 +73,7 @@ function needsOf(attempt) {
 }
 
 /**
- * Tester fail carries `testOutput` on the attempt's evidence so a fix seed
- * can quote it. P2-F journals that field from the report payload.
- *
+ * Tester fail carries `testOutput` on the attempt's evidence so a fix seed can quote it.
  * @param {import('./core/types').Attempt | undefined} attempt
  * @returns {string}
  */
@@ -105,7 +81,6 @@ function testOutputOf(attempt) {
   if (!attempt) return '';
   const value = attempt.evidence?.testOutput;
   if (typeof value === 'string' && value) return value;
-  // Fall back to blockers so a fail that went through TurnResult still seeds.
   const blockers = blockersOf(attempt);
   return blockers[0] || attempt.summary || '';
 }
@@ -168,10 +143,7 @@ function failureAwareSeed(task) {
 }
 
 /**
- * Repair stays in this worktree because it is whose worktree it is — the
- * env-fixer agent is gone. `blocked` means the environment cannot support the
- * work, not that the code is hard.
- *
+ * Repair stays in this worktree because it is whose worktree it is — the env-fixer agent is gone.
  * @param {import('./core/types').TaskState} task
  * @returns {string}
  */
@@ -251,10 +223,6 @@ function rebaseSeed(task, integrationTip) {
 
 /**
  * Seed for a task that is running again after `board.reopened`.
- *
- * Quotes the integration tip, the ladder failure captured on `state.rerun`,
- * and this task's retired attempts. Fresh worktree: the integration tip has moved.
- *
  * @param {import('./core/types').TaskState} task
  * @param {import('./core/types').BoardState} state
  * @returns {string}

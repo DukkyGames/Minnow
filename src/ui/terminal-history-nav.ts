@@ -1,12 +1,3 @@
-/**
- * Pure helpers for PTY tab command-history navigation (ArrowUp/ArrowDown).
- */
-
-/**
- * Fallback line-clear for shells that do not own their own history: beginning-of-line
- * then kill-to-end (Ctrl+A Ctrl+K). Do not send this to zsh/bash — those shells echo
- * the bytes as caret notation (^A^K) on an already-used tab (MIN-670).
- */
 export const HISTORY_LINE_CLEAR = '\x01\x0b';
 
 /** WSL distro profile ids (`wsl:Ubuntu`) spawn a real Unix line editor inside the distro. */
@@ -48,24 +39,14 @@ export function isTerminalEscapeInput(data: string): boolean {
   return data.length > 0 && data.charCodeAt(0) === 0x1b;
 }
 
-/**
- * Interactive PTY shells own ArrowUp/Down via their line editor (zle, readline,
- * fish, PSReadLine, DOSKEY). Client-side recall injects Ctrl+A/Ctrl+K which zsh
- * prints as ^A^K on a used tab (MIN-670) and garbles PSReadLine on Windows.
- * Pass-through still needs the xterm write-callback gate: CSI sent before zle
- * restarts echoes as ^[[A / ^[[B (same cooked-mode window).
- */
+/** Interactive PTY shells own ArrowUp/Down via their line editor (zle, readline, fish, PSReadLine, DOSKEY). */
 export function usesShellNativeHistory(shellProfileId: string | null | undefined): boolean {
   if (!shellProfileId) return false;
   if (shellProfileId.startsWith(WSL_SHELL_PROFILE_PREFIX)) return true;
   return NATIVE_HISTORY_SHELL_IDS.has(shellProfileId);
 }
 
-/**
- * True when the xterm handler should swallow this key and inject a stored line.
- * Fresh tabs (empty history) already pass arrows through; used zsh/bash tabs
- * must do the same or the prompt shows ^A^K + the command (MIN-670).
- */
+/** True when the xterm handler should swallow this key and inject a stored line. */
 export function shouldInterceptPtyHistoryArrow(options: {
   data: string;
   shellProfileId: string | null | undefined;

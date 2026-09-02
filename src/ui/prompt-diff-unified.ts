@@ -1,7 +1,3 @@
-/**
- * Render unified prompt diff lines into a host element.
- */
-
 import type { DiffLine } from '../chat/prompts/text-diff';
 import { toChangedLinesWithNumbers } from '../chat/prompts/text-diff';
 

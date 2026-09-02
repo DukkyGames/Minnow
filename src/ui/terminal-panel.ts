@@ -1,7 +1,3 @@
-/**
- * Bottom docked terminal: interactive PTY tabs (xterm) + agent run stream sidebar.
- */
-
 import '../styles/terminal.css';
 
 import {
@@ -109,14 +105,13 @@ export interface TerminalStreamHooks {
 
 let externalHooks: TerminalStreamHooks = {};
 
-/**
- * Count live execute_command stdout/stderr as stream progress so the board
- * stall watchdog does not kill a long but chatty tool.
- */
+/** Count live execute_command stdout/stderr as stream progress so the board stall watchdog does not kill a long but chatty tool. */
 export function notifyProgressFromTerminalChunk(chatId: string, text: string): void {
   if (!chatId.trim() || !text) return;
   notifyChatStreamActivity(chatId);
 }
+
+// ── Height ───────────────────────────────────────────────────────────────────
 
 function minPanelHeight(): number {
   return resolveTerminalPanelMinHeightPx(panelEl, xtermHostEl);
@@ -129,8 +124,6 @@ function maxPanelHeight(): number {
   const mainColumn = document.getElementById('mainColumn');
   if (!mainColumn) return ratioCap;
 
-  // Panel bottom is anchored to the main column; cap height so the header cannot
-  // scroll above the column top when the dock is tall or the window is short.
   const panelBottom = panelEl.getBoundingClientRect().bottom;
   const columnTop = mainColumn.getBoundingClientRect().top;
   const structuralCap = Math.floor(panelBottom - columnTop - 8);
@@ -199,6 +192,8 @@ function toggleTerminalMaximized(): void {
   setTerminalMaximized(!isTerminalMaximized());
 }
 
+// ── Chrome ───────────────────────────────────────────────────────────────────
+
 function getElements(): void {
   panelEl = document.getElementById('terminalPanel');
   agentPaneEl = document.getElementById('terminalAgentPane');
@@ -239,10 +234,7 @@ function maybeClearScopeChangePending(): void {
   }
 }
 
-/**
- * Align terminal cwd with the file explorer / git panel root (MIN-349).
- * New PTY tabs spawn in the resolved cwd; existing shells keep their directory.
- */
+/** Align terminal cwd with the file explorer / git panel root (MIN-349). */
 export function syncTerminalFromFileExplorer(): void {
   getElements();
 
@@ -328,6 +320,8 @@ function scrollOutputIfPinned(): void {
   outputEl.scrollTop = outputEl.scrollHeight;
 }
 
+// ── Output ───────────────────────────────────────────────────────────────────
+
 function appendOutputText(text: string, stream: 'stdout' | 'stderr'): void {
   if (!outputEl || !text) return;
 
@@ -402,6 +396,8 @@ function bumpAgentRunHint(delta: number): void {
   syncTerminalAgentRunHint();
 }
 
+// ── Panel visibility ─────────────────────────────────────────────────────────
+
 function setPanelOpen(open: boolean): void {
   if (!panelEl) return;
   const currentlyOpen = isTerminalPanelOpen();
@@ -468,6 +464,8 @@ interface AgentBackgroundStreamUiState {
   showAgentRunHint: boolean;
   showAgentTabBadge: boolean;
 }
+
+// ── Agent stream ─────────────────────────────────────────────────────────────
 
 async function pumpAgentBackgroundStream(
   runId: string,
@@ -550,10 +548,7 @@ async function pumpAgentBackgroundStream(
   }
 }
 
-/**
- * Mirror a background agent shell run in the Agent terminal tab (SSE log tail + kill UI).
- * Idempotent while the same runId is already streaming.
- */
+/** Mirror a background agent shell run in the Agent terminal tab (SSE log tail + kill UI). */
 export function attachAgentBackgroundRun(options: {
   runId: string;
   command: string;
@@ -631,6 +626,8 @@ function applyPanelHeight(px: number): void {
 }
 
 const MAX_TERMINAL_HISTORY = 50;
+
+// ── History ──────────────────────────────────────────────────────────────────
 
 function historyCommandLabel(run: TerminalRunRecord): string {
   const cmd = typeof run.command === 'string' ? run.command.trim() : '';
@@ -726,7 +723,6 @@ export async function refreshTerminalHistoryForActiveChat(): Promise<void> {
     try {
       remote = await loadTerminalHistory(chat.id);
     } catch {
-      /* in-memory only */
     }
   }
   const merged = mergeTerminalHistory(local, remote);
@@ -769,6 +765,8 @@ function setupOutputScroll(): void {
   });
 }
 
+// ── Command stream ───────────────────────────────────────────────────────────
+
 export async function runCommandWithTerminalStream(
   command: string,
   options: {
@@ -799,7 +797,6 @@ export async function runCommandWithTerminalStream(
   }
 
   const panelWasClosed = !isTerminalPanelOpen();
-  // Agent/sub-agent shell tools never raise the panel unless the user opted in.
   const showAgentRunHint = isAgentRun && panelWasClosed;
   const showAgentTabBadge = isAgentRun && !panelWasClosed;
   if (showAgentRunHint) {
@@ -846,9 +843,6 @@ export async function runCommandWithTerminalStream(
   let accTruncated = false;
   let aborted = false;
 
-  // Mirror the server's appendBuffer ceiling: a chatty process (e.g. a per-frame
-  // console warning in a test harness) can otherwise stream tens of MB into these
-  // strings, which then land verbatim in the persisted tool result.
   const accumulate = (current: string, text: string): string => {
     if (current.length >= PROCESS_MAX_ACCUMULATE_BYTES) {
       accTruncated = true;
@@ -938,10 +932,6 @@ export async function runCommandWithTerminalStream(
       `(subprocess output exceeded ${PROCESS_MAX_ACCUMULATE_BYTES} bytes and was cut during capture)`,
     );
   }
-  // Same ceiling as the blocking /api/tools path (formatProcessOutput): the result
-  // string is persisted into messages.payload_json, so an uncapped one bloats the
-  // sessions store permanently — unless Settings turned the product cap off or the
-  // model passed full_result.
   const policy = resolveOutputCapPolicy(loadToolConfig().toolOutput, {
     full_result: options.fullResult === true,
   });
@@ -1002,6 +992,8 @@ function wireTerminalPanelButtons(): void {
   syncTerminalMaximizeButton();
 }
 
+// ── Init ─────────────────────────────────────────────────────────────────────
+
 export async function initTerminalPanel(): Promise<void> {
   getElements();
   if (!panelEl) return;
@@ -1026,7 +1018,6 @@ export async function initTerminalPanel(): Promise<void> {
     initTerminalWorkspaceDrop(xtermHostEl);
   }
 
-  // PTY tabs attach only when the panel is opened (avoids orphan sessions on reload).
   if (meta.open) {
     await ensureTerminalTabsWhenOpen();
   }

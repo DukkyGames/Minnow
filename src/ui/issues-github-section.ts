@@ -1,17 +1,3 @@
-/**
- * GitHub sync controls on the issue peek panel.
- *
- * Absent, not disabled. §8 asks for that explicitly and the reason is that a
- * greyed-out "Sync with GitHub" on a workspace with no GitHub remote is a
- * question the user cannot answer. With the mode Off, this renders nothing at
- * all — the same way `detectGhAvailable()` already gates the PR button.
- *
- * Conflict resolution is inline and explicit: both versions, side by side, and
- * two buttons. Nothing here picks a winner.
- *
- * Phase 5 of `documentation/plans/issues-app-v2.md`.
- */
-
 import {
   getIssuesGithubMode,
   resolveSyncConflict,
@@ -25,10 +11,14 @@ import { showToast } from './toast';
 /** Called after any change so the panel re-renders from store state. */
 export type GithubSectionChanged = () => void;
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function truncate(text: string, max = 400): string {
   const clean = text.trim();
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
 }
+
+// ── Conflict ─────────────────────────────────────────────────────────────────
 
 function buildConflictPane(
   conflict: SyncConflict,
@@ -106,12 +96,9 @@ function buildConflictPane(
   return wrap;
 }
 
-/**
- * Render the section into a peek-panel section body.
- *
- * Returns false when nothing was rendered, so the caller can skip appending an
- * empty section rather than leaving a titled void.
- */
+// ── Render ───────────────────────────────────────────────────────────────────
+
+/** Render the section into a peek-panel section body. */
 export function renderIssueGithubSection(
   body: HTMLElement,
   issue: IssueCard,
@@ -135,7 +122,6 @@ export function renderIssueGithubSection(
     open.href = link.url;
     open.target = '_blank';
     open.rel = 'noreferrer';
-    // gh CLI tone: terse, factual, states not decorations.
     open.textContent = `#${link.number} · github`;
     body.appendChild(open);
   }
@@ -143,9 +129,6 @@ export function renderIssueGithubSection(
   const controls = document.createElement('div');
   controls.className = 'issues-detail__add-code';
 
-  // The per-issue flag only means anything in Link + push; in mirror mode the
-  // mode itself is the opt-in, so showing a second switch would imply a
-  // distinction that does not exist.
   if (mode === 'link') {
     const toggleLabel = document.createElement('label');
     toggleLabel.className = 'issues-github__toggle';

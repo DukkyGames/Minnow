@@ -1,7 +1,3 @@
-/**
- * Tray status snapshot types shared across main, preload, and renderer.
- */
-
 export interface TrayStatusSnapshot {
   agentCount: number;
   localModelCount: number;
@@ -19,7 +15,6 @@ export const EMPTY_TRAY_STATUS: TrayStatusSnapshot = {
   localModelNames: [],
 };
 
-/** Build disabled menu labels for agent/model rows. */
 export function formatTrayAgentLabel(count: number): string {
   return `Agents running: ${Math.max(0, count)}`;
 }

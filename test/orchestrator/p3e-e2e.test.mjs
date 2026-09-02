@@ -269,8 +269,6 @@ before(async () => {
   await fsp.mkdir(path.join(sandbox, 'src'), { recursive: true });
   await initWorkspaceRoot();
   await setWorkspaceRoot(sandbox);
-  // Worktree allocation needs a real git repo. Shared-cwd tests still pass
-  // `cwd: sandbox` and never create trees.
   await git(['init'], sandbox);
   await git(['config', 'user.email', 'test@example.com'], sandbox);
   await git(['config', 'user.name', 'Test'], sandbox);
@@ -314,6 +312,8 @@ after(async () => {
   await rmTestHome(homeDir);
   resetMinnowHomeCache();
 });
+
+// ── P3-E N=2 overlap ─────────────────────────────────────────────────────────
 
 describe('P3-E N=2 overlap + finish with isolated worktrees', { concurrency: false }, () => {
   beforeEach(async () => {
@@ -397,7 +397,6 @@ describe('P3-E N=2 overlap + finish with isolated worktrees', { concurrency: fal
       const succeeded = events.filter((e) => e.type === 'merge.succeeded');
       assert.equal(succeeded.length, 3);
       for (const event of succeeded) {
-        // Instant P2-G merge sets sha to workspace-head and omits beforeSha.
         assert.notEqual(event.sha, 'workspace-head', 'merge must not be engine-driven instant pass');
         assert.equal(typeof event.beforeSha, 'string');
         assert.ok(String(event.beforeSha).length > 0);
@@ -414,6 +413,8 @@ describe('P3-E N=2 overlap + finish with isolated worktrees', { concurrency: fal
     },
   );
 });
+
+// ── P3-E overlap by ──────────────────────────────────────────────────────────
 
 describe('P3-E overlap by journal seq (shared sandbox)', { concurrency: false }, () => {
   beforeEach(async () => {
@@ -513,6 +514,8 @@ describe('P3-E overlap by journal seq (shared sandbox)', { concurrency: false },
     assert.equal(state.finished, true);
   });
 });
+
+// ── P3-E reliability vs P2-G ─────────────────────────────────────────────────
 
 describe('P3-E reliability vs P2-G (10-run, N=2, shared sandbox)', { concurrency: false }, () => {
   beforeEach(async () => {

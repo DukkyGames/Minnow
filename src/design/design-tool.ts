@@ -1,10 +1,3 @@
-/**
- * DesignTool plug-in contract (MIN-365) — the shape P3/P4 tools (Select, Draw, Comment,
- * Inspect) implement to arm/disarm against a Design Mode session and receive overlay-space
- * pointer events. This module only owns the contract + a process-wide registry; mounting,
- * pointer capture, and dispatch live in design-mode.ts.
- */
-
 import type { AnnotationOverlay, OverlayMarker } from './overlay';
 import {
   createBestElementPicker,
@@ -64,30 +57,19 @@ export interface DesignToolPointerEvent {
   raw: PointerEvent;
 }
 
-/**
- * Plug-in contract for a Design Mode tool. Registered once via registerDesignTool(); armed/
- * disarmed exclusively (only one tool is armed at a time) by design-mode.ts.
- */
 export interface DesignTool {
   id: string;
   label: string;
-  /**
-   * How the armed tool wants pointer events routed. 'capture' (default) raises the capture
-   * layer so pointer events come through onPointerDown/Move/Up in host-space. 'passthrough'
-   * leaves the guest interactive — used by Select, whose picker listens inside the guest
-   * document itself and would never see a click the capture layer swallowed.
-   */
   pointerMode?: 'capture' | 'passthrough';
-  /** Called when this tool becomes the armed tool. Pointer capture is already enabled. */
   arm(ctx: DesignToolContext): void;
-  /** Called when this tool stops being the armed tool (Esc, switching tools, mode off). */
   disarm(): void;
   onPointerDown?(evt: DesignToolPointerEvent): void;
   onPointerMove?(evt: DesignToolPointerEvent): void;
   onPointerUp?(evt: DesignToolPointerEvent): void;
-  /** Optional explicit re-render hook (e.g. after external state change while armed). */
   render?(): void;
 }
+
+// ── Registry ─────────────────────────────────────────────────────────────────
 
 const registry = new Map<string, DesignTool>();
 
@@ -113,11 +95,6 @@ export function resetDesignToolRegistryForTests(): void {
   registry.clear();
 }
 
-/**
- * Page the current preview is showing: workspace path or URL (elementRef context). Exported
- * (MIN-368) so the annotations panel / preview-panel.ts toolbar can key annotation-store
- * lookups off the same page identity Draw/Comment tools already persist under.
- */
 export function currentPreviewPageRef(
   designInstanceId: string = WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID,
 ): string {
@@ -126,13 +103,8 @@ export function currentPreviewPageRef(
   return source.kind === 'workspace' ? source.path : source.url;
 }
 
-/**
- * Real Select tool (MIN-366): arms the P0 element picker (element-picker.ts), captures a
- * DPR-correct crop per pick via region-capture.ts, and pushes an `elementRef` composer chip
- * (attachments/element-ref.ts). Picks accumulate as numbered overlay markers with pinned crop
- * thumbnails; dedupe by page + uid is handled by addElementRefToComposer itself, so re-picking
- * the same element (shift-click or not) just re-focuses the existing chip.
- */
+// ── Select tool ──────────────────────────────────────────────────────────────
+
 export function createSelectDesignTool(): SelectDesignTool {
   let ctx: DesignToolContext | null = null;
   let picker: ElementPicker | null = null;
@@ -144,7 +116,6 @@ export function createSelectDesignTool(): SelectDesignTool {
     ctx?.overlay.clear();
   }
 
-  /** Bumped on disarm/rebind so an in-flight bindPicker cannot win after a newer bind starts. */
   let bindGeneration = 0;
 
   async function teardownPicker(): Promise<void> {
@@ -154,9 +125,7 @@ export function createSelectDesignTool(): SelectDesignTool {
     if (!current) return;
     try {
       await current.disable();
-    } catch {
-      /* guest may already be gone (CDP detach races hide/swap) */
-    }
+    } catch {}
     current.destroy();
   }
 
@@ -180,15 +149,11 @@ export function createSelectDesignTool(): SelectDesignTool {
     });
     try {
       await nextPicker.enable();
-    } catch {
-      /* guest may still be loading — preview-panel re-binds on iframe load */
-    }
+    } catch {}
     if (!ctx || generation !== bindGeneration) {
       try {
         await nextPicker.disable();
-      } catch {
-        /* superseded bind — ignore teardown errors */
-      }
+      } catch {}
       nextPicker.destroy();
       return;
     }
@@ -237,8 +202,6 @@ export function createSelectDesignTool(): SelectDesignTool {
     ctx.overlay.render(markers);
     if (captured.dataUrl) ctx.overlay.pinCaptureToMarker(markerId, captured);
 
-    // Source resolution (MIN-369) runs after the chip is already on screen — never delays or
-    // blocks the pick itself. Best-effort: resolveElementSourceMapping never rejects.
     const armedTransport = transport;
     void resolveElementSourceMapping(
       {
@@ -295,13 +258,6 @@ function getPreviewFrame(): HTMLIFrameElement | null {
   return getPreviewGuestFrame();
 }
 
-/**
- * Draw/Comment anchor resolution (MIN-367): already-tagged `data-mn-uid` elements in the guest,
- * for {@link resolveShapeAnchor} to hit-test a drawn shape's region against. Best-effort — an
- * empty list just means every shape/pin anchors to the page instead of an element. Exported
- * (MIN-368) so annotation-nav.ts's transcript → page re-highlight can reuse the same live-guest
- * read instead of re-implementing it.
- */
 export async function gatherAnchorCandidates(
   designInstanceId: string = WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID,
 ): Promise<AnchorCandidate[]> {
@@ -337,11 +293,6 @@ export async function gatherAnchorCandidates(
   }
 }
 
-/**
- * Inline label editor (MIN-367 polish): a small floating text input at the click point.
- * Replaces window.prompt, which is blocked in the Electron renderer and jarring everywhere
- * else. Enter commits, Escape cancels, blur commits any non-empty text.
- */
 function openInlineLabelEditor(
   host: HTMLElement,
   point: ShapePoint,
@@ -382,9 +333,6 @@ function guestScrollOffset(): { x: number; y: number } {
   const frame = getPreviewFrame();
   const view = frame?.contentWindow;
   if (view) {
-    // Reading scrollX/scrollY on a cross-origin guest throws a SecurityError
-    // ("Blocked a frame with origin…"). A cross-origin page can't be introspected anyway, so
-    // fall back to a zero page-scroll anchor rather than letting the pin/shape drop crash.
     try {
       return { x: view.scrollX || 0, y: view.scrollY || 0 };
     } catch {
@@ -411,13 +359,8 @@ export interface DrawDesignTool extends DesignTool {
   undo(): void;
 }
 
-/**
- * Real Draw tool (MIN-367): pen/rect/arrow/label shapes drawn directly on the live page.
- * Pointer events arrive in host-space (design-mode.ts's capture layer); each finished shape is
- * anchored (element vs. page), persisted per-page (annotation-store.ts), rendered into the
- * overlay's shape layer, and pushed to the composer as its own `designRef` chip with a
- * composited region crop + structured intent text (design-ref.ts).
- */
+// ── Draw tool ────────────────────────────────────────────────────────────────
+
 export function createDrawDesignTool(): DrawDesignTool {
   let ctx: DesignToolContext | null = null;
   let kind: ShapeKind = 'rect';
@@ -427,8 +370,6 @@ export function createDrawDesignTool(): DrawDesignTool {
   let penPoints: ShapePoint[] = [];
 
   function renderShapes(): void {
-    // Dynamic import avoids a static cycle (annotation-nav.ts calls back into this module's
-    // gatherAnchorCandidates for the transcript → page direction).
     ctx?.overlay.renderShapes(shapes, (shapeId) => {
       const shape = shapes.find((s) => s.id === shapeId);
       const link = shape?.links?.[0];
@@ -451,7 +392,7 @@ export function createDrawDesignTool(): DrawDesignTool {
       gatherAnchorCandidates(),
       Promise.resolve(guestScrollOffset()),
     ]);
-    if (ctx !== armedCtx) return; // torn down while awaiting
+    if (ctx !== armedCtx) return;
     const anchor = resolveShapeAnchor(rect, candidates, {
       x: rect.x,
       y: rect.y,
@@ -570,7 +511,7 @@ export function createDrawDesignTool(): DrawDesignTool {
         const armedCtx = ctx;
         if (!armedCtx) return;
         openInlineLabelEditor(armedCtx.host, start, (text) => {
-          if (ctx !== armedCtx) return; // disarmed while typing
+          if (ctx !== armedCtx) return;
           const rect = { x: start.x, y: start.y - 10, width: Math.max(24, text.length * 7 + 12), height: 20 };
           void finalizeShape({ kind: 'label', rect, label: text });
         });
@@ -619,11 +560,8 @@ export interface CommentDesignTool extends DesignTool {
   undo(): void;
 }
 
-/**
- * Real Comment tool (MIN-367): click drops a numbered pin anchored like a draw shape; each pin
- * threads plain-text notes (with timestamps) in a small popover. Pins persist per-page via
- * annotation-store.ts — no chat/composer coupling (comments are markup, not chat turns).
- */
+// ── Comment tool ─────────────────────────────────────────────────────────────
+
 export function createCommentDesignTool(): CommentDesignTool {
   let ctx: DesignToolContext | null = null;
   let pins: CommentPin[] = [];
@@ -721,8 +659,6 @@ export function createCommentDesignTool(): CommentDesignTool {
 
     panel.appendChild(inputRow);
 
-    // Position beside the pin, then clamp inside the host so threads near the right/bottom
-    // edge don't overflow off screen.
     panel.style.left = `${Math.round(pin.x) + 14}px`;
     panel.style.top = `${Math.round(pin.y)}px`;
     host.appendChild(panel);
@@ -779,15 +715,12 @@ export function createCommentDesignTool(): CommentDesignTool {
       const armedCtx = ctx;
       if (!armedCtx) return;
 
-      // Clicking an existing pin re-opens its thread — the capture layer sits above the
-      // overlay SVG, so the pin's own click handler never fires while this tool is armed.
       const hit = pins.find((p) => Math.hypot(p.x - evt.x, p.y - evt.y) <= 14);
       if (hit) {
         openPopover(hit);
         return;
       }
 
-      // A click elsewhere while a thread is open dismisses it instead of dropping a new pin.
       if (popover) {
         closePopover();
         return;
@@ -856,11 +789,6 @@ function getSelectTool(): SelectDesignTool | null {
   return null;
 }
 
-/**
- * Wipe every Design Mode mark on the current preview page: overlay markers/shapes/pins,
- * persisted annotations, and queued elementRef/designRef composer chips. Keeps the armed tool
- * active so the user can keep working after clearing.
- */
 export async function clearAllDesignModeMarks(ctx: DesignToolContext): Promise<void> {
   const pageKey = currentPreviewPageRef(ctx.instanceId);
 
@@ -882,15 +810,12 @@ export async function clearAllDesignModeMarks(ctx: DesignToolContext): Promise<v
   ctx.overlay.renderDraft(null);
 }
 
+// ── Placeholders ─────────────────────────────────────────────────────────────
+
 /** Ids the built-in tool strip renders buttons for; P3/P4 implement the real behavior. */
 export const BUILTIN_DESIGN_TOOL_IDS = ['select', 'draw', 'comment', 'inspect'] as const;
 export type BuiltinDesignToolId = (typeof BUILTIN_DESIGN_TOOL_IDS)[number];
 
-/**
- * A minimal placeholder tool: arms/disarms and records events but draws nothing. Used both to
- * back the built-in tool-strip buttons until P3/P4 land real behavior, and as the stub the
- * DesignTool contract is exercised against in tests.
- */
 export interface PlaceholderDesignToolHandle {
   tool: DesignTool;
   isArmed(): boolean;

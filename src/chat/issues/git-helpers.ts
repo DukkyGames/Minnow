@@ -1,8 +1,3 @@
-/**
- * Pure Git helpers for Issues app (MIN-261 Phase 4).
- * Side-effect free so unit tests can assert branch names, URL parse, and log parse.
- */
-
 import type { IssueCard, IssueGitLink } from '../../types.ts';
 
 const DEFAULT_SLUG_MAX = 48;
@@ -42,10 +37,6 @@ export type GitOnelineCommit = {
   subject: string;
 };
 
-/**
- * Parse `git log --oneline` stdout into sha + subject rows.
- * Skips tool error lines and `(exit N)` footers from execute_command.
- */
 export function parseGitLogOneline(stdout: string): GitOnelineCommit[] {
   const out: GitOnelineCommit[] = [];
   for (const raw of stdout.split(/\r?\n/)) {
@@ -75,10 +66,6 @@ export type ParsedGitHubIssueOrPr = {
   title: string;
 };
 
-/**
- * Parse a GitHub issue or PR URL into an IssueGitLink-shaped payload (no API).
- * Accepts github.com and github enterprise hosts with /pull/N or /issues/N.
- */
 export function parseGitHubIssueOrPrUrl(input: string): ParsedGitHubIssueOrPr | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
@@ -91,13 +78,11 @@ export function parseGitHubIssueOrPrUrl(input: string): ParsedGitHubIssueOrPr | 
   }
 
   const host = url.hostname.toLowerCase();
-  // github.com, *.github.com, and GHES hosts whose hostname contains "github".
   const isGithubHost =
     host === 'github.com' || host.endsWith('.github.com') || host.includes('github');
   if (!isGithubHost) return null;
 
   const parts = url.pathname.split('/').filter(Boolean);
-  // owner / repo / pull|issues / number
   if (parts.length < 4) return null;
   const kindSeg = parts[2]?.toLowerCase();
   const num = parts[3];
@@ -128,7 +113,6 @@ export function parseGitHubIssueOrPrUrl(input: string): ParsedGitHubIssueOrPr | 
 export function buildIssueCommitGrepCommand(issueId: string, count = 40): string {
   const needle = issueCommitGrepNeedle(issueId);
   const n = Math.max(1, Math.min(200, Math.floor(count)));
-  // fixed-strings avoids regex escaping for [ISS-n]; double-quote for win/posix shells.
   return `git log --oneline -n ${n} --fixed-strings --grep="${needle}"`;
 }
 
@@ -174,7 +158,6 @@ export function parseGhVersionAvailable(content: string): boolean {
   const exit = content.match(/\(exit (-?\d+)\)/);
   if (exit && exit[1] !== '0') return false;
   if (/gh version/i.test(content)) return true;
-  // Some shells only echo the version line without a clear footer.
   return exit?.[1] === '0' && !/not (found|recognized)|command not found|is not recognized/i.test(content);
 }
 

@@ -1,7 +1,3 @@
-/**
- * Local model cache scan — HF hub, Minnow artifacts, and custom dirs.
- */
-
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
@@ -12,10 +8,8 @@ import { scanInstalledArtifacts } from './installed.js';
 import { contextLengthFromTransformersConfig } from './mlx-context-length.js';
 import { getMinnowHome } from '../config/home.js';
 
-/** LM Studio / Ollama metadata folders — not model roots. */
 const CUSTOM_DIR_SKIP_NAMES = new Set(['blobs', 'manifests']);
 
-/** Paths that must never be walked (safety). */
 const BLOCKED_ROOTS = ['/sys', '/proc', '/dev', '/run', '/var/run'];
 
 /**
@@ -48,22 +42,9 @@ const BLOCKED_ROOTS = ['/sys', '/proc', '/dev', '/run', '/var/run'];
  * @property {string} [status]
  */
 
+// ── MLX detect ───────────────────────────────────────────────────────────────
+
 /**
- * Decide whether a directory holds MLX-quantized weights, and at what width.
- *
- * The signal that matters is the `quantization` block `mlx_lm.convert` writes
- * into config.json. `config.json` + `*.safetensors` on its own describes *every*
- * transformers repo, so keying off those would list a cached fp16 Llama as a
- * servable MLX model that then fails at load.
- *
- * `quantization_config` is checked separately and only when `quant_method` says
- * mlx — GPTQ, AWQ, and bitsandbytes all write that same key with a `bits` field.
- *
- * Deliberately *not* mlx_lm.server's own heuristic (config.json +
- * model.safetensors.index.json + tokenizer_config.json): the index file only
- * exists for sharded models, so every single-shard small model is invisible to
- * it. For the same reason /v1/models is not the library source of truth.
- *
  * @param {string} dir
  * @param {string} repoId
  * @returns {Promise<{ root: string, quant: string, contextLength?: number } | null>}
@@ -97,7 +78,6 @@ async function detectMlxRepo(dir, repoId) {
   );
 
   let bits = NaN;
-  // mlx_lm.convert writes {group_size, bits} — both keys together are its signature.
   if (
     quantization &&
     typeof quantization === 'object' &&
@@ -106,10 +86,6 @@ async function detectMlxRepo(dir, repoId) {
   ) {
     bits = Number(quantization.bits);
   } else if (quantConfig && typeof quantConfig === 'object') {
-    // GPTQ, AWQ, and bitsandbytes all set `quant_method` here so transformers
-    // knows which quantizer to dispatch to; MLX repos carry a bare `bits`. So a
-    // bits field with no quant_method is the MLX case, and a foreign
-    // quant_method is a definite no.
     const method = String(quantConfig.quant_method ?? '').toLowerCase();
     if (!method || method === 'mlx') {
       bits = Number(quantConfig.bits);
@@ -123,8 +99,6 @@ async function detectMlxRepo(dir, repoId) {
     };
   }
 
-  // Fallback: an mlx-named repo whose config carries no quantization block, i.e.
-  // an unquantized MLX conversion. Take the width from the name when it says so.
   if (/(^|[-_/])mlx([-_/]|$)/i.test(repoId)) {
     const named = /(\d+)\s*bit/i.exec(repoId);
     return {
@@ -162,8 +136,9 @@ function safePath(p) {
   }
 }
 
+// ── Cache paths ──────────────────────────────────────────────────────────────
+
 /**
- * HuggingFace hub cache directory candidates.
  * @returns {string[]}
  */
 export function hfCachePaths() {
@@ -186,7 +161,6 @@ export function hfCachePaths() {
 }
 
 /**
- * Expand a hub-cache path (tilde → homedir).
  * @param {string | undefined} raw
  * @returns {string}
  */
@@ -197,8 +171,6 @@ function expandHubCachePath(raw) {
 }
 
 /**
- * Directory huggingface_hub should scan (matches mlx_lm.server / cached.js).
- * Prefers explicit env, then the first existing candidate, else the default layout.
  * @returns {string}
  */
 export function resolveHfHubCacheDir() {
@@ -211,7 +183,6 @@ export function resolveHfHubCacheDir() {
     try {
       if (fs.existsSync(candidate)) return candidate;
     } catch {
-      /* unreadable path */
     }
   }
 
@@ -219,8 +190,6 @@ export function resolveHfHubCacheDir() {
 }
 
 /**
- * Ensure the Hugging Face hub cache directory exists (mlx_lm.server's scan_cache_dir
- * raises CacheNotFound when the path is missing).
  * @param {string} [dir]
  * @returns {Promise<string>}
  */
@@ -230,7 +199,6 @@ export async function ensureHfHubCacheDir(dir = resolveHfHubCacheDir()) {
 }
 
 /**
- * Extract quant tier from a GGUF filename.
  * @param {string} name
  */
 function ggufQuant(name) {
@@ -239,7 +207,6 @@ function ggufQuant(name) {
 }
 
 /**
- * Classify GGUF role (model vs projector).
  * @param {string} name
  */
 function ggufRole(name) {
@@ -248,8 +215,9 @@ function ggufRole(name) {
   return 'model';
 }
 
+// ── Scan ─────────────────────────────────────────────────────────────────────
+
 /**
- * Collect GGUF files under a directory tree.
  * @param {string} base
  * @returns {Promise<CachedGgufFile[]>}
  */
@@ -280,14 +248,12 @@ async function collectGgufs(base) {
         const stat = await fsp.stat(full);
         size = stat.size;
       } catch {
-        /* skip */
       }
 
       let rel = entry.name;
       try {
         rel = path.relative(base, full).split(path.sep).join('/');
       } catch {
-        /* keep basename */
       }
 
       const splitMatch = entry.name.match(/^(.+)-(\d+)-of-(\d+)\.gguf$/i);
@@ -346,7 +312,6 @@ async function collectGgufs(base) {
 }
 
 /**
- * Scan HuggingFace hub cache directory.
  * @param {string} cache
  * @param {Set<string>} seen
  * @returns {Promise<CachedModelRow[]>}
@@ -387,7 +352,6 @@ async function scanHfCache(cache, seen) {
           const stat = await fsp.stat(path.join(dir, item.name));
           sizeBytes += stat.size;
         } catch {
-          /* skip */
         }
       }
     }
@@ -424,7 +388,6 @@ async function scanHfCache(cache, seen) {
         await fsp.access(path.join(sf, 'model_index.json'));
         isDiffusion = true;
       } catch {
-        /* not diffusion */
       }
       if (!mlx) mlx = await detectMlxRepo(sf, repoId);
       const found = await collectGgufs(sf);
@@ -451,8 +414,6 @@ async function scanHfCache(cache, seen) {
 }
 
 /**
- * Scan a plain directory for model folders (custom model dirs).
- * Supports flat folders and LM Studio-style publisher/model nesting.
  * @param {string} dirPath
  * @param {Set<string>} seen
  */
@@ -539,7 +500,6 @@ async function scanCustomDir(dirPath, seen) {
         await fsp.access(path.join(modelRoot, 'model_index.json'));
         isDiffusion = true;
       } catch {
-        /* not diffusion */
       }
       const mlx = await detectMlxRepo(modelRoot, repoId);
 
@@ -617,13 +577,11 @@ async function walkCount(dir, onFile) {
       const stat = await fsp.stat(full);
       onFile(stat.size);
     } catch {
-      /* skip */
     }
   }
 }
 
 /**
- * Scan Minnow download artifacts as cached rows.
  * @param {Set<string>} seen
  */
 async function scanMinnowArtifacts(seen) {
@@ -664,19 +622,9 @@ async function scanMinnowArtifacts(seen) {
 }
 
 /**
- * Find MLX repos under ~/.minnow/models/artifacts.
- *
- * Separate from scanMinnowArtifacts because that path builds on
- * scanInstalledArtifacts, which is a per-*file* view that hard-filters `.gguf`.
- * An MLX repo is a directory, so forcing it through that shape would mean
- * inventing a filename and changing what /api/models/installed returns.
- *
- * Rows already produced for a repo get annotated in place, so a directory
- * holding both GGUF and MLX weights keeps its gguf_files and gains mlx_root.
- *
  * @param {Set<string>} seen
- * @param {CachedModelRow[]} existing rows from the artifact scan, annotated in place
- * @returns {Promise<CachedModelRow[]>} rows for MLX-only repos
+ * @param {CachedModelRow[]} existing
+ * @returns {Promise<CachedModelRow[]>}
  */
 async function scanMlxArtifacts(seen, existing) {
   const root = path.join(getModelsRoot(), 'artifacts');
@@ -736,14 +684,14 @@ async function scanMlxArtifacts(seen, existing) {
   return out;
 }
 
-/** 30s — `/v1/models` for mlx-lm-local used to re-walk the HF cache on every request. */
+// ── List cache ───────────────────────────────────────────────────────────────
+
 export const CACHED_MODELS_LIST_TTL_MS = 30_000;
 
 /** @type {{ at: number, home: string, payload: { models: CachedModelRow[] } } | null} */
 let listCache = null;
 let cachedModelsScanCount = 0;
 
-/** Drop the scan TTL so a finished download / model-dir change is visible immediately. */
 export function invalidateCachedModelsCache() {
   listCache = null;
 }
@@ -757,7 +705,6 @@ export function resetCachedModelsScanCountForTests() {
 }
 
 /**
- * Full cached model scan (local machine).
  * @returns {Promise<{ models: CachedModelRow[] }>}
  */
 async function scanCachedModelsUncached() {
@@ -786,8 +733,6 @@ async function scanCachedModelsUncached() {
 }
 
 /**
- * Full cached model scan (local machine). 30s TTL keyed by Minnow home so
- * `/v1/models` enrichment and the library table share one walk.
  * @returns {Promise<{ models: CachedModelRow[] }>}
  */
 export async function listCachedModels() {

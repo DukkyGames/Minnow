@@ -62,7 +62,6 @@ const IDLE_POLL_MS = 400;
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     const timer = setTimeout(resolve, ms);
-    // Node tests should not keep the process alive for an empty queue.
     if (typeof timer === 'object' && timer && 'unref' in timer) {
       timer.unref();
     }
@@ -72,6 +71,8 @@ function delay(ms: number): Promise<void> {
 function probeKey(providerId: string, modelId: string): string {
   return `${providerId}\0${modelId}`;
 }
+
+// ── Candidates ───────────────────────────────────────────────────────────────
 
 /**
  * True when this row still needs a live chat probe to learn vision/tools.
@@ -166,6 +167,8 @@ function targetAlreadySettled(providerId: string, modelId: string): boolean {
   return rows.some((row) => row !== undefined && !modelNeedsFirstLoadCapabilityProbe(row));
 }
 
+// ── Queue ────────────────────────────────────────────────────────────────────
+
 function enqueueFirstLoadProbe(providerId: string, modelId: string): void {
   const target = resolveFirstLoadProbeTarget(providerId, modelId);
   if (!target.providerId || !target.modelId) return;
@@ -195,7 +198,6 @@ async function drainFirstLoadProbeQueue(): Promise<void> {
             selectedModelId: job.modelId,
           });
           if (!ran) {
-            // Manual probe owned the slot, or storage is local-only — retry later.
             seenKeys.delete(job.key);
             continue;
           }
@@ -207,7 +209,6 @@ async function drainFirstLoadProbeQueue(): Promise<void> {
           if (name === 'AbortError') {
             seenKeys.delete(job.key);
           }
-          // Hard failure stays in seenKeys so catalog refresh cannot hammer the runtime.
         }
       }
     } finally {
@@ -231,6 +232,8 @@ function maybeEnqueueFirstLoadProbe(
   if (!modelNeedsFirstLoadCapabilityProbe(row)) return;
   enqueueFirstLoadProbe(providerId, modelId);
 }
+
+// ── Schedule ─────────────────────────────────────────────────────────────────
 
 /**
  * After modelCache is filled from a catalog fetch, probe loaded local models

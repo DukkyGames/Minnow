@@ -76,6 +76,8 @@ async function seedRunning(journal, runId = RUN, parentChatId = PARENT) {
   await journal.appendEvent(parentChatId, started(runId));
 }
 
+// ── fold queue ───────────────────────────────────────────────────────────────
+
 describe('delivery — fold queue (memory journal)', () => {
   test('MIN-639: a failed inject leaves the run pending in the journal, not a Set', async () => {
     const journal = createMemoryJournal();
@@ -385,6 +387,8 @@ describe('delivery — fold queue (memory journal)', () => {
   });
 });
 
+// ── kill/restart against ─────────────────────────────────────────────────────
+
 describe('delivery — kill/restart against the on-disk journal', () => {
   /** @type {string} */
   let homeDir = '';
@@ -515,6 +519,8 @@ describe('delivery — kill/restart against the on-disk journal', () => {
     assert.equal((await agentsJournal.loadState(parentChatId)).runs.get(runId).delivered, true);
   });
 });
+
+// ── buildProductionParentMessage ─────────────────────────────────────────────
 
 describe('buildProductionParentMessage', () => {
   test('includes type, status, and last attempt summary (not ids-only)', async () => {

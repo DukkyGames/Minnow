@@ -1,33 +1,6 @@
-/**
- * Live runtime activity for running llama.cpp serves, polled from `/slots`.
- *
- * Polled server-side rather than derived from Minnow's own chat stream so the panels
- * tell the truth about *all* traffic — an agent loop, a headless run, or a `curl` from
- * outside Minnow shows up the same way a chat message does.
- *
- * What `/slots` actually carries (measured on b9628, not assumed):
- *
- * - idle slots return only `{id, n_ctx, speculative, is_processing}`;
- * - a busy slot adds `id_task`, `n_prompt_tokens`, `n_prompt_tokens_processed`,
- *   `n_prompt_tokens_cache`, the resolved sampler `params`, and `next_token`;
- * - during prefill `n_prompt_tokens` *mirrors* `n_prompt_tokens_processed` — both climb
- *   in `n_batch` steps — so **there is no denominator and no prefill percentage here**.
- *   Prefill is reported as a token count. A real percentage exists only in the chat
- *   stream, via the `return_progress` request field;
- * - `next_token[0].n_decoded` holds the *previous* task's final count during prefill,
- *   so it is only trusted once `n_remain > 0`, and is reset when `id_task` changes;
- * - there is no tok/s field; it is derived here from Δdecoded over Δt;
- * - a saturated server stops answering `/slots` entirely. A timeout is `stale`, never
- *   `idle` — reporting Ready for a server that is pinned at 100% would be a lie.
- */
-
-/** Poll cadence while at least one slot is working. */
 const BUSY_INTERVAL_MS = 400;
-/** Poll cadence when everything is idle. */
 const IDLE_INTERVAL_MS = 2_500;
-/** A slow `/slots` is a busy server, not a dead one — give up on the request, not the poll. */
 const REQUEST_TIMEOUT_MS = 1_500;
-/** Samples older than this are reported as stale rather than current. */
 const STALE_AFTER_MS = 10_000;
 
 /**
@@ -35,22 +8,22 @@ const STALE_AFTER_MS = 10_000;
  * @property {number} id
  * @property {number | null} taskId
  * @property {'idle' | 'prompt' | 'generating'} state
- * @property {number} promptProcessed Prompt tokens fed so far. A count, not a fraction.
- * @property {number} promptCached Prefix reused from the prompt cache.
- * @property {number} decoded Tokens generated for the current task.
- * @property {number | null} remaining Tokens still allowed for the current task.
- * @property {number | null} tokensPerSecond Derived from consecutive samples.
+ * @property {number} promptProcessed
+ * @property {number} promptCached
+ * @property {number} decoded
+ * @property {number | null} remaining
+ * @property {number | null} tokensPerSecond
  */
 
 /**
  * @typedef {object} ServeActivity
  * @property {string} serveId
- * @property {string} modelLabel Identity for surfaces that never hold a serve list.
- * @property {string | null} libraryId Library row id, when the serve was started from one.
+ * @property {string} modelLabel
+ * @property {string | null} libraryId
  * @property {number} updatedAt
- * @property {boolean} available `/slots` answered at least once.
- * @property {boolean} stale The last sample is too old to trust.
- * @property {number} queued llama.cpp deferred requests (`requests_deferred` from `/metrics`).
+ * @property {boolean} available
+ * @property {boolean} stale
+ * @property {number} queued
  * @property {ServeActivitySlot[]} slots
  */
 
@@ -63,7 +36,6 @@ const listeners = new Set();
 /** @type {typeof fetch} */
 let fetchImpl = (...args) => fetch(...args);
 
-/** Test seam — swap the transport without standing up an HTTP server. */
 export function setServeActivityFetchForTests(fn) {
   fetchImpl = fn ?? ((...args) => fetch(...args));
 }
@@ -73,19 +45,16 @@ export function resetServeActivityFetchForTests() {
 }
 
 /**
- * Subscribe to activity samples for every polled serve.
  * @param {(activity: ServeActivity) => void} listener
  * @returns {() => void}
  */
 export function subscribeServeActivity(listener) {
   listeners.add(listener);
-  // Replay what we already know so a late subscriber is not blank until the next tick.
   for (const entry of pollers.values()) {
     if (entry.last) {
       try {
         listener(entry.last);
       } catch {
-        /* a broken listener must not stop the others */
       }
     }
   }
@@ -98,7 +67,6 @@ function publish(activity) {
     try {
       listener(activity);
     } catch {
-      /* one bad consumer must not kill the poll loop */
     }
   }
 }
@@ -110,10 +78,7 @@ function asInt(value) {
 }
 
 /**
- * Turn one `/slots` response into the DTO, using the previous sample for rates.
- * Exported for tests — this is where every quirk in the endpoint is absorbed.
- *
- * @param {unknown} raw Parsed `/slots` body.
+ * @param {unknown} raw
  * @param {Map<number, { taskId: number | null, decoded: number, at: number }>} prev
  * @param {number} now
  * @returns {ServeActivitySlot[]}
@@ -131,8 +96,6 @@ export function normalizeSlots(raw, prev, now) {
     const nextToken = Array.isArray(entry.next_token) ? entry.next_token[0] : null;
     const remaining = nextToken && nextToken.n_remain != null ? asInt(nextToken.n_remain) : null;
 
-    // n_decoded is left over from the previous task while a new prompt is prefilling.
-    // Trust it only once the task has tokens left to produce.
     const generating = busy && remaining != null && remaining > 0;
     const decoded = generating && nextToken ? asInt(nextToken.n_decoded) : 0;
 
@@ -161,9 +124,6 @@ export function normalizeSlots(raw, prev, now) {
 }
 
 /**
- * Read llama.cpp's deferred-request gauge from Prometheus `/metrics` text.
- * Upstream emits `llamacpp:requests_deferred`; some exporters use underscores.
- *
  * @param {unknown} text
  * @returns {number}
  */
@@ -183,8 +143,6 @@ export function parseLlamaCppDeferred(text) {
 }
 
 /**
- * One `/slots` request. Resolves to null on any failure — including a timeout, which
- * on this endpoint usually means the server is too busy to answer, not that it died.
  * @param {string} baseUrl
  * @returns {Promise<unknown | null>}
  */
@@ -205,7 +163,6 @@ async function fetchSlots(baseUrl) {
 }
 
 /**
- * One `/metrics` request. Resolves to the raw Prometheus body, or null on failure.
  * @param {string} baseUrl
  * @returns {Promise<string | null>}
  */
@@ -227,9 +184,6 @@ async function fetchMetricsText(baseUrl) {
 }
 
 /**
- * Start polling a running llama.cpp serve. Idempotent — a second call for the same
- * serve is a no-op, so the crash watcher and the heartbeat can both ask.
- *
  * @param {{ id: string, baseUrl: string, runtime?: string, modelLabel?: string, libraryId?: string }} serve
  */
 export function startServeActivity(serve) {
@@ -237,8 +191,6 @@ export function startServeActivity(serve) {
   if (serve.runtime && serve.runtime !== 'llama-cpp') return;
   if (pollers.has(serve.id)) return;
 
-  // Carried on every sample so the header picker — which holds no serve list — can
-  // match a row without a second round trip.
   const identity = {
     modelLabel: String(serve.modelLabel ?? ''),
     libraryId: serve.libraryId ? String(serve.libraryId) : null,
@@ -256,14 +208,10 @@ export function startServeActivity(serve) {
     if (entry.stopped) return;
 
     const now = Date.now();
-    // Keep the last deferred count when /metrics is silent — a saturated
-    // server often stops answering both endpoints together.
     const queued =
       metricsText != null ? parseLlamaCppDeferred(metricsText) : (entry.last?.queued ?? 0);
     let activity;
     if (raw == null) {
-      // Keep the last good sample rather than flipping every panel to Ready. A busy
-      // server that stopped answering is the exact case this must not misreport.
       activity = entry.last
         ? { ...entry.last, queued, stale: true }
         : {
@@ -301,7 +249,6 @@ export function startServeActivity(serve) {
   void tick();
 }
 
-/** Stop polling a serve. Safe to call for a serve that was never polled. */
 export function stopServeActivity(serveId) {
   const entry = pollers.get(serveId);
   if (!entry) return;
@@ -310,14 +257,11 @@ export function stopServeActivity(serveId) {
   pollers.delete(serveId);
 }
 
-/** Stop every poller (app shutdown, tests). */
 export function stopAllServeActivity() {
   for (const serveId of [...pollers.keys()]) stopServeActivity(serveId);
 }
 
 /**
- * Latest sample for a serve, marked stale when it has aged out. Null when the serve
- * was never polled.
  * @param {string} serveId
  * @returns {ServeActivity | null}
  */
@@ -328,7 +272,6 @@ export function getServeActivity(serveId) {
   return stale === entry.last.stale ? entry.last : { ...entry.last, stale };
 }
 
-/** Every current sample — the initial payload for a new SSE subscriber. */
 export function listServeActivity() {
   const out = [];
   for (const serveId of pollers.keys()) {

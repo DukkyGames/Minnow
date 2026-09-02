@@ -249,6 +249,7 @@ export async function toolGenerateReplyVariants(args) {
 }
 
 /**
+ * Batch mutations land in the review queue; they run only when the user applies them.
  * @param {Record<string, unknown>} args
  */
 export async function toolEmailAction(args) {
@@ -271,8 +272,6 @@ export async function toolEmailAction(args) {
     return 'Error: no email accounts configured';
   }
 
-  // Batch mutations from the agent are suggestions, not actions: they land in
-  // the review queue (§3.7) and run only when the user applies them.
   if (messageIds.length > 1) {
     if (!['archive', 'delete', 'read', 'unread', 'flag'].includes(action)) {
       return `Error: unsupported action "${action}" (use archive, delete, read, unread, flag)`;

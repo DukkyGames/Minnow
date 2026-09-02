@@ -1,8 +1,3 @@
-/**
- * Transient UI flags for orchestrate board onboarding (git preflight + kickoff).
- */
-
-/** True while /git-setup skill turn runs before leftover board create. */
 let boardOnboardingGitSetupActive = false;
 
 /** True while kickoff preflight (git prompt / git setup) is in flight. */
@@ -29,7 +24,6 @@ function notifyOnboardingStateListeners(): void {
     try {
       fn();
     } catch {
-      // ignore listener errors
     }
   }
 }
@@ -92,10 +86,7 @@ export function getBoardGitSetupPromptKind(): BoardGitPromptKind {
   return gitSetupPromptKind;
 }
 
-/**
- * Show the inline git setup question in board onboarding and wait for the user's choice.
- * Resolves false when cancelled or when kickoff aborts.
- */
+/** Show the inline git setup question in board onboarding and wait for the user's choice. */
 export function promptBoardGitSetup(kind: BoardGitPromptKind): Promise<boolean> {
   return new Promise((resolve) => {
     gitSetupPromptKind = kind;

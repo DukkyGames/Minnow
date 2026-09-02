@@ -1,8 +1,3 @@
-/**
- * Tab strip UI for the multi-tab preview browser panel.
- * Rendering is handled by unified-right-tabs.ts (MIN-224).
- */
-
 import {
   registerUnifiedPreviewTabHandlers,
 } from './unified-right-tabs';
@@ -20,7 +15,6 @@ export function registerPreviewTabHandlers(handlers: {
 
 /** Wire preview tab strip listeners (call once from initPreviewPanel). */
 export function bindPreviewTabs(): void {
-  // Unified tab strip is bound from init-file-panel via bindFileViewerTabs.
 }
 
 export function refreshPreviewTabs(): void {

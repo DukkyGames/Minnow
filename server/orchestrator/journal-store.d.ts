@@ -7,7 +7,6 @@ export function safeSegment(value: string, kind?: string): string;
 
 /**
  * Directory for one journaled entry: `~/.minnow/<namespace>/<id>/`.
- * Boards pass namespace `'boards'` so existing journals keep their path.
  */
 export function entryDir(namespace: string, id: string, idKind?: string): string;
 export function journalFile(namespace: string, id: string, idKind?: string): string;
@@ -57,5 +56,4 @@ export interface JournalStore {
 
 export function createJournalStore(options: JournalStoreOptions): JournalStore;
 
-// Re-export unused board types so this file stays aligned with journal.d.ts consumers.
 export type { BoardState, Evidence, Snapshot };

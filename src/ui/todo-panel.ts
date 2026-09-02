@@ -1,7 +1,3 @@
-/**
- * Build-mode progress checklist pinned above the composer (todo_write).
- */
-
 import { getActiveChat } from '../state/sessions';
 import { getChatTodos } from '../state/sessions';
 import type { Chat, ChatTodo } from '../types';

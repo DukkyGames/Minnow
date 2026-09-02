@@ -55,8 +55,6 @@ export function initRenderIdleTracking(): () => void {
 
   const windowApi = window.minnow?.window;
   if (windowApi?.onVisibilityChanged) {
-    // The main process is authoritative for tray-hide and minimise; a visible window
-    // still defers to the document, which knows about occlusion and display sleep.
     cleanups.push(
       windowApi.onVisibilityChanged((visible) => {
         if (!visible) setIdle(true);

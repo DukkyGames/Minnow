@@ -213,9 +213,7 @@ export async function runEvalSuite(options: RunEvalSuiteOptions): Promise<string
 
   try {
     await saveEvalManifest(manifest);
-  } catch {
-    /* offline — continue in memory */
-  }
+  } catch {}
 
   emitEvalSuiteProgress({
     suiteRunId,
@@ -267,9 +265,7 @@ export async function runEvalSuite(options: RunEvalSuiteOptions): Promise<string
       try {
         await saveEvalCell(suiteRunId, cell);
         await saveEvalManifest(manifest);
-      } catch {
-        /* offline */
-      }
+      } catch {}
 
       emitEvalSuiteProgress({
         suiteRunId,
@@ -294,9 +290,7 @@ export async function runEvalSuite(options: RunEvalSuiteOptions): Promise<string
   try {
     await saveEvalManifest(manifest);
     await saveEvalLeaderboard(suiteRunId, leaderboard);
-  } catch {
-    /* offline */
-  }
+  } catch {}
 
   emitEvalSuiteProgress({
     suiteRunId,

@@ -1,7 +1,3 @@
-/**
- * Save and delete user-owned experts (Experts hub CRUD).
- */
-
 import {
   deleteExpertEntity,
   fetchPromptFileRaw,

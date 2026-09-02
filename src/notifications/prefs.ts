@@ -41,36 +41,28 @@ function readBool(key: string, fallback: boolean): boolean {
     const raw = localStorage.getItem(key);
     if (raw === '0' || raw === 'false') return false;
     if (raw === '1' || raw === 'true') return true;
-  } catch {
-    /* private mode */
-  }
+  } catch {}
   return fallback;
 }
 
 function writeBool(key: string, value: boolean): void {
   try {
     localStorage.setItem(key, value ? '1' : '0');
-  } catch {
-    /* private mode */
-  }
+  } catch {}
 }
 
 function readString(key: string, fallback: string): string {
   try {
     const raw = localStorage.getItem(key);
     if (raw != null && raw.trim()) return raw.trim();
-  } catch {
-    /* private mode */
-  }
+  } catch {}
   return fallback;
 }
 
 function writeString(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
-  } catch {
-    /* private mode */
-  }
+  } catch {}
 }
 
 /** Migrate legacy single-sound `soundId` to `soundPackId`. */
@@ -130,9 +122,7 @@ function emitPrefs(): void {
   for (const fn of listeners) {
     try {
       fn({ ...prefs });
-    } catch {
-      /* ignore subscriber errors */
-    }
+    } catch {}
   }
 }
 
@@ -183,8 +173,6 @@ const KIND_GROUP: Record<NotificationKind, NotificationKindGroup> = {
   scheduler: 'background',
   research: 'background',
   synthesis: 'background',
-  // An agent working an issue is a task, so it obeys the same switch as board
-  // tasks. Triage arrivals are background: they are a queue, not an event.
   issue_agent_started: 'tasks',
   issue_agent_question: 'tasks',
   issue_agent_pr: 'tasks',

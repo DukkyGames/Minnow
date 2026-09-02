@@ -1,7 +1,3 @@
-/**
- * In-app Save / Discard / Cancel prompt for dirty file viewer tabs (MIN-224 / GH #312).
- */
-
 export type ViewerUnsavedChoice = 'save' | 'discard' | 'cancel';
 
 const DIALOG_ID = 'fileViewerUnsavedDialog';
@@ -69,10 +65,7 @@ function hideDialog(): void {
   dialogEl.classList.add('hidden');
 }
 
-/**
- * Ask whether to save, discard, or cancel when leaving a dirty tab.
- * Returns the user's choice.
- */
+/** Ask whether to save, discard, or cancel when leaving a dirty tab. */
 export function showViewerUnsavedDialog(message: string): Promise<ViewerUnsavedChoice> {
   ensureDialog();
   if (!dialogEl || !messageEl || !saveBtn || !discardBtn || !cancelBtn) {

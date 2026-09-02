@@ -1,8 +1,3 @@
-/**
- * Chat UI + history wiring for bounded parallel tool batch execution.
- * Shared by the main tool loop and incomplete-tool resume.
- */
-
 import { patchMainTurnActivity } from '../chat/main-turn-activity.ts';
 import { notifyChatStreamActivity } from '../chat/streaming-state.ts';
 import { normalizeModeId } from '../chat/modes/types.ts';
@@ -55,6 +50,8 @@ export interface RunChatToolBatchOptions {
   ) => HTMLElement;
 }
 
+// ── Context ──────────────────────────────────────────────────────────────────
+
 function buildChatToolExecuteContext(
   chat: Chat,
   toolCallId: string,
@@ -72,26 +69,12 @@ function buildChatToolExecuteContext(
   };
 }
 
-/**
- * The row this result should render into, resolved when the result lands.
- *
- * Switching chats mid-batch rebuilds the transcript from history, stranding the
- * node captured at batch start (MIN-649). The history render redraws the card
- * from the assistant `tool_calls` message, so re-querying by `tool_call_id`
- * re-attaches to whatever is on screen now and the result fills in.
- *
- * A still-connected node is always the right target, so the query only runs on
- * the stranded path. When nothing is mounted (the user is in another chat) the
- * detached node is used and the write is harmless — history repaints it on the
- * way back.
- *
- * Exported so the V2 painter (P10-H) can reuse this instead of forking a second
- * lookup — incomplete-tool-resume already depended on the same identity.
- */
 export function resolveLiveToolWrap(toolCallId: string, captured: HTMLElement): HTMLElement {
   if (captured.isConnected) return captured;
   return findToolWrapInDom(toolCallId) ?? captured;
 }
+
+// ── Outcome ──────────────────────────────────────────────────────────────────
 
 function applyToolOutcome(
   options: RunChatToolBatchOptions,
@@ -151,12 +134,12 @@ function applyToolOutcome(
   options.trackHistoryPush();
   options.syncContextUsage();
 
-  // Live check, not the batch-start snapshot: the row is only worth scrolling to
-  // if it is actually mounted right now.
   if (toolWrap.isConnected) {
     scrollChatIfPinned();
   }
 }
+
+// ── Batch ────────────────────────────────────────────────────────────────────
 
 /**
  * Pre-render tool rows, run the batch executor, append tool history, and refresh board chrome.
@@ -275,7 +258,6 @@ export async function runChatToolBatch(
       }
       const toolWrap = resolveLiveToolWrap(outcome.toolCall.id, captured);
       if (toolWrap !== captured) {
-        // Keep the batch pointed at the row that is actually on screen.
         wrapById.set(outcome.toolCall.id, toolWrap);
       }
       applyToolOutcome(options, outcome, toolWrap, argsById.get(outcome.toolCall.id));

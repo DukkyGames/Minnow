@@ -1,17 +1,3 @@
-/**
- * Email app preview harness (dev-only, not shipped).
- *
- * Mounts the real Email UI modules against an in-memory fixture backend so every
- * state and viewport can be inspected without a live IMAP account. The whole
- * `/api/email/*` surface is stubbed on `window.fetch`; SSE is a controllable
- * emitter. Pick a scene with `?scene=`, a palette with `?theme=`.
- *
- *   /dev/email-preview.html?scene=panel&theme=swamp-dark
- *
- * Scenes: panel (default) · dashboard · mail · compose · automations · unified ·
- *         setup · error
- */
-
 import '../src/styles/fonts.css';
 import '../src/styles/tokens.css';
 import '../src/styles/global.css';
@@ -39,19 +25,11 @@ import { renderEmailAutomations } from '../src/ui/email/email-automations';
 import { mountEmailCompose } from '../src/ui/email/email-compose';
 import { renderUnifiedInbox } from '../src/ui/email/email-unified';
 
-// ---------------------------------------------------------------------------
-// Clock helpers
-// ---------------------------------------------------------------------------
-
 const NOW = Date.now();
 const iso = (offsetMs: number): string => new Date(NOW + offsetMs).toISOString();
 const mins = (n: number): number => n * 60_000;
 const hours = (n: number): number => n * 3_600_000;
 const days = (n: number): number => n * 86_400_000;
-
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
 
 const accounts: EmailAccount[] = [
   {
@@ -105,7 +83,6 @@ interface SeedMessage extends EmailMessage {
   accountId: string;
 }
 
-/** One inbox per account, keyed by id, so mutations survive a refetch. */
 function seedMessages(): SeedMessage[] {
   const rows: SeedMessage[] = [];
 
@@ -292,7 +269,6 @@ function seedMessages(): SeedMessage[] {
   return rows;
 }
 
-/** Multi-message body for the long "Catch up" thread. */
 function planningThread(): EmailMessage[] {
   const base = seedMessages().find((m) => m.threadId === 't-planning')!;
   const mk = (i: number, from: string, offset: number, body: string): EmailMessage => ({
@@ -426,10 +402,6 @@ function threadSummaries(rows: SeedMessage[]): EmailThreadSummary[] {
   });
 }
 
-// ---------------------------------------------------------------------------
-// In-memory backend
-// ---------------------------------------------------------------------------
-
 const db = {
   all: seedMessages(),
   outbox: new Map<string, OutboxEntry>(),
@@ -461,10 +433,6 @@ function outboxEntry(to: string, subject: string, windowSec = 8): OutboxEntry {
   return entry;
 }
 
-// ---------------------------------------------------------------------------
-// fetch stub
-// ---------------------------------------------------------------------------
-
 const forceSummaryError = new URLSearchParams(location.search).get('scene') === 'error';
 const failMode = new URLSearchParams(location.search).get('fail');
 
@@ -474,7 +442,6 @@ const json = (body: unknown, status = 200): Response =>
     headers: { 'Content-Type': 'application/json' },
   });
 
-/** A believable byte payload for the download/preview routes. */
 function attachmentResponse(filename: string): Response {
   if (/\.(png|jpe?g|gif|webp)$/i.test(filename)) {
     const svg =
@@ -566,8 +533,6 @@ route('GET', /\/accounts\/[^/]+\/messages$/, () => {
 });
 
 route('POST', /\/accounts\/[^/]+\/sync$/, () => {
-  // ?fail=auth exercises the error deep-link: an auth failure should send the
-  // panel to the account form with the password field lit.
   if (failMode === 'auth') {
     return delay(
       json(
@@ -580,7 +545,6 @@ route('POST', /\/accounts\/[^/]+\/sync$/, () => {
       700,
     );
   }
-  // A visible pause so the sync progress bar has something to animate over.
   return delay(json({ synced: 3, folder: 'INBOX' }), 1400);
 });
 
@@ -600,7 +564,7 @@ route('POST', /\/messages\/([^/]+)\/archive$/, (m) => {
   return json({ ok: true });
 });
 route('POST', /\/messages\/([^/]+)\/move$/, (m) => {
-  db.removed.delete(decodeURIComponent(m[1])); // move-back (undo) restores
+  db.removed.delete(decodeURIComponent(m[1]));
   return json({ ok: true });
 });
 route('DELETE', /\/messages\/([^/?]+)/, (m) => {
@@ -622,7 +586,6 @@ route('POST', /\/messages\/bulk$/, (_m, init) => {
 
 route('GET', /\/messages\/[^/]+\/attachments\/([^/?]+)/, (m, _init, url) => {
   const selector = decodeURIComponent(m[1]);
-  // cid: parts are inline images inside the body iframe; serve them as images.
   const filename = selector.startsWith('cid:') ? 'inline.png' : `attachment-${selector}`;
   const knownName = url.searchParams.get('filename');
   return attachmentResponse(knownName || filename);
@@ -724,10 +687,6 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   return json({ ok: true });
 };
 
-// ---------------------------------------------------------------------------
-// SSE stub — a controllable emitter (window.__previewSSE.emit(type, payload))
-// ---------------------------------------------------------------------------
-
 class PreviewEventSource {
   static instances = new Set<PreviewEventSource>();
   private listeners = new Map<string, Set<(e: MessageEvent) => void>>();
@@ -756,10 +715,6 @@ class PreviewEventSource {
   },
 };
 
-// ---------------------------------------------------------------------------
-// Scene mounting
-// ---------------------------------------------------------------------------
-
 window.__MINNOW_SESSION_TOKEN__ = 'preview';
 
 function toast(state: 'ok' | 'err', message: string): void {
@@ -782,7 +737,6 @@ async function mountScene(): Promise<void> {
   const scene = new URLSearchParams(location.search).get('scene') ?? 'panel';
 
   if (scene === 'setup') {
-    // Force the empty-account path by making /accounts return none.
     routes.unshift({ method: 'GET', re: /\/accounts$/, handler: () => json({ accounts: [] }) });
     await renderEmailPanel(stage, { onStatus });
     return;
@@ -817,7 +771,6 @@ async function mountScene(): Promise<void> {
     });
     return;
   }
-  // default: the full panel
   await renderEmailPanel(stage, { onStatus });
 }
 

@@ -1,7 +1,3 @@
-/**
- * Super Plan grill stage prompt helpers — batch ask_question cards.
- */
-
 /** Max questions per ask_question call during the Super Plan grill stage. */
 export const SUPER_PLAN_GRILL_QUESTIONS_PER_BATCH = 5;
 

@@ -1,7 +1,3 @@
-/**
- * Subprocess runner shared by git tools and the terminal streaming layer.
- */
-
 import { spawn } from 'node:child_process';
 import {
   PROCESS_MAX_ACCUMULATE_BYTES,
@@ -9,11 +5,9 @@ import {
   capTextOutput,
 } from './tools/output-cap.js';
 
-/** Default timeout for shell/code tools (ms). */
 export const COMMAND_TIMEOUT_MS = 30_000;
 
 /**
- * Run a subprocess; collect stdout/stderr; optional per-chunk callbacks for streaming.
  * @param {string} command
  * @param {string[]} args
  * @param {object} [options]
@@ -25,8 +19,6 @@ export const COMMAND_TIMEOUT_MS = 30_000;
  * @param {(text: string) => void} [options.onStderr]
  * @param {(child: import('node:child_process').ChildProcess) => void} [options.onSpawn]
  * @param {(child: import('node:child_process').ChildProcess) => void} [options.killTree]
- *   Platform-aware tree killer injected by callers (avoids circular imports).
- *   Falls back to child.kill('SIGTERM') when omitted.
  * @returns {Promise<{ code: number, stdout: string, stderr: string, timedOut: boolean, accumulationTruncated?: boolean }>}
  */
 export function runProcess(command, args, options = {}) {
@@ -69,16 +61,11 @@ export function runProcess(command, args, options = {}) {
 
     const timer = setTimeout(() => {
       timedOut = true;
-      // Use injected tree-killer so Windows grandchild processes are also killed.
-      // On Windows, child.kill('SIGTERM') only kills cmd.exe, leaving node grandchildren
-      // alive and holding stdout/stderr pipes open, so 'close' never fires.
       if (killTree) {
         killTree(child);
       } else {
         child.kill('SIGTERM');
       }
-      // Grace period: if 'close' still hasn't fired after the kill, settle anyway so
-      // the promise never hangs indefinitely.
       graceTimer = setTimeout(() => {
         settle(() => reject(new Error(`Command timed out after ${timeout / 1000}s`)));
       }, 3000);
@@ -100,8 +87,6 @@ export function runProcess(command, args, options = {}) {
       onStderr?.(text);
     });
 
-    // A SIGTERM/force-kill can break these pipes and emit a stream 'error'; without
-    // a listener Node rethrows it as an uncaughtException and crashes the host.
     child.stdout?.on('error', () => {});
     child.stderr?.on('error', () => {});
 
@@ -120,7 +105,6 @@ export function runProcess(command, args, options = {}) {
 }
 
 /**
- * Format process output for tool results (blocking /api/tools path).
  * @param {string} label
  * @param {{ code: number, stdout: string, stderr: string, timedOut?: boolean, stopped?: boolean, timeoutSecs?: number }} result
  */

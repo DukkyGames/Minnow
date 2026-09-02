@@ -1,50 +1,25 @@
-/**
- * Shared output-size limits for server tools (MIN-345, MIN-667).
- * grep, process-backed tools, read_file, and git_diff share these ceilings.
- *
- * This module is imported by the Vite SPA (defaults, Settings, terminal panel).
- * Keep it free of `node:*` imports — Node AsyncLocalStorage lives in output-cap-als.js.
- *
- * Product caps (chars/line, grep head, web bytes) are skippable via tools.json
- * `toolOutput.enabled` or per-call `full_result`. Memory guards (25 MB file,
- * 5 MB process capture) always apply.
- */
-
 import { truncateUtf8 } from '../../src/lib/fetch-web-content.mjs';
 
-/** Default max characters returned to agents (UTF-16 code units). */
 export const DEFAULT_MAX_OUTPUT_CHARS = 128_000;
 
-/** Max characters per emitted line before ellipsis. */
 export const DEFAULT_MAX_LINE_CHARS = 2_000;
 
-/** Clamp for persisted `toolOutput.maxChars`. */
 export const TOOL_OUTPUT_MAX_CHARS_MIN = 8_000;
 
-/** Clamp for persisted `toolOutput.maxChars`. */
 export const TOOL_OUTPUT_MAX_CHARS_MAX = 2_000_000;
 
-/**
- * Hard ceiling for reading a whole file into memory (read_file / read_file_range).
- * Larger files are refused so a single call cannot OOM the host on a huge/binary blob.
- */
 export const MAX_READ_FILE_BYTES = 25 * 1024 * 1024;
 
-/** Stop accumulating subprocess stdout/stderr beyond this byte budget. */
 export const PROCESS_MAX_ACCUMULATE_BYTES = 5 * 1024 * 1024;
 
-/** grep aliases — kept for existing imports/tests. */
 export const GREP_MAX_OUTPUT_CHARS = DEFAULT_MAX_OUTPUT_CHARS;
 export const GREP_MAX_LINE_CHARS = DEFAULT_MAX_LINE_CHARS;
 
 /**
- * Per-request result-cap policy (tools.json + this-call args).
  * @typedef {{ applyResultCap: boolean, maxOutputChars: number, maxLineChars: number }} OutputCapPolicy
  */
 
 /**
- * Nested-call policy for the SPA and tests (sync callbacks).
- * Concurrent overlapping async runs on Node use AsyncLocalStorage via installOutputCapStore.
  * @type {OutputCapPolicy | undefined}
  */
 let fallbackPolicy;
@@ -63,7 +38,6 @@ let outputCapStore = {
     fallbackPolicy = policy;
     try {
       const result = fn();
-      // Keep policy until a thenable settles so a single await still sees this call's caps.
       if (result && typeof result.then === 'function') {
         return Promise.resolve(result).finally(() => {
           fallbackPolicy = previous;
@@ -79,7 +53,6 @@ let outputCapStore = {
 };
 
 /**
- * Replace the in-module store with Node AsyncLocalStorage (see output-cap-als.js).
  * @param {OutputCapStore} store
  */
 export function installOutputCapStore(store) {
@@ -87,8 +60,6 @@ export function installOutputCapStore(store) {
 }
 
 /**
- * True when the model asked to skip automatic size caps.
- * Constrained decoding uses `full_result`; `full` is accepted when a model guesses that name.
  * @param {unknown} args
  */
 export function argsRequestFullResult(args) {
@@ -98,7 +69,6 @@ export function argsRequestFullResult(args) {
 }
 
 /**
- * Normalize persisted `toolOutput` with defaults and clamps.
  * @param {unknown} raw
  * @returns {{ enabled: boolean, maxChars: number }}
  */
@@ -121,7 +91,6 @@ export function normalizeToolOutputConfig(raw) {
 }
 
 /**
- * Resolve whether this call should apply product result caps (not memory guards).
  * @param {unknown} toolOutput
  * @param {unknown} args
  * @returns {OutputCapPolicy}
@@ -136,7 +105,6 @@ export function resolveOutputCapPolicy(toolOutput, args) {
   };
 }
 
-/** Default policy when no ALS store is active (tests and stray callers). */
 function defaultOutputCapPolicy() {
   return {
     applyResultCap: true,
@@ -145,13 +113,11 @@ function defaultOutputCapPolicy() {
   };
 }
 
-/** Active policy, or the on-by-default product caps. */
 export function getOutputCapPolicy() {
   return outputCapStore.getStore() ?? defaultOutputCapPolicy();
 }
 
 /**
- * Run async (or sync) work with a resolved output-cap policy.
  * @template T
  * @param {OutputCapPolicy} policy
  * @param {() => T} fn
@@ -162,7 +128,6 @@ export function runWithOutputCapPolicy(policy, fn) {
 }
 
 /**
- * Footer suffix pointing at the per-call opt-out (valid on capped tools).
  * @param {string} hint
  * @param {boolean} [applyResultCap]
  */
@@ -172,7 +137,6 @@ export function withFullResultFooterHint(hint, applyResultCap = getOutputCapPoli
 }
 
 /**
- * Cap a single output line to maxLineChars with trailing ellipsis.
  * @param {string} line
  * @param {number} [maxLineChars]
  */
@@ -183,7 +147,6 @@ export function capLineLength(line, maxLineChars = DEFAULT_MAX_LINE_CHARS) {
 }
 
 /**
- * Append chunk text to an accumulator without exceeding a byte budget.
  * @param {string} current
  * @param {string} chunk
  * @param {number} maxBytes
@@ -214,8 +177,6 @@ export function appendWithByteCap(current, chunk, maxBytes = PROCESS_MAX_ACCUMUL
 }
 
 /**
- * Whether this call should skip product caps (explicit option wins, then ALS).
- * Passing maxOutputChars still applies a cap — tests and callers that set a budget keep it.
  * @param {{ applyResultCap?: boolean, maxOutputChars?: number }} options
  * @param {OutputCapPolicy} policy
  */
@@ -230,14 +191,8 @@ function shouldApplyTextCap(options, policy) {
 }
 
 /**
- * Cap arbitrary text: per-line length, then total char budget, then UTF-8 byte safety.
  * @param {string} text
- * @param {{
- *   maxOutputChars?: number,
- *   maxLineChars?: number,
- *   footerHint?: string,
- *   applyResultCap?: boolean,
- * }} [options]
+ * @param {{ maxOutputChars?: number, maxLineChars?: number, footerHint?: string, applyResultCap?: boolean, }} [options]
  * @returns {{ text: string, truncated: boolean, originalChars: number }}
  */
 export function capTextOutput(text, options = {}) {
@@ -249,9 +204,6 @@ export function capTextOutput(text, options = {}) {
   const maxOutputChars = options.maxOutputChars ?? policy.maxOutputChars;
   const maxLineChars = options.maxLineChars ?? policy.maxLineChars;
 
-  // Baseline is the EOL-normalized length: output is always \n-joined, so measuring
-  // truncation against the raw (possibly CRLF) input would flag every Windows command
-  // result as truncated even when nothing was dropped.
   const lines = text.split(/\r?\n/);
   const originalChars =
     lines.reduce((sum, line) => sum + line.length, 0) +
@@ -279,8 +231,6 @@ export function capTextOutput(text, options = {}) {
 }
 
 /**
- * Cap read_file output at complete lines with read_file_range guidance.
- * Explicit `maxChars` still caps (tests); otherwise ALS can skip the product cap.
  * @param {string} content
  * @param {string} relPath
  * @param {number} [maxChars]
@@ -310,9 +260,6 @@ export function capReadFileOutput(content, relPath, maxChars) {
     totalChars += added;
   }
 
-  // A single line longer than the budget (e.g. minified bundle) keeps zero lines and
-  // would otherwise point back at read_file_range for the same oversized line. Emit a
-  // hard-truncated head instead so the caller sees something actionable.
   if (kept.length === 0 && lines.length > 0) {
     const head = lines[0].slice(0, budget);
     const text = [

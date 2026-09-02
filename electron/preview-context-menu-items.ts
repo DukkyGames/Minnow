@@ -1,8 +1,3 @@
-/**
- * Pure menu-item builder for the preview guest context menu.
- * No Electron import — unit-tested from electron/dist without a live guest.
- */
-
 export type PreviewContextMenuRole =
   | 'goBack'
   | 'goForward'
@@ -29,11 +24,9 @@ export type PreviewContextMenuItem =
       role: PreviewContextMenuRole;
       label: string;
       enabled: boolean;
-      /** Spellcheck replacement text when role is replaceMisspelling. */
       suggestion?: string;
     };
 
-/** Subset of Electron ContextMenuParams needed to build labels / enabled flags. */
 export interface PreviewContextMenuParams {
   linkURL?: string;
   srcURL?: string;
@@ -63,10 +56,6 @@ function pushSeparator(items: PreviewContextMenuItem[]): void {
   items.push({ type: 'separator' });
 }
 
-/**
- * Build ordered menu items (labels + enabled flags) from guest context-menu params.
- * Renderer and main share this shape; action dispatch lives elsewhere.
- */
 export function buildPreviewContextMenuItems(
   input: BuildPreviewContextMenuItemsInput,
 ): PreviewContextMenuItem[] {
@@ -104,7 +93,7 @@ export function buildPreviewContextMenuItems(
       {
         type: 'item',
         role: 'saveImage',
-        label: 'Save image as…',
+        label: 'Save image asâ€¦',
         enabled: Boolean(srcURL),
       },
     );

@@ -1,8 +1,3 @@
-/**
- * Continue + Clear controls for a failed assistant turn (MIN-666).
- * Continue retries with full history; Clear drops only the failed assistant output.
- */
-
 export interface FailedTurnRecoveryTarget {
   chatId: string;
   forkHistoryIndex: number;

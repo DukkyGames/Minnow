@@ -1,7 +1,3 @@
-/**
- * Git operations for /api/git (MIN-198). All ops accept optional `cwd` (defaults to workspace root).
- */
-
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,15 +13,10 @@ import {
 
 const GIT_TIMEOUT_MS = 120_000;
 
-/** Resolve working directory for git commands. */
 function resolveCwd(cwd) {
   return cwd && String(cwd).trim() ? String(cwd).trim() : getWorkspaceRoot();
 }
 
-/**
- * Run git in cwd; returns runProcess result.
- * Optional `env` merges into process.env (used for temp GIT_INDEX_FILE snapshots).
- */
 async function git(args, cwd, env) {
   return runProcess('git', args, {
     cwd,
@@ -34,13 +25,11 @@ async function git(args, cwd, env) {
   });
 }
 
-/** Combine stdout/stderr for error messages. */
 function processError(result) {
   const text = `${result.stdout ?? ''}\n${result.stderr ?? ''}`.trim();
   return text || `git exited with code ${result.code}`;
 }
 
-/** Fail fast when cwd is not inside a git work tree. */
 async function requireGitRepo(cwd) {
   const root = resolveCwd(cwd);
   if (!(await isGitRepository(root))) {
@@ -50,7 +39,6 @@ async function requireGitRepo(cwd) {
 }
 
 /**
- * Parse porcelain v1 status lines into branch metadata and file buckets.
  * @param {string} text
  */
 export function parsePorcelainStatus(text) {
@@ -115,7 +103,6 @@ export function parsePorcelainStatus(text) {
 }
 
 /**
- * Parse `git branch -a` output.
  * @param {string} text
  */
 export function parseBranchList(text) {
@@ -128,7 +115,6 @@ export function parseBranchList(text) {
     const line = rawLine.trimEnd();
     if (!line) continue;
     const isCurrent = line.startsWith('* ');
-    // Git marks branches checked out in another worktree with "+ ".
     const checkedOutElsewhere = line.startsWith('+ ');
     const name = line.slice(2).trim();
     if (!name) continue;
@@ -147,14 +133,12 @@ export function parseBranchList(text) {
   return { current, local, lockedLocal, remote };
 }
 
-/** Minnow orchestration branches (board worktrees) — not user checkout targets. */
 export function isMinnowBoardBranch(name) {
   return typeof name === 'string' && name.startsWith('minnow/board/');
 }
 
 /**
- * Branches checked out in worktrees other than `mainRepoRoot`.
- * @param {string} porcelain `git worktree list --porcelain`
+ * @param {string} porcelain
  * @param {string} mainRepoRoot
  */
 export function parseWorktreeLockedBranches(porcelain, mainRepoRoot) {
@@ -184,7 +168,6 @@ export function parseWorktreeLockedBranches(porcelain, mainRepoRoot) {
 }
 
 /**
- * Local branches suitable for user-facing checkout pickers.
  * @param {string[]} local
  * @param {Set<string>} [lockedElsewhere]
  */
@@ -193,18 +176,11 @@ export function filterUserFacingBranches(local, lockedElsewhere = new Set()) {
 }
 
 /**
- * Parse one git log line.
- * Preferred format is %x1f-delimited (`%H%x1f%P%x1f%s%x1f%an%x1f%ar%x1f%D`),
- * which is unambiguous for any subject/author. Legacy space-separated lines
- * (`%H %P %s %an %ar %D`) are still parsed; there the author is taken as the
- * final token before the relative time, so multi-word authors lose tokens
- * into the subject.
  * @param {string} line
  */
 const LOG_RELATIVE_TIME =
   /^(.*) (\d+ seconds? ago|\d+ minutes? ago|\d+ hours? ago|\d+ days? ago|\d+ weeks? ago|\d+ months? ago|\d+ years? ago|just now)(?:\s+(.+))?\s*$/i;
 
-/** Split a git decorator field into individual ref strings. */
 function splitLogRefList(text) {
   const trimmed = String(text ?? '').trim();
   if (!trimmed) return [];
@@ -262,7 +238,6 @@ export function parseLogLine(line) {
       refs = splitLogRefList(timeDecorMatch[3]);
     }
   } else {
-    // Fallback for lines that omit a relative-time token.
     const parenRefMatch = remainder.match(/^(.*) (\([^)]+\))\s*$/);
     if (parenRefMatch) {
       refs = splitLogRefList(parenRefMatch[2]);
@@ -288,7 +263,6 @@ export function parseLogLine(line) {
 }
 
 /**
- * Split combined `git show --stat --patch` output into stat summary and patch body.
  * @param {string} text
  */
 export function splitShowOutput(text) {
@@ -305,7 +279,6 @@ export function splitShowOutput(text) {
   return { stat, patch };
 }
 
-/** `git status --porcelain=v1 -b` */
 export async function status({ cwd } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -319,7 +292,6 @@ export async function status({ cwd } = {}) {
   return { ok: true, ...parsed };
 }
 
-/** Unstaged tracked changes plus untracked file diffs (for commit message generation). */
 async function diffWorkingTree(repoCwd) {
   const parts = [];
 
@@ -346,7 +318,6 @@ async function diffWorkingTree(repoCwd) {
   return { ok: true, patch: parts.join('\n\n') };
 }
 
-/** `git diff [--cached] [-- <path>]` or full working-tree diff when `workingTree` is true */
 export async function diff({ cwd, cached, path: filePath, workingTree } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -367,14 +338,6 @@ export async function diff({ cwd, cached, path: filePath, workingTree } = {}) {
   return { ok: true, patch: result.stdout ?? '' };
 }
 
-/**
- * Paths git can accept as pathspecs: tracked in the index, or present on disk.
- *
- * A file an agent created and then deleted in the same session is neither, and `git add`
- * aborts the *entire* command on one unmatched pathspec — so without this filter a single
- * throwaway temp file makes every other path in the batch unstageable (MIN-651). Tracked
- * files that were deleted still match the index, so their deletion stages normally.
- */
 async function partitionStageablePaths(paths, cwd) {
   const listed = await git(['ls-files', '-z', '--', ...paths], cwd);
   const tracked = new Set(
@@ -400,7 +363,6 @@ async function partitionStageablePaths(paths, cwd) {
   return { stageable, skipped };
 }
 
-/** `git add <paths[]>`, minus pathspecs that no longer match anything. */
 export async function stage({ cwd, paths } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -412,8 +374,6 @@ export async function stage({ cwd, paths } = {}) {
   const requested = paths.map(String);
   const { stageable, skipped } = await partitionStageablePaths(requested, repo.cwd);
 
-  // Nothing left to stage is not a failure — the caller asked about files that are simply
-  // gone, and reporting an error there would block a commit of the rest.
   if (stageable.length === 0) {
     return { ok: true, stagedPaths: [], skippedPaths: skipped };
   }
@@ -426,7 +386,6 @@ export async function stage({ cwd, paths } = {}) {
   return { ok: true, stagedPaths: stageable, skippedPaths: skipped };
 }
 
-/** `git add -A` */
 export async function stageAll({ cwd } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -439,7 +398,6 @@ export async function stageAll({ cwd } = {}) {
   return { ok: true };
 }
 
-/** `git reset HEAD -- <paths[]>` */
 export async function unstage({ cwd, paths } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -456,7 +414,6 @@ export async function unstage({ cwd, paths } = {}) {
   return { ok: true };
 }
 
-/** `git checkout -- <paths[]>` */
 export async function discard({ cwd, paths } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -473,7 +430,6 @@ export async function discard({ cwd, paths } = {}) {
   return { ok: true };
 }
 
-/** `git commit -m <msg>` — auto-stages all changes when the index is empty */
 export async function commit({ cwd, message } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -507,7 +463,6 @@ export async function commit({ cwd, message } = {}) {
   return { ok: true, sha: (shaResult.stdout ?? '').trim() };
 }
 
-/** `git push [--set-upstream origin <branch>]` */
 export async function push({ cwd, setUpstream, branch } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -528,7 +483,6 @@ export async function push({ cwd, setUpstream, branch } = {}) {
   return { ok: true, stdout: (result.stdout ?? '').trim() };
 }
 
-/** `git pull` */
 export async function pull({ cwd } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -541,7 +495,6 @@ export async function pull({ cwd } = {}) {
   return { ok: true, stdout: (result.stdout ?? '').trim() };
 }
 
-/** `git fetch --all` */
 export async function fetch({ cwd } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -554,7 +507,6 @@ export async function fetch({ cwd } = {}) {
   return { ok: true };
 }
 
-/** `git log --topo-order --format=<%x1f-delimited> --exclude=refs/stash --all -n <count>` */
 export async function log({ cwd, count = 10 } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -584,7 +536,6 @@ export async function log({ cwd, count = 10 } = {}) {
   return { ok: true, commits };
 }
 
-/** `git branch -a` */
 export async function branches({ cwd } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -611,7 +562,6 @@ export async function branches({ cwd } = {}) {
   return { ok: true, ...parsed };
 }
 
-/** `git branch [-d|-D] <branch>` */
 export async function deleteBranch({ cwd, branch, force } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -639,7 +589,6 @@ export async function deleteBranch({ cwd, branch, force } = {}) {
   return { ok: true };
 }
 
-/** `git worktree add [-b <branch>] <path> [<start-point>]` */
 export async function worktreeAdd({ cwd, branch, path: worktreePath, baseRef } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -675,9 +624,6 @@ export async function worktreeAdd({ cwd, branch, path: worktreePath, baseRef } =
 }
 
 /**
- * Principal worktree for the repo (first entry in `git worktree list --porcelain`).
- * Linked worktrees must not be compared via `rev-parse --show-toplevel` from their cwd —
- * that returns the linked path, not the main worktree.
  * @param {string} repoCwd
  * @returns {Promise<string | null>}
  */
@@ -693,7 +639,6 @@ async function resolveMainWorktreePath(repoCwd) {
   return null;
 }
 
-/** `git worktree remove [--force] <path>` */
 export async function worktreeRemove({ cwd, path: worktreePath, force } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -715,7 +660,6 @@ export async function worktreeRemove({ cwd, path: worktreePath, force } = {}) {
   if (force) args.push('--force');
   args.push(targetPath);
 
-  // Run from the principal worktree so removal works when cwd is the linked worktree.
   const gitCwd = mainWorktreePath ?? repo.cwd;
   const result = await git(args, gitCwd);
   if (result.code !== 0) {
@@ -726,7 +670,6 @@ export async function worktreeRemove({ cwd, path: worktreePath, force } = {}) {
   return { ok: true };
 }
 
-/** `git checkout [-b] <branch> [<startPoint>]` or `git checkout --detach <sha>` */
 export async function checkout({ cwd, branch, create, startPoint } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -735,8 +678,6 @@ export async function checkout({ cwd, branch, create, startPoint } = {}) {
     return { ok: false, error: 'branch is required' };
   }
 
-  // Create flows auto-fix invalid names (`Test Worktree` → `test-worktree`).
-  // Checkout of an existing branch keeps the typed name so mixed-case refs match.
   const name = create ? slugifyGitRefName(branch, 'branch') : branch.trim();
   const args = create
     ? ['checkout', '-b', name]
@@ -752,7 +693,6 @@ export async function checkout({ cwd, branch, create, startPoint } = {}) {
   return { ok: true, branch: name };
 }
 
-/** `git checkout --detach <sha>` */
 export async function checkoutDetach({ cwd, sha } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -769,7 +709,6 @@ export async function checkoutDetach({ cwd, sha } = {}) {
   return { ok: true };
 }
 
-/** `git tag <name> <sha>` */
 export async function createTag({ cwd, name, sha } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -789,7 +728,6 @@ export async function createTag({ cwd, name, sha } = {}) {
   return { ok: true };
 }
 
-/** `git remote get-url origin` */
 export async function remoteUrl({ cwd } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -807,7 +745,6 @@ export async function remoteUrl({ cwd } = {}) {
   return { ok: true, url };
 }
 
-/** `git show --stat --patch <sha>` */
 export async function show({ cwd, sha } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -825,7 +762,6 @@ export async function show({ cwd, sha } = {}) {
   return { ok: true, patch, stat, stdout: result.stdout };
 }
 
-/** Detect merge/rebase/cherry-pick conflict from git stderr/stdout. */
 function isGitConflictOutput(text) {
   const lower = String(text ?? '').toLowerCase();
   return (
@@ -835,7 +771,6 @@ function isGitConflictOutput(text) {
   );
 }
 
-/** `git merge <branch> [--no-ff]` or `--abort` */
 export async function merge({ cwd, branch, noFf, abort } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -864,7 +799,6 @@ export async function merge({ cwd, branch, noFf, abort } = {}) {
   return { ok: true, stdout: (result.stdout ?? '').trim() };
 }
 
-/** `git rebase <onto>` or `--abort` / `--continue` */
 export async function rebase({ cwd, onto, abort, continue: cont } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -890,7 +824,6 @@ export async function rebase({ cwd, onto, abort, continue: cont } = {}) {
   return { ok: true, stdout: (result.stdout ?? '').trim() };
 }
 
-/** `git stash list` */
 export async function stashList({ cwd } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -908,7 +841,6 @@ export async function stashList({ cwd } = {}) {
   return { ok: true, stashes: entries };
 }
 
-/** `git stash push [-m msg] [-- paths]` */
 export async function stashPush({ cwd, message, paths } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -929,7 +861,6 @@ export async function stashPush({ cwd, message, paths } = {}) {
   return { ok: true, stdout: (result.stdout ?? '').trim() };
 }
 
-/** `git stash pop [stash@{n}]` */
 export async function stashPop({ cwd, index } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -946,7 +877,6 @@ export async function stashPop({ cwd, index } = {}) {
   return { ok: true, stdout: (result.stdout ?? '').trim() };
 }
 
-/** `git stash apply [stash@{n}]` */
 export async function stashApply({ cwd, index } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -963,7 +893,6 @@ export async function stashApply({ cwd, index } = {}) {
   return { ok: true, stdout: (result.stdout ?? '').trim() };
 }
 
-/** `git stash drop [stash@{n}]` */
 export async function stashDrop({ cwd, index } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -979,7 +908,6 @@ export async function stashDrop({ cwd, index } = {}) {
   return { ok: true };
 }
 
-/** `git cherry-pick <sha>` or `--abort` / `--continue` */
 export async function cherryPick({ cwd, sha, abort, continue: cont } = {}) {
   const repo = await requireGitRepo(cwd);
   if (!repo.ok) return repo;
@@ -1006,8 +934,6 @@ export async function cherryPick({ cwd, sha, abort, continue: cont } = {}) {
 }
 
 /**
- * Parse `git diff --name-status` lines into `{ status, path }` entries.
- * Rename/copy lines use the destination path.
  * @param {string} text
  */
 export function parseNameStatus(text) {
@@ -1018,7 +944,6 @@ export function parseNameStatus(text) {
     const parts = line.split('\t');
     const statusRaw = (parts[0] ?? '').trim();
     if (!statusRaw) continue;
-    // status may be "R100" / "C100" — keep the letter for clients
     const status = statusRaw[0] ?? statusRaw;
     const filePath =
       parts.length >= 3 ? String(parts[2] ?? '').trim() : String(parts[1] ?? '').trim();
@@ -1029,8 +954,6 @@ export function parseNameStatus(text) {
 }
 
 /**
- * Create a dangling commit of the current working tree without touching HEAD
- * or the real index (temp GIT_INDEX_FILE). Used for agent-turn undo snapshots.
  * @param {{ cwd?: string, message?: string }} [input]
  */
 export async function snapshotCreate({ cwd, message } = {}) {
@@ -1049,7 +972,6 @@ export async function snapshotCreate({ cwd, message } = {}) {
       return { ok: false, error: 'Could not resolve HEAD' };
     }
 
-    // Seed temp index from HEAD tree when the repo has commits; empty index otherwise.
     if (hasHead) {
       const readTree = await git(['read-tree', 'HEAD'], repo.cwd, env);
       if (readTree.code !== 0) {
@@ -1057,7 +979,6 @@ export async function snapshotCreate({ cwd, message } = {}) {
       }
     }
 
-    // Stage all WT changes into the temp index only (real index untouched).
     const add = await git(['add', '-A'], repo.cwd, env);
     if (add.code !== 0) {
       return { ok: false, error: processError(add) };
@@ -1074,7 +995,6 @@ export async function snapshotCreate({ cwd, message } = {}) {
 
     const msg =
       message && String(message).trim() ? String(message).trim() : 'minnow snapshot';
-    // commit-tree does not need the temp index — only the tree object id.
     const commitArgs = ['commit-tree', treeSha];
     if (hasHead && headSha) {
       commitArgs.push('-p', headSha);
@@ -1101,8 +1021,6 @@ export async function snapshotCreate({ cwd, message } = {}) {
 }
 
 /**
- * Restore working tree (+ real index) to a snapshot commit's tree without moving
- * branch tip / HEAD. Takes a safety snapshot first so the restore is undoable.
  * @param {{ cwd?: string, sha: string }} input
  */
 export async function snapshotRestore({ cwd, sha } = {}) {
@@ -1126,7 +1044,6 @@ export async function snapshotRestore({ cwd, sha } = {}) {
   }
   const treeSha = (treeParse.stdout ?? '').trim();
 
-  // Safety snapshot of current WT so this restore can be undone.
   const safety = await snapshotCreate({
     cwd: repo.cwd,
     message: 'minnow undo safety',
@@ -1139,7 +1056,6 @@ export async function snapshotRestore({ cwd, sha } = {}) {
   const headBeforeSha =
     headBefore.code === 0 ? (headBefore.stdout ?? '').trim() : undefined;
 
-  // Apply tree to real index + working tree; do not move refs/HEAD.
   const readTree = await git(['read-tree', '--reset', '-u', treeSha], repo.cwd);
   if (readTree.code !== 0) {
     return { ok: false, error: processError(readTree), safetySha: safety.sha };
@@ -1171,8 +1087,6 @@ export async function snapshotRestore({ cwd, sha } = {}) {
 }
 
 /**
- * List paths that differ between two snapshot commits, or between a commit and
- * the current working tree when `toSha` is omitted.
  * @param {{ cwd?: string, fromSha: string, toSha?: string }} input
  */
 export async function snapshotDiff({ cwd, fromSha, toSha } = {}) {
@@ -1190,14 +1104,12 @@ export async function snapshotDiff({ cwd, fromSha, toSha } = {}) {
     : ['diff', '--name-status', from];
 
   const result = await git(args, repo.cwd);
-  // git diff returns 1 when differences exist — treat 0/1 as success.
   if (result.code !== 0 && result.code !== 1) {
     return { ok: false, error: processError(result) };
   }
 
   const files = parseNameStatus(result.stdout ?? '');
 
-  // When comparing to the working tree, also list untracked paths (clean -fd removes them).
   if (!to) {
     const others = await git(['ls-files', '--others', '--exclude-standard'], repo.cwd);
     if (others.code === 0) {

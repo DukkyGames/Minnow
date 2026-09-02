@@ -1,8 +1,7 @@
-/**
- * Emit src/styles/tokens.css from palette definitions (Color Scheme Exploration).
- */
 import fs from 'node:fs';
 import path from 'node:path';
+
+// ── Palettes ─────────────────────────────────────────────────────────────────
 
 const PALETTES = {
   sage: {
@@ -239,6 +238,8 @@ const PALETTES = {
   },
 };
 
+// ── Theme CSS ────────────────────────────────────────────────────────────────
+
 function block(themeId, p, mode) {
   const elevated =
     mode === 'dark'
@@ -321,6 +322,8 @@ function block(themeId, p, mode) {
 }
 `;
 }
+
+// ── Write file ───────────────────────────────────────────────────────────────
 
 const families = Object.keys(PALETTES);
 const themeBlocks = [];

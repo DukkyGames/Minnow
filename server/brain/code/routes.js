@@ -119,8 +119,6 @@ export async function handleCodeIndexRequest(req, res, pathname) {
       const files = Array.isArray(body.files)
         ? body.files.map((f) => String(f))
         : undefined;
-      // Fire-and-forget: a full index runs for minutes. Progress and the final outcome
-      // come back through /api/brain/code/status.
       const result = await withCodeWorkspace(req, body, async () =>
         startReindexJob({
           trigger: 'manual',

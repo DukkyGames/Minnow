@@ -127,6 +127,7 @@ export function resetLspBundleSpawnOverride() {
   spawnOverride = null;
 }
 
+/** Drain stdout/stderr so pip progress cannot fill the pipe and hang the child. */
 export function runProcess(command, args, options = {}) {
   const spawnFn = spawnOverride ?? spawn;
   const { shell = false, ...spawnOpts } = options;
@@ -138,8 +139,6 @@ export function runProcess(command, args, options = {}) {
     });
     let stdout = '';
     let stderr = '';
-    // Drain both streams — pip and other tools write progress to stdout; if it is
-    // not consumed the pipe buffer fills and the child blocks indefinitely.
     child.stdout?.on('data', (c) => {
       stdout += String(c);
     });

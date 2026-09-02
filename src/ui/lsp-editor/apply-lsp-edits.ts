@@ -1,7 +1,3 @@
-/**
- * Apply LSP text edits to a document string (bottom-up so offsets stay valid).
- */
-
 import { Text } from '@codemirror/state';
 import type { LspTextEdit } from '../../lsp/completion-client';
 import { lspRangeToSpanFromDoc } from './lsp-positions';

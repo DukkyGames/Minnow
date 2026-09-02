@@ -1,7 +1,3 @@
-/**
- * Multi-model campaign UI: per-target live state, progress cards, and selection.
- */
-
 import type { BenchmarkTarget, ModelAggregate } from '../../benchmark/campaign-types.ts';
 import { buildTargetKey, targetKeyFromTarget, targetLabel } from '../../benchmark/model-key.ts';
 import type { BenchmarkPreset, BenchmarkRun, SuiteId, TestResult } from '../../benchmark/types.ts';
@@ -274,7 +270,5 @@ export function setScheduleTogglesDisabled(disabled: boolean): void {
 
 /** Match a saved run to a roster target key. */
 export function targetKeyForRun(run: BenchmarkRun): string {
-  // Campaign runs carry their roster row; provider/model hold the resolved binding,
-  // which differs from the roster row for served My Models targets.
   return run.targetKey?.trim() || buildTargetKey(run.provider.id, run.model.id);
 }

@@ -96,15 +96,12 @@ export function validateAccountInput(input) {
     pollingIntervalMinutes,
     folders: folders.length > 0 ? folders : DEFAULT_FOLDERS.slice(),
     signature: String(input.signature ?? '').slice(0, MAX_SIGNATURE_LENGTH),
-    // Optional AI-layer switches ride through only when explicitly provided,
-    // so an update that omits them cannot silently flip a stored preference.
     ...(input.followupTracking !== undefined
       ? { followupTracking: Boolean(input.followupTracking) }
       : {}),
     ...(input.styleProfileEnabled !== undefined
       ? { styleProfileEnabled: Boolean(input.styleProfileEnabled) }
       : {}),
-    // Inbox Primary/Social/Other tabs — default on; toggle only hides the UI.
     ...(input.categoryTabsEnabled !== undefined
       ? { categoryTabsEnabled: Boolean(input.categoryTabsEnabled) }
       : {}),
@@ -265,6 +262,7 @@ export async function updateEmailAccount(accountId, input, password) {
 }
 
 /**
+ * Close the live IMAP session first — an open socket (or Windows SQLite handle) would outlive the account.
  * @param {string} accountId
  */
 export async function deleteEmailAccount(accountId) {
@@ -296,8 +294,6 @@ export async function deleteEmailAccount(accountId) {
   }
 
   try {
-    // Drop the live IMAP session first — an open socket (or, on Windows, an
-    // open SQLite handle) would otherwise outlive the account.
     const { closeImapSession, stopIdleWatcher } = await import('./imap-session.js');
     await stopIdleWatcher(accountId);
     await closeImapSession(accountId);

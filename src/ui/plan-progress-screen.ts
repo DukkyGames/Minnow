@@ -1,7 +1,3 @@
-/**
- * Plan / Super Plan animated progress stepper — modeled on ResearchProgressPanel.
- */
-
 import { findLastPlanSavePath } from '../chat/plans/plan-from-history';
 import {
   SUPER_PLAN_STAGE_LABELS,
@@ -121,10 +117,7 @@ export function superPlanProgressLabel(state: SuperPlanState): string {
   return SUPER_PLAN_DISPLAY_STEPS[stepIndex]?.label ?? 'Planning in progress';
 }
 
-/**
- * Verbose one-line status for the Super Plan working screen:
- * pipeline position, exact stage, stage elapsed, and live turn activity.
- */
+/** Verbose one-line status for the Super Plan working screen: pipeline position, exact stage, stage elapsed, and live turn activity. */
 export function superPlanStageDetail(
   state: SuperPlanState,
   activity?: { phase?: PlanActivityPhase; currentTool?: string },

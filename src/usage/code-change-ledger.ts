@@ -164,7 +164,6 @@ function isChatHistoryReady(chat: Chat): boolean {
  * Used to show strip Undo only when rewinding would touch the working tree.
  */
 export function runHadCodeChanges(chat: Chat, run: TurnRunRecord): boolean {
-  // Undo runs against the active chat after hydrate; skip placeholder transcripts.
   if (!isChatHistoryReady(chat)) return false;
 
   const start = run.outputHistoryStart;
@@ -179,7 +178,6 @@ export function runHadCodeChanges(chat: Chat, run: TurnRunRecord): boolean {
     return false;
   }
 
-  // Fallback when output indices were not persisted (legacy sessions).
   const fork = run.forkHistoryIndex;
   for (let i = fork + 1; i < chat.history.length; i++) {
     const msg = chat.history[i];
@@ -196,9 +194,6 @@ export function runHadCodeChanges(chat: Chat, run: TurnRunRecord): boolean {
  * Sorted by total changes descending (most-changed first).
  */
 export function getPerFileChangeSummary(chat: Chat): FileChangeSummary[] {
-  // Sidebar listing paints every chat on boot. Unique file counts live in
-  // tool rows, which summaries omit — return [] so +/− can still come from
-  // persisted codeChangeTotals without tripping the lazy-history trap.
   if (!isChatHistoryReady(chat)) return [];
 
   const byPath = new Map<string, FileChangeSummary>();

@@ -1,6 +1,3 @@
-/**
- * Regenerate multimodal-probe-image.ts from multimodal-probe-fish.png.
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

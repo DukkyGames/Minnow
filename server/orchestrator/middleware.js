@@ -1,39 +1,4 @@
-/**
- * P1-C — `/api/boards/*`. The engine's only public surface.
- *
- * Commands in by POST, events out by SSE. This endpoint set is what makes
- * "the renderer is a view" enforceable rather than aspirational: there is no
- * mutation verb the renderer can reach that is not a command the engine chose to
- * expose.
- *
- * | Method | Path                                | Purpose                                   |
- * | ------ | ----------------------------------- | ----------------------------------------- |
- * | POST   | `/api/boards`                       | Create from a plan path; 400 + ParseError[] |
- * | GET    | `/api/boards`                       | List                                      |
- * | GET    | `/api/boards/resume/pending`        | Boards held by the boot resume gate       |
- * | POST   | `/api/boards/resume/resolve`        | `{ decision: 'resume' | 'decline' }`      |
- * | GET    | `/api/boards/:id`                   | Current derived state                     |
- * | GET    | `/api/boards/:id/events`            | SSE stream                                |
- * | POST   | `/api/boards/:id/start`             | `{ concurrency }` (omit → default 2)      |
- * | POST   | `/api/boards/:id/stop`              | —                                         |
- * | POST   | `/api/boards/:id/concurrency`       | `{ n }`                                   |
- * | POST   | `/api/boards/:id/tasks/:taskId/start` | Manual single-task start                |
- * | POST   | `/api/boards/:id/tasks/:taskId/abandon` | Manual abandon (P9-H)                 |
- * | POST   | `/api/boards/:id/rerun`               | `{ taskIds? }` reopen failed work        |
- * | POST   | `/api/boards/:id/model`             | `{ providerId, id, reasoning? }` (P9-C)   |
- * | GET    | `/api/boards/:id/attempts/:attemptId` | One attempt's transcript (P9-D)         |
- * | GET    | `/api/boards/:id/tasks/:taskId/files` | Diffstat at the merge commit; `?path=` for one file's diff |
- * | PATCH  | `/api/boards/:id`                   | `{ name }` — rename (P9-E)                |
- * | DELETE | `/api/boards/:id`                   | Delete the board and its journal (P9-E)   |
- * | GET    | `/api/boards/:id/journal`           | Raw events; `?since=<seq>&limit=<n>`      |
- * | GET    | `/api/boards/:id/report`            | Persisted end-of-run markdown (P3-G)      |
- *
- * **No endpoint accepts board state.** Every write above is a command the engine
- * chose to expose, and each one turns into a journal append the engine performs
- * — including the PATCH, which journals `board.renamed` rather than assigning a
- * field. DELETE is the one exception to "everything is a journal append", and it
- * is the opposite of a state write: it removes the journal outright.
- */
+/** HTTP routes for /api/boards. */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -81,17 +46,11 @@ const MUTATING_ROUTES = new Set([
 
 /**
  * How a board's effector is built.
- *
- * The default stays scripted so the Phase 1 conformance suite needs no model.
- * Production calls {@link setEffectorFactory} from `server/runtime/middlewares.js`
- * with the runner effector (P2-F). Tests that need zero-model still inject
- * `createScriptedEffector`.
- *
- * The factory may receive the board id; scripted factories ignore it.
- *
  * @type {(boardId?: string) => import('./engine.js').Effector}
  */
 let makeEffector = () => createScriptedEffector({});
+
+// ── HTTP helpers ─────────────────────────────────────────────────────────────
 
 /**
  * @param {() => import('./engine.js').Effector} factory
@@ -128,9 +87,7 @@ async function readJsonBody(req) {
 }
 
 /**
- * Board state as JSON. `Map`s do not survive `JSON.stringify`, so the wire form
- * is the same canonical shape the snapshot uses — one serialisation, not two.
- *
+ * Board state as JSON.
  * @param {import('./core/types').BoardState} state
  * @returns {unknown}
  */
@@ -138,21 +95,12 @@ function serialiseState(state) {
   return stateToJSON(state);
 }
 
-// ---------------------------------------------------------------------------
-// Routes
-// ---------------------------------------------------------------------------
+// ── Routes ───────────────────────────────────────────────────────────────────
 
-/**
- * The route table, as data, so a test can enumerate it and assert nothing else
- * exists — in particular nothing that writes state.
- *
- * @type {Array<{ method: string, pattern: RegExp, name: string }>}
- */
+/** @type {Array<{ method: string, pattern: RegExp, name: string }>} */
 export const ROUTES = [
   { method: 'POST', pattern: /^\/api\/boards$/, name: 'create' },
   { method: 'GET', pattern: /^\/api\/boards$/, name: 'list' },
-  // Boot resume gate. Two segments, so neither collides with the `:id` routes
-  // below — but they must stay above them to keep that obvious.
   { method: 'GET', pattern: /^\/api\/boards\/resume\/pending$/, name: 'resumePending' },
   { method: 'POST', pattern: /^\/api\/boards\/resume\/resolve$/, name: 'resumeResolve' },
   { method: 'GET', pattern: /^\/api\/boards\/([^/]+)$/, name: 'get' },
@@ -217,15 +165,10 @@ export async function handleBoardsRequest(req, res, pathname) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (res.headersSent) {
-      // The SSE route writes its 200 before it can fail. Answering with a 500
-      // here throws ERR_HTTP_HEADERS_SENT on top of the original error, and the
-      // client then sees a crash rather than the failure that caused it. Say
-      // what happened on the stream that is already open, and close it.
       console.warn(`[orchestrator] ${pathname} failed after the response began:`, message);
       try {
         res.write(`event: error\ndata: ${JSON.stringify({ error: message })}\n\n`);
       } catch {
-        // The socket is gone; ending it is all that is left.
       }
       res.end();
       return true;
@@ -234,6 +177,8 @@ export async function handleBoardsRequest(req, res, pathname) {
   }
   return true;
 }
+
+// ── Dispatch ─────────────────────────────────────────────────────────────────
 
 /**
  * @param {{ name: string, params: string[] }} route
@@ -244,8 +189,6 @@ export async function handleBoardsRequest(req, res, pathname) {
 async function dispatch(route, req, res) {
   const [boardId, taskId] = route.params;
 
-  // MIN-752: a leaked id from another workspace must not start/stop against
-  // this root. Reads stay available so a stale view can still inspect state.
   if (MUTATING_ROUTES.has(route.name) && boardId) {
     if (!(await boardExists(boardId))) {
       return json(res, 404, { ok: false, error: 'no such board' });
@@ -282,8 +225,6 @@ async function dispatch(route, req, res) {
     }
 
     case 'resumePending': {
-      // Boards `load()` held because they were `running` when the process died.
-      // Scoped like `list` so another workspace's board is never offered here.
       const rows = [];
       for (const row of listPendingBoardResumes()) {
         const state = peekEngine(row.boardId)?.getState();
@@ -325,10 +266,6 @@ async function dispatch(route, req, res) {
 
     case 'journal': {
       if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
-      // Journals are kept forever by design, so a timeline drawer that opens
-      // against a six-hour run must be able to ask for a window rather than the
-      // whole history. `since` is a `seq`, matching the SSE frame ids and
-      // `Last-Event-ID`, so a view already holding events knows what to ask for.
       const query = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
       const since = Number(query.get('since'));
       const limit = Number(query.get('limit'));
@@ -336,8 +273,6 @@ async function dispatch(route, req, res) {
       if (Number.isSafeInteger(since) && since > 0) {
         events = events.filter((event) => Number(event.seq) > since);
       }
-      // The window is the *most recent* `limit`: a drawer opening on a long run
-      // wants the end of the story, not the beginning of it.
       const truncated = Number.isSafeInteger(limit) && limit > 0 && events.length > limit;
       if (truncated) events = events.slice(-limit);
       return json(res, 200, { ok: true, events, truncated });
@@ -349,9 +284,6 @@ async function dispatch(route, req, res) {
     case 'start': {
       if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
       const body = await readJsonBody(req);
-      // Omit means the product default. An explicit nonsense value is still 400 —
-      // silent coercion would hide a bad client. The fold stays at 1 until this
-      // event, so a GET before start must not look like N=2 is already live.
       const concurrency =
         body.concurrency === undefined
           ? DEFAULT_BOARD_CONCURRENCY
@@ -367,11 +299,6 @@ async function dispatch(route, req, res) {
           state: serialiseState(engine.getState()),
         });
       }
-      // P9-A. Refuse *before* answering. A missing model binding used to present
-      // as "Start does nothing": the board went to `running`, every tick's
-      // `effector.start()` rejected into a console.warn, and the only evidence
-      // was a server log. A precondition that can be checked up front is checked
-      // up front, so the failure lands on the button that caused it.
       try {
         await engine.preflight();
       } catch (err) {
@@ -393,8 +320,6 @@ async function dispatch(route, req, res) {
       if (!providerId || !id) {
         return json(res, 400, { ok: false, error: 'providerId and id are required' });
       }
-      // Header effort (low/medium/high) is journaled for the picker; attempts
-      // still only honour thinking on/off on TurnModel.
       const allowed = new Set(['on', 'off', 'low', 'medium', 'high']);
       const raw = typeof body.reasoning === 'string' ? body.reasoning : '';
       const reasoning = allowed.has(raw) ? raw : '';
@@ -422,9 +347,6 @@ async function dispatch(route, req, res) {
 
     case 'delete': {
       if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
-      // Dispose first. An engine left ticking would write the directory back the
-      // moment its safety-net timer fired, and the board would come back from
-      // the dead with a one-line journal.
       disposeEngines(boardId);
       const removed = await deleteBoard(boardId);
       return json(res, removed ? 200 : 404, {
@@ -437,23 +359,18 @@ async function dispatch(route, req, res) {
       if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
       const query = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
       const limit = Number(query.get('limit'));
-      // `taskId` is the second capture on this route; the attempt id rides in it.
       const transcript = await readTranscript(boardId, taskId, {
         ...(Number.isSafeInteger(limit) && limit > 0 ? { limit } : {}),
       });
       return json(res, 200, { ok: true, attemptId: taskId, ...transcript });
     }
 
-    // What a task changed, read from git rather than from the journal. A read
-    // and only a read; nothing here reaches `plan()` or `derive()`.
     case 'taskFiles': {
       if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
       const engine = await getEngine(boardId, () => makeEffector(boardId));
       const task = engine.getState().tasks.get(taskId);
       if (!task) return json(res, 404, { ok: false, error: 'no such task' });
       const sha = task.mergedSha;
-      // Not merged yet, so there is no commit to diff. The declared footprint
-      // is already in the state the renderer holds; it does not need fetching.
       if (!sha) return json(res, 200, { ok: true, taskId, sha: null, source: 'planned' });
 
       const query = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
@@ -473,9 +390,6 @@ async function dispatch(route, req, res) {
         ok: true,
         taskId,
         sha,
-        // `merged` means the numbers came from the commit. A merge whose diff
-        // git could not produce falls back to the plan rather than claiming
-        // the task changed nothing.
         source: stats ? 'merged' : 'planned',
         ...(stats
           ? {
@@ -575,16 +489,10 @@ function normaliseConcurrency(value) {
   return n;
 }
 
-// ---------------------------------------------------------------------------
-// Create
-// ---------------------------------------------------------------------------
+// ── Handlers ─────────────────────────────────────────────────────────────────
 
 /**
  * Create a board from a plan file.
- *
- * A plan that does not parse is a **400 with the `ParseError[]`**, not a 500 and
- * not a board with silently dropped tasks. The line numbers are the point.
- *
  * @param {import('node:http').IncomingMessage} req
  * @param {import('node:http').ServerResponse} res
  * @returns {Promise<void>}
@@ -597,10 +505,6 @@ async function createFromPlan(req, res) {
   /** @type {string} */
   let markdown;
   try {
-    // Inline markdown is for tests and converters. Otherwise the path is
-    // workspace-relative — `fs.readFile(planPath)` against process.cwd() is
-    // why typing documentation/plans/… failed whenever the workspace was not
-    // the server's working directory.
     markdown =
       typeof body.markdown === 'string'
         ? body.markdown
@@ -664,21 +568,10 @@ function deriveBoardId(requested, planName, planPath) {
   return slug || 'board';
 }
 
-// ---------------------------------------------------------------------------
-// SSE
-// ---------------------------------------------------------------------------
+// ── Events stream ────────────────────────────────────────────────────────────
 
 /**
  * Stream a board's events.
- *
- * On connect the client gets one `snapshot` frame carrying the current derived
- * state and the `seq` it is current as of, then every subsequent event. A client
- * that reconnects sends `Last-Event-ID` and receives exactly the tail from that
- * `seq` — **never a re-fold from event zero**.
- *
- * Every frame's `id:` is the event `seq`, which is what makes `Last-Event-ID`
- * work with no extra bookkeeping.
- *
  * @param {import('node:http').IncomingMessage} req
  * @param {import('node:http').ServerResponse} res
  * @param {string} boardId
@@ -716,14 +609,8 @@ async function streamEvents(req, res, boardId) {
 
   const engine = await getEngine(boardId, () => makeEffector(boardId));
 
-  // Subscribe *before* taking the baseline, buffering whatever arrives while it
-  // is being taken. Reading first and subscribing after leaves a window — today
-  // it happens to be free of `await`s, but that is a property of the current
-  // code rather than of the design, and an event dropped there is not recovered
-  // by anything: the client would sit on a permanently stale board.
   /** @type {Record<string, unknown>[]} */
   let buffered = [];
-  /** Highest seq already sent. -1 until the baseline is established. */
   let sentThrough = -1;
 
   const deliver = (event) => {
@@ -732,26 +619,19 @@ async function streamEvents(req, res, boardId) {
       buffered.push(event);
       return;
     }
-    if (seq <= sentThrough) return; // already covered by the baseline
+    if (seq <= sentThrough) return;
     sentThrough = seq;
     if (!send('event', event, seq)) cleanup();
   };
   const unsubscribe = engine.subscribe(deliver);
-  // Live tokens/tools are a parallel stream, not journal lines. No `id:` so a
-  // reconnect's Last-Event-ID cannot skip a real event or treat a token as one.
   const unsubscribeLive = subscribeLive(boardId, (payload) => {
     if (!send('live', payload)) cleanup();
   });
-  // P9-A. Failures that stop work from *starting* are deliberately not journaled
-  // — a start that never happened is not a completed side effect, and putting it
-  // in the fold would make replay disagree with reality. No `id:` either, for the
-  // same reason as `live`: a reconnect must not treat one as a journal seq.
   const unsubscribeErrors = subscribeErrors(boardId, (payload) => {
     if (!send('error', payload)) cleanup();
   });
 
   if (resumeFrom > 0) {
-    // Resuming: just the tail the client missed.
     const events = await readEvents(boardId);
     let highest = resumeFrom;
     for (const event of events) {
@@ -762,25 +642,16 @@ async function streamEvents(req, res, boardId) {
     }
     sentThrough = highest;
   } else {
-    // `seq` and `state` come from the engine together. Deriving the seq from a
-    // separate journal read could claim the snapshot is current as of an event
-    // the state does not contain, and a reconnect would then skip it forever.
     const state = engine.getState();
     const seq = engine.getHighestSeq();
     send('snapshot', { seq, state: serialiseState(state) }, seq);
     sentThrough = seq;
   }
 
-  // Flush what arrived while the baseline was being taken. Synchronous, so no
-  // further event can interleave with it.
   const pending = buffered;
   buffered = [];
   for (const event of pending) deliver(event);
 
-  // Whatever is failing to start right now, for a client that connected after
-  // the frame that said so. Error frames are live-only, so without this a window
-  // opened mid-failure shows a board reading `running` with nothing happening and
-  // no explanation — the exact symptom P9-A exists to abolish.
   for (const failure of engine.getStartFailures()) {
     send('error', {
       boardId,
@@ -804,15 +675,12 @@ async function streamEvents(req, res, boardId) {
     if (closed) return;
     closed = true;
     clearInterval(heartbeat);
-    // Drop the subscription *and* the reference to the response, so a dead
-    // socket cannot keep the board's event stream alive through this closure.
     unsubscribe();
     unsubscribeLive();
     unsubscribeErrors();
     try {
       res.end();
     } catch {
-      // Already gone.
     }
   }
 
@@ -822,7 +690,7 @@ async function streamEvents(req, res, boardId) {
   res.on('error', cleanup);
 }
 
-// ---------------------------------------------------------------------------
+// ── Middleware ───────────────────────────────────────────────────────────────
 
 /** Connect-style middleware. */
 export function createBoardsMiddleware() {

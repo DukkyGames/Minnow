@@ -1,8 +1,3 @@
-/**
- * Collapsible reasoning UI: collapsed "Thinking…" indicator while streaming,
- * expand-to-read full prose; per-message toggle after the assistant reply completes.
- */
-
 import { resolveChatMount } from './chat-mount';
 import { splitThinkingSegments } from '../api/reasoning';
 import { formatThinkingDuration } from './thinking-duration';
@@ -16,10 +11,7 @@ export interface ThoughtPhaseCallbacks {
   onReasoningEnded?: () => void;
 }
 
-/**
- * Controller for one user send: accumulates reasoning internally, shows a compact
- * collapsed indicator by default, and reveals prose only when the user expands.
- */
+/** Controller for one user send: accumulates reasoning internally, shows a compact collapsed indicator by default, and reveals prose only when the user expands. */
 export class ThoughtBubbleController {
   /** Segments finalized by `\n\n` or by `endReasoningPhase` / `flushOpen`. */
   private finalizedSegments: string[] = [];
@@ -73,10 +65,7 @@ export class ThoughtBubbleController {
     this.anthropicThinkingSignature = null;
   }
 
-  /**
-   * Point the controller at the active assistant row (e.g. after a tool round
-   * replaces the streaming bubble wrapper).
-   */
+  /** Point the controller at the active assistant row (e.g. after a tool round replaces the streaming bubble wrapper). */
   setAssistantWrap(wrap: HTMLElement): void {
     this.assistantWrap = wrap;
     if (this.stageEl && !this.stageEl.isConnected) {
@@ -105,9 +94,7 @@ export class ThoughtBubbleController {
     }
   }
 
-  /** Append streamed reasoning characters; splits on `\n\n` into discrete thoughts.
-   * Follow-scroll is owned by `createChatTurnEventPainter` (MIN-729), not here.
-   */
+  /** Append streamed reasoning characters; splits on `\n\n` into discrete thoughts. */
   appendReasoningDelta(delta: string): void {
     if (this.disposed || !delta) return;
     this.invalidateJoinedDisplayCache();
@@ -131,8 +118,6 @@ export class ThoughtBubbleController {
 
     this.ensureThinkingPanel();
     this.syncFlowContent();
-    // Stream follow-scroll is owned by createChatTurnEventPainter (MIN-729) so a
-    // thinking burst is one layout per paint tick, not one per delta.
   }
 
   /** Store Anthropic signature_delta for replay on later tool-loop turns. */
@@ -147,10 +132,7 @@ export class ThoughtBubbleController {
     return this.anthropicThinkingSignature?.trim() || undefined;
   }
 
-  /**
-   * Call when the model starts streaming normal `content` for this phase:
-   * flushes any open reasoning, removes the live stage from the DOM.
-   */
+  /** Call when the model starts streaming normal `content` for this phase: flushes any open reasoning, removes the live stage from the DOM. */
   endReasoningPhase(): void {
     if (this.disposed || this.reasoningPhaseEnded) return;
     this.reasoningPhaseEnded = true;
@@ -193,10 +175,6 @@ export class ThoughtBubbleController {
     return splitThinkingSegments(raw);
   }
 
-  /**
-   * Return reasoning segments for a completed assistant row, then reset so the next
-   * stream in the same user send does not duplicate thoughts on a later message.
-   */
   consumePersistedSegments(): string[] {
     const segments = this.getSegmentsNormalized();
     this.finalizedSegments = [];
@@ -291,7 +269,6 @@ export class ThoughtBubbleController {
       this.flowEl = flow;
       this.flowTextEl = pre;
 
-      // Live thinking row owns the indicator; hide the generic stream-status row.
       const streamStatus = this.assistantWrap.querySelector('.stream-status');
       streamStatus?.classList.add('hidden');
 
@@ -343,23 +320,12 @@ export class ThoughtBubbleController {
   }
 }
 
-/**
- * Resolve the mount that holds the `.msg` rows owning `el` (the element whose
- * children are the message rows). Returns null when `el` is not inside a `.msg`.
- */
+/** Resolve the mount that holds the `.msg` rows owning `el` (the element whose children are the message rows). */
 export function thoughtsScopeFromEl(el: HTMLElement): HTMLElement | null {
   return el.closest('.msg')?.parentElement ?? null;
 }
 
-/**
- * Enforce the single-pulse invariant: at most one `.thoughts-caret` animates —
- * always the most recent in DOM order (the live "Thinking…" stage while
- * reasoning is active, otherwise the newest settled "Thought for" toggle).
- * Expanded carets never pulse.
- *
- * `scope` is the mount holding the `.msg` rows; when null it falls back to the
- * active chat mount.
- */
+/** Enforce the single-pulse invariant: at most one `.thoughts-caret` animates — always the most recent in DOM order (the live "Thinking…" stage while reasoning is active, otherwise the newest settled "Thought for" toggle). */
 export function syncThoughtsCaretPulse(scope: HTMLElement | null): void {
   const root = scope ?? resolveChatMount();
   if (!root) return;
@@ -373,22 +339,13 @@ export function syncThoughtsCaretPulse(scope: HTMLElement | null): void {
   }
 }
 
-/**
- * Renders the "Thoughts" control and expandable flow above the assistant bubble.
- * Skips when there are no segments. Idempotent if already present.
- */
+/** Renders the "Thoughts" control and expandable flow above the assistant bubble. */
 export interface ThoughtsToggleOptions {
   expanded?: boolean;
   durationMs?: number;
-  /**
-   * Whether the collapsed caret pulses. Defaults to false — settled "Thought for
-   * X.Xs" toggles stay static; only the current reasoning indicator animates.
-   */
+  /** Whether the collapsed caret pulses. */
   pulse?: boolean;
-  /**
-   * Override the collapsed toggle label (e.g. live "Thinking…").
-   * When omitted, uses duration ("Thought for …") or the default "Thoughts".
-   */
+  /** Override the collapsed toggle label (e.g. live "Thinking…"). */
   label?: string;
 }
 

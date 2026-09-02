@@ -1,10 +1,3 @@
-/**
- * Issues command-palette source.
- *
- * Registered while the Issues app (or Code embed) is open, matching Source
- * Control: one palette, surface verbs only when they can run.
- */
-
 import type { Command } from './command-registry';
 import type { IssuesGroupBy } from '../issues/grouping';
 import { ISSUES_GROUP_BY_OPTIONS } from '../issues/grouping';

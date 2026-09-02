@@ -1,16 +1,3 @@
-/**
- * CDP-backed element picking for cross-origin preview guests (MIN-370 P7).
- *
- * `execJs` script injection is undesirable/blocked on arbitrary external sites (CSP, sandboxing).
- * This attaches Chrome DevTools Protocol directly to the guest `WebContents` — hover highlight via
- * `Overlay.setInspectMode`, node geometry via `DOM.getBoxModel`, computed styles via
- * `CSS.getComputedStyleForNode` — with no script ever injected into the page. Only reachable from
- * the Electron main process; the iframe fallback keeps its existing coordinate-only degradation.
- *
- * Isolated on purpose: nothing else in preview-host.ts depends on this module, so a CDP
- * regression can't take down the rest of the preview channel.
- */
-
 import type { WebContents } from 'electron';
 import type { CdpPickedElement } from './preview-cdp-adapt.js';
 import { fetchCdpNodeAsPicked, type DebuggerLike } from './preview-cdp-element-at-point.js';
@@ -24,18 +11,8 @@ const HIGHLIGHT_CONFIG = {
   showInfo: true,
 };
 
-/** App accent (#9ec5a7) — matches the same-origin picker's in-guest hover outline. */
 const SELECTION_OUTLINE_COLOR = '#9ec5a7';
 
-/**
- * Persistent "selected" indicator, drawn into the page itself rather than via the CDP Overlay
- * layer. On a cross-origin guest the DOM SVG overlay markers are occluded by the native
- * WebContentsView, and a CDP `Overlay.highlightNode` is cleared the moment `searchForNode` inspect
- * mode redraws on hover — so neither is visible. Marking the element with a real CSS outline via
- * CSSOM paints on top of page content, persists across hovers, accumulates for multi-select, and
- * is CSP-safe (programmatic `.style` writes are not governed by `style-src`). Keyed off the
- * `data-mn-uid` the pick already stamps on the node.
- */
 function markSelectedScript(uid: number): string {
   return `(() => {
     const el = document.querySelector('[data-mn-uid=${JSON.stringify(String(uid))}]');
@@ -47,7 +24,6 @@ function markSelectedScript(uid: number): string {
   })()`;
 }
 
-/** Undo every {@link markSelectedScript} outline when the session ends. */
 const CLEAR_SELECTION_SCRIPT = `(() => {
   document.querySelectorAll('[data-mn-selected]').forEach((el) => {
     el.removeAttribute('data-mn-selected');
@@ -57,17 +33,12 @@ const CLEAR_SELECTION_SCRIPT = `(() => {
   return true;
 })()`;
 
-/** Debugger plus message subscription used by the persistent pick session. */
 interface PickDebuggerLike extends DebuggerLike {
   on(event: 'message', listener: (event: unknown, method: string, params: any) => void): unknown;
   removeListener(event: 'message', listener: (...args: unknown[]) => void): unknown;
 }
 
-/**
- * Attach CDP to `wc` and start native hover/click element picking. Resolves once the inspect
- * overlay is armed; `onPick` fires (possibly many times) as the user clicks elements; `onError`
- * fires for non-fatal per-pick failures (the session stays alive).
- */
+// Prime the DOM tree, then re-arm inspect mode after every click.
 export async function enableCdpPicking(
   wc: WebContents,
   onPick: (picked: CdpPickedElement) => void,
@@ -86,33 +57,23 @@ export async function enableCdpPicking(
   await dbg.sendCommand('Overlay.enable');
   await dbg.sendCommand('Runtime.enable');
 
-  // The DOM agent rejects backendNodeId resolution (DOM.getBoxModel /
-  // DOM.pushNodesByBackendIdsToFrontend) with "Document needs to be requested first" until the
-  // tree has been fetched once. Overlay hover highlighting works without it, so the failure only
-  // surfaces on the first click. Prime it now, and re-prime whenever the document is invalidated
-  // (full navigation, or an SPA route swap that fires DOM.documentUpdated).
   const requestDocument = async (): Promise<void> => {
     try {
       await dbg.sendCommand('DOM.getDocument', { depth: -1, pierce: true });
     } catch {
-      /* guest mid-navigation — the next inspect/documentUpdated re-primes it */
     }
   };
   await requestDocument();
 
-  // `searchForNode` is one-shot: Chromium drops back to `mode: 'none'` after each click, so the
-  // Select tool (which stays armed for repeated picks) would go dead after the first element.
-  // Re-arm it at enable and after every pick.
   let disabled = false;
   const armInspectMode = async (): Promise<void> => {
-    if (disabled) return; // a pick's .finally() must not re-arm after the session was torn down
+    if (disabled) return;
     try {
       await dbg.sendCommand('Overlay.setInspectMode', {
         mode: 'searchForNode',
         highlightConfig: HIGHLIGHT_CONFIG,
       });
     } catch {
-      /* guest may be gone or the session tearing down */
     }
   };
   await armInspectMode();
@@ -124,11 +85,9 @@ export async function enableCdpPicking(
     try {
       await dbg.sendCommand('Runtime.evaluate', { expression: markSelectedScript(uid) });
     } catch {
-      /* node gone / guest navigated — the missing outline is non-fatal */
     }
   };
 
-  /** Resolve + forward a clicked node. Returns the pick's uid, or null when nothing was picked. */
   async function handleInspectNode(backendNodeId: number): Promise<number | null> {
     try {
       const uid = nextUid;
@@ -149,9 +108,6 @@ export async function enableCdpPicking(
 
   const onInspect = async (backendNodeId: number): Promise<void> => {
     const uid = await handleInspectNode(backendNodeId);
-    // Re-arm inspect mode so the next element is still selectable, then outline the just-picked
-    // node in-page so there's a visible "selected" confirmation (the CDP overlay/DOM-marker layers
-    // are both invisible on a cross-origin native guest).
     await armInspectMode();
     if (uid != null) await showSelectionHighlight(uid);
   };
@@ -160,8 +116,6 @@ export async function enableCdpPicking(
     if (method === 'Overlay.inspectNodeRequested' && typeof params?.backendNodeId === 'number') {
       void onInspect(params.backendNodeId);
     } else if (method === 'DOM.documentUpdated') {
-      // The frontend node cache was invalidated (navigation / SPA route swap). Re-request the
-      // tree so the next click can still resolve its backendNodeId.
       void requestDocument();
     }
   };
@@ -178,17 +132,14 @@ export async function enableCdpPicking(
           highlightConfig: {},
         });
         await dbg.sendCommand('Overlay.hideHighlight');
-        // Strip the in-page selection outlines we painted so the guest is left clean.
         await dbg.sendCommand('Runtime.evaluate', { expression: CLEAR_SELECTION_SCRIPT });
       } catch {
-        /* guest may already be gone */
       }
       if (wc.isDestroyed()) return;
       if (dbg.isAttached()) {
         try {
           dbg.detach();
         } catch {
-          /* already detached by Electron (e.g. devtools opened) */
         }
       }
     },

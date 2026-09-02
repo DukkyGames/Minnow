@@ -1,7 +1,3 @@
-/**
- * Sidebar per-chat /loop indicator; spins while at least one loop is unpaused.
- */
-
 import { getActiveLoops, sessionState } from '../state/sessions';
 import type { Chat } from '../types';
 import { createIcon } from './icon';

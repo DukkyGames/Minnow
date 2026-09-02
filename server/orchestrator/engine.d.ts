@@ -40,8 +40,7 @@ export interface AttemptEnd {
 }
 
 /**
- * Fold + scheduler + the predicates a tick calls. Boards pass `boardGraph`.
- * A second graph supplies its own fold/plan; board-only hooks are omitted.
+ * Fold + scheduler + the predicates a tick calls.
  */
 export interface Graph {
   foldInto(state: unknown, events: Iterable<unknown>): unknown;

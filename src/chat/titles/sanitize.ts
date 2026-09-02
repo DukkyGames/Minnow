@@ -1,7 +1,3 @@
-/**
- * Normalize raw model output into a sidebar-safe chat title.
- */
-
 import { AUTO_TITLE_MAX_LEN } from '../../constants';
 
 /** Model outputs that signal reasoning instead of a real title (start-anchored). */
@@ -46,13 +42,10 @@ export function normalizeTitle(raw: string): string | null {
   let text = raw.trim();
   if (!text) return null;
 
-  // Remove markdown code fence markers.
   text = text.replace(/```+/g, '').trim();
 
-  // Drop common prefixes models add despite instructions.
   text = text.replace(/^title:\s*/i, '').trim();
 
-  // Collapse whitespace and trim wrapping quotes.
   text = text.replace(/\s+/g, ' ').trim();
   text = text.replace(/^["'`]+|["'`]+$/g, '').trim();
   text = text.replace(/\.$/, '').trim();

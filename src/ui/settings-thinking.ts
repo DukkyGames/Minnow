@@ -1,6 +1,3 @@
-/**
- * Settings → Thinking — global default and thinking budget.
- */
 
 import '../styles/settings-general.css';
 import '../styles/settings-thinking.css';

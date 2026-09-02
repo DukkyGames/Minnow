@@ -1,8 +1,3 @@
-/**
- * Shared types for Brain knowledge-graph and call-graph renderers.
- */
-
-/** Visual / semantic kind for a graph vertex. */
 export type GraphNodeKind = 'page' | 'tag' | 'symbol';
 
 /** Edge relationship between graph vertices. */

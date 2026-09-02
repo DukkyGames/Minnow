@@ -1,7 +1,3 @@
-/**
- * Theme preference resolution (re-exports from src/theme.ts for tests and legacy imports).
- */
-
 export {
   THEME_STORAGE_KEY,
   getFollowSystem,

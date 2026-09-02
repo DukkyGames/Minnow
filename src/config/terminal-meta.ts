@@ -261,9 +261,7 @@ export function saveTerminalMetaKeepalive(patch: Partial<TerminalMeta>): void {
       }),
       keepalive: true,
     });
-  } catch {
-    /* unload */
-  }
+  } catch {}
 }
 
 /** Save terminal layout for the workspace being switched away from. */

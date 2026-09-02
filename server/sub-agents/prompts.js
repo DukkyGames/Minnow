@@ -1,15 +1,3 @@
-/**
- * Type prompt for a sub-agent attempt (P8-D / MIN-757).
- *
- * Maps `systemPromptPath` / shipped type files onto `runTurn({ systemPrompt })`.
- * Lives here — not in the graph — because reading a file is I/O, and the fold
- * must stay a pure function of the journal.
- *
- * `workAgentId` is a config pointer at a work-agent prompt file. The server
- * does not import renderer prompt loaders; it reads the same markdown the
- * prompt-file API would have returned.
- */
-
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,8 +16,6 @@ const PROJECT_ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url
  */
 export async function loadSubAgentSystemPrompt(typeId, typeRow, task, profile = 'full') {
   const base = await resolveBasePrompt(typeId, typeRow, profile);
-  // The report tool is how this attempt produces a verdict. Saying so here
-  // keeps the runner from having to know what a sub-agent is.
   return `${base}
 
 ---

@@ -1,10 +1,3 @@
-/**
- * DOM for the Load-tab launch memory instrument.
- *
- * The Load tab replaces this cluster on each slider tick (the range inputs
- * stay mounted). Fills are instant: no 0→value animation on a reused node.
- */
-
 import {
   buildLaunchMemoryMeterView,
   type LaunchMemoryMeterInput,
@@ -22,7 +15,6 @@ function meterRow(row: LaunchMemoryMeterRow): HTMLElement {
   wrap.append(kind, value);
 
   const track = el('div', 'models-launch-memory__track');
-  // Occupancy is only a meter when we have a hardware budget to compare against.
   if (row.budgetGb != null && row.ratio != null) {
     track.setAttribute('role', 'meter');
     track.setAttribute('aria-label', row.label);

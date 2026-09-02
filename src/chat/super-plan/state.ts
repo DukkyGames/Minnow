@@ -1,7 +1,3 @@
-/**
- * Super Plan state persistence helpers — read/write {@link Chat.superPlan}.
- */
-
 import { normalizeOrchestratePlanPath } from '../plans/plan-path';
 import { findGroupById } from '../../state/chat-groups';
 import { findChatById, scheduleSaveSessions, touchChat } from '../../state/sessions';
@@ -32,6 +28,8 @@ export {
   superPlanResearchPath,
   superPlanSpecPath,
 } from './state-paths';
+
+// ── Create ───────────────────────────────────────────────────────────────────
 
 /** @deprecated Prompt-derived slugs; tests only — use {@link createInterimPlanSlug}. */
 export function slugFromSuperPlanPrompt(prompt: string): string {
@@ -75,6 +73,8 @@ export function createSuperPlanState(prompt: string): SuperPlanState {
 export function detectUiInvolvement(text: string): boolean {
   return planInvolvesUi(text);
 }
+
+// ── Access ───────────────────────────────────────────────────────────────────
 
 export function getSuperPlanState(chat: Chat): SuperPlanState | undefined {
   return chat.superPlan;
@@ -134,6 +134,8 @@ async function workspaceFileExists(path: string): Promise<boolean> {
 async function probePlanFileExists(planPath: string): Promise<boolean> {
   return workspaceFileExists(planPath);
 }
+
+// ── Reconcile ────────────────────────────────────────────────────────────────
 
 /**
  * After the build spec is confirmed, rename artifacts from the interim slug to a title-based slug.
@@ -253,15 +255,12 @@ export function resetSuperPlanStage(chat: Chat, stageId: SuperPlanStageId): void
   scheduleSaveSessions();
 }
 
+// ── Pause ────────────────────────────────────────────────────────────────────
+
 export function setSuperPlanPaused(chat: Chat, paused: boolean): SuperPlanState {
   return patchSuperPlanState(chat, { paused });
 }
 
-/**
- * True while the sequential Super Plan pipeline owns this chat's turn slot.
- * Composer follow-up queue drains are deferred so they cannot race stage turns
- * (e.g. grill → spec_confirm right after the interview ends).
- */
 export function isSuperPlanPipelineOwningChatTurns(chat: Chat): boolean {
   const sp = chat.superPlan;
   if (!sp || sp.cancelled || sp.paused) return false;

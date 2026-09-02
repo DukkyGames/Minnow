@@ -31,6 +31,8 @@ interface OverlayState {
 
 let overlay: OverlayState | null = null;
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -70,6 +72,8 @@ function renderRow(entry: ActivityLogEntry, isLatest: boolean): string {
     ${urlHtml}
   </div>`;
 }
+
+// ── DOM ──────────────────────────────────────────────────────────────────────
 
 function ensureOverlayDom(options: ResearchActivityOverlayOptions): OverlayState {
   if (overlay) {
@@ -240,6 +244,8 @@ function stopOverlayTimer(): void {
     overlay.timerInterval = null;
   }
 }
+
+// ── Open close ───────────────────────────────────────────────────────────────
 
 /** Open the centered activity overlay bound to a log buffer. */
 export function openResearchActivityOverlay(

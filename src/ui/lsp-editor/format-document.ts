@@ -1,7 +1,3 @@
-/**
- * Format document / selection via LSP textDocument/formatting (explicit user action).
- */
-
 import { indentUnit } from '@codemirror/language';
 import type { EditorView } from '@codemirror/view';
 import { fetchLspDocumentFormat } from '../../lsp/completion-client';

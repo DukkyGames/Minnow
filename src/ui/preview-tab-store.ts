@@ -1,7 +1,3 @@
-/**
- * In-memory tab model for the preview browser panel (MIN-224).
- */
-
 import { randomUUID } from '../lib/random-id.ts';
 import {
   getFilePanelState,
@@ -128,10 +124,7 @@ export function findOldestBackgroundPreviewTab(): PreviewTabState | null {
   return oldest;
 }
 
-/**
- * Open a tab when below capacity, or return the oldest background tab to evict first.
- * Callers must `closePreviewTabUi(evictedId)` before retrying when only evictedId is set.
- */
+/** Open a tab when below capacity, or return the oldest background tab to evict first. */
 export function openPreviewTabWithCapacity(
   source?: PreviewSource | null,
   options?: { evict?: boolean },

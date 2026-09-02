@@ -1,7 +1,3 @@
-/**
- * In-flight intent resolve anchors — mapped through transactions while awaiting the model.
- */
-
 import type { Transaction } from '@codemirror/state';
 import { changeIntersectsRegion } from './intent-context';
 

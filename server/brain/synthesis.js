@@ -1,7 +1,3 @@
-/**
- * LLM fact extraction — writes wiki pages or enqueues proposals (brain store).
- */
-
 import { llmCall } from '../research/llm.js';
 import { loadAllPagesWithBodies } from './retrieve.js';
 import { createPage, loadBrainConfig, updatePage } from './store.js';
@@ -19,7 +15,8 @@ import {
   loadVectorStore,
 } from './vector-store.js';
 
-/** Recent message pairs included in extraction context. */
+// ── Extract ──────────────────────────────────────────────────────────────────
+
 export const CONTEXT_WINDOW = 6;
 
 export const EXTRACT_SYSTEM_PROMPT = `You are a knowledge extraction assistant. Analyze the conversation and extract ONLY durable knowledge worth recalling in future sessions. There are two tracks — extract from either or both.
@@ -54,7 +51,6 @@ Scope: "personal" or "workspace".
 
 Return ONLY valid JSON, no markdown fences.`;
 
-/** Patterns that indicate secrets — reject proposals containing these. */
 const SECRET_PATTERNS = [
   /\bsk-[a-zA-Z0-9]{10,}\b/,
   /\bBearer\s+[a-zA-Z0-9._-]{8,}\b/i,
@@ -76,7 +72,6 @@ export function containsSecretPatterns(text) {
 }
 
 /**
- * Parse LLM JSON array output; tolerates code fences and surrounding prose.
  * @param {string} raw
  * @returns {unknown[]}
  */
@@ -114,7 +109,6 @@ export function parseExtractionJson(raw) {
   return [];
 }
 
-/** Categories from the personal track — these land in the shared facts/ tree. */
 export const PERSONAL_CATEGORIES = new Set([
   'identity',
   'preference',
@@ -124,7 +118,6 @@ export const PERSONAL_CATEGORIES = new Set([
   'goal',
 ]);
 
-/** Categories from the project track — these default to the active workspace's pages. */
 export const PROJECT_CATEGORIES = new Set([
   'decision',
   'gotcha',
@@ -133,11 +126,9 @@ export const PROJECT_CATEGORIES = new Set([
   'reference',
 ]);
 
-/**
- * Body cap. Project knowledge needs room for symptom → cause → fix, which the
- * old single-sentence personal-fact shape could not hold.
- */
 export const FACT_BODY_MAX_CHARS = 400;
+
+// ── Facts ────────────────────────────────────────────────────────────────────
 
 /**
  * @param {unknown} row
@@ -157,8 +148,6 @@ export function normalizeExtractedFact(row) {
     ? category
     : 'fact';
 
-  // Project-knowledge categories describe the codebase, so they default to the
-  // workspace wiki; the older personal categories stay in the shared facts/ tree.
   const rawScope = String(r.scope ?? '').toLowerCase();
   const scope =
     rawScope === 'personal' || rawScope === 'workspace'
@@ -187,7 +176,6 @@ export function normalizeExtractedFact(row) {
   };
 }
 
-/** Slugify a title for pages/facts/<slug>.md filenames. */
 export function slugifyFactTitle(title) {
   const slug = String(title ?? 'untitled')
     .toLowerCase()
@@ -197,12 +185,9 @@ export function slugifyFactTitle(title) {
   return slug || 'untitled';
 }
 
-/**
- * Cosine similarity above which a new fact counts as a duplicate of an existing page.
- * Must stay high enough that same-topic updates ("prefers dark mode" → "prefers light
- * mode") are written and left to retireSupersededPages, not silently dropped here.
- */
 export const VECTOR_DUPLICATE_THRESHOLD = 0.92;
+
+// ── Duplicates ───────────────────────────────────────────────────────────────
 
 /**
  * @param {string} title
@@ -218,10 +203,6 @@ export async function isDuplicateMemory(title, body, existing, brainConfig, deps
 
   const emb = brainConfig.embeddings ?? {};
   if (emb.enabled && existing.length > 0) {
-    // Score each existing page directly against a similarity threshold. Top-k
-    // retrieval is the wrong tool here: it always returns ids once any page
-    // exists (no score cutoff, plus a recent/pinned fallback), which made every
-    // new fact a "duplicate" after the first page was written.
     try {
       const embedder = await (deps.getEmbedder ?? getEmbedder)(brainConfig);
       const store = await (deps.loadVectorStore ?? loadVectorStore)();
@@ -252,7 +233,6 @@ export async function isDuplicateMemory(title, body, existing, brainConfig, deps
         }
       }
     } catch {
-      /* embeddings unavailable — fall through to the keyword check */
     }
   }
 
@@ -267,19 +247,11 @@ export async function isDuplicateMemory(title, body, existing, brainConfig, deps
 }
 
 /**
- * Score every existing page against a query by raw cosine similarity.
- *
- * Deliberately NOT built on `retrieveMemoryBlockHybrid`: that path normalizes
- * scores against the batch max (the best hit is always 1.0) and falls back to
- * recent/pinned ids when nothing matches, so an absolute floor is meaningless
- * there. Linking and retirement need absolute similarity, so they score directly
- * the way `isDuplicateMemory` does.
- *
  * @param {string} query
  * @param {Array<{ meta: object, body: string }>} existing
  * @param {object} brainConfig
  * @param {{ getEmbedder?: typeof getEmbedder, embedTexts?: typeof embedTexts, loadVectorStore?: typeof loadVectorStore, getEntryVector?: typeof getEntryVector }} [deps]
- * @returns {Promise<Map<string, number>>} cosine keyed by page id; empty when embeddings are off or unavailable
+ * @returns {Promise<Map<string, number>>}
  */
 export async function scorePagesByCosine(query, existing, brainConfig, deps = {}) {
   /** @type {Map<string, number>} */
@@ -318,15 +290,12 @@ export async function scorePagesByCosine(query, existing, brainConfig, deps = {}
       scores.set(id, cosineSimilarity(queryVector, stored));
     }
   } catch {
-    /* embeddings unavailable — callers fall back to title overlap alone */
   }
 
   return scores;
 }
 
 /**
- * Linking thresholds for a brain config, defaulted for callers (and tests) that
- * pass a bare config without a `linking` block.
  * @param {object} brainConfig
  * @returns {typeof DEFAULT_LINKING_CONFIG}
  */
@@ -335,16 +304,6 @@ function linkingConfig(brainConfig) {
 }
 
 /**
- * Flatten recent messages into the transcript handed to the extraction LLM.
- *
- * The window is a parameter because callers disagree about how much context they
- * need: memory extraction wants a wide view to spot a decision and its reasoning,
- * skill extraction wants the whole procedure. Previously this hard-coded
- * CONTEXT_WINDOW internally, which silently re-sliced the skill extractor's
- * 12-message window back down to 6 — it never actually saw more than 6.
- *
- * Defaults reproduce the original behavior for any caller passing no options.
- *
  * @param {Array<{ role?: string, content?: string | unknown[] }>} messages
  * @param {{ window?: number, perMessageChars?: number, roles?: string[] }} [opts]
  * @returns {string}
@@ -373,12 +332,8 @@ export function formatMessagesForExtraction(messages, opts = {}) {
 }
 
 /**
- * Directory a fact belongs in: workspace-scoped project knowledge goes under the
- * active workspace, everything else into the shared facts/ tree. Falls back to
- * facts/ when there is no workspace open, so a scoped fact is never lost.
- *
  * @param {{ scope?: string }} fact
- * @returns {string} directory prefix, no trailing slash
+ * @returns {string}
  */
 export function synthesisFactDir(fact) {
   if (fact?.scope !== 'workspace') return 'facts';
@@ -390,15 +345,15 @@ export function synthesisFactDir(fact) {
   }
 }
 
+// ── Write pages ──────────────────────────────────────────────────────────────
+
 /**
- * Write a synthesized fact directly to the wiki.
  * @param {{ title: string, body: string, tags: string[], category?: string, scope?: string }} fact
- * @param {string[]} [similarTo] related page paths to record as frontmatter links
- * @param {{ dir?: string, source?: string }} [opts] override the target directory (defaults to scope routing) or page source
+ * @param {string[]} [similarTo]
+ * @param {{ dir?: string, source?: string }} [opts]
  */
 export async function writeSynthesisFactPage(fact, similarTo = [], opts = {}) {
   const dir = opts.dir ?? synthesisFactDir(fact);
-  // Category leads the tags so the wiki stays filterable without a schema change.
   const tags = fact.category
     ? [fact.category, ...(fact.tags ?? []).filter((t) => t !== fact.category)]
     : (fact.tags ?? []);
@@ -431,7 +386,6 @@ export async function writeSynthesisFactPage(fact, similarTo = [], opts = {}) {
   throw new Error('Could not allocate a unique fact page path');
 }
 
-/** Stop-words stripped when comparing fact titles for topic overlap. */
 export const TITLE_STOP = new Set([
   'the', 'a', 'an', 'is', 'are', 'was', 'were', 'of', 'in', 'on', 'at', 'to',
   'for', 'and', 'or', 'but', 'with', 'by', 'from', 'user', 'has', 'have',
@@ -450,7 +404,6 @@ export function titleKeywords(title) {
   );
 }
 
-/** Count keywords shared by two title keyword sets. */
 function sharedKeywordCount(kA, kB) {
   let shared = 0;
   for (const k of kA) if (kB.has(k)) shared++;
@@ -458,12 +411,6 @@ function sharedKeywordCount(kA, kB) {
 }
 
 /**
- * True when two fact titles share enough keywords to be about the same topic.
- *
- * Requires ≥2 shared keywords (or every keyword, for one-word titles) AND ≥50%
- * overlap against the smaller set. The old "≥1 shared word, ≥40%" rule retired
- * unrelated pages off a single generic word like "config" or "server".
- *
  * @param {string} titleA
  * @param {string} titleB
  * @returns {boolean}
@@ -479,23 +426,11 @@ export function titlesAreSameTopic(titleA, titleB) {
 }
 
 /**
- * After writing a new fact page, mark existing pages that cover the same topic as stale.
- *
- * Primary signal: title keyword overlap — catches semantic updates like "dark mode" → "light mode"
- * where the bodies differ but the topic (and most title keywords) are the same.
- * The old body-similarity approach was symmetric with isDuplicateMemory, so it never found
- * anything to retire (if old and new were different enough to write, they were different enough
- * to skip retirement too).
- *
- * Secondary signal: vector similarity when embeddings are enabled, floored at
- * `linking.retireMinCosine`. That floor sits above the link floor on purpose —
- * retirement is destructive, so it needs more evidence than drawing an edge.
- *
  * @param {{ title: string, body: string, category?: string }} newFact
  * @param {string} newRelPath
  * @param {Array<{ meta: object, body: string }>} existing
  * @param {object} brainConfig
- * @param {object} [deps] injected embedding deps, forwarded to scorePagesByCosine
+ * @param {object} [deps]
  */
 export async function retireSupersededPages(
   newFact,
@@ -510,7 +445,6 @@ export async function retireSupersededPages(
   /** @type {Map<string, string>} page id → why it was retired */
   const reasons = new Map();
 
-  // Title keyword overlap — primary retirement signal.
   for (const row of existing) {
     if (!row.meta?.id) continue;
     if (titlesAreSameTopic(newFact.title, row.meta.title)) {
@@ -518,7 +452,6 @@ export async function retireSupersededPages(
     }
   }
 
-  // Vector similarity — secondary signal when embeddings are on.
   const cosines = await scorePagesByCosine(
     `${newFact.title} ${newFact.body}`.trim(),
     existing,
@@ -539,33 +472,20 @@ export async function retireSupersededPages(
     if (row.meta.status === 'stale') continue;
     try {
       await updatePage(relPath, { status: 'stale', similarTo: [newRelPath] });
-      // Logged for one tuning iteration — remove once the thresholds settle.
       console.info(
         `[brain] retired ${relPath} superseded by ${newRelPath} (${reason})`,
       );
     } catch {
-      /* best-effort */
     }
   }
 }
 
 /**
- * Find existing pages genuinely related to a new fact, to record as `similarTo`.
- *
- * A page qualifies only if it clears an absolute bar: at least
- * `linking.minSharedTitleKeywords` shared title keywords, OR cosine similarity
- * at least `linking.minCosine`. Qualifying pages are ranked by
- * `shared + 2*cosine` and capped at `linking.maxLinks`.
- *
- * Returns `[]` when nothing qualifies. An orphan page is the correct outcome —
- * the old top-3-with-no-floor behavior linked every new page to whatever
- * happened to exist, which is what made the graph unreadable.
- *
  * @param {{ title: string, body: string }} fact
  * @param {Array<{ meta: object, body: string }>} existing
  * @param {object} brainConfig
- * @param {object} [deps] injected embedding deps, forwarded to scorePagesByCosine
- * @returns {Promise<string[]>} related page relPaths (excluding the new page)
+ * @param {object} [deps]
+ * @returns {Promise<string[]>}
  */
 export async function findRelatedPagePaths(fact, existing, brainConfig, deps = {}) {
   if (!fact.title && !fact.body) return [];
@@ -598,14 +518,9 @@ export async function findRelatedPagePaths(fact, existing, brainConfig, deps = {
     .map((row) => row.relPath);
 }
 
+// ── Synthesis ────────────────────────────────────────────────────────────────
+
 /**
- * Decide what happens to an extracted fact.
- *
- * Pure so the policy is testable without touching the wiki. The split exists
- * because a single `requireConfirmation` flag forced a bad trade: confirm
- * everything and the queue rots unreviewed, confirm nothing and hedged guesses
- * get written as fact. Confidence decides instead.
- *
  * @param {{ confidence?: number }} fact
  * @param {{ confidenceThreshold?: number, requireConfirmation?: boolean, autoWriteConfidence?: number }} cfg
  * @returns {'skip-low' | 'propose' | 'write'}
@@ -614,21 +529,13 @@ export function routeSynthesisFact(fact, cfg = {}) {
   const confidence = typeof fact?.confidence === 'number' ? fact.confidence : 0;
   const floor = cfg.confidenceThreshold ?? 0.6;
   if (confidence < floor) return 'skip-low';
-  // Explicit opt-in to review everything still wins.
   if (cfg.requireConfirmation === true) return 'propose';
   const autoWrite = cfg.autoWriteConfidence ?? 0.85;
   return confidence >= autoWrite ? 'write' : 'propose';
 }
 
 /**
- * Run fact extraction and write pages or enqueue pending proposals.
- * @param {{
- *   messages: Array<{ role?: string, content?: string | unknown[] }>,
- *   sourceChatId?: string,
- *   sourceExcerpt?: string,
- *   providerId?: string,
- *   modelId?: string,
- * }} input
+ * @param {{ messages: Array<{ role?: string, content?: string | unknown[] }>, sourceChatId?: string, sourceExcerpt?: string, providerId?: string, modelId?: string, }} input
  * @returns {Promise<{ memoryProposals: object[], pages: object[], skipped: string[] }>}
  */
 export async function runMemorySynthesis(input) {
@@ -645,8 +552,6 @@ export async function runMemorySynthesis(input) {
     return { memoryProposals: [], pages: [], skipped: ['no-model'] };
   }
 
-  // Wider than the personal-fact default: spotting a decision and the reasoning
-  // behind it needs more than the last three exchanges.
   const conversation = formatMessagesForExtraction(input.messages ?? [], {
     window: 20,
     perMessageChars: 700,
@@ -699,8 +604,6 @@ export async function runMemorySynthesis(input) {
       continue;
     }
 
-    // Dedupe and secret checks apply to both routes — a proposal that duplicates
-    // an existing page is just as useless as a duplicate write.
     if (pendingTitles.has(fact.title.toLowerCase())) {
       skipped.push('duplicate-in-batch');
       continue;
@@ -724,7 +627,6 @@ export async function runMemorySynthesis(input) {
       const written = await writeSynthesisFactPage(fact, similarTo);
       pendingTitles.add(fact.title.toLowerCase());
       pages.push(written.page);
-      // Retire prior pages that covered the same topic before adding the new one to existing.
       void retireSupersededPages(fact, written.relPath, existing, brainConfig);
       existing.push({ meta: written.page.meta, body: written.page.body });
     }

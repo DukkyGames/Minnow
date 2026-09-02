@@ -129,9 +129,7 @@ export class TtsStreamClient {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(JSON.stringify({ type: 'cancel' }));
-      } catch {
-        /* ignore */
-      }
+      } catch {}
     }
     this.close();
   }
@@ -142,9 +140,7 @@ export class TtsStreamClient {
     if (this.ws) {
       try {
         this.ws.close();
-      } catch {
-        /* ignore */
-      }
+      } catch {}
       this.ws = null;
     }
   }

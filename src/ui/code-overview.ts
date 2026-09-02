@@ -1,7 +1,3 @@
-/**
- * Code app Overview — instrumentation dashboard for live status and telemetry.
- */
-
 import '../styles/code-overview.css';
 import { iconHtml } from './icon';
 
@@ -59,10 +55,7 @@ export function isCodeOverviewOpen(): boolean {
   return Boolean(document.getElementById(ROOT_ID));
 }
 
-/**
- * Tear down code overview so sidebar navigation can repaint chat or board.
- * Syncs hash to #/app/code/chat when overview was open.
- */
+/** Tear down code overview so sidebar navigation can repaint chat or board. */
 export function dismissCodeOverviewForNavigation(): boolean {
   if (!isCodeOverviewOpen()) return false;
   closeCodeOverview({ skipNavigate: true, restoreChat: false });
@@ -512,7 +505,6 @@ function renderSessionRow(chat: Chat): HTMLButtonElement {
 
   btn.append(dot, main);
   btn.addEventListener('click', () => {
-    // switchChat closes the overview, updates the hash, and renders the target chat.
     switchChat(chat.id);
   });
   return btn;
@@ -566,7 +558,6 @@ function refreshSessionsPanel(): void {
   const host = document.getElementById('codeOverviewSessionsBody');
   if (!host || !sessionState) return;
 
-  // Board chats live in Orchestrate, not in the chats panel — and not on this dashboard either.
   const chats = getSidebarListedChatsForWorkspace(getWorkspacePath(), sessionState)
     .filter((c) => !isBoardOwnedChat(c))
     .slice(0, RECENT_SESSION_LIMIT);
@@ -1148,7 +1139,6 @@ function onHashChange(): void {
 
 function wireOverviewNavButtons(): void {
   const goOverview = (): void => {
-    // Toggle: close the dashboard when it is already open.
     if (isCodeOverviewOpen()) {
       void enterCodeChat();
       return;

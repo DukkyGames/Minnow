@@ -1,7 +1,3 @@
-/**
- * Secondary preview slot (Electron instance workspace-preview-secondary or iframe).
- */
-
 import type { PreviewSource } from '../state/file-panel';
 import { getPreviewTab, updatePreviewTabSource } from './preview-tab-store';
 import { resolvePreviewLoadUrl } from './preview-load-url';
@@ -84,7 +80,6 @@ function syncSecondaryUrlInputFromNavigation(url: string): void {
         return;
       }
     } catch {
-      /* fall through */
     }
   }
 
@@ -108,7 +103,6 @@ function commitSecondaryTabSourceFromNavigation(url: string, tabId: string): voi
       updatePreviewTabSource(tabId, { kind: 'workspace', path });
     }
   } catch {
-    /* ignore malformed URLs */
   }
 }
 
@@ -123,7 +117,6 @@ function goBackInSecondaryFrame(): void {
   try {
     secondaryFrame?.contentWindow?.history.back();
   } catch {
-    /* cross-origin history may be inaccessible */
   }
 }
 
@@ -131,7 +124,6 @@ function goForwardInSecondaryFrame(): void {
   try {
     secondaryFrame?.contentWindow?.history.forward();
   } catch {
-    /* cross-origin history may be inaccessible */
   }
 }
 
@@ -304,8 +296,6 @@ async function loadSecondaryElectron(tabId: string, url: string): Promise<void> 
   }
 
   if (api.tabs?.create) {
-    // Tab ops must name the secondary instance: the default instance belongs to the
-    // primary pane, so create/activate there switched the left pane to this tab.
     const listed = await api.tabs.list(WORKSPACE_PREVIEW_SECONDARY_INSTANCE);
     if (!listed.some((t) => t.id === tabId)) {
       await api.tabs.create(tabId, WORKSPACE_PREVIEW_SECONDARY_INSTANCE);
@@ -347,7 +337,6 @@ export async function renderSecondaryPreviewSlot(tabId: string | null): Promise<
   activeSecondaryTabId = tabId;
   syncSecondaryPreviewUrlInput(tab.source);
   const url = resolvePreviewLoadUrl(tab.source, undefined, getFileTreeListingWorkspaceRoot());
-  // Layout passes re-enter here; reloading the same URL would restart the guest page.
   if (loadedSecondaryUrl === url) return;
   loadedSecondaryUrl = url;
   if (usesElectron()) {

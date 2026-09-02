@@ -1,8 +1,3 @@
-/**
- * macOS Seatbelt (sandbox-exec) adapter — Phase 1 backend for MIN-553.
- * Argv wrapper pattern mirrors WSL: rewrite command/args after resolveOneShotSpawn.
- */
-
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,9 +7,6 @@ import { SANDBOX_UNAVAILABLE_REASON } from './unavailable.js';
 export const SANDBOX_EXEC_PATH = '/usr/bin/sandbox-exec';
 
 /**
- * Escape a path for a Seatbelt string literal.
- * Seatbelt only runs on macOS — normalize separators to `/` so profiles are
- * stable when unit-tested on Windows.
  * @param {string} value
  * @returns {string}
  */
@@ -25,7 +17,6 @@ export function seatbeltEscape(value) {
 }
 
 /**
- * Emit one `(subpath "…")` or `(literal "…")` per path (deduped).
  * @param {string[]} paths
  * @param {'subpath'|'literal'} kind
  * @returns {string[]}
@@ -42,9 +33,6 @@ function pathFilters(paths, kind) {
 }
 
 /**
- * Partition deny-read roots into directory subpaths vs exact file literals.
- * Uses CREDENTIAL_DENY_ENTRIES' `file` flag when the path ends with that relative segment.
- *
  * @param {string[]} denyReadRoots
  * @param {string} [home]
  * @returns {{ dirs: string[], files: string[] }}
@@ -68,7 +56,6 @@ export function partitionDenyReadPaths(denyReadRoots, home = '') {
       files.push(p);
       continue;
     }
-    // Fallback: treat paths ending in known credential filenames as literals
     const base = path.basename(p);
     if (base === 'config.json' || base === '.npmrc' || base === '.pypirc') {
       files.push(p);
@@ -80,9 +67,6 @@ export function partitionDenyReadPaths(denyReadRoots, home = '') {
 }
 
 /**
- * Render a Seatbelt profile for the given policy.
- * Allow-default + selective write/read denies so login shells (zsh -l) keep working.
- *
  * @param {import('./policy.js').SandboxPolicy} policy
  * @returns {string}
  */
@@ -143,9 +127,6 @@ ${networkRule}
 }
 
 /**
- * Wrap a resolved spawn target with sandbox-exec -p <profile>.
- * sandbox-exec stays the parent pid Node tracks, so killProcessTree still works.
- *
  * @param {{ command: string, args?: string[], shell?: boolean, cwd?: string, env?: NodeJS.ProcessEnv }} spawnTarget
  * @param {import('./policy.js').SandboxPolicy} policy
  * @returns {{ command: string, args: string[], shell: boolean, cwd?: string, env?: NodeJS.ProcessEnv }}
@@ -155,7 +136,6 @@ export function wrapWithSeatbelt(spawnTarget, policy) {
   const innerArgs = Array.isArray(spawnTarget.args) ? spawnTarget.args : [];
   return {
     command: SANDBOX_EXEC_PATH,
-    // -p keeps the profile in argv (no temp file). Inner command follows as remaining argv.
     args: ['-p', profile, spawnTarget.command, ...innerArgs],
     shell: false,
     ...(spawnTarget.cwd != null ? { cwd: spawnTarget.cwd } : {}),
@@ -164,7 +144,6 @@ export function wrapWithSeatbelt(spawnTarget, policy) {
 }
 
 /**
- * Probe that sandbox-exec can run a trivial allow-default profile.
  * @returns {{ ok: boolean, reason?: string, detail?: string }}
  */
 export function probeSeatbelt() {

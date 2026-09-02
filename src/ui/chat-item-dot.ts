@@ -1,8 +1,3 @@
-/**
- * Sidebar per-chat status: colored dots for unread / needs-input / error;
- * accent spinner (expanded) or mode-glyph ring (collapsed rail) while streaming.
- */
-
 import { streamingChatIds } from '../app-state';
 import { chatAwaitingUserInputTool } from '../chat/incomplete-tool-batch';
 import { getActiveChat, sessionState } from '../state/sessions';
@@ -55,10 +50,7 @@ function isChatStreamWorking(chat: Chat, ctx: ChatItemDotContext): boolean {
   );
 }
 
-/**
- * One resolved visual state per chat. Priority: needs-input > error > working > unread > idle.
- * Working uses a spinner / rail ring (not the actionable colored dot).
- */
+/** One resolved visual state per chat. */
 export function resolveChatItemDotState(chat: Chat, ctx: ChatItemDotContext): ChatItemDotState {
   if (ctx.inputPendingChatId != null && chat.id === ctx.inputPendingChatId) {
     return 'needs-input';
@@ -229,10 +221,7 @@ export function setSidebarStreamPhase(
   syncChatItemDotsInDom();
 }
 
-/**
- * Marks which chat is blocked on user input (tool approval or ask_question).
- * Pass null when the UI closes.
- */
+/** Marks which chat is blocked on user input (tool approval or ask_question). */
 export function setSidebarInputPendingChatId(chatId: string | null): void {
   inputPendingChatId = chatId;
   syncChatItemDotsInDom();
@@ -262,10 +251,7 @@ export function bootstrapActiveChatOpenedTimestamp(): void {
   recordChatOpened(getActiveChat().id);
 }
 
-/**
- * If the assistant produced output after the user last viewed this chat, mark unread
- * (typically called when switching away from this chat).
- */
+/** If the assistant produced output after the user last viewed this chat, mark unread (typically called when switching away from this chat). */
 export function maybeMarkChatUnreadAfterLeave(chat: Chat): void {
   const openedAt = chatLastOpenedAt.get(chat.id) ?? 0;
   const lastAsst = chat.lastAssistantAt;
@@ -277,11 +263,6 @@ export function maybeMarkChatUnreadAfterLeave(chat: Chat): void {
 /** Updates the timestamp used when the user later leaves this chat (active stream only). */
 export function recordAssistantReplyOnChat(chat: Chat): void {
   chat.lastAssistantAt = Date.now();
-  /*
-   * A background chat is never the active one by construction (MIN-637), so the
-   * switch-away path that normally raises the dot never runs for it. Without
-   * this its results would land completely silently.
-   */
   if (chat.background === true && getActiveChat().id !== chat.id) {
     chat.unread = true;
   }

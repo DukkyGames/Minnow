@@ -1,14 +1,4 @@
-/**
- * P3-A — engine-owned worktree lifecycle.
- *
- * The journal is the only record of which worktree an attempt used
- * (`task.attempt.started.worktree`). There is no registry, allocation map, or
- * release-queue file: orphan reclaim is `git worktree list` minus journal-live,
- * the same shape as `inspect()` versus `desired`.
- *
- * Git plumbing stays in `server/worktree/worktree-ops.js`. This module owns
- * *when* those ops run and *what* the journal considers live.
- */
+/** Allocate, commit, and release attempt worktrees. */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -34,29 +24,16 @@ export const INTEGRATION_SLOT = 'integration';
 
 /**
  * Opaque journal type for dirty work that was discarded on removal.
- *
- * Not in the P0-B known vocabulary: the fold ignores it (unknown types are
- * opaque), and P0-B's envelope already accepts that. A dedicated schema would
- * bump the thirteen-type contract for a side-effect the fold never reads.
  */
 export const WORKTREE_DISCARDED_TYPE = 'worktree.discarded';
 
 /**
  * Opaque journal type when Start created a workspace repo or its first commit.
- *
- * Same pattern as {@link WORKTREE_DISCARDED_TYPE}: not a 14th known fold type.
- * The timeline already prints unknown `event.type`.
  */
 export const BOARD_GIT_INITIALIZED_TYPE = 'board.git.initialized';
 
 /**
  * Boards that have had `ensureIntegration` succeed this process.
- *
- * The op is already idempotent; this only skips a git round-trip. Dep links
- * are still re-validated on every allocate — a broken integration
- * `node_modules` must not stall the next task. It is not an ownership
- * registry — crash recovery re-runs `ensureIntegration`.
- *
  * @type {Set<string>}
  */
 const ensuredBoards = new Set();
@@ -79,9 +56,7 @@ export function attemptBranch(boardId, slotId) {
 }
 
 /**
- * Slot directory for a new attempt. Attempt ids are unique, so two concurrent
- * attempts never collide here — isolation is a path, not a lock.
- *
+ * Slot directory for a new attempt.
  * @param {string} attemptId
  * @returns {string}
  */
@@ -127,10 +102,7 @@ export function pathsEqual(a, b) {
 }
 
 /**
- * Worktree paths the journal currently says are live: open (started, not ended)
- * attempts. Same shape as `inspect()` — ended attempts are not live, even if
- * a retry is about to reuse the path.
- *
+ * Worktree paths the journal currently says are live: open (started, not ended) attempts.
  * @param {import('./core/types').BoardState | null | undefined} state
  * @returns {Set<string>}
  */
@@ -150,10 +122,6 @@ export function liveWorktreePaths(state) {
 
 /**
  * Most recent worktree recorded for a task, open or ended.
- *
- * Lookup into the journal fold, not a parallel map. A `repair` / `continue`
- * retry (and the tester after a builder pass) use this path.
- *
  * @param {import('./core/types').BoardState | null | undefined} state
  * @param {string} taskId
  * @returns {string | null}
@@ -183,11 +151,6 @@ export function slotIdFromWorktreePath(boardId, worktreePath) {
 
 /**
  * Should this attempt's worktree survive its end so the next start can reuse it?
- *
- * Uses the policy table rather than a hidden slot map: keep iff the next action
- * is a same-worktree retry, a builder pass advancing to tester, or a tester
- * pass advancing to merge (P3-C rebases that same committed tree).
- *
  * @param {import('./core/types').BoardState} state
  * @param {import('./core/types').Desired} desired
  * @param {string} outcome
@@ -198,8 +161,6 @@ export function shouldKeepWorktree(state, desired, outcome) {
   const action = decide({
     role: desired.role,
     outcome,
-    // The current attempt is not ended in the journal yet, so this count is
-    // already "finished before now" — the reading `decide()` documents.
     attemptCount: attemptCount(state, desired.taskId, desired.role),
   });
   if (action.kind === 'retry') return wantsSameWorktree(action.seedKind);
@@ -208,11 +169,6 @@ export function shouldKeepWorktree(state, desired, outcome) {
 
 /**
  * Should `start(desired)` attach the previous path instead of creating a slot?
- *
- * `desired.sameWorktree` / `wantsSameWorktree(seedKind)` cover repair,
- * continue, and rebase. Tester is not a retry, but it still has to run in
- * the builder's tree — nothing has merged yet.
- *
  * @param {import('./core/types').Desired} desired
  * @returns {boolean}
  */
@@ -224,9 +180,7 @@ export function wantsReuse(desired) {
 }
 
 /**
- * MIN-615 git init for isolated-worktree boards. Idempotent: a repo that already
- * has HEAD is a no-op. `parsePlan` stays pure — this is I/O on the effector path.
- *
+ * git init for isolated-worktree boards.
  * @returns {Promise<{
  *   ok: true,
  *   event: {
@@ -242,8 +196,6 @@ export async function ensureBoardWorkspaceGit() {
   if (!result.ok) {
     return { ok: false, error: result.error || 'git init failed' };
   }
-  // Journal only when something actually appeared — not when we touched an
-  // existing checkout (gitignore repair with HEAD already present).
   if (!result.createdRepo && !result.committed) {
     return { ok: true, event: null };
   }
@@ -271,8 +223,6 @@ export async function ensureBoardWorkspaceGit() {
  * }>}
  */
 export async function ensureBoardIntegration(boardId) {
-  // Manual card Start never calls `preflight()`, so the first worktree allocate
-  // is what must refuse a non-git workspace.
   const git = await ensureBoardWorkspaceGit();
   if (!git.ok) {
     return { ok: false, error: git.error };
@@ -281,9 +231,6 @@ export async function ensureBoardIntegration(boardId) {
     const intPath = getWorktreeSlotPath(boardId, INTEGRATION_SLOT);
     try {
       await fs.access(intPath);
-      // The cache skips the git round-trip, not dep repair. Task worktrees
-      // chain their node_modules off integration; a link that broke after the
-      // first allocate must be healed before the next task starts.
       const deps = await ensureDependencyDirs(getWorkspaceRoot(), intPath);
       return {
         ok: true,
@@ -305,9 +252,7 @@ export async function ensureBoardIntegration(boardId) {
 }
 
 /**
- * Allocate (or reuse) a worktree for one attempt. The process does not exist
- * until this resolves, which is what licenses `task.attempt.started`.
- *
+ * Allocate (or reuse) a worktree for one attempt.
  * @param {{
  *   boardId: string,
  *   taskId: string,
@@ -347,8 +292,6 @@ export async function allocateAttemptWorktree(input) {
     const slotId = slotIdFromWorktreePath(boardId, previous) ?? slotIdForAttempt(attemptId);
     try {
       await fs.access(previous);
-      // Do not call `createWorktree` on a live repair tree — that merges the
-      // integration tip in and can clobber the dirty work being repaired.
       return {
         ok: true,
         path: previous,
@@ -358,8 +301,6 @@ export async function allocateAttemptWorktree(input) {
         ...(gitInitialized ? { gitInitialized } : {}),
       };
     } catch {
-      // Crash between end and retry: recreate at the same slot so the path
-      // the journal records still matches the previous attempt.
       const created = await createWorktree({
         boardId,
         slotId,
@@ -384,8 +325,6 @@ export async function allocateAttemptWorktree(input) {
     }
   }
 
-  // Fresh: release the previous tree for this task first. Two attempts of the
-  // same task never overlap, so this cannot yank a live path.
   if (previous) {
     const prevSlot = slotIdFromWorktreePath(boardId, previous);
     if (prevSlot && prevSlot !== INTEGRATION_SLOT) {
@@ -435,9 +374,7 @@ export async function commitAttemptWorktree(input) {
 }
 
 /**
- * Remove a slot after a dirty check. Dirty state is returned so the caller can
- * journal it — never dropped silently.
- *
+ * Remove a slot after a dirty check.
  * @param {{
  *   boardId: string,
  *   slotId: string,
@@ -467,8 +404,6 @@ export async function releaseWorktree(input) {
 
 /**
  * `git worktree list` minus journal-live, scoped to this board's directory.
- * Never removes a path the journal says is live, and never touches integration.
- *
  * @param {{ boardId: string, livePaths: Set<string> | Iterable<string> }} input
  * @returns {Promise<{ removed: string[], discarded: Record<string, unknown>[] }>}
  */
@@ -516,9 +451,7 @@ function isUnderBoard(boardDir, wtPath) {
 }
 
 /**
- * Hook for the merge queue (P3-C). Call after a real integration merge so the
- * next worktree does not start from stale manifests. P3-A does not merge.
- *
+ * Refresh integration deps after a real merge.
  * @param {{ boardId: string, sinceSha?: string }} input
  */
 export async function refreshIntegrationDepsAfterMerge(input) {

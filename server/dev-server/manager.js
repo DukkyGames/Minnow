@@ -1,8 +1,3 @@
-/**
- * Workspace dev-server lifecycle — multi-server Map keyed by (workspace, serverId).
- * Primary-id wrappers keep hub / agent-tool / existing tests working.
- */
-
 import path from 'node:path';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
 import { mergeConfigMeta } from '../config/validators.js';
@@ -47,7 +42,7 @@ import { probePort } from './ports.js';
  * @property {string} [error]
  * @property {string} [lastError]
  * @property {number} [startedAt]
- * @property {boolean} [orphaned] child survived the host process that spawned it
+ * @property {boolean} [orphaned]
  */
 
 /** @type {Map<string, Map<string, ManagedDevServer>>} */
@@ -56,7 +51,6 @@ const byWorkspaceKey = new Map();
 const HEALTH_TIMEOUT_MS = 4_000;
 const HEALTH_RECONCILE_INTERVAL_MS = 250;
 
-/** Max time in `starting` before error when health never passes (override via env). */
 function startingTimeoutMs() {
   const raw = process.env.MINNOW_DEV_SERVER_START_TIMEOUT_MS;
   if (raw) {
@@ -94,7 +88,6 @@ function stopHealthReconcile(workspaceKey, serverId) {
 }
 
 /**
- * Background ticks until status leaves `starting` (pattern: servers/manager waitForHealth).
  * @param {ManagedDevServer} row
  * @param {string} healthUrl
  */
@@ -127,7 +120,6 @@ function ensureHealthReconcileScheduled(row, healthUrl) {
 }
 
 /**
- * Whether the managed row still has a live child (in-memory run or PID).
  * @param {ManagedDevServer} row
  */
 function isManagedChildAlive(row) {
@@ -164,11 +156,9 @@ async function readPersistedServers(key) {
   if (!row || typeof row !== 'object') return {};
 
   const obj = /** @type {Record<string, unknown>} */ (row);
-  // Nested shape: { servers: { [serverId]: row } }
   if (obj.servers && typeof obj.servers === 'object' && !Array.isArray(obj.servers)) {
     return /** @type {Record<string, Record<string, unknown>>>} */ (obj.servers);
   }
-  // Legacy flat row (has status, no servers) → adopt as primary.
   if (typeof obj.status === 'string') {
     return { [PRIMARY_DEV_SERVER_ID]: obj };
   }
@@ -275,7 +265,6 @@ async function getOrInitRow(root, serverId = PRIMARY_DEV_SERVER_ID) {
 }
 
 /**
- * Reconcile stale PID / finished runs.
  * @param {ManagedDevServer} row
  */
 async function reconcileRow(row) {
@@ -304,13 +293,9 @@ async function reconcileRow(row) {
   }
 
   if (!run && row.status !== 'stopping') {
-    // Background spawn can lag before the terminal registry sees the child (esp. Windows).
     if (row.startedAt && Date.now() - row.startedAt < 2_000) {
       return row;
     }
-    // A restarted host has an empty in-memory registry while the detached dev
-    // server keeps holding its port. Calling that "stopped" orphans the process
-    // and invites a second one on the same port, so trust the durable index.
     const indexed = await readRunIndexEntry(row.runId);
     if (indexed && !indexed.finished && isPidAlive(indexed.pid)) {
       row.status = 'running';
@@ -354,7 +339,6 @@ async function probeHealth(healthUrl) {
 }
 
 /**
- * Apply a successful background run to the managed dev-server row.
  * @param {ManagedDevServer} row
  * @param {{ runId: string, pid: number, startedAt: number }} started
  * @param {{ command: string, healthUrl?: string, port?: number }} guide
@@ -383,7 +367,6 @@ async function applyStartedRun(row, started, guide) {
 }
 
 /**
- * Whether a background tool invocation should register as the managed dev server.
  * @param {Record<string, unknown>} args
  * @param {{ command: string }} guide
  */
@@ -394,7 +377,6 @@ function shouldRegisterDevServerFromTool(args, guide) {
 }
 
 /**
- * Build effective guide for a registry definition (or startup.md primary).
  * @param {import('./registry.js').DevServerDefinition | null} def
  * @param {{ command: string, cwd?: string, healthUrl?: string, port?: number, apiPort?: number, stop?: { command?: string } } | null} startupGuide
  * @param {{ port: number, network: 'local' | 'lan' }} settings
@@ -423,7 +405,6 @@ function effectiveFromDefinition(def, startupGuide, settings, workspaceRoot) {
 }
 
 /**
- * Promote starting→running / timeout error for a row.
  * @param {ManagedDevServer} row
  * @param {string | undefined} healthUrl
  */
@@ -459,10 +440,9 @@ async function reconcileHealth(row, healthUrl) {
 }
 
 /**
- * Resolve the filesystem root used to spawn a dev server (registered worktree or workspace).
- * @param {string} registryRoot — Code workspace (registry key)
+ * @param {string} registryRoot
  * @param {{ worktreeRoot?: string } | null | undefined} def
- * @param {string | undefined} overrideWorktreeRoot — one-off start/restart override
+ * @param {string | undefined} overrideWorktreeRoot
  */
 async function resolveDevServerRunRoot(registryRoot, def, overrideWorktreeRoot) {
   const candidate =
@@ -545,7 +525,6 @@ export async function listDevServerStatuses(workspaceRoot = getWorkspaceRoot()) 
   const root = path.resolve(workspaceRoot);
   const defs = await readDevServers(root);
   if (defs.length === 0) {
-    // Empty registry: still surface primary status for hub/legacy (no_guide).
     const primary = await getDevServerStatusById(root, PRIMARY_DEV_SERVER_ID);
     return {
       servers: [
@@ -604,10 +583,6 @@ export async function getDevServerStatus(workspaceRoot = getWorkspaceRoot()) {
  * @param {string} [workspaceRoot]
  * @param {string} [serverId]
  * @param {{ worktreeRoot?: string, strictPort?: boolean }} [options]
- *   `strictPort` makes a Vite-family command fail rather than move to the next
- *   free port. Opt-in, for callers that must know exactly which port they are
- *   talking to — P5-C's browser rung. Off for the interactive surface, where
- *   auto-incrementing is a convenience rather than a correctness hole.
  */
 export async function startDevServerById(
   workspaceRoot = getWorkspaceRoot(),
@@ -619,7 +594,6 @@ export async function startDevServerById(
   const settings = await readDevServerSettings(registryRoot);
   let def = await getDevServerDefinition(registryRoot, serverId);
 
-  // Ensure registry is seeded for primary when startup.md exists.
   if (!def && serverId === PRIMARY_DEV_SERVER_ID) {
     await readDevServers(registryRoot);
     def = await getDevServerDefinition(registryRoot, serverId);
@@ -656,8 +630,6 @@ export async function startDevServerById(
   let row = await getOrInitRow(registryRoot, serverId);
   row = await reconcileRow(row);
 
-  // reconcileRow leaves row.status === 'running' with row.orphaned set when the
-  // child outlived its host process; starting a second one would fight for the port.
   const liveInThisHost = Boolean(row.runId && getRun(row.runId) && !getRun(row.runId)?.finished);
   if (row.status === 'running' && row.runId && (liveInThisHost || row.orphaned)) {
     return {
@@ -689,7 +661,6 @@ export async function startDevServerById(
           cwd,
           shell: false,
           source: 'agent',
-          // Dev servers must bind ports / serve — excluded from agent shell sandbox (MIN-553).
           sandbox: false,
           logSubdir: 'dev-server',
           env: buildDevServerSpawnEnv(effective.port, effective.network, {
@@ -772,7 +743,6 @@ export async function stopDevServerById(
         { workspaceRoot: runRoot },
       );
     } catch {
-      /* fall through to PID kill */
     }
   }
 
@@ -817,7 +787,6 @@ export async function restartDevServerById(
 }
 
 /**
- * Clear a managed row when its runId is stopped via agent tools.
  * @param {string} runId
  */
 async function clearRowForRunId(runId) {
@@ -838,7 +807,6 @@ async function clearRowForRunId(runId) {
 }
 
 /**
- * Server tool: start_background_command
  * @param {Record<string, unknown>} args
  */
 export async function toolStartBackgroundCommand(args) {
@@ -881,7 +849,6 @@ export async function toolStartBackgroundCommand(args) {
       shell: false,
       source: 'agent',
       chatId,
-      // Dev servers must bind ports / serve — excluded from agent shell sandbox (MIN-553).
       sandbox: false,
       logSubdir: 'dev-server',
       shellProfile,
@@ -892,7 +859,7 @@ export async function toolStartBackgroundCommand(args) {
     const startup = await readStartupGuide(root);
     if (startup.guide && shouldRegisterDevServerFromTool(args, startup.guide)) {
       const settings = await readDevServerSettings(root);
-      await readDevServers(root); // seed registry
+      await readDevServers(root); 
       const effective = resolveEffectiveGuide(startup.guide, settings, {
         packageJsonDir: path.join(root, startup.guide.cwd ?? '.'),
       });
@@ -921,7 +888,6 @@ export async function toolStartBackgroundCommand(args) {
 }
 
 /**
- * Server tool: stop_background_command
  * @param {Record<string, unknown>} args
  */
 export async function toolStopBackgroundCommand(args) {
@@ -942,7 +908,6 @@ export async function toolStopBackgroundCommand(args) {
   );
 }
 
-/** Server tool: stop_command — any active agent terminal run. */
 export async function toolStopCommand(args) {
   const runId = typeof args?.run_id === 'string' ? args.run_id.trim() : '';
   if (!runId) return 'Error: run_id is required';
@@ -961,7 +926,6 @@ export async function toolStopCommand(args) {
   );
 }
 
-/** Clear in-memory dev-server rows between tests (does not touch persisted config). */
 export function resetDevServerManagerForTests() {
   for (const timer of healthReconcileTimers.values()) {
     clearInterval(timer);

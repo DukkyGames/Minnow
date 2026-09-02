@@ -1,8 +1,3 @@
-/**
- * Registers all Minnow Connect middleware in a fixed order (before Vite SPA).
- * Reusable from server.js and a future Electron HTTP host.
- */
-
 import { createAgentPacksMiddleware } from '../agent-packs/routes.js';
 import { createBenchmarkWorkspaceMiddleware } from '../benchmark-workspace/middleware.js';
 import { createChatsWorkspaceMiddleware } from '../chats-workspace/middleware.js';
@@ -78,17 +73,9 @@ import { installDiagnosticsProcessHandlers } from '../diagnostics/process-handle
  */
 export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPathAccess }) {
   installDiagnosticsProcessHandlers();
-  // P2-F: production boards run real agents. Tests that need zero-model still
-  // call setEffectorFactory with createScriptedEffector. A previous process
-  // has an empty generations store; this is a no-op on a real boot.
   cancelOrphanedRunnerGenerations();
   setEffectorFactory((boardId) => createRunnerEffector({ boardId }));
-  // A board left `running` by a crash or a quit must not restart on whatever
-  // request happens to build its engine. Armed only here: the engine suites
-  // load-and-run as before unless they opt in.
   armBoardResumeGate();
-  // P8-F: sub-agents are a view of /api/agents. Spawn/cancel are POSTs;
-  // delivery tickAll re-offers pending completions after a restart.
   cancelOrphanedSubAgentGenerations();
   setAgentsEffectorFactory((parentChatId) => createSubAgentEffector({ parentChatId }));
   void bootAgentsRuntime();

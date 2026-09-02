@@ -1,7 +1,3 @@
-/**
- * Stop all in-flight agent work (boards, chats, sub-agents, titles, desktop research).
- */
-
 import { abortByChatId, streamingChatIds } from '../app-state';
 import { cancelSubAgent, listActiveSubAgentRuns } from '../agents/orchestrator';
 import { listMainTurnActivity } from './main-turn-activity';
@@ -93,11 +89,6 @@ function collectPresentationChatIds(extra?: ReadonlySet<string>): Set<string> {
   return ids;
 }
 
-/**
- * Clear client streaming/activity flags immediately after stop-all.
- * Abort alone may not run runChatTurn finally (or may lag), but the UI must not
- * keep showing running chats or agent-activity rows.
- */
 function flushStoppedAgentPresentation(extraChatIds?: ReadonlySet<string>): void {
   flushStoppedChatPresentation(collectPresentationChatIds(extraChatIds), {
     clearGlobalStreaming: true,

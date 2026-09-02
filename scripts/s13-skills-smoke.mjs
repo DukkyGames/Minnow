@@ -1,15 +1,3 @@
-/**
- * Step 13 smoke: skills API list + GET one with user override in MINNOW_HOME.
- * Usage: node scripts/s13-skills-smoke.mjs [baseUrl]
- *
- * S1–S3: in-process scan (isolated temp home if MINNOW_HOME unset).
- * S4–S6: HTTP against npm start. S6 needs the server to use the same home as this script:
- *   set MINNOW_HOME=%TEMP%\minnow-s13-verify (or export on Unix)
- *   node scripts/s13-skills-smoke.mjs   # writes override, then start server in same env:
- *   npm start
- *   node scripts/s13-skills-smoke.mjs http://localhost:5173
- * If MINNOW_HOME is already set, the script writes the override there and does not replace it.
- */
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -56,7 +44,6 @@ async function cleanupHome({ home, serverCoordinated }) {
   try {
     await fs.rm(skillMd, { force: true });
   } catch {
-    /* ignore */
   }
 
   if (serverCoordinated) {
@@ -68,7 +55,6 @@ async function cleanupHome({ home, serverCoordinated }) {
   try {
     await fs.rm(home, { recursive: true, force: true });
   } catch {
-    /* ignore */
   }
 }
 

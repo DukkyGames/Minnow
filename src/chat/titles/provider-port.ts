@@ -1,7 +1,3 @@
-/**
- * Production TitleProviderPort — Step 03 provider registry + non-streaming POST.
- */
-
 import { thinkingToCompletionBody } from '../../agents/thinking-to-body';
 import { completeNonStreamingViaGenerations } from '../../providers/fetch-chat';
 import { getActiveProvider } from '../../providers/store';

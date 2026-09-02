@@ -154,6 +154,8 @@ import {
 } from './composer-draft';
 import { isMainColumnOverlaySuppressingChatDom } from './main-column-overlay';
 
+// ── Board waves ──────────────────────────────────────────────────────────────
+
 /** True when every task in a wave is complete (sidebar auto-collapse). */
 function isWaveComplete(tasks: LeftoverBoardTask[], waveId: number | string): boolean {
   const wt = tasks.filter((t) => t.wave === waveId);
@@ -256,10 +258,10 @@ function appendBoardGroupWaveMembers(
   }
 }
 
-// ─── Multi-select state ───────────────────────────────────────────────────────
-
 const selectedChatIds = new Set<string>();
 let lastSelectedChatId: string | null = null;
+
+// ── Selection ────────────────────────────────────────────────────────────────
 
 function clearChatSelection(): void {
   if (selectedChatIds.size === 0) return;
@@ -313,8 +315,6 @@ function updateSelectionVisuals(): void {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-
 /** Refresh composer model UI from the active chat (default #modelSelect stays put). */
 export function syncModelSelectForActiveChat(): void {
   syncActiveChatModelUi();
@@ -340,6 +340,8 @@ export function onModelSelectChange(): void {
   syncActiveChatModelUi();
 }
 
+// ── Workspace ────────────────────────────────────────────────────────────────
+
 /** Refresh main column after workspace folder changes. */
 export async function applyWorkspaceScopedSession(
   newPath: string,
@@ -347,11 +349,8 @@ export async function applyWorkspaceScopedSession(
   options?: { skipFileTreeSync?: boolean },
 ): Promise<void> {
   clearChatSelection();
-  // Opening a workspace should land in chat view, not the last Orchestrate board.
   exitBoardViewForNavigation();
-  // Workspace switch may enter/leave a git repo — recheck Undo visibility.
   invalidateComposerUndoGitCache();
-  // Awaits history hydrate for the workspace's active chat before painting.
   const { activeChat, activeChanged } = await onWorkspaceChanged(newPath, previousPath);
   if (activeChanged) {
     recordChatOpened(activeChat.id);
@@ -437,6 +436,8 @@ function appendChatListSection(
     appendChatRow(list, chat, activeId, { draggable: false });
   }
 }
+
+// ── Rows ─────────────────────────────────────────────────────────────────────
 
 /** Shared session row builder (main sidebar + expert-scoped list). */
 export function appendChatRow(
@@ -524,8 +525,6 @@ export function appendChatRow(
 
   const boardCategory = inGroup ? boardCategoryForChat(chat, options?.group) : undefined;
 
-  // Mode glyph: collapsed rail icon + compact marker beside name when expanded.
-  // In-group board tasks use a category icon instead (build/fix/test); skip mode to avoid duplicates.
   if (!inGroup || !boardCategory) {
     const icon = createModeMaskIcon(chat.modeId, 'chat-item-icon mode-mask-icon');
     titleRow.appendChild(icon);
@@ -601,7 +600,6 @@ export function appendChatRow(
   }
   list.appendChild(row);
 }
-
 
 function appendGroupHeader(
   list: HTMLElement,
@@ -716,7 +714,6 @@ function showGroupContextMenu(
       if (isBoardGroup) {
         const chatCount = group ? listBoardGroupChatIds(group, sessionState?.chats ?? []).length : 0;
         const chatLabel = chatCount === 1 ? '1 chat' : `${chatCount} chats`;
-        // Electron patches window.confirm to always return false — use in-app dialog.
         if (
           !(await appConfirm(
             `Delete this board and ${chatLabel} inside it? This cannot be undone.`,
@@ -794,6 +791,8 @@ function beginRenameGroup(groupId: string, nameSpan: HTMLSpanElement): void {
   inp.addEventListener('blur', finish, { once: true });
 }
 
+// ── Render ───────────────────────────────────────────────────────────────────
+
 /** Wire "+ New group" and chat drag-drop (call once at init). */
 export function wireSidebarNewGroupButton(): void {
   void import('./sidebar-chat-dnd').then((m) => m.wireSidebarChatDragDrop());
@@ -816,7 +815,6 @@ export function wireSidebarNewGroupButton(): void {
 }
 
 /** Rebuild the session list in the left sidebar (workspace-scoped + Unassigned). */
-// ─────────────────────────────────────────────────────────────────────────────
 
 /** Update draft-only chat row labels without rebuilding the sidebar (composer typing). */
 export function syncComposerDraftSidebarLabels(chat: Chat): void {
@@ -852,9 +850,6 @@ export function renderSidebar(): void {
   const ws = getWorkspacePath();
   const excludeAssistantChats = (chat: { workspacePath?: string }) =>
     !isChatsWorkspacePath(chat.workspacePath ?? '');
-  // Board chats and board folders belong to the Orchestrate screen, which carries
-  // its own rail of boards and of each board's chats. Two lists for the same thing
-  // reads as one confused column (same reasoning as Super Plan's hidden session list).
   const workspaceChats = getSidebarListedChatsForWorkspace(ws, sessionState)
     .filter((c) => !isHiddenFromMainSidebar(c))
     .filter((c) => !isBoardOwnedChat(c))
@@ -905,10 +900,7 @@ export function renderSidebar(): void {
   syncChatItemLoopIconsInDom();
 }
 
-/**
- * Shown when the workspace has no chats yet. The panel is 300px of nothing
- * otherwise, which reads as broken rather than new.
- */
+/** Shown when the workspace has no chats yet. */
 function appendChatListEmptyState(list: HTMLElement): void {
   const empty = document.createElement('div');
   empty.className = 'chat-list-empty';
@@ -924,6 +916,8 @@ function appendChatListEmptyState(list: HTMLElement): void {
   empty.append(title, hint);
   list.appendChild(empty);
 }
+
+// ── Menus ────────────────────────────────────────────────────────────────────
 
 function showMultiSelectContextMenu(x: number, y: number, chatIds: string[]): void {
   const existing = document.getElementById('chatItemContextMenu');
@@ -978,7 +972,6 @@ function showMultiSelectContextMenu(x: number, y: number, chatIds: string[]): vo
     void (async () => {
       const n = deletable.length;
       if (!n) return;
-      // Electron patches window.confirm to always return false — use in-app dialog.
       if (
         !(await appConfirm(`Delete ${n} chat${n === 1 ? '' : 's'}? This cannot be undone.`, {
           confirmLabel: 'Delete',
@@ -1039,22 +1032,13 @@ function chatBrainCaptureState(chat: Chat): { disabled: boolean; title: string }
 export interface ChatItemContextMenuOptions {
   /** Override default deleteChat (e.g. Experts hub detail list refresh). */
   onDelete?: (chat: Chat) => void;
-  /**
-   * Drop "Open in orchestrator". Dead weight when the menu is already open
-   * inside the Orchestrate screen.
-   */
+  /** Drop "Open in orchestrator". */
   hideOrchestrateEntry?: boolean;
   /** Repaint after an inline rename commits. Defaults to the sidebar. */
   onRenamed?: (chat: Chat) => void;
 }
 
-/**
- * Row context menu for a chat: Rename, Add to Brain, Open in orchestrator, Delete.
- *
- * Exported so Orchestrate's chat rail shows the same menu rather than a
- * near-copy that drifts. Callers pass `hideOrchestrateEntry` when the menu opens
- * on a surface where "Open in orchestrator" is a no-op.
- */
+/** Row context menu for a chat: Rename, Add to Brain, Open in orchestrator, Delete. */
 export function showChatItemContextMenu(
   x: number,
   y: number,
@@ -1077,7 +1061,6 @@ export function showChatItemContextMenu(
     document.removeEventListener('keydown', onKey);
   };
   const onPointerDownOutside = (e: PointerEvent): void => {
-    // Ignore presses inside the menu so Delete/Rename are not dismissed before click.
     if (menu.contains(e.target as Node)) return;
     closeMenu();
   };
@@ -1221,7 +1204,6 @@ function onChatRemoved(result: RemoveChatResult): void {
   refreshSessionListUIs();
   if (isOrchestrateHubMounted()) {
     refreshOrchestrateHubBoardList();
-    // Deleting a planner chat can free its plan; refresh the dropdown too (MIN-215).
     void refreshOrchestrateHubPlanList();
   }
   closeMobileSidebar();
@@ -1243,6 +1225,8 @@ function paintActiveChatInForegroundShell(chat: Chat): void {
   renderChatFromHistory(chat);
 }
 
+// ── Switch ───────────────────────────────────────────────────────────────────
+
 export async function deleteChat(chatId: string, evt?: Event): Promise<void> {
   if (evt) evt.stopPropagation();
   if (isChatStreaming(chatId)) {
@@ -1256,7 +1240,6 @@ export async function deleteChat(chatId: string, evt?: Event): Promise<void> {
     getChatMessageCount(victim) === 0 && hasComposerDraft(victim)
       ? formatDraftChatSidebarName(victim)
       : victim.name;
-  // Electron patches window.confirm to always return false — must use appConfirm.
   if (
     !(await appConfirm(`Delete "${victimLabel}"? Messages in this chat cannot be recovered.`, {
       confirmLabel: 'Delete',
@@ -1273,11 +1256,6 @@ export async function deleteChat(chatId: string, evt?: Event): Promise<void> {
 
 export async function switchChat(id: string): Promise<void> {
   restoreChatColumnOnChatSelect();
-  /*
-   * A sub-agent that settled while its parent was streaming has nothing left to
-   * wake it once that stream ends silently (MIN-639). Every chat switch is a
-   * cheap, natural moment to re-check the queue.
-   */
   void import('../agents/sub-agent-completion-push')
     .then((m) => m.flushAllPendingSubAgentCompletions())
     .catch((err) => reportBackgroundError('sub-agent-completion-flush', err));
@@ -1296,11 +1274,6 @@ export async function switchChat(id: string): Promise<void> {
     return;
   }
 
-  /*
-   * The Orchestrate chat embed drives its own switches: the board stays mounted
-   * behind `.ob-chat`, and the planner is just another row in its rail rather
-   * than a signal to reopen the kanban.
-   */
   const boardChatEmbedOpen = isBoardChatEmbedOpenForChat(id);
 
   const boardRestoreGroup = boardChatEmbedOpen
@@ -1315,13 +1288,6 @@ export async function switchChat(id: string): Promise<void> {
     acknowledgeChatViewed(id);
     openBoardGroup(boardRestoreGroup.id);
     syncViewModeToggleFromActiveChat();
-    /*
-     * Board state (`activeBoardGroupId`, `viewMode`) is committed by
-     * `openBoardGroup` above, so the file tree can finally resolve the board's
-     * integration worktree (MIN-619). This branch returns early, so without the
-     * sync here the tree stayed on the previous chat's root until the user
-     * opened Source Control — which is exactly what re-ran it.
-     */
     clearPanelCwdUserOverride();
     syncPanelFromActiveChat({ forceFileTree: true });
     syncComposerFromStreamingState();
@@ -1346,7 +1312,6 @@ export async function switchChat(id: string): Promise<void> {
       devServerScreenOpen
     ) {
       if (sameChat) {
-        // Re-hydrate in case this chat was never loaded after a lazy boot.
         await ensureChatHistoryLoaded(id);
         if (sessionState.activeId !== id) return;
         paintActiveChatInForegroundShell(sameChat);
@@ -1374,7 +1339,6 @@ export async function switchChat(id: string): Promise<void> {
   markSessionScalarsDirty();
   const historyPending = chat.historyLoaded === false;
   if (historyPending) {
-    // Synchronous wipe so the previous chat's transcript never lingers during the GET.
     paintChatHistoryPendingInForegroundShell();
     await ensureChatHistoryLoaded(id);
     if (!sessionState || sessionState.activeId !== id) return;
@@ -1426,6 +1390,8 @@ export interface CreateChatWithModeOptions {
   orchestratePlanPath?: string;
   initialUserMessage?: string;
 }
+
+// ── Create ───────────────────────────────────────────────────────────────────
 
 /** Apply operating mode and default work-agent binding on an existing chat row. */
 function applyModeIdToChat(chat: Chat, modeId: ModeId): void {
@@ -1593,7 +1559,6 @@ export function createChatWithMode(
 
   if (initial) {
     void kickoffSeededChatTurn(chat, initial).catch(() => {
-      /* runChatTurn surfaces inline errors */
     });
   }
 

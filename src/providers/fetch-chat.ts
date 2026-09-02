@@ -84,9 +84,7 @@ export async function postChatCompletions(
         closed = true;
         try {
           controller.close();
-        } catch {
-          /* already closed */
-        }
+        } catch {}
       };
 
       const unsubscribe = subscribeToGenerationRaw(
@@ -128,7 +126,6 @@ export async function postChatCompletions(
           unsubscribe();
           failStream(new DOMException('Aborted', 'AbortError'));
           void cancelGeneration(generationId).catch(() => {
-            /* best-effort; matches chat stopGeneration */
           });
         },
         { once: true },

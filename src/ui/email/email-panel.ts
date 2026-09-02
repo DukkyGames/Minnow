@@ -63,14 +63,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-/**
- * Map an IMAP/connection error to the account-form field worth highlighting.
- *
- * The messages come from `server/email/imap-errors.js`; this only needs to be
- * good enough to point at the field the user can actually fix — credentials
- * versus reachability — so an auth failure lands them on the password, not a
- * toast they have to decode.
- */
+/** Map an IMAP/connection error to the account-form field worth highlighting. */
 function classifyAccountFieldError(message: string): { field: string } | null {
   const text = message.toLowerCase();
   if (/authentication failed|app password|basic authentication|rejected the login|password|credential/.test(text)) {
@@ -128,6 +121,8 @@ async function signOutEmailAccount(
     return false;
   }
 }
+
+// ── Account form ─────────────────────────────────────────────────────────────
 
 /** Render create- or edit-account form. */
 function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): void {
@@ -200,8 +195,6 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
     form.appendChild(row);
   }
 
-  // Signature is only offered when editing: it is noise during the initial
-  // connect, when the user is trying to get mail flowing at all.
   if (editing) {
     const signatureRow = el('label', 'email-field');
     signatureRow.appendChild(el('span', 'email-field-label', 'Signature (optional)'));
@@ -361,8 +354,6 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
   card.appendChild(form);
   mount.appendChild(card);
 
-  // Deep-link from a connection error: mark the offending field, explain why,
-  // and put the cursor on it so the fix is one keystroke away.
   if (options.highlightField) {
     const input = card.querySelector<HTMLInputElement>(`#email-${options.highlightField}`);
     const row = input?.closest('.email-field');
@@ -380,6 +371,8 @@ function renderAccountForm(mount: HTMLElement, options: AccountFormOptions): voi
     }
   }
 }
+
+// ── Privacy ──────────────────────────────────────────────────────────────────
 
 /** Privacy and reader preferences (global, not per account). */
 async function renderEmailPrivacySettings(
@@ -460,6 +453,8 @@ interface EmailSettingsOptions extends EmailPanelOptions {
   onCancel: () => void;
 }
 
+// ── Settings ─────────────────────────────────────────────────────────────────
+
 /** Tabbed Email settings — Privacy vs active account connection. */
 function renderEmailSettings(
   mount: HTMLElement,
@@ -530,6 +525,8 @@ function renderEmailSettings(
 
   showTab(initialTab);
 }
+
+// ── Panel render ─────────────────────────────────────────────────────────────
 
 /** Main panel entry — one spine rail, one workspace surface (MIN-358). */
 export async function renderEmailPanel(
@@ -612,11 +609,7 @@ export async function renderEmailPanel(
     assistantPanel?.setContext(baseAssistantContext());
   };
 
-  /**
-   * Status pass-through that also deep-links auth/connection failures to the
-   * account form with the offending field highlighted — the difference between
-   * a dead-end toast and a one-step fix.
-   */
+  /** Status pass-through that also deep-links auth/connection failures to the account form with the offending field highlighted — the difference between a dead-end toast and a one-step fix. */
   const handleStatus = (state: 'ok' | 'err', message: string): void => {
     options.onStatus?.(state, message);
     if (state !== 'err' || unified || accountFormMode !== 'none') return;
@@ -624,12 +617,9 @@ export async function renderEmailPanel(
     if (hit) openSettings({ highlightField: hit.field, errorMessage: message });
   };
 
-  // ---- Shell: spine rail + workspace ----------------------------------
   const shell = el('div', 'email-shell email-shell-a');
   const workspace = el('div', 'email-workspace');
 
-  // A hairline progress bar above the surface carries sync state, ref-counted
-  // so overlapping syncs (manual + background) keep it lit until the last ends.
   const syncBar = el('div', 'email-sync-bar');
   syncBar.setAttribute('role', 'progressbar');
   syncBar.setAttribute('aria-label', 'Syncing mail');
@@ -709,7 +699,6 @@ export async function renderEmailPanel(
       renderSurface();
     },
     onOpenSettings: () => openSettings(),
-    // Folder drops route through the live inbox so undo + reload stay consistent.
     onThreadsDrop: (destFolder, payload) => {
       void inboxHandle?.applyFolderDrop(destFolder, payload);
     },
@@ -819,11 +808,7 @@ export async function renderEmailPanel(
     return surface.classList.contains('has-reader');
   }
 
-  /**
-   * Refresh the inbox stream without tearing down an open reader. Background
-   * sync and SSE can land while the user is reading; remounting the surface
-   * mid-open leaves the dock attached to detached DOM nodes.
-   */
+  /** Refresh the inbox stream without tearing down an open reader. */
   function requestInboxRefresh(allowAnyScope = false): void {
     if (surfaceMode !== 'inbox' || unified) return;
     if (!allowAnyScope && scope.kind !== 'triage') return;
@@ -853,7 +838,6 @@ export async function renderEmailPanel(
   /** Mount whichever surface the current state calls for. */
   function renderSurface(): void {
     if (surfaceMode === 'setup') {
-      // openSettings owns this surface; nothing to redraw here.
       return;
     }
     if (surfaceMode === 'automations') {
@@ -869,7 +853,6 @@ export async function renderEmailPanel(
       return;
     }
 
-    // Inbox surface. Unified keeps the simple all-mailboxes list for now.
     if (unified) {
       surface.classList.remove('has-reader');
       assistantPanel?.mountToggle(null);
@@ -880,8 +863,6 @@ export async function renderEmailPanel(
       void renderUnifiedInbox(col, {
         accounts,
         onStatus: handleStatus,
-        // Opening a message drops into that mailbox's own inbox surface, where
-        // reply, archive and the rest actually live.
         onOpen: (message) => {
           const owner = accounts.find((row) => row.id === message.accountId);
           if (!owner) return;
@@ -963,7 +944,6 @@ export async function renderEmailPanel(
         if (type === 'pending_actions_updated') {
           void assistantPanel?.refreshReview();
         }
-        // Only refresh the live triage stream; skip while the reader is open.
         requestInboxRefresh(false);
       }
     }),
@@ -972,8 +952,6 @@ export async function renderEmailPanel(
   await loadFolders();
   renderSurface();
 
-  // Resume a partial backfill as soon as the panel opens — older caches only
-  // stored the newest page and need no user action to catch up.
   if (!unified && !autoSyncAccounts.has(activeAccount.id)) {
     autoSyncAccounts.add(activeAccount.id);
     void runManualSync(navFolder(activeNav));

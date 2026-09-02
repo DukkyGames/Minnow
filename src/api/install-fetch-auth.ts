@@ -1,9 +1,3 @@
-/**
- * Global fetch interceptor: adds the session-token header to same-origin
- * /api/* requests, so the ~400 existing `fetch('/api/...')` call sites don't
- * need to be touched individually.
- */
-
 import { getDeviceToken, getSessionToken, hasHostSessionToken } from './session-token.ts';
 
 const TOKEN_HEADER = 'X-Minnow-Token';

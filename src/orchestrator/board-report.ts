@@ -1,13 +1,3 @@
-/**
- * Dedicated end-of-run report pane for the V2 Boards page.
- *
- * Replaces the kanban when the run is finished or user-stopped. The header
- * stays; a session-local Board / Report toggle (not a journal write) flips
- * back. Markdown is rendered, not dumped in a <pre>. Git landing talks to
- * `/api/worktree` using V2's integration branch name — it does not write
- * board state.
- */
-
 import type { BoardState, TaskState } from '../../server/orchestrator/core/types';
 import { setAssistantBubbleContent } from '../markdown/renderer.ts';
 import { gitCommit, gitPush } from '../state/git-api.ts';
@@ -21,12 +11,13 @@ import { createChatWithMode } from '../ui/sidebar.ts';
 import { countPhase, renderRunLedger } from './board-render';
 import { el } from './dom';
 
-/** Same formula as `server/orchestrator/worktree-lifecycle.js` — keep them aligned. */
+// ── Predicates ───────────────────────────────────────────────────────────────
+
+/** Same formula as server/orchestrator/worktree-lifecycle.js — keep them aligned. */
 export function integrationBranchName(boardId: string): string {
   return `minnow/board/${boardId}/integration`;
 }
 
-/** True when the report pane should be available (shown unless the user toggled back). */
 export function wantsReportScreen(state: BoardState): boolean {
   return state.finished || (state.status === 'stopped' && state.stopReason === 'user');
 }
@@ -43,7 +34,6 @@ export function canFixFinal(state: BoardState): boolean {
 }
 
 export interface BoardReportActions {
-  /** Session-local: show the kanban again. */
   dismiss: () => void;
   reopen: () => void;
   fixFinal: () => void;
@@ -72,10 +62,8 @@ export function clearBoardReportStateForTests(): void {
   clearedByBoard.clear();
 }
 
-/**
- * The report pane. Header is painted by the view; this is the body that
- * replaces the kanban.
- */
+// ── Report ───────────────────────────────────────────────────────────────────
+
 export function renderBoardReport(
   state: BoardState,
   markdown: string | null,
@@ -105,6 +93,8 @@ export function renderBoardReport(
   void hydrateGitStats(wrap, state);
   return wrap;
 }
+
+// ── Copy ─────────────────────────────────────────────────────────────────────
 
 function renderCopy(state: BoardState): HTMLElement {
   const block = el('div', 'ov2-report-screen__copy');
@@ -165,6 +155,8 @@ function renderStats(state: BoardState): HTMLElement {
   });
   return row;
 }
+
+// ── Issues ───────────────────────────────────────────────────────────────────
 
 function collectIssues(state: BoardState): Array<{ task: TaskState; reason: string }> {
   const issues: Array<{ task: TaskState; reason: string }> = [];
@@ -248,6 +240,8 @@ function renderMarkdown(markdown: string | null, loading: boolean): HTMLElement 
   return section;
 }
 
+// ── Footer ───────────────────────────────────────────────────────────────────
+
 function renderFooter(
   state: BoardState,
   markdown: string | null,
@@ -322,6 +316,8 @@ function startFollowUp(state: BoardState, markdown: string | null): void {
     .join('\n');
   createChatWithMode({ modeId: 'general', initialUserMessage: seed });
 }
+
+// ── Git ──────────────────────────────────────────────────────────────────────
 
 function buildGitAction(state: BoardState, markdown: string | null): HTMLElement {
   if (clearedByBoard.has(state.boardId)) {

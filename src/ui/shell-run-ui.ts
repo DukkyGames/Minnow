@@ -1,7 +1,3 @@
-/**
- * Sync shell-run kill controls across the agent console and tool-call bubbles.
- */
-
 import { stopShellRun } from '../api/stop-shell-run';
 import {
   getPrimaryActiveShellRunId,

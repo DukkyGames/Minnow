@@ -1,37 +1,8 @@
-/**
- * Shared phone/tablet layout signals.
- *
- * CSS media queries answer "how wide is the viewport"; several shell behaviours
- * (window geometry, drag affordances, drawer mode) need the same answer in JS so
- * the DOM and the stylesheet never disagree. This module is the single source:
- * it stamps `mn-phone` / `mn-tablet` / `mn-touch` on `<html>` and lets callers
- * subscribe to changes.
- */
-
-/**
- * Phone layout: no room for window management.
- *
- * Width alone is not enough — a phone in landscape is 740–930px wide and under
- * 430px tall, which is plenty of columns but nowhere near enough rows to stack
- * a menubar, a floating window, and a dock. The second clause covers that (and
- * short split-screen windows) without hijacking wide desktops that happen to be
- * short.
- *
- * Keep in sync with the `html.mn-phone` rules in styles/mobile.css.
- */
 export const PHONE_MQ = '(max-width: 640px), (max-width: 1024px) and (max-height: 540px)';
-/**
- * Touch tablets in the mid-width band — not every desktop browser window between
- * 641px and 1024px (that looked like permanent "iPad mode" in the web shell).
- */
 export const TABLET_MQ =
   '(min-width: 641px) and (max-width: 1024px) and (min-height: 541px) and (pointer: coarse)';
 /** Touch-first input; true on tablets and touchscreen laptops as well as phones. */
 export const COARSE_POINTER_MQ = '(pointer: coarse)';
-/**
- * Narrow shell layout: bottom app rail + overlay side drawers (below 768px width).
- * Keep in sync with `html.mn-narrow` rules in styles/minnowos-rail.css and drawer CSS.
- */
 export const NARROW_MQ = '(max-width: 767px)';
 
 type Listener = (phone: boolean) => void;
@@ -93,10 +64,7 @@ function syncFlags(): void {
   root.classList.toggle('mn-narrow', isNarrowLayout());
 }
 
-/**
- * Stamp layout flags on `<html>` and keep them current. Idempotent — the shell
- * and tests may both call it.
- */
+/** Stamp layout flags on `<html>` and keep them current. */
 export function initMobileLayout(): void {
   phoneMq = query(PHONE_MQ);
   tabletMq = query(TABLET_MQ);
@@ -122,7 +90,6 @@ export function initMobileLayout(): void {
 
   if (typeof window === 'undefined') return;
 
-  // Backstop: a dropped media-query event would leave flags stuck on resize.
   window.addEventListener('resize', onChange, { passive: true });
   window.addEventListener('orientationchange', onChange, { passive: true });
   window.visualViewport?.addEventListener('resize', onChange, { passive: true });

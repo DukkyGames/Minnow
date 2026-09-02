@@ -253,7 +253,6 @@ describe('P8-B injected graph', () => {
       (await journal.readEvents()).some((e) => e.type === STARTED),
       true,
     );
-    // The board journal was not written by the fake tick.
     assert.equal(boardEngine.getHighestSeq(), 0);
   });
 

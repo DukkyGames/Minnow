@@ -1,6 +1,3 @@
-/**
- * Pure helpers for summing usage and averaging timing stats (MIN-36).
- */
 import type { FinalizedResponseMeta, Stats, Usage } from '../../src/types.js';
 /** Sub-agent row shape for aggregation (usage/stats only). */
 export interface SubAgentStatsSlice {

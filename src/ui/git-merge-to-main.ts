@@ -1,7 +1,3 @@
-/**
- * Merge the current feature branch into trunk (main/master) from Source Control.
- */
-
 import { confirmDirtyCheckout } from './git-checkout-confirm';
 import {
   resolveTrunkBranchName,

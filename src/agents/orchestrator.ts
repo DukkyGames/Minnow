@@ -1,17 +1,3 @@
-/**
- * P8-F — SSE-backed sub-agent store (MIN-759).
- *
- * The renderer is a view of derived state. Spawn and cancel POST to
- * `/api/agents`; everything else is a read. The same read API the drawer,
- * completion-push, and `sub-agent-events` subscribers already call
- * (`getSubAgentRun`, `listSubAgentRunsForParentChat`, `subscribeSubAgentRuns`).
- * The controller directory is gone (P8-G / MIN-760).
- *
- * Nothing in this file mutates a run except by POSTing a command. Live
- * fields (tool name, start-error counter) are overlays from `event: live`
- * / `event: error` and are never written back.
- */
-
 import { findChatById, getActiveChat } from '../state/sessions';
 import { getSubAgentExecutorContext } from '../tools/sub-agent-executor-context';
 import { getWorkspacePath } from '../state/workspace';
@@ -60,17 +46,19 @@ let apiFetch: FetchFn = (input, init) => fetch(input, init);
 
 let openStream: ((url: string) => EventStream) | undefined;
 
-/** Tests: drive HTTP without a real server. */
+// ── Tests ────────────────────────────────────────────────────────────────────
+
 export function setSubAgentApiFetchForTests(fn: FetchFn | null): void {
   apiFetch = fn ?? ((input, init) => fetch(input, init));
 }
 
-/** Tests: drive SSE without EventSource. */
 export function setSubAgentOpenStreamForTests(
   fn: ((url: string) => EventStream) | null,
 ): void {
   openStream = fn ?? undefined;
 }
+
+// ── Request ──────────────────────────────────────────────────────────────────
 
 async function request(path: string, init?: RequestInit): Promise<any> {
   const response = await apiFetch(`/api/agents${path}`, {
@@ -98,7 +86,6 @@ function statusFromPhase(phase: string | undefined): SubAgentStatus {
   return 'queued';
 }
 
-/** Fold string wins over a sticky empty client overlay. */
 function preferNonEmptyString(fold: unknown, prev: unknown): string {
   if (typeof fold === 'string' && fold.trim()) return fold;
   if (typeof prev === 'string' && prev.trim()) return prev;
@@ -125,10 +112,8 @@ function lastEnded(raw: Record<string, unknown>): Record<string, unknown> | null
   return null;
 }
 
-/**
- * Map a fold run onto the product `SubAgentRun` the drawer already renders.
- * Live overlays (tool name, start-error) ride SSE and are merged by the store.
- */
+// ── Fold ─────────────────────────────────────────────────────────────────────
+
 export function subAgentRunFromFold(
   raw: Record<string, unknown>,
   extra: Partial<SubAgentRun> = {},
@@ -230,10 +215,6 @@ function mergeClientView(runId: string): void {
     ...(prev ?? {}),
     messages,
     toolTurns: messages.length > 0 ? countToolCalls(messages) : prev?.toolTurns ?? 0,
-    // Live overlays die with the attempt. Replaying tokens onto a completed
-    // card is exactly the reload bug this store exists to close. Cancelling
-    // maps to product `running` so the card stays live, but the overlay is
-    // always `stopping` — do not keep "Calling {tool}…" after the user stop.
     livePhase: terminal
       ? undefined
       : stopping
@@ -256,18 +237,14 @@ function mergeClientView(runId: string): void {
   publish(next);
 }
 
-/**
- * `EventSource` cannot send `X-Minnow-Token`, so the per-boot session token
- * goes in the query string — the same split as boards: the client stays
- * token-free so tests inject a plain stream, and production binds auth here.
- */
+// ── Streams ──────────────────────────────────────────────────────────────────
+
 function openAuthenticatedStream(url: string): EventStream {
   return new EventSource(withSessionToken(url)) as EventStream;
 }
 
 function ensureClient(runId: string): void {
   if (clients.has(runId)) return;
-  // Tests inject `setSubAgentOpenStreamForTests`; production always tokens the URL.
   const client = createSubAgentRunClient(runId, {
     openStream: openStream ?? openAuthenticatedStream,
   });
@@ -285,15 +262,10 @@ function ensureClient(runId: string): void {
   client.connect();
 }
 
-/**
- * Tests: put a run in the store without opening SSE. Drawer/card DOM tests
- * seed this so they do not need a tool server.
- */
 export function adoptSubAgentRunForTests(run: SubAgentRun): void {
   publish(run);
 }
 
-/** Production completion-push listens here for SSE `event: deliver`. */
 export function subscribeSubAgentDeliver(
   listener: (frame: DeliverFrame & { runId: string }) => void,
 ): () => void {
@@ -307,18 +279,13 @@ function adoptRaw(raw: Record<string, unknown>): void {
   ensureClient(String(raw.runId));
   const runId = String(raw.runId ?? '');
   const next = runs.get(runId);
-  // A terminal run with no live rows still needs the disk transcript so
-  // reopening the overlay is not an empty Complete pane.
   if (next && isSubAgentRunTerminal(next.status) && (next.messages?.length ?? 0) === 0) {
     void hydrateSubAgentTranscript(runId);
   }
 }
 
-/**
- * Load derived state for a parent chat from the server and open SSE for
- * each run. A drawer opened after a reload must show every run in its
- * correct state — this is that fetch.
- */
+// ── Hydrate ──────────────────────────────────────────────────────────────────
+
 export async function hydrateSubAgentRunsForParentChat(parentChatId: string): Promise<void> {
   if (!parentChatId) return;
   const existing = hydrating.get(parentChatId);
@@ -342,10 +309,6 @@ export async function hydrateSubAgentRunsForParentChat(parentChatId: string): Pr
   return work;
 }
 
-/**
- * Load the lossy attempt transcript into the store so a finished (or
- * mid-flight) drawer is not an empty Complete pane after reload.
- */
 export async function hydrateSubAgentTranscript(runId: string): Promise<void> {
   if (!runId) return;
   try {
@@ -378,8 +341,6 @@ export function getSubAgentRun(runId: string): SubAgentRun | undefined {
 
 function isListedActiveSubAgentRun(run: SubAgentRun): boolean {
   if (run.status === 'running') return true;
-  // Queued means "no attempt yet". Idle between retry and abandon is not
-  // an active Agent activity row.
   return run.status === 'queued' && (run.foldAttemptCount ?? 0) === 0;
 }
 
@@ -387,11 +348,6 @@ export function listActiveSubAgentRuns(): SubAgentRun[] {
   return [...runs.values()].filter(isListedActiveSubAgentRun);
 }
 
-/**
- * If the client map still shows live children after the parent turn ends,
- * re-fetch derived state so a missed SSE fold cannot leave the activity
- * panel ticking until the next chat switch.
- */
 export async function rehydrateLiveParentSubAgents(parentChatId: string): Promise<void> {
   if (!parentChatId) return;
   const live = listSubAgentRunsForParentChat(parentChatId).filter(isListedActiveSubAgentRun);
@@ -415,14 +371,8 @@ export function listSubAgentRunsForParentTurn(parentTurnId: string | null | unde
 
 function resolveParentChatId(input: SpawnSubAgentInput): string {
   if (input.parentChatId?.trim()) return input.parentChatId.trim();
-  // Prefer the in-flight execute latch over whatever chat is on screen.
-  // Spawn from A, switch to B before POST used to journal the run under B (MIN-776).
   const fromExecutor = getSubAgentExecutorContext()?.parentChatId?.trim() ?? '';
   if (fromExecutor) return fromExecutor;
-  // Follow-up (MIN-776): remaining callers can omit parentChatId (issue
-  // expand when `ensureIssueWorkflowChat` fails). Do not turn this into an
-  // error until those pass an id — guessing the active chat is still wrong
-  // for them, but a hard throw would 400 a path that currently still POSTs.
   try {
     return getActiveChat()?.id?.trim() ?? '';
   } catch {
@@ -439,17 +389,13 @@ function resolveSpawnCwd(parentChatId: string | null | undefined): string {
   return getWorkspacePath().trim();
 }
 
-/** Spawn a sub-agent by POSTing `/api/agents`. Never mutates local run state. */
+// ── Spawn ────────────────────────────────────────────────────────────────────
+
 export async function spawnSubAgent(
   input: SpawnSubAgentInput,
 ): Promise<SpawnSubAgentResult | AggregateResult> {
   const parentChatId = resolveParentChatId(input);
   const cwd = resolveSpawnCwd(parentChatId);
-  // Explicit Super Plan (etc.) override wins. Otherwise bind the parent
-  // chat's model so Settings → Model routing's "effective model" is what
-  // actually runs — not Autopilot planner, not whichever chat is on screen
-  // at retry time. Server resolveAttemptModel stays the last resort when
-  // there is no parent chat at all.
   let providerId = input.providerId?.trim() ?? '';
   let modelId = input.modelId?.trim() ?? '';
   if (!providerId && !modelId) {
@@ -483,16 +429,13 @@ export async function spawnSubAgent(
     status: (body.status as SubAgentStatus) ?? 'queued',
   };
   if (input.wait === true) {
-    // Do not pass a parent chat AbortSignal. executeTool receives chatSignal
-    // but spawn never forwards it — that wiring would cancel a wait:true
-    // sub-agent whenever the parent turn stopped (MIN-777 false cancel).
-    // Super Plan passes its own timeout signal at the waitForSubAgent site.
     return waitForSubAgent(result.runId);
   }
   return result;
 }
 
-/** Cancel by POSTing `/api/agents/:runId/cancel`. */
+// ── Cancel ───────────────────────────────────────────────────────────────────
+
 export function cancelSubAgent(runId: string, _reason = 'cancelled'): CancelSubAgentResult {
   const prev = runs.get(runId);
   void request(`/${encodeURIComponent(runId)}/cancel`, { method: 'POST' })
@@ -557,8 +500,6 @@ export async function waitForSubAgent(
       reject(err);
     };
     const onAbort = () => {
-      // Fires only for the AbortSignal *passed into this wait*. Chat spawn
-      // does not pass chatSignal. Super Plan review uses AbortSignal.timeout.
       fail(new DOMException('Aborted', 'AbortError'));
       cancelSubAgent(runId, 'parent_abort');
     };
@@ -584,11 +525,6 @@ export async function waitForSubAgent(
   });
 }
 
-/**
- * Live tool overlay comes from SSE `event: live`. This is a no-op so callers
- * that used the controller log still compile, and grep finds no run-state
- * mutation outside the SSE merge path (`mergeClientView`).
- */
 export function recordToolCallForRun(
   _runId: string,
   _name: string,
@@ -622,9 +558,7 @@ export function ensureControllerReady(): Promise<void> {
   return Promise.resolve();
 }
 
-// ---------------------------------------------------------------------------
-// Parent-facing formatters (pure reads of SubAgentRun — no mutation)
-// ---------------------------------------------------------------------------
+// ── Format ───────────────────────────────────────────────────────────────────
 
 function utf8ByteLength(text: string): number {
   return new TextEncoder().encode(text).length;
@@ -641,11 +575,6 @@ export function deriveSubAgentTerminalReason(run: SubAgentRun): SubAgentTerminal
   return 'success';
 }
 
-/**
- * Honest terminal copy when the fold has no prose. Must never be the
- * placeholder from `legacyOutcomeFromSummary('')` — that string is painted
- * as a fake structured answer and collapses Activity.
- */
 export function honestTerminalSummary(run: { status: string; error?: string | null }): string {
   const err = typeof run.error === 'string' ? run.error.trim() : '';
   if (err) return err;
@@ -654,10 +583,6 @@ export function honestTerminalSummary(run: { status: string; error?: string | nu
   return 'The sub-agent finished without a written summary.';
 }
 
-/**
- * Prefer a real structured outcome, then a trimmed fold summary, then the
- * last non-system message. Never call `legacyOutcomeFromSummary` on blank.
- */
 function outcomeForRun(run: SubAgentRun) {
   if (run.structuredOutcome) return run.structuredOutcome;
   const trimmed = typeof run.summary === 'string' ? run.summary.trim() : '';

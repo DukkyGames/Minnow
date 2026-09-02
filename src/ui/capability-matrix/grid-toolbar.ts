@@ -1,7 +1,3 @@
-/**
- * Capability matrix — grid toolbar (search, group filter chips, verdict legend).
- */
-
 import { CAPABILITY_GROUP_LABELS, CAPABILITY_GROUP_ORDER } from '../../benchmark/capabilities/groups.ts';
 import type { CapabilityGroupId } from '../../benchmark/capabilities/types.ts';
 import { capabilityVerdictGlyph } from '../../benchmark/capabilities/view-model.ts';

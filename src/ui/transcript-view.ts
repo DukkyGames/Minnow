@@ -1,9 +1,3 @@
-/**
- * Shared read-only transcript renderer (messages, tool calls, tool results).
- * Sub-agent Activity and benchmark drawers share this path; reasoning uses the
- * same Thoughts toggle as main chat (`renderThoughtsToggle`).
- */
-
 import { apiMessageContentToText } from '../api/message-content.ts';
 import { isHiddenTranscriptUserMessage } from '../chat/hidden-transcript-user-messages.ts';
 import type {
@@ -89,10 +83,7 @@ function assistantTranscriptReasoning(msg: Record<string, unknown>): string {
   return '';
 }
 
-/**
- * Thinking segments for the Thoughts toggle — main-chat `thinking[]` first,
- * then sub-agent hydrate `reasoning` / `reasoning_content`.
- */
+/** Thinking segments for the Thoughts toggle — main-chat `thinking[]` first, then sub-agent hydrate `reasoning` / `reasoning_content`. */
 export function assistantTranscriptThinkingSegments(
   msg: Record<string, unknown>,
 ): string[] {
@@ -118,10 +109,7 @@ interface AssistantTranscriptPaintOpts {
   thinkingDurationMs?: number;
 }
 
-/**
- * Paint Thoughts (main-chat toggle) then prose. Callers append tool rows after
- * so reasoning stays before tool calls for the turn.
- */
+/** Paint Thoughts (main-chat toggle) then prose. */
 function appendAssistantTranscriptRow(
   body: HTMLElement,
   msg: Record<string, unknown>,
@@ -134,7 +122,6 @@ function appendAssistantTranscriptRow(
   const wrap = document.createElement('div');
   wrap.className = 'transcript-view__assistant-turn';
 
-  // Match main chat: Thoughts above the bubble, then tools (caller) below.
   if (segments.length > 0) {
     renderThoughtsToggle(wrap, segments, {
       pulse: opts.liveThinking === true,
@@ -243,8 +230,6 @@ export function appendTranscriptLiveTail(
   const toolName = live.currentToolName?.trim();
 
   if (phase === 'thinking') {
-    // When thinking events already landed on messages, the assistant row owns
-    // the pulsing Thoughts toggle — avoid a second copy in the live tail.
     if (!messagesHaveThinking(messages)) {
       const reasoning = live.partialReasoning?.trim();
       if (reasoning) {
@@ -353,7 +338,6 @@ export function renderTranscriptView(
           ? durationRaw
           : undefined;
 
-      // Thoughts + prose first, then tool calls — same order as main chat.
       appendAssistantTranscriptRow(body, msg, {
         liveThinking: i === liveThinkingIdx && segments.length > 0,
         thinkingDurationMs,

@@ -1,7 +1,3 @@
-/**
- * Express-style middleware for /api/config/* (Vite configureServer).
- */
-
 import fs from 'node:fs';
 import { ensureMinnowLayout, getMinnowHome } from './home.js';
 import {
@@ -62,7 +58,6 @@ function sendJson(res, status, payload) {
 }
 
 /**
- * Run migration from browser localStorage payloads.
  * @param {object} body
  */
 async function handleMigrate(body) {
@@ -85,7 +80,6 @@ async function handleMigrate(body) {
       raw: ls.sessions,
       file: useJsonSessionsStore() ? 'sessions/state.json' : 'sessions/sessions.db',
       parse: (str) => validateSessionState(JSON.parse(str)),
-      // Sessions write through writeResource so SQLite cutover stays consistent.
       write: async (parsed) => {
         await writeResource('sessions', parsed);
       },
@@ -166,11 +160,10 @@ async function handleMigrate(body) {
 }
 
 /**
- * Core request handler (exported for tests).
  * @param {import('http').IncomingMessage} req
  * @param {import('http').ServerResponse} res
  * @param {string} pathname
- * @returns {Promise<boolean>} true if handled
+ * @returns {Promise<boolean>}
  */
 export async function handleConfigRequest(req, res, pathname) {
 
@@ -210,7 +203,6 @@ export async function handleConfigRequest(req, res, pathname) {
           const failedAt = readSessionMeta(db, 'jsonImportFailedAt');
           if (failedAt) status.jsonImportFailedAt = failedAt;
         } catch {
-          /* status should still succeed if DB is unavailable */
         }
       }
       sendJson(res, 200, status);
@@ -226,12 +218,9 @@ export async function handleConfigRequest(req, res, pathname) {
       return true;
     }
 
-    // Phase C.1: chat list without message bodies (lazy history boot when flag on).
     if (pathname === '/api/config/sessions/summaries' && req.method === 'GET') {
       await ensureMinnowLayout();
       if (useJsonSessionsStore()) {
-        // JSON rollback store has no summary projection — return whole blob chats
-        // stripped of history so the client shape stays consistent.
         const full = (await readConfigJson('sessions/state.json')) ?? (await readResource('sessions'));
         const url = new URL(req.url ?? '', 'http://localhost');
         const workspace = url.searchParams.get('workspace') ?? '';
@@ -265,7 +254,6 @@ export async function handleConfigRequest(req, res, pathname) {
       return true;
     }
 
-    // Phase C.1: full (or optionally paged) message history for one chat.
     const historyMatch = pathname.match(/^\/api\/config\/sessions\/history\/([^/]+)$/);
     if (historyMatch && req.method === 'GET') {
       await ensureMinnowLayout();
@@ -296,7 +284,6 @@ export async function handleConfigRequest(req, res, pathname) {
       return true;
     }
 
-    // Phase C.2: FTS5 search over message bodies + title substring match.
     if (pathname === '/api/config/sessions/search' && req.method === 'GET') {
       await ensureMinnowLayout();
       const url = new URL(req.url ?? '', 'http://localhost');
@@ -306,7 +293,6 @@ export async function handleConfigRequest(req, res, pathname) {
       const limit = limitRaw != null && limitRaw !== '' ? Number(limitRaw) : 30;
 
       if (useJsonSessionsStore()) {
-        // JSON rollback: scan in-process (client also keeps the pure scorer for localStorage).
         const full = (await readConfigJson('sessions/state.json')) ?? (await readResource('sessions'));
         const chats = Array.isArray(full?.chats) ? full.chats : [];
         const tokens = String(q)
@@ -389,7 +375,6 @@ export async function handleConfigRequest(req, res, pathname) {
 
       if (req.method === 'GET') {
         const data = await readResource(resource);
-        // Absent issues file → 404 so the client can migrate from bugs once.
         if (resource === 'issues' && data === null) {
           sendJson(res, 404, { error: 'Not found' });
           return true;
@@ -409,8 +394,6 @@ export async function handleConfigRequest(req, res, pathname) {
         return true;
       }
 
-      // Partial sessions write (Phase B.0). Other config resources stay PUT-only.
-      // POST is a sendBeacon alias for PATCH (beacons cannot use the PATCH method).
       if (req.method === 'PATCH' || req.method === 'POST') {
         if (resource !== 'sessions') {
           sendJson(res, 405, { error: 'Method not allowed' });
@@ -427,7 +410,6 @@ export async function handleConfigRequest(req, res, pathname) {
       return handleRunsConfigRequest(req, res, pathname);
     }
 
-    /** Generic file API with whitelist (traversal tests). */
     const fileMatch = pathname === '/api/config/file';
     if (fileMatch) {
       const url = new URL(req.url ?? '', 'http://localhost');
@@ -463,7 +445,6 @@ export async function handleConfigRequest(req, res, pathname) {
       }
     }
 
-    /** Reject traversal attempts on path-style URLs. */
     if (pathname.startsWith('/api/config/') && pathname.includes('..')) {
       sendJson(res, 400, { error: 'Invalid config path' });
       return true;
@@ -479,8 +460,6 @@ export async function handleConfigRequest(req, res, pathname) {
       return true;
     }
     if (statusCode === 409) {
-      // Stale write: another window advanced the store. Hand back the current
-      // revision so the client can re-hydrate instead of retrying blindly.
       const revision =
         err && typeof err === 'object' && 'revision' in err
           ? Number(/** @type {{ revision: number }} */ (err).revision)
@@ -501,7 +480,6 @@ export async function handleConfigRequest(req, res, pathname) {
     return true;
   }
 
-  /** LSP catalog read/write is handled by createLspMiddleware later in the Connect stack. */
   if (pathname === '/api/config/lsp') {
     return false;
   }
@@ -514,7 +492,6 @@ export async function handleConfigRequest(req, res, pathname) {
   return false;
 }
 
-/** Connect middleware for Vite dev server. */
 export function createConfigMiddleware() {
   return async (req, res, next) => {
     const url = req.url?.split('?')[0] ?? '';

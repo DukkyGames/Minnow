@@ -1,7 +1,3 @@
-﻿/**
- * Project file tree — lazy list_directory via executeTool; CRUD via file-tree-ops.
- */
-
 import { WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
 import {
   beginCaptureDrag,
@@ -73,6 +69,8 @@ let gitStatusPollCwd: string | undefined;
 let gitStatusPollDebounce: ReturnType<typeof setTimeout> | undefined;
 let gitStatusPollInFlight = false;
 
+// ── Git status ───────────────────────────────────────────────────────────────
+
 /** Update git badge map; patch visible rows in place when possible. */
 export function setFileTreeGitStatus(map: Map<string, string>): void {
   const prev = gitStatusMap;
@@ -113,11 +111,8 @@ function unrefPollTimerIfSupported(timer: ReturnType<typeof setTimeout> | null |
 
 /** Poll git status every 5s and refresh file tree badges. */
 export function startFileTreeGitStatusPoll(cwd?: string): void {
-  // Browser-only: the poll relies on window timers and fetch. No-op in non-DOM
-  // environments (node UI tests) where `window` is undefined.
   if (typeof window === 'undefined') return;
   const normalizedCwd = cwd?.trim() || undefined;
-  // Board-change storm guard: skip if cwd is unchanged and the interval is already running.
   if (normalizedCwd === gitStatusPollCwd && gitStatusPollTimer !== undefined) {
     return;
   }
@@ -125,7 +120,6 @@ export function startFileTreeGitStatusPoll(cwd?: string): void {
   if (gitStatusPollTimer !== undefined) {
     clearInterval(gitStatusPollTimer);
   }
-  // Debounce the immediate poll so a burst of distinct-cwd calls collapses to one fetch.
   if (gitStatusPollDebounce !== undefined) {
     clearTimeout(gitStatusPollDebounce);
   }
@@ -169,8 +163,6 @@ async function pollFileTreeGitStatus(): Promise<void> {
     const result = await gitStatus(cwdArg);
     if (!result.ok) {
       setFileTreeGitStatus(new Map());
-      // Stop the interval when the server is down; onFilePanelServerAvailabilityChanged
-      // restarts polling once the server comes back up.
       if (!isFileTreeServerAvailable() && gitStatusPollTimer !== undefined) {
         clearInterval(gitStatusPollTimer);
         gitStatusPollTimer = undefined;
@@ -186,8 +178,6 @@ async function pollFileTreeGitStatus(): Promise<void> {
     }
     setFileTreeGitStatus(map);
   } catch {
-    // Best-effort background poll: swallow errors (e.g. workspace/session state
-    // torn down between ticks) so it never surfaces as an unhandled rejection.
   } finally {
     gitStatusPollInFlight = false;
   }
@@ -213,6 +203,8 @@ function patchGitBadgeOnRow(row: HTMLElement, fullPath: string): void {
 let crudBound = false;
 let focusedTreePath: string | null = null;
 let focusedTreeKind: FileTreeEntryKind | null = null;
+
+// ── Cache ────────────────────────────────────────────────────────────────────
 
 function isExpanded(path: string): boolean {
   return getFilePanelState().expandedDirs.includes(path);
@@ -339,10 +331,9 @@ function restoreFocusedTreeRow(): void {
   }
 }
 
-/**
- * Re-fetch and patch only the given directory listings (VS Code-style incremental refresh).
- * Falls back to a full reload when the filter box is active or dirs are unknown.
- */
+// ── Refresh ──────────────────────────────────────────────────────────────────
+
+/** Re-fetch and patch only the given directory listings (VS Code-style incremental refresh). */
 export async function refreshDirectories(dirs: string[]): Promise<void> {
   if (!isFileTreeServerAvailable()) {
     renderFileTree();
@@ -405,7 +396,6 @@ export async function syncFileTreeToPanelWorktree(
   panelCwd?: string,
   options?: { force?: boolean },
 ): Promise<void> {
-  // Desktop drawer scopes the tree to the selected desktop workspace folder.
   if (isDesktopWorkspaceHostingActive()) {
     const { getDesktopWorkspacePath } = await import('../lib/desktop-workspace');
     const desktopPath = await getDesktopWorkspacePath();
@@ -461,6 +451,8 @@ export function collapseDir(path: string): void {
   renderFileTree();
 }
 
+// ── Rows ─────────────────────────────────────────────────────────────────────
+
 function setFocusedRow(path: string, kind: FileTreeEntryKind, row: HTMLElement): void {
   focusedTreePath = path;
   focusedTreeKind = kind;
@@ -470,11 +462,7 @@ function setFocusedRow(path: string, kind: FileTreeEntryKind, row: HTMLElement):
   row.classList.add('file-tree-row--focused');
 }
 
-/**
- * Draggable file-tree row (composer copy + internal move).
- * Click-vs-drag uses the browser drag threshold; suppressClick avoids opening the
- * viewer after a completed drag.
- */
+/** Draggable file-tree row (composer copy + internal move). */
 function wireTreeRowDrag(row: HTMLElement, fullPath: string): { consumeClickAfterDrag: () => boolean } {
   row.draggable = true;
   let suppressClick = false;
@@ -524,6 +512,8 @@ function wireRowContextMenu(
 
   row.addEventListener('focus', () => setFocusedRow(path, kind, row));
 }
+
+// ── Render ───────────────────────────────────────────────────────────────────
 
 function renderOfflineEmpty(host: HTMLElement): void {
   host.innerHTML = '';
@@ -590,7 +580,6 @@ function appendDirRow(
   row.tabIndex = 0;
 
   row.appendChild(createExpandHit(fullPath, expanded));
-  // Material Icon Theme folder glyph (special folders like src / node_modules when named)
   row.appendChild(createFolderTypeIconElement(name, 'tree', { expanded }));
 
   const label = document.createElement('span');
@@ -783,6 +772,8 @@ function renderSubtree(host: HTMLElement, dirPath: string, depth: number): void 
   }
 }
 
+// ── Init ─────────────────────────────────────────────────────────────────────
+
 export function renderFileTree(): void {
   const host = document.getElementById('fileTreeHost');
   if (!host) return;
@@ -888,6 +879,8 @@ export async function initFileTreeIfNeeded(): Promise<void> {
     renderFileTree();
   }
 }
+
+// ── Keys ─────────────────────────────────────────────────────────────────────
 
 /** F2 rename — tree row focus or open file while CodeMirror is focused (BUG-018). */
 function handleRenameShortcut(e: KeyboardEvent): void {

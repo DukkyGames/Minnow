@@ -1,11 +1,3 @@
-/**
- * Global confirmation card for newly saved Brain pages and memory entries.
- *
- * Saves can arrive in parallel from agent tools, so cards use a single visible
- * slot backed by a queue. Each item receives a full review window without
- * covering the workspace with stacked notifications.
- */
-
 import type { BrainPage } from '../brain/types';
 import type { MemoryEntryMeta } from '../memory/types';
 import { createIcon } from './icon';
@@ -102,12 +94,7 @@ function readStringArg(args: unknown, key: string): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-/**
- * Parse successful memory tool output into a card payload.
- *
- * The server result is the source of truth for the generated id while the tool
- * arguments provide richer copy and the requested wiki path.
- */
+/** Parse successful memory tool output into a card payload. */
 export function memorySavedPayloadFromTool(
   toolName: string,
   args: unknown,
@@ -384,16 +371,11 @@ function renderNextToast(): void {
   document.body.append(element);
   requestAnimationFrame(() => element.classList.add('memory-saved-toast--visible'));
   toast.intervalId = window.setInterval(() => updateProgress(toast), PROGRESS_INTERVAL_MS);
-  // Start the countdown after DOM work so the bar begins at full width.
   toast.resumedAt = Date.now();
   updateProgress(toast);
 }
 
-/**
- * Queue a memory saved card.
- *
- * @returns a function that removes this card whether it is active or pending
- */
+/** Queue a memory saved card. */
 export function showMemorySavedToast(
   payload: MemorySavedPayload,
   options: MemorySavedToastOptions = {},

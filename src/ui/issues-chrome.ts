@@ -1,12 +1,6 @@
-/**
- * Issues chrome built into the thin `#issuesView` mount.
- *
- * The old static skeleton lived in index.html. App surfaces are resized as
- * MinnowOS windows, so the shell is the container-query child of `.issues-page`
- * (`@container` never matches the container element itself).
- */
-
 const CHROME_MARK = 'data-issues-chrome';
+
+// ── Ensure ───────────────────────────────────────────────────────────────────
 
 /** True when the live DOM already has the Phase 1 shell. */
 export function hasIssuesChrome(root: HTMLElement): boolean {
@@ -15,8 +9,6 @@ export function hasIssuesChrome(root: HTMLElement): boolean {
 
 /** Fill `#issuesView` once. Safe to call on every open. */
 export function ensureIssuesChrome(root: HTMLElement): void {
-  // Rebuild when the shell is missing even if we marked the root — embed
-  // tests (and a failed first paint) can leave the mark without chrome.
   if (hasIssuesChrome(root)) return;
   root.setAttribute(CHROME_MARK, '1');
   root.replaceChildren();
@@ -25,7 +17,6 @@ export function ensureIssuesChrome(root: HTMLElement): void {
   shell.className = 'issues-shell';
 
   shell.append(buildHeader(), buildViewTabs(), buildChipBar(), buildBody());
-  // Portal to document.body so fixed positioning is not clipped by app layers.
   buildNewForm();
   root.appendChild(shell);
 }
@@ -46,6 +37,8 @@ function el<K extends keyof HTMLElementTagNameMap>(
   }
   return node;
 }
+
+// ── Header ───────────────────────────────────────────────────────────────────
 
 function buildHeader(): HTMLElement {
   const icon = el('span', { id: 'issuesPageIcon', class: 'issues-header__icon', 'aria-hidden': 'true' });
@@ -149,6 +142,8 @@ function buildChipBar(): HTMLElement {
   });
 }
 
+// ── Form ─────────────────────────────────────────────────────────────────────
+
 function buildNewForm(): HTMLElement {
   const existing = document.getElementById('issuesNewForm');
   if (existing) {
@@ -208,6 +203,8 @@ function buildNewForm(): HTMLElement {
   return form;
 }
 
+// ── Body ─────────────────────────────────────────────────────────────────────
+
 function sortHead(key: string, label: string, extraClass: string, ariaSort = 'none'): HTMLButtonElement {
   const btn = el('button', {
     type: 'button',
@@ -215,7 +212,6 @@ function sortHead(key: string, label: string, extraClass: string, ariaSort = 'no
     'data-sort-key': key,
     'aria-sort': ariaSort,
   });
-  // Label is wrapped so icon-width columns (Type) can hide text without losing a11y names.
   btn.append(
     el('span', { class: 'issues-list-head__sort-label', text: label }),
     el('span', { class: 'issues-list-head__sort-indicator', 'aria-hidden': 'true' }),

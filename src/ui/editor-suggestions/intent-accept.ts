@@ -1,7 +1,3 @@
-/**
- * Apply an accepted intent proposal with optional indentRange (Layer B).
- */
-
 import type { ChangeSpec, EditorState } from '@codemirror/state';
 import type { EditorAiCompletionConfig } from '../../config/editor-ai-completion';
 

@@ -1,7 +1,3 @@
-/**
- * LLM skill draft extraction for skill proposals.
- */
-
 import { llmCall } from '../research/llm.js';
 import { parseSkillFrontmatter } from '../skills/parse-frontmatter.js';
 import { listMergedSkills } from '../skills/scan.js';
@@ -18,7 +14,6 @@ import {
   matchScore,
 } from '../skills/observations.js';
 
-/** Recent messages for skill extraction (longer than fact window). */
 export const SKILL_CONTEXT_WINDOW = 12;
 
 export const SKILL_OBSERVE_PROMPT = `You are analyzing an AI agent's work session. The agent took {rounds} rounds and {tool_count} tool calls to complete the task.
@@ -43,12 +38,6 @@ When (and only when) a genuine reusable procedure exists, return a JSON object w
 Be conservative: if in doubt, return null.
 Return ONLY valid JSON (or the bare word null), no markdown fences.`;
 
-/**
- * Second-stage prompt: turn several observations of the same problem class into
- * one skill. Written to fight the failure mode of the old single-session
- * pipeline, which proposed skills so specific to one incident (exact paths, one
- * error string) that they never matched anything again.
- */
 export const SKILL_GENERALIZE_PROMPT = `You are writing ONE reusable skill from several separate sessions where an AI agent solved the same class of problem.
 
 You will receive:
@@ -74,7 +63,6 @@ Otherwise return a JSON object with:
 Return ONLY valid JSON (or the bare word null), no markdown fences.`;
 
 /**
- * Best-effort JSON object extraction (handles stray braces before the real object).
  * @param {string} raw
  * @returns {Record<string, unknown> | null}
  */
@@ -180,8 +168,6 @@ export function validateSkillMdDraft(draft) {
 }
 
 /**
- * Every title a new skill could collide with: installed/merged skills plus
- * pending and rejected proposals.
  * @returns {Promise<string[]>}
  */
 export async function collectKnownSkillTitles() {
@@ -192,7 +178,6 @@ export async function collectKnownSkillTitles() {
       if (label) titles.push(label);
     }
   } catch {
-    /* best-effort — a scan failure must not block the pipeline */
   }
   try {
     for (const row of await listSkillProposals()) {
@@ -202,23 +187,15 @@ export async function collectKnownSkillTitles() {
       }
     }
   } catch {
-    /* best-effort */
   }
   return titles;
 }
 
-/** Jaccard bar above which two skill titles are treated as the same skill. */
 export const SKILL_DUPLICATE_THRESHOLD = 0.6;
 
 /**
- * True when a candidate title duplicates an existing, pending, or rejected skill.
- *
- * Checks all three because the old exact-match-against-merged-skills-only rule
- * meant a rejected proposal could be re-proposed forever: rejecting it never
- * created a merged skill, so nothing ever matched.
- *
  * @param {string} title
- * @param {string[]} knownTitles merged skill labels + pending + rejected proposal titles
+ * @param {string[]} knownTitles
  * @param {number} [threshold]
  * @returns {boolean}
  */
@@ -236,21 +213,7 @@ export function isDuplicateSkillCandidate(title, knownTitles, threshold = SKILL_
 }
 
 /**
- * Observe a session, and propose a generalized skill only once the same problem
- * class has recurred across enough distinct sessions.
- *
- * Three stages:
- *   1. **Observe** — extract a candidate from this session and record it.
- *   2. **Recurrence check** — stop unless `skillMinOccurrences` distinct sessions
- *      have produced a matching candidate.
- *   3. **Generalize** — merge the matched occurrences into one parameterized skill.
- *
- * @param {{
- *   messages: Array<{ role?: string, content?: string | unknown[] }>,
- *   roundCount: number,
- *   toolCount: number,
- *   sourceChatId?: string,
- * }} input
+ * @param {{ messages: Array<{ role?: string, content?: string | unknown[] }>, roundCount: number, toolCount: number, sourceChatId?: string, }} input
  * @returns {Promise<{ skillProposal: object | null, skipped: string[] }>}
  */
 export async function runSkillSynthesis(input) {
@@ -260,8 +223,6 @@ export async function runSkillSynthesis(input) {
     return { skillProposal: null, skipped: ['disabled'] };
   }
 
-  // AND, not OR. The old `rounds < min && tools < min` fired on nearly every
-  // turn, because clearing either bar alone was enough to pass.
   const minRounds = cfg.skillMinRounds ?? 2;
   const minTools = cfg.skillMinToolCalls ?? 2;
   if (input.roundCount < minRounds || input.toolCount < minTools) {
@@ -273,9 +234,6 @@ export async function runSkillSynthesis(input) {
     return { skillProposal: null, skipped: ['no-model'] };
   }
 
-  // The window must be passed through: formatMessagesForExtraction used to
-  // re-slice to the narrower fact window internally, so this never saw more
-  // than 6 messages despite SKILL_CONTEXT_WINDOW being 12.
   const conversation = formatMessagesForExtraction(input.messages ?? [], {
     window: SKILL_CONTEXT_WINDOW,
   });
@@ -283,7 +241,6 @@ export async function runSkillSynthesis(input) {
     return { skillProposal: null, skipped: ['empty-context'] };
   }
 
-  // --- Stage 1: observe this session ---------------------------------------
 
   const observePrompt = SKILL_OBSERVE_PROMPT.replace('{rounds}', String(input.roundCount))
     .replace('{tool_count}', String(input.toolCount));
@@ -325,7 +282,6 @@ export async function runSkillSynthesis(input) {
 
   const knownTitles = await collectKnownSkillTitles();
   if (isDuplicateSkillCandidate(title, knownTitles)) {
-    // Already covered, already queued, or already rejected — don't even observe.
     return { skillProposal: null, skipped: ['duplicate-skill'] };
   }
 
@@ -347,15 +303,12 @@ export async function runSkillSynthesis(input) {
     { retentionDays },
   );
 
-  // --- Stage 2: has this recurred? -----------------------------------------
 
   const matches = await findMatchingObservations(
     { title, tags },
     DEFAULT_MATCH_THRESHOLD,
     { retentionDays },
   );
-  // findMatchingObservations reads from disk, so the row just written is
-  // included; guard anyway in case the store write is ever made async.
   const occurrences = matches.some((row) => row.id === observation.id)
     ? matches
     : [...matches, observation];
@@ -365,7 +318,6 @@ export async function runSkillSynthesis(input) {
     return { skillProposal: null, skipped: ['observed'] };
   }
 
-  // --- Stage 3: generalize across the occurrences --------------------------
 
   const generalizeRaw = await llmCall({
     providerId: modelBinding.providerId,
@@ -437,7 +389,6 @@ export async function runSkillSynthesis(input) {
     sourceChatId: input.sourceChatId,
   });
 
-  // Consume the occurrences so the next session doesn't re-propose from them.
   await markObservationsProposed(occurrences.map((row) => row.id));
 
   return { skillProposal: proposal, skipped };

@@ -1,8 +1,3 @@
-/**
- * @deprecated Legacy synthetic tones — use bundled sound packs under `public/sounds/packs/`.
- * Generate short synthetic WAV notification tones for `public/sounds/notifications/`.
- * Run: node scripts/gen-notification-sounds.mjs
- */
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -29,7 +24,6 @@ function writeWavHeader(dataLength, sampleRate = 22050) {
   return header;
 }
 
-/** Build mono 16-bit PCM samples for a sine tone with exponential decay. */
 function makeToneSamples(frequency, durationSec, sampleRate, volume) {
   const sampleCount = Math.floor(sampleRate * durationSec);
   const data = Buffer.alloc(sampleCount * 2);

@@ -1,7 +1,3 @@
-/**
- * File tree name filter — subsequence matcher and workspace path index (BFS via list_directory).
- */
-
 import { parseListDirectoryResult, type ParsedListing } from '../lib/list-directory-parse';
 
 /** Directory basenames skipped during workspace index walks. */

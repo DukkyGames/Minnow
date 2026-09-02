@@ -1,3 +1,5 @@
+// ── Style wait ───────────────────────────────────────────────────────────────
+
 /** Max wait before revealing the shell even if CSS or chrome never signals ready. */
 const APP_READY_STYLE_TIMEOUT_MS = 4_000;
 
@@ -150,6 +152,8 @@ import {
   recordAppReadyMetrics,
 } from './boot-metrics.ts';
 
+// ── Gates ────────────────────────────────────────────────────────────────────
+
 /** Dual-gate state: CSS ready + first coherent chrome before dismissing the loader. */
 let stylesGateReady = false;
 let chromeGateReady = false;
@@ -194,6 +198,8 @@ export function whenChromeReady(): Promise<void> {
   });
 }
 
+// ── Reveal ───────────────────────────────────────────────────────────────────
+
 /** Dismiss the inline loading shell (see index.html `#app-loader`). */
 export function markAppReady(): void {
   if (revealFinished) return;
@@ -208,9 +214,6 @@ export function markAppReady(): void {
   if (loader) {
     loader.setAttribute('aria-busy', 'false');
     loader.setAttribute('aria-hidden', 'true');
-    // Drop it once the fade ends. Until this landed the loader lived forever at
-    // `opacity: 0` with its spinner still animating, which is enough on its own to
-    // keep the GPU compositor producing frames at the display refresh rate.
     window.setTimeout(() => loader.remove(), APP_LOADER_REMOVE_DELAY_MS);
   }
   const status = document.getElementById('appLoaderStatus');
@@ -249,7 +252,6 @@ export function signalStylesReadyForReveal(): Promise<void> {
         markStylesGateReady();
       })
       .catch(() => {
-        // Still open the styles gate so chrome-ready alone can finish (timeout is the backstop).
         markStylesGateReady();
       });
   }
@@ -265,7 +267,6 @@ export function scheduleMarkAppReady(): void {
 
   if (revealTimeoutId === undefined) {
     revealTimeoutId = window.setTimeout(() => {
-      // Safety: force both gates so the shell becomes usable.
       stylesGateReady = true;
       chromeGateReady = true;
       notifyChromeReadyWaiters();

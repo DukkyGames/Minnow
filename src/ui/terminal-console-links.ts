@@ -1,7 +1,3 @@
-/**
- * Console URL links open in the Minnow in-app preview (MIN-290, MIN-378).
- */
-
 import { openUrlInMinnowBrowser } from './minnow-browser-links';
 
 /** Match http(s) URLs in streamed console text (aligned with xterm web-links). */

@@ -5,6 +5,8 @@
 
 import { DEFAULT_ISSUE_TYPE_ICONS, isIssueTypeIconClass } from './type-icons';
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
 /** Semantic workflow roles mapped onto status ids at runtime. */
 export type IssueStatusRole =
   | 'triage'
@@ -69,6 +71,8 @@ export const TAXONOMY_COLOR_PALETTE = [
   '#9b7cb2',
   '#7cb29b',
 ] as const;
+
+// ── Defaults ─────────────────────────────────────────────────────────────────
 
 /** Seed defaults matching the original hardcoded unions. */
 export function createDefaultIssuesTaxonomy(): IssuesTaxonomy {
@@ -211,6 +215,8 @@ function validateItemList(
   return sortByOrder(out);
 }
 
+// ── Validate ─────────────────────────────────────────────────────────────────
+
 /** Normalize and validate a taxonomy payload; throws on hard errors. */
 export function validateIssuesTaxonomy(
   raw: unknown,
@@ -315,6 +321,8 @@ export function countIssuesUsingTaxonomyId(
   }
   return n;
 }
+
+// ── Lookups ──────────────────────────────────────────────────────────────────
 
 /** Sorted catalog helpers for UI and guards. */
 export function sortedTypes(taxonomy: IssuesTaxonomy): TaxonomyItem[] {

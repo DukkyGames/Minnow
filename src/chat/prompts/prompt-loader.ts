@@ -1,7 +1,3 @@
-/**
- * Load prompt templates from built-in bundle and optional user overrides.
- */
-
 import { parsePromptMarkdown, partIdFromKind } from './parse-front-matter';
 import type { ParsedPrompt, PromptKind, PromptProfile } from './types';
 
@@ -10,6 +6,8 @@ const registry = new Map<string, ParsedPrompt>();
 
 /** User overrides from ~/.minnow/prompts (merged when server registry is set). */
 const userRegistry = new Map<string, ParsedPrompt>();
+
+// ── Parse ────────────────────────────────────────────────────────────────────
 
 function registryKey(kind: PromptKind, id: string): string {
   return `${kind}:${id}`;
@@ -127,6 +125,8 @@ function buildFromRawMap(
   return out;
 }
 
+// ── Init ─────────────────────────────────────────────────────────────────────
+
 /**
  * Initialize built-in registry from Vite glob map (idempotent).
  * @param builtinRaw — from `builtin-globs.ts` (browser build only)
@@ -209,6 +209,8 @@ export function loadBuiltinPromptById(
   }
   return { body: bodies.fullBody ?? bodies.body, fullBody: bodies.fullBody, liteBody: bodies.liteBody };
 }
+
+// ── Load ─────────────────────────────────────────────────────────────────────
 
 /**
  * Resolve prompt body for kind + id and profile.

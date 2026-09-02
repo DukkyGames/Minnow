@@ -1,11 +1,3 @@
-/**
- * Search result enrichment — fetch the top hits and return ranked excerpts.
- *
- * Result snippets are one line each and frequently too thin to answer from, which costs
- * the model a second round-trip through fetch_web_content anyway. This pulls the top few
- * pages and reuses the rag_web_content ranker so one call can be enough.
- */
-
 import {
   fetchUrlText,
   rankWebContentByQuery,
@@ -15,10 +7,8 @@ import {
 
 import { getOutputCapPolicy } from './output-cap.js';
 
-/** Pages fetched per enriched search. Kept small — each is a network round-trip. */
 export const DEEP_READ_PAGE_LIMIT = 3;
 
-/** Ranked excerpts kept per page. */
 export const DEEP_READ_EXCERPTS_PER_PAGE = 4;
 
 /**
@@ -27,10 +17,6 @@ export const DEEP_READ_EXCERPTS_PER_PAGE = 4;
  */
 
 /**
- * Fetch and rank the top results.
- *
- * Fetches run in parallel and never reject — a page that 404s or times out is reported
- * inline rather than failing the search.
  * @param {string} query
  * @param {SearchResult[]} results
  * @param {{ pageLimit?: number; excerptsPerPage?: number }} [opts]
@@ -61,7 +47,6 @@ export async function fetchResultExcerpts(query, results, opts = {}) {
 }
 
 /**
- * Render enriched pages as a block appended below the result list.
  * @param {string} query
  * @param {EnrichedPage[]} pages
  * @returns {string}
@@ -89,10 +74,9 @@ export function formatResultExcerpts(query, pages) {
 }
 
 /**
- * Search-result text with ranked page excerpts appended.
  * @param {string} query
  * @param {SearchResult[]} results
- * @param {string} formatted Already-formatted result listing.
+ * @param {string} formatted
  * @param {{ pageLimit?: number; excerptsPerPage?: number }} [opts]
  * @returns {Promise<string>}
  */

@@ -77,6 +77,8 @@ afterEach(async () => {
   setStorageModeForTests(null);
 });
 
+// ── resolvePanelWorktreeCwd ──────────────────────────────────────────────────
+
 describe('resolvePanelWorktreeCwd', () => {
   test('returns undefined for main workspace path', () => {
     setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
@@ -96,6 +98,8 @@ describe('resolvePanelWorktreeCwd', () => {
   });
 });
 
+// ── panelPathsEqual ──────────────────────────────────────────────────────────
+
 describe('panelPathsEqual', () => {
   test('normalizes slashes and trailing separators', () => {
     assert.equal(panelPathsEqual('a/b/', 'a\\b'), true);
@@ -108,6 +112,8 @@ describe('panelPathsEqual', () => {
     );
   });
 });
+
+// ── resolvePanelBrowseRunTargetSeed ──────────────────────────────────────────
 
 describe('resolvePanelBrowseRunTargetSeed', () => {
   test('returns null when browse override is off', () => {
@@ -135,6 +141,8 @@ describe('resolvePanelBrowseRunTargetSeed', () => {
   });
 });
 
+// ── fileTreeListingRootsEqual ────────────────────────────────────────────────
+
 describe('fileTreeListingRootsEqual', () => {
   test('treats undefined and main workspace as equivalent', () => {
     setWorkspaceFromServer({ path: MAIN_WS, label: 'minnow', isDefault: false });
@@ -149,6 +157,8 @@ describe('fileTreeListingRootsEqual', () => {
   });
 });
 
+// ── buildFileTreeToolContext ─────────────────────────────────────────────────
+
 describe('buildFileTreeToolContext', () => {
   test('includes workspaceRoot when listing a worktree', () => {
     setFileTreeListingWorkspaceRoot(WORKTREE);
@@ -160,6 +170,8 @@ describe('buildFileTreeToolContext', () => {
     assert.deepEqual(buildFileTreeToolContext(), {});
   });
 });
+
+// ── syncFileTreeToPanelWorktree ──────────────────────────────────────────────
 
 describe('syncFileTreeToPanelWorktree', () => {
   test('resets panel state and listing root when cwd changes', async () => {
@@ -245,6 +257,8 @@ describe('syncFileTreeToPanelWorktree', () => {
 
 });
 
+// ── file tree tool ───────────────────────────────────────────────────────────
+
 describe('file tree tool context merge', () => {
   test('buildFileTreeToolContext supplies workspaceRoot for listing worktree', () => {
     setFileTreeListingWorkspaceRoot(WORKTREE);
@@ -252,6 +266,8 @@ describe('file tree tool context merge', () => {
     assert.deepEqual(merged, { workspaceRoot: WORKTREE, chatId: 'chat-1' });
   });
 });
+
+// ── resolvePanelBrowseCwd ────────────────────────────────────────────────────
 
 describe('resolvePanelBrowseCwd', () => {
   test('chat worktreeRoot wins with no integration-worktree lookup', () => {
@@ -320,6 +336,8 @@ describe('resolvePanelBrowseCwd', () => {
   });
 });
 
+// ── syncPanelFromActiveChat browse ───────────────────────────────────────────
+
 describe('syncPanelFromActiveChat browse override', () => {
   test('skips sync while browse override is active', async () => {
     setupDom();
@@ -360,6 +378,8 @@ describe('syncPanelFromActiveChat browse override', () => {
     gitPanel.resetGitPanelForTests();
   });
 });
+
+// ── shouldScheduleFileTreeRefresh ────────────────────────────────────────────
 
 describe('shouldScheduleFileTreeRefresh with worktree listing', () => {
   test('allows refresh when tool and tree share worktree root', () => {

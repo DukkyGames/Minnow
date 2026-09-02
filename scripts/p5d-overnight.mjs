@@ -1,46 +1,3 @@
-/**
- * P5-D — the unattended overnight run harness (MIN-722).
- *
- * Starts a board from the P5-D plan, samples it while it runs, optionally
- * induces a failure partway, and writes a record plus a human report when it
- * ends. It exists so the overnight proof is a *measurement* rather than an
- * anecdote — "it finished" is not a result, and neither is a screenshot of a
- * green board at 7am.
- *
- * ## Usage
- *
- *   node --import tsx scripts/p5d-overnight.mjs --board p5d-run-1
- *
- * Options:
- *
- *   --board <id>          board id to create or resume (default: p5d-<date>)
- *   --plan <path>         plan to run (default: the P5-D fixture)
- *   --concurrency <n>     default 2, which is what the proof specifies
- *   --sample-ms <n>       sampling interval, default 60000
- *   --out <dir>           where the record and report go
- *                         (default: documentation/plans/p5d-runs/<board>)
- *   --induce <spec>       schedule a failure — repeatable. See below.
- *   --max-hours <n>       give up and report after this long (default 14)
- *   --resume              attach to an existing board instead of creating one
- *
- * Failure induction, which is part of the proof and not a separate test:
- *
- *   --induce kill-server@2h     exit this process at t+2h, leaving the board
- *                               mid-run. Restart with --resume; recovery from
- *                               the journal is the thing being proved.
- *   --induce revoke-key@3h      point the provider at a dead key at t+3h.
- *   --induce break-task@1h      write a syntax error into the integration
- *                               worktree so a task must be abandoned.
- *
- * ## What this deliberately does not do
- *
- * It does not decide whether the run passed. Three runs, one of them on a
- * machine that sleeps, is a judgement about reliability that belongs to a
- * person reading three records side by side. The harness's job is to make sure
- * that person has the numbers — including the ones that only exist if someone
- * thought to record them before the night started.
- */
-
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
@@ -53,6 +10,8 @@ import {
 } from '../server/orchestrator/p5d-instrument.js';
 
 const HOUR_MS = 3_600_000;
+
+// ── CLI args ─────────────────────────────────────────────────────────────────
 
 /** @param {string[]} argv */
 export function parseArgs(argv) {
@@ -76,13 +35,9 @@ export function parseArgs(argv) {
   return out;
 }
 
+// ── Induction ────────────────────────────────────────────────────────────────
+
 /**
- * `kill-server@2h` → `{ kind: 'kill-server', atMs: 7200000 }`.
- *
- * Rejects an unknown kind loudly rather than ignoring it: a typo in an
- * induction spec means the night's most important variable silently never
- * happened, and you find out in the morning.
- *
  * @param {string} spec
  */
 export function parseInduction(spec) {
@@ -97,23 +52,10 @@ export function parseInduction(spec) {
   return { kind, atMs: Number(amount) * scale };
 }
 
+// ── Report ───────────────────────────────────────────────────────────────────
+
 /**
- * The Markdown report a human reads in the morning.
- *
- * The test of this report is in the issue: hand it to someone who did not watch
- * the run and confirm they know what shipped, what did not, and what to do
- * next. So it leads with those three, and the numbers come after — a wall of
- * metrics above the conclusion is how a report goes unread.
- *
  * @param {{
- *   boardId: string,
- *   startedAt: number,
- *   endedAt: number,
- *   samples: Array<Record<string, any>>,
- *   inductions: Array<{ kind: string, atMs: number, firedAt?: number }>,
- *   state?: Record<string, any> | null,
- *   comparisons?: Array<Record<string, any>>,
- * }} input
  */
 export function renderRunReport(input) {
   const last = input.samples[input.samples.length - 1] ?? {};
@@ -275,10 +217,8 @@ function mb(bytes) {
   return (Number(bytes) / 1024 / 1024).toFixed(1);
 }
 
-/**
- * The harness proper. Kept out of module scope so importing this file for
- * `parseArgs` / `renderRunReport` — which the tests do — never starts a run.
- */
+// ── Main ─────────────────────────────────────────────────────────────────────
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const boardId = String(args.board ?? `p5d-${new Date().toISOString().slice(0, 10)}`);
@@ -324,8 +264,6 @@ async function main() {
     worktreeRoot: path.join(repoRoot, '.minnow', 'worktrees', boardId),
     intervalMs: sampleMs,
     onSample: (sample) => {
-      // One line per sample to stdout, so a `tail -f` overnight is readable and
-      // a crash still leaves a trail even if the record is never written.
       console.log(
         `[p5d] +${((sample.elapsedMs ?? 0) / 60_000).toFixed(1)}m ` +
           `events=${sample.journal?.events ?? '?'} ` +
@@ -344,8 +282,6 @@ async function main() {
       if (induction.kind === 'kill-server') {
         await sampler.stop();
         await writeRecord();
-        // Hard exit, no cleanup: the point is to leave the board exactly as an
-        // unexpected death would. A graceful shutdown proves nothing.
         process.exit(9);
       } else if (induction.kind === 'revoke-key') {
         process.env.MINNOW_P5D_REVOKED = '1';
@@ -408,8 +344,6 @@ async function main() {
     console.log(`[p5d] wrote ${path.join(outDir, 'report.md')}`);
   };
 
-  // The ceiling. An unattended run that hangs must still produce a record —
-  // "it was still going at 9am" is not a result anyone can act on.
   const ceiling = setTimeout(async () => {
     console.log(`[p5d] hit the ${maxHours}h ceiling`);
     await sampler.stop();
@@ -428,8 +362,6 @@ async function main() {
   process.on('SIGINT', () => void finish(130));
   process.on('SIGTERM', () => void finish(143));
 
-  // Poll for the run's own end rather than racing the engine's internals: the
-  // journal is the source of truth for "is it over", and it survives a restart.
   for (;;) {
     await new Promise((r) => setTimeout(r, Math.min(sampleMs, 30_000)));
     const events = await journal.readEvents(boardId).catch(() => []);

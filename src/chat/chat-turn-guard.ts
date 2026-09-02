@@ -1,7 +1,3 @@
-/**
- * Prevents overlapping chat turn setup for the same session (double-send before streaming flag is set).
- */
-
 import { getChatAbort } from '../app-state';
 import { isChatStreaming } from './streaming-state';
 

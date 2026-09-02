@@ -1,9 +1,3 @@
-/**
- * When the Electron WebContentsView preview host may be shown.
- * The native view is a window overlay — hide it unless the preview pane is open and unobstructed.
- * Show + setBounds must run in one pass so PREVIEW_SET_BOUNDS is not dropped while visible=false.
- */
-
 import type { MinnowPreviewBounds } from '../electron';
 import { isDesignModeUsingIframeGuest } from './preview-design-mode-guest';
 import { getFilePanelState } from '../state/file-panel';
@@ -56,11 +50,6 @@ function usesElectronPreview(): boolean {
   return Boolean(typeof window !== 'undefined' && window.minnow?.preview);
 }
 
-/**
- * True when a non-Code OS app layer is the active fullscreen surface.
- * Complements the `is-open` id list so Models / Brain / Scheduler (and future apps)
- * hide the guest even if their root id is missing from FULLSCREEN_OVERLAY_IDS.
- */
 export function isNonCodeOsAppLayerActive(): boolean {
   if (typeof document === 'undefined') return false;
   if (typeof document.querySelectorAll !== 'function') return false;
@@ -138,7 +127,6 @@ export function isPreviewPaneDomVisible(): boolean {
   if (state.rightPaneMode !== 'preview') return false;
   const pane = document.getElementById('previewPane');
   if (!pane) return false;
-  // Desktop drawer CSS keeps #previewPane flex-visible even when .hidden lingers briefly.
   if (isDesktopBrowserMountActive()) return true;
   if (pane.classList.contains('hidden')) return false;
   return true;
@@ -150,10 +138,7 @@ function isPreviewSurfaceActive(): boolean {
   return isCodeWorkspaceForeground();
 }
 
-/**
- * Whether agent browser_navigate may open the preview split and later paint the guest.
- * The pane may still be closed; distinct from shouldShowElectronPreviewHost (needs layout).
- */
+/** Whether agent browser_navigate may open the preview split and later paint the guest. */
 export function canAgentRevealPreviewPanel(): boolean {
   if (isProductWikiOverlayVisible()) return false;
   if (isFullscreenOverlayObscuringWorkspace()) return false;
@@ -175,13 +160,9 @@ function isCodeWorkspaceForeground(): boolean {
 /** Whether the Chromium guest should be visible and receive bounds updates. */
 export function shouldShowElectronPreviewHost(): boolean {
   if (!usesElectronPreview()) return false;
-  // Design Mode uses a same-origin iframe in #previewBody so DOM overlays stack above the guest.
   if (isDesignModeUsingIframeGuest()) return false;
   if (!isPreviewSurfaceActive()) return false;
   if (!isPreviewPaneDomVisible()) return false;
-  // Full-window covers hide the native guest. Stage views do not — they only
-  // replace #chatArea; #previewPane stays a sibling in #workspaceSplit, and hiding
-  // the guest there leaves a blank browser pane.
   if (isFullscreenOverlayObscuringWorkspace()) return false;
   if (isProductWikiOverlayVisible()) return false;
   if (isChromePopoverOpen()) return false;
@@ -276,7 +257,6 @@ async function runElectronPreviewHostLayoutSync(tabId?: string | null): Promise<
   if (!api) return;
 
   if (!shouldShowElectronPreviewHost()) {
-    // Always invoke hide — main-process guest can outlive renderer reload (MIN-179).
     await api.hide();
     previewGuestVisible = false;
     return;
@@ -286,18 +266,12 @@ async function runElectronPreviewHostLayoutSync(tabId?: string | null): Promise<
   if (!bounds) return;
   if (!shouldShowElectronPreviewHost()) return;
 
-  // Always use show(bounds) — tab activate / loadSource can attach the guest at 0×0
-  // before layout is ready; setBounds alone is skipped when the guest is not visible.
   await api.show(bounds, tabId ?? undefined);
   previewGuestVisible = true;
 }
 
-/**
- * Show or hide the native preview host and sync bounds when visible.
- * Call after layout changes (Code foreground, split restore, resize).
- */
+/** Show or hide the native preview host and sync bounds when visible. */
 export function syncElectronPreviewHostLayout(tabId?: string | null): Promise<void> {
-  // Direct sync supersedes a pending debounced pass (e.g. registerChromePopover + immediate sync).
   if (layoutSyncRaf) {
     cancelScheduledAnimationFrame(layoutSyncRaf);
     layoutSyncRaf = 0;

@@ -1,7 +1,3 @@
-/**
- * User history rows that must reach the model but should not appear in the chat transcript.
- */
-
 import type { UserMessage } from '../types';
 import { isSuperPlanPipelineUserMessage } from './super-plan/hidden-user-messages';
 

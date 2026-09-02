@@ -32,6 +32,8 @@ function testScope(): string {
   return getCacheScope({});
 }
 
+// ── normalizeToolArgs / ──────────────────────────────────────────────────────
+
 describe('normalizeToolArgs / buildCacheKey', () => {
   test('same args with different key order produce the same cache key', () => {
     const a = normalizeToolArgs('read_file', { path: 'src/a.ts' });
@@ -45,6 +47,8 @@ describe('normalizeToolArgs / buildCacheKey', () => {
     assert.equal(buildCacheKey('read_file', a), buildCacheKey('read_file', b));
   });
 });
+
+// ── cache hit/miss ───────────────────────────────────────────────────────────
 
 describe('cache hit/miss', () => {
   test('cache hit invokes inner only once', async () => {
@@ -92,6 +96,8 @@ describe('cache hit/miss', () => {
     assert.equal(getCachePolicyForTool('get_lsp_diagnostics').cacheable, false);
   });
 });
+
+// ── invalidation ─────────────────────────────────────────────────────────────
 
 describe('invalidation', () => {
   test('save_file busts read_file for the same path', async () => {
@@ -289,6 +295,8 @@ describe('invalidation', () => {
   });
 });
 
+// ── invalidateCachedDirectoryListings ────────────────────────────────────────
+
 describe('invalidateCachedDirectoryListings', () => {
   test('removes list_directory and find_files in one workspace only', () => {
     const listPolicy = getCachePolicyForTool('list_directory');
@@ -324,6 +332,8 @@ describe('invalidateCachedDirectoryListings', () => {
   });
 });
 
+// ── TTL and scope clear ──────────────────────────────────────────────────────
+
 describe('TTL and scope clear', () => {
   test('TTL expiry causes miss after ttlMs', () => {
     const policy = { cacheable: true, ttlMs: 100 };
@@ -347,6 +357,8 @@ describe('TTL and scope clear', () => {
     assert.equal(getCachedResult(scope, key), undefined);
   });
 });
+
+// ── getCacheScope workspaceRoot ──────────────────────────────────────────────
 
 describe('getCacheScope workspaceRoot override', () => {
   test('scopes list_directory separately per workspaceRoot', async () => {
@@ -378,6 +390,8 @@ describe('getCacheScope workspaceRoot override', () => {
   });
 });
 
+// ── changedPathAffectsDirectoryListing ───────────────────────────────────────
+
 describe('changedPathAffectsDirectoryListing', () => {
   test('parent listing invalidates when child file changes', () => {
     assert.equal(changedPathAffectsDirectoryListing('src', 'src/foo.ts'), true);
@@ -388,6 +402,8 @@ describe('changedPathAffectsDirectoryListing', () => {
     assert.equal(changedPathAffectsDirectoryListing('.', 'readme.md'), true);
   });
 });
+
+// ── pathMatchesBustPrefix ────────────────────────────────────────────────────
 
 describe('pathMatchesBustPrefix', () => {
   test('directory prefix matches nested file paths', () => {

@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Poll the dev server until Vite returns HTTP 200.
- * First cold start can take a while while dependencies are pre-bundled.
- */
 
 /**
  * @param {number | string} port
@@ -21,7 +17,6 @@ export async function waitForVite(port, options = {}) {
         const res = await fetch(devUrl, { method: 'GET' });
         if (res.ok) return devUrl;
       } catch {
-        // Host not ready yet.
       }
     }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));

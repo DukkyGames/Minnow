@@ -1,14 +1,3 @@
-/**
- * P6-D (MIN-726) — product chat send path. One turn loop: `runTurn()`.
- *
- * Callers (composer, Super Plan, resume, attachments) compose messages and
- * overlays around `runTurn`. Import from `server/runner/index.js` (isomorphic).
- * Never import `node.js` or `tool-dispatch.js`.
- *
- * Sub-agents spawn *within* a turn via POST `/api/agents` (P8-F store).
- * This file is not a second SSE/tool loop.
- */
-
 import { runTurn } from '../../server/runner/index.js';
 import type {
   AskCapability,
@@ -264,6 +253,8 @@ import {
 import { postChatCompletions } from '../providers/fetch-chat';
 import type { PostChatCompletionsOptions } from '../../server/runner/adapters';
 
+// ── Options ──────────────────────────────────────────────────────────────────
+
 /** Browser-native tools kept as a catalog floor for tests. */
 export const RUN_TURN_CHAT_SPIKE_TOOL_IDS = ['get_datetime', 'calculate'] as const;
 
@@ -317,22 +308,19 @@ export interface ResumeParentChatOptions {
   goalDriven?: boolean;
 }
 
+// ── Tests ────────────────────────────────────────────────────────────────────
+
 /** Test hook so stream-end order can be recorded without mocking ESM. */
 let setStreamingFn: typeof setStreaming = setStreaming;
 let notifyChatStreamEndedFn: typeof notifyChatStreamEnded = notifyChatStreamEnded;
 
 function endRunTurnChatStreaming(chatId: string): void {
-  // PRD §1.3: setStreaming(false) BEFORE notifyChatStreamEnded on this path.
   setStreamingFn(false, chatId);
   notifyChatStreamEndedFn(chatId);
 }
 
 let endStreamingImpl: (chatId: string) => void = endRunTurnChatStreaming;
 
-/**
- * Replace stream-end helpers in tests. Pass `null` to restore production
- * `setStreaming` + `notifyChatStreamEnded`.
- */
 export function setRunTurnChatEndStreamingForTests(
   fns: {
     setStreaming?: typeof setStreaming;
@@ -344,19 +332,11 @@ export function setRunTurnChatEndStreamingForTests(
   endStreamingImpl = endRunTurnChatStreaming;
 }
 
-/**
- * Watchdog for the injected ask. Honors Settings → Watchdog idle when
- * it is a positive number; otherwise the runner default (60 min). Never `0`.
- */
 export function resolveSpikeAskTimeoutMs(): number {
   const idle = getChatMetaSync().generationIdleTimeoutMs;
   return idle > 0 ? idle : DEFAULT_ASK_TIMEOUT_MS;
 }
 
-/**
- * Capability injected into `runTurn`. Backed by the existing question
- * card queue — `ask_question` is not added to `spikeChatToolDefinitions()`.
- */
 export function createChatAskCapability(input: {
   chatId: string;
   enqueue?: typeof enqueueAskQuestion;
@@ -373,23 +353,15 @@ export function createChatAskCapability(input: {
   };
 }
 
-/**
- * Round-boundary hook for in-turn steer (P10-I / MIN-774).
- * Same injection shape as {@link createChatAskCapability}: the runner does
- * not know what a chat is. Boards omit `onRoundBoundary`.
- */
 export function createChatRoundBoundary(
   chat: Chat,
 ): () => TranscriptMessage[] | null {
   return () => {
     const result = consumePendingSteer(chat);
-    // Queue strip is last-write-wins with pendingSteer; refresh after consume.
     syncComposerMessageQueue();
     if (!result.consumed || typeof result.content !== 'string' || !result.content) {
       return null;
     }
-    // Product `steer: true` is already on chat.history. The runner strips
-    // unknown fields before the next completion.
     return [{ role: 'user', content: result.content }];
   };
 }
@@ -408,10 +380,6 @@ type EnsureChatModelLoadedFn = typeof ensureChatModelLoadedForTurn;
 let chatTurnNeedsModelLoadImpl: ChatTurnNeedsModelLoadFn = chatTurnNeedsModelLoad;
 let ensureChatModelLoadedImpl: EnsureChatModelLoadedFn = ensureChatModelLoadedForTurn;
 
-/**
- * Stub model-load gating in tests so the transcript can show Loading model…
- * before completions start.
- */
 export function setChatModelLoadForTests(
   fns: {
     needsLoad?: ChatTurnNeedsModelLoadFn;
@@ -428,10 +396,6 @@ export function resetRunTurnForTests(): void {
   ensureChatModelLoadedImpl = ensureChatModelLoadedForTurn;
 }
 
-/**
- * Isolated buffer used by the P6-A spike. P6-C persist suffixes against the
- * session store instead; this helper remains for tests that assert the wrap.
- */
 export function createChatTurnTranscriptStore(chatId: string): {
   store: TranscriptStore;
   getIsolatedMessages: () => TranscriptMessage[];
@@ -455,6 +419,8 @@ export function createChatTurnTranscriptStore(chatId: string): {
   };
 }
 
+// ── Tools ────────────────────────────────────────────────────────────────────
+
 /** OpenAI function tools for the two spike ids, if they exist in the catalog. */
 export function spikeChatToolDefinitions(): RunTurnOptions['tools'] {
   const tools: RunTurnOptions['tools'] = [];
@@ -473,11 +439,6 @@ export function spikeChatToolDefinitions(): RunTurnOptions['tools'] {
   return tools;
 }
 
-/**
- * Mode catalog for this chat. Plan-mode write guard stays in `executeTool`.
- * `ask_question` may be in the list; routing still goes through
- * {@link createChatAskCapability}. UI Designer remaps the allow-list here.
- */
 export function chatToolDefinitionsForTurn(
   chat: Chat,
   skillId?: string | null,
@@ -504,11 +465,6 @@ export function chatToolDefinitionsForTurn(
   }));
 }
 
-/**
- * Work-agent / global context policy + the window for this send model.
- * Omitted `limits` made the runner fall back to default summarize + catalog
- * lookup, so Agents settings never applied on product chat (MIN-783).
- */
 function chatTurnContextLimits(chat: Chat, sendModelId: string): NonNullable<RunTurnOptions['limits']> {
   const workAgent = resolveActiveWorkAgent(chat);
   const policy = workAgent
@@ -523,11 +479,8 @@ function chatTurnContextLimits(chat: Chat, sendModelId: string): NonNullable<Run
   };
 }
 
-/**
- * Compose system prompt for `runTurn`. Exclusive skill bodies (impeccable /
- * caveman / partymode) and UI Designer remap live here — not a second loop.
- * User rules concatenate into one systemPrompt (no second system message).
- */
+// ── Prompt ───────────────────────────────────────────────────────────────────
+
 export async function composeRunTurnChatSystemPrompt(input: {
   chat: Chat;
   rawText: string;
@@ -618,10 +571,6 @@ function asToolArgs(args: unknown): Record<string, unknown> {
   return {};
 }
 
-/**
- * Copy runner assistant/tool rows into the chat. Skip system + inner-loop
- * user nudges — those are sub-agent continuation, not product transcript.
- */
 export function appendIsolatedProductRows(
   chat: Chat,
   isolated: TranscriptMessage[],
@@ -633,10 +582,8 @@ export function appendIsolatedProductRows(
   }
 }
 
-/**
- * P6-D: every product send goes through `runTurn`. Kept so older tests that
- * called `maybeRunChatTurnViaRunner` still drive the adapter.
- */
+// ── Turn ─────────────────────────────────────────────────────────────────────
+
 export async function maybeRunChatTurnViaRunner(
   input: RunChatTurnOptions,
 ): Promise<boolean> {
@@ -644,10 +591,6 @@ export async function maybeRunChatTurnViaRunner(
   return true;
 }
 
-/**
- * Product chat turn: overlays (Super Plan, resume, attachments, skills,
- * titles, synthesis) around `runTurn()`. Not a second stream/tool loop.
- */
 export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   const {
     chat,
@@ -696,7 +639,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   let streamStatus: StreamingStatusHandle | undefined;
   let painter: ChatTurnEventPainter | undefined;
   let store: ChatTranscriptStore | undefined;
-  // Default failed so a throw before we classify still records a failed run.
   let turnRunStatus: TurnRunStatus = 'failed';
   let turnStopReason: ChatStopReason | undefined;
   let turnErrorMessage: string | undefined;
@@ -861,7 +803,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     chat.modelId = sendModelId;
     chat.providerId = sendProviderId;
 
-    // My Models: keep library ids for ensure; remap to llama/mlx after a live serve.
     const cached = await fetchCachedModels().catch(() => []);
     const library = await loadableLibraryFromCached(cached);
     const serves = await listModelServes().catch(() => []);
@@ -915,8 +856,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     if (ownsGlobalStreaming) {
       setStreaming(true, chat.id);
     }
-    // Match the pre-runTurn overlay: send/stop + follow-up placeholder while this
-    // chat is on screen. Teardown syncs again in `finally`.
     if (getActiveChat().id === chat.id) {
       syncComposerFromStreamingState();
     }
@@ -931,8 +870,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       );
     }
 
-    // Stream shell must exist before the load await so "Loading model…" is
-    // in-transcript, not only on the status bar.
     const streamRow = appendStreamingAssistantRow(chat.id);
     wrap = streamRow.wrap;
     bubble = streamRow.bubble;
@@ -951,7 +888,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       streamStatus = row.streamStatus;
       thoughtController?.setAssistantWrap(wrap);
       if (!painter) return;
-      // revealProse closes over these `let`s, so retarget does not need a new one.
       painter.retarget({
         wrap,
         bubble,
@@ -993,8 +929,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       setSidebarStreamPhase('generating', chat.id);
     }
 
-    // Live thinking timer (loop.ts:1949–1953). The store has its own tracker
-    // for persist duration; this one drives the elapsed suffix and toggle.
     thinkingTracker = new ThinkingDurationTracker((elapsedMs) => {
       if (!isStreamDomVisible(chat.id)) return;
       thoughtController?.setThinkingElapsed(elapsedMs);
@@ -1069,22 +1003,16 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       return histIdx;
     };
 
-    // Live strip: schedule from the coalesced paint so a token burst is one
-    // snapshot of already-held cumulative strings, not a thought-bubble join.
     streamingStatsPublisher = createStreamingStatsPublisher(chat);
     let statsT0 = 0;
     let statsTFirst: number | null = null;
-    // Real provider usage/stats from P10-B `stream_meta` — never `{}` mid-stream.
     let liveStreamMeta: StreamMetaAccumulator = {};
-    // Completed rounds, same fields loop.ts fed the publisher as priorSegments.
     const turnUsageSegments: Usage[] = [];
     const turnStatsSegments: Array<{ stats: Stats; usage: Usage }> = [];
-    // Box so post-await reads see callback writes (TS does not track those).
     const metricsState: {
       lastRound: { stats: Stats; usage: Usage; model_info: ModelInfo } | null;
       streamModelId: string;
     } = { lastRound: null, streamModelId: '' };
-    // Inner loop records via deps.recordTurnUsage; fake tests only emit round_end.
     let recordedUsageViaDeps = false;
     let recordedRoundUsage = false;
     const publishLiveStats = (
@@ -1097,7 +1025,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         t0: statsT0 || performance.now(),
         tFirst: statsTFirst,
         partialText: snap.lastDelta,
-        // Length only — P7-C: never join thought-bubble segments here.
         partialThinkingLength: snap.lastThinking.length,
         priorSegments: turnUsageSegments,
         priorStatsSegments: turnStatsSegments,
@@ -1109,7 +1036,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     };
     const appendLiveRowStats = (row: HTMLElement, stats: Stats, usage: Usage): void => {
       if (!row.isConnected || !isStreamDomVisible(chat.id)) return;
-      // Rebuilds from history also call appendStats; drop a live duplicate first.
       row.querySelector('.msg-stats')?.remove();
       appendStats(row, stats, usage);
     };
@@ -1134,7 +1060,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       );
     };
 
-    // Serialized tool calls for the context ring. Updated on tool_call, not per token.
     const pendingToolCallsForContext: Array<{
       id?: string;
       name: string;
@@ -1146,7 +1071,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       lastThinking?: string;
     }): void => {
       const painterSnap = painter?.snapshot();
-      // Coalesced paint + tool_call only — never from raw delta events (P7-B).
       syncTurnContextUsage({
         chatId: chat.id,
         partialAssistantText: snap?.lastDelta ?? painterSnap?.lastDelta,
@@ -1171,7 +1095,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       onActivity: () => notifyChatStreamActivity(chat.id),
       onCoalescedPaint: (snap) => {
         publishLiveStats(snap, false);
-        // Once per rAF tick — the grain P7-B exists to keep (P10-I).
         writeLiveContextOverlay(snap);
       },
       modeId: chat.modeId,
@@ -1179,7 +1102,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       beginNextStreamingRow,
       onRoundFinalized: ({ wrap: closedWrap, connected }) => {
         if (!connected || !isStreamDomVisible(chat.id)) return;
-        // Per-message footer on the closed live row before any history rebuild.
         if (metricsState.lastRound) {
           appendLiveRowStats(closedWrap, metricsState.lastRound.stats, metricsState.lastRound.usage);
         }
@@ -1198,7 +1120,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       },
     });
 
-    // Local inference shares the GPU with the compositor; cloud must not acquire.
     if (isLocalProvider(provider)) {
       releaseTickedMotion = acquireTickedMotion();
     }
@@ -1228,8 +1149,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       if (composed.composed.trim()) systemPrompt = composed.composed;
       injectionBlocks = composed.injectionBlocks;
     } catch (err) {
-      // Missing prompt config must not fail a plain turn; exploding
-      // attachments (abandoned-turn test) must still propagate after cleanup.
       if (err instanceof Error && /setup exploded/i.test(err.message)) throw err;
       if (validAttachments.some((a) => {
         try {
@@ -1256,8 +1175,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       }
     }
 
-    // Replay-prior-reasoning is a buildApiMessages option; inner runner owns
-    // thinking. Fetch once so a later caller overlay can use it if needed.
     await fetchReplayPriorReasoningEnabled().catch(() => false);
 
     if (!resumeGenerationId) {
@@ -1367,8 +1284,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         },
       });
     };
-    // Inner loop would otherwise attribute this completion to a sub-agent
-    // helper (`recordSubAgentTurnUsage`). Record as main-chat instead.
     deps.recordTurnUsage = async (_input, turn) => {
       const payload = turn as {
         providerId?: string;
@@ -1388,8 +1303,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       );
     };
 
-    // Main chat persists generations so boot resume can re-subscribe. First
-    // post of a resume turn subscribes; later tool rounds POST a new generation.
     let resumeId = resumeGenerationId?.trim() || '';
     deps.postChatCompletions = async (prov, body, signal, postOptions) => {
       const next: PostChatCompletionsOptions = {
@@ -1433,17 +1346,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           attachments: validAttachments,
         })
       : undefined;
-    // Match the user row already pushed (`historyContent`, including skill
-    // tags). `userText` is the pre-tag body — using it here duplicates the
-    // send as a second user bubble. Continue-after-truncation still wins.
     const seed =
       ephemeralContinueInstruction?.trim() ||
       (priorMessages ? '' : historyContent);
 
     statsT0 = performance.now();
-    // Consecutive parallel-safe `tool_call`s in one round (all emitted before
-    // execute) share one activity label — a 6-wide read batch should not flash
-    // the last tool name (P10-H / MIN-773).
     let parallelSafeStreak = 0;
 
     const result = await runTurnImpl({
@@ -1464,7 +1371,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       onEvent: (event) => {
         chatStore.observe(event);
         if (event.type === 'round_start') {
-          // Each API round has its own t0 / usage; do not inherit the last one.
           liveStreamMeta = {};
           statsT0 = performance.now();
           statsTFirst = null;
@@ -1482,7 +1388,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           if (typeof event.model === 'string' && event.model.trim()) {
             metricsState.streamModelId = event.model.trim();
           }
-          // P10-B runtime is timings + prompt_progress, not a label string.
           const runtime = runtimeStatusFromStreamMetaRuntime(
             event.runtime,
             statsTFirst != null,
@@ -1493,13 +1398,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             }
             streamStatus.setRuntimeDetail(runtime.detail || null);
           }
-          // Usage-only snapshot: still length, never a thought-bubble join.
           const snap = painter?.snapshot() ?? { lastDelta: '', lastThinking: '' };
           publishLiveStats(snap, false);
         }
         if (event.type === 'round_end') {
           const roundStreamMeta = streamMetaFromRoundEnd(liveStreamMeta, event);
-          // t0 can be 0 in tests; `||` would fall through to wall-clock now.
           const tEnd = Number.isFinite(event.tEnd) ? event.tEnd : performance.now();
           const t0 = Number.isFinite(event.t0) ? event.t0 : statsT0 || tEnd;
           const tFirst = event.tFirst ?? statsTFirst ?? tEnd;
@@ -1515,14 +1418,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             recordRoundLedger(roundStreamMeta, t0, tFirst, tEnd);
           }
           recordedUsageViaDeps = false;
-          // Strip during tool execution shows completed rounds, not a live estimate.
           liveStreamMeta = {};
           publishLiveStats({ lastDelta: '', lastThinking: '' }, true, {});
         }
         if (event.type === 'phase') {
-          // thinking / generating come from the runner; do not infer them from
-          // tool_call. phase `tools` also fires from onToolCallDelta (args still
-          // streaming) — remount needs a stream shell until a real tool_call.
           if (event.phase === 'thinking' || event.phase === 'generating') {
             patchMainTurnActivity(chat.id, {
               phase: event.phase,
@@ -1531,8 +1430,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           }
         }
         if (event.type === 'tool_streaming') {
-          // Args are still streaming — one name is correct until the batch
-          // of `tool_call`s arrives and we can see a parallel segment.
           if (parallelSafeStreak <= 1) {
             patchMainTurnActivity(chat.id, { currentTool: event.name });
           }
@@ -1556,10 +1453,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             name: event.name,
             arguments: event.arguments,
           });
-          // Discrete tool_call — once per call with serialized args (P10-I).
           writeLiveContextOverlay();
         }
-        // round_end lastRound is set above so onRoundFinalized can appendStats.
         painter?.onEvent(event);
       },
       transcript: chatStore,
@@ -1587,10 +1482,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         }
 
         const toolLoopModeId = normalizeModeId(chat.modeId);
-        // Nested spawn/cancel read this module-level latch. It must be the
-        // current tool call, and it must be cleared in `finally` — a leak
-        // anchors the next turn's cards to this row (P10-H / MIN-773).
-        // P10-K re-anchors the card on upsert if the tool row was rebuilt.
         setSubAgentExecutorContext({
           parentTurnId: turnRunId ?? chat.id,
           modeId: toolLoopModeId,
@@ -1619,7 +1510,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
           content: toolOut.content,
         };
         if (toolOut.attachments?.length) payload.attachments = toolOut.attachments;
-        // Persist-time tool rows read attachments/codeChange from TurnEvent.
         if (toolOut.codeChange) payload.codeChange = toolOut.codeChange;
         return payload;
       },
@@ -1627,9 +1517,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
 
     await Promise.all(ledgerWrites);
 
-    // End-of-turn summed usage is a fallback when no round_end / deps
-    // recording happened. Per-round recordMainChatTurnUsage already wrote
-    // the same tokens; a second write would double-count the ledger.
     if (result.usage && !recordedRoundUsage) {
       const agent = resolveActiveWorkAgent(chat);
       await recordChatCompletionUsage(chat, {
@@ -1658,8 +1545,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       superPlanStage,
     };
 
-    // Stop is a returned outcome, not a throw. Do not fall through to the
-    // success painter — that path never mints `stopped: true`.
     if (isAbortedTurnResult(result, chatSignal)) {
       const settled = settleStoppedTurn(chrome);
       turnRunStatus = 'stopped';
@@ -1689,8 +1574,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         lastThinking: '',
         toolCallCount: 0,
       };
-      // Priors already hold every round; do not pass summed result.usage
-      // (that adds prompts across rounds and looks like a huge context).
       publishLiveStats(painted, true, {});
       const displayMeta = turnStatsSegments.length
         ? aggregateTurnMetaSegments(turnStatsSegments)
@@ -1814,7 +1697,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       pushUser,
       superPlanStage,
     };
-    // Thrown AbortError is the fallback Stop path; the usual Stop is a return.
     if (isAbortError(err) || getChatAbort(chat.id)?.signal.aborted) {
       const settled = settleStoppedTurn(chrome);
       turnRunStatus = 'stopped';
@@ -1824,19 +1706,14 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       turnRunStatus = 'failed';
       turnErrorMessage = settled.errorMessage;
     }
-    // Setup failures after the activity row (abandoned-turn) must propagate
-    // so callers can distinguish a throw from a crashed outcome.
     if (!turnTeardownRan && err instanceof Error && /setup exploded/i.test(err.message)) {
       throw err;
     }
   } finally {
     turnTeardownRan = true;
-    // Nested spawn cards latch onto this module-level parent; a leak
-    // would pin the next turn's cards to a stale tool row (P10-H / MIN-773).
     setSubAgentExecutorContext(null);
     setBugBoardExecutorContext(null);
     await Promise.all(ledgerWrites);
-    // Drop the live-strip timer; hand looping animations back to vsync.
     streamingStatsPublisher?.reset();
     streamingStatsPublisher = null;
     releaseTickedMotion?.();
@@ -1844,12 +1721,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     thoughtController?.abort();
     thinkingTracker?.abort();
     store?.abortThinking();
-    // Drop in-flight tokens so the ring settles to the post-turn estimate.
     setContextInFlightOverlay(null);
     scheduleContextUsageRefresh();
     registerStreamDomRemount(chat.id, null);
-    // System Stop (Quit Minnow) leaves the id so boot resume can still prompt.
-    // Activity snapshot otherwise rebuilds a `main:<chatId>` row from a leftover id.
     if (turnStopReason !== 'system' && chat.currentGenerationId) {
       chat.currentGenerationId = undefined;
       touchChat(chat);
@@ -1858,7 +1732,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     clearMainTurnActivity(chat.id);
     streamStatus?.setPhase('done');
     streamStatus?.dispose();
-    // Tools-only last round / detached wrap can leave Generating… in the transcript.
     if (wrap?.isConnected && wrap.classList.contains('msg--awaiting-prose')) {
       removeOrphanStreamingRow(wrap, streamStatus);
     }
@@ -1890,12 +1763,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       setSidebarStreamPhase(null, chat.id);
       syncChatItemDotsInDom();
     }
-    // Composer send/stop chrome is not a stream-end listener; switchChat
-    // used to be the only path that restored idle placeholder + send icon.
     if (getActiveChat().id === chat.id) {
       syncComposerFromStreamingState();
     }
-    // Do not await — a slow /api/agents must not stall queue drain or abort clear.
     void rehydrateLiveParentSubAgents(chat.id);
     if (getChatAbort(chat.id)?.signal) {
       setChatAbort(chat.id, null);
@@ -1912,7 +1782,6 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     if (completedNormally) {
       const leftoverSteer = chat.pendingSteerMessage?.trim() ?? '';
       if (leftoverSteer) {
-        // No tool-loop boundary this turn — follow-up send, not abort+resend.
         clearPendingSteer(chat);
         void resumeParentChatWithMessage(chat, leftoverSteer);
       } else {
@@ -1930,10 +1799,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
   }
 }
 
-/**
- * Programmatic parent turn (e.g. sub-agent completion push). Skips slash/skill
- * resolution — prefer {@link sendProgrammaticChatText} when the text may include `/skills`.
- */
+// ── Resume ───────────────────────────────────────────────────────────────────
+
 export async function resumeParentChatWithMessage(
   chat: Chat,
   message: string,

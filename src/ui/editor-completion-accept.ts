@@ -1,7 +1,3 @@
-/**
- * Layer B: optional indentRange after accepting multi-line completion ghosts.
- */
-
 import type { EditorState } from '@codemirror/state';
 import type { ChangeSpec } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
@@ -38,10 +34,7 @@ export function completionInsertChangeSpecs(
   return { from: insertPos, insert: text };
 }
 
-/**
- * Apply optional indentRange after an insert/replace dispatch.
- * indentRange returns a ChangeSet, so it must be its own dispatch (not batched with ChangeSpecs).
- */
+/** Apply optional indentRange after an insert/replace dispatch. */
 export function dispatchReindentAfterAccept(
   view: EditorView,
   rangeFrom: number,

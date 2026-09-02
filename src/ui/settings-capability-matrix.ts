@@ -1,7 +1,3 @@
-/**
- * Settings → Advanced → Capability matrix (workbench inside settings panels).
- */
-
 import '../styles/settings-general.css';
 import '../styles/settings-capability-matrix.css';
 import { detectConfigServer } from '../config/storage-mode';
@@ -417,7 +413,6 @@ export async function renderCapabilityMatrixSettingsSection(): Promise<void> {
           `${selection.targetKey}::${selection.capabilityId}`,
         );
         if (!cell) return;
-        // Click opens the transcript panel; the former bottom editor lives there.
         openSelection = selection;
         openCapabilityCellTranscript(cell, {
           ...cellTranscriptOptions(),

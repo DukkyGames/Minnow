@@ -137,9 +137,7 @@ function shiftHue(color: RgbaColor, degrees: number): RgbaColor {
  */
 function deriveSuccessColor(accent: RgbaColor, dark: boolean): RgbaColor {
   const hsl = rgbToHsl(accent);
-  // Floor saturation so near-gray accents still yield a readable status green.
   const s = Math.max(hsl.s, dark ? 0.25 : 0.3);
-  // Clamp lightness into ranges that read as "ok" on dark vs light shells.
   const l = dark
     ? clamp01(Math.max(0.55, Math.min(0.72, hsl.l)))
     : clamp01(Math.max(0.32, Math.min(0.48, hsl.l)));
@@ -172,7 +170,6 @@ export function deriveThemeTokensFromSeeds(seeds: SimplifiedThemeSeeds): Record<
   const accentBorder = rgbaWithAlpha(accent, 0.28);
   const accentInk = dark ? lighten(accent, 0.35) : darken(accent, 0.35);
 
-  // Success is a fixed-hue semantic green, not a clone of accent (desert/ocean/coral accents are not green).
   const success = deriveSuccessColor(accent, dark);
   const successSoft = rgbaWithAlpha(success, 0.14);
   const successBorder = rgbaWithAlpha(success, 0.28);

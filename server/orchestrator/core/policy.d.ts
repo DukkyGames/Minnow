@@ -2,10 +2,6 @@ import type { Action, Evidence, PolicyOutcome, PolicyRow, Role, SeedKind } from 
 
 /**
  * The recovery policy, as data rather than control flow.
- *
- * Rows are matched top to bottom; the first whose role, outcome, and attempt
- * bound all match wins. `under: n` applies while `attemptCount < n`;
- * `under: null` is that role-and-outcome's fallback.
  */
 export const POLICY_TABLE: readonly PolicyRow[];
 
@@ -18,7 +14,6 @@ export function decide(input: {
   evidence?: Evidence | null;
 }): Action;
 
-/** Seed kinds that reuse the previous attempt's worktree (MIN-705 / MIN-707). */
 export const SAME_WORKTREE_SEED_KINDS: readonly ['repair', 'continue', 'rebase'];
 
 /** Does this seed kind repair in place rather than in a fresh worktree? */

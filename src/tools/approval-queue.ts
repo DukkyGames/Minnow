@@ -1,7 +1,3 @@
-/**
- * Serializes tool approval modals so only one dialog is active at a time.
- */
-
 import { showToolApprovalModal } from '../ui/tool-approval-modal';
 import type { ToolApprovalModalResult } from '../ui/tool-approval-modal';
 import type { ToolApprovalRequest } from './tool-approval-types';
@@ -48,10 +44,6 @@ function settle(item: Queued, decision: ToolApprovalDecision): void {
   item.resolve(decision);
 }
 
-/**
- * Queues a modal request. Resolves when the user chooses an action, closes the
- * dialog, or the request's AbortSignal fires (`cancel`).
- */
 export function enqueueToolApproval(request: ToolApprovalRequest): Promise<ToolApprovalDecision> {
   return new Promise((resolve) => {
     if (request.signal?.aborted) {

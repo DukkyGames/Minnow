@@ -1,7 +1,3 @@
-/**
- * Inline rename on file-tree rows (replaces window.prompt for BUG-018).
- */
-
 import { setStatus } from './status';
 import { basename, normalizeTreePath } from './file-tree-path';
 import type { FileTreeEntryKind } from './file-tree-ops';
@@ -107,7 +103,6 @@ export function startInlineRename(path: string, kind: FileTreeEntryKind): void {
     kind === 'dir' ? 'New folder name' : 'New file name',
   );
 
-  // Row click opens files / toggles folders; keep pointer events on the input only.
   const stopRowPointer = (e: Event) => {
     e.stopPropagation();
   };
@@ -157,7 +152,6 @@ export function startInlineRename(path: string, kind: FileTreeEntryKind): void {
       finish(true);
       return;
     }
-    // Row Space/Enter activate tree items; keep typing (e.g. "my file.ts") in the input.
     e.stopPropagation();
   });
 

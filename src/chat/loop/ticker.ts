@@ -1,8 +1,3 @@
-/**
- * Global 15s scanner for due /loop entries across all chats.
- * Persisted dueAt + scan survives reload and laptop sleep (unlike per-loop setTimeout).
- */
-
 import type { ActiveLoopState, Chat } from '../../types';
 import { isGoalEvaluating } from '../goal/evaluating-state';
 import {
@@ -48,6 +43,8 @@ let sendFn: LoopSendFn | null = null;
 export function setLoopSendFn(fn: LoopSendFn | null): void {
   sendFn = fn;
 }
+
+// ── Predicates ───────────────────────────────────────────────────────────────
 
 /** Whether the chat is idle enough to fire a loop this tick. */
 export function isChatIdleForLoop(chat: Chat): boolean {
@@ -126,16 +123,14 @@ function scheduleLoopWake(): void {
   }, delayMs);
 }
 
+// ── Schedule ─────────────────────────────────────────────────────────────────
+
 /** Reschedule the precise wake timer after loop dueAt changes. */
 export function notifyLoopScheduleChanged(): void {
   if (!tickerStarted) return;
   scheduleLoopWake();
 }
 
-/**
- * Advance scheduling fields before firing so a crash mid-send does not
- * immediately re-fire the same loop on the next tick.
- */
 export function advanceLoopSchedule(
   loop: ActiveLoopState,
   now: number,
@@ -168,10 +163,8 @@ export interface LoopTickResult {
   skipped: string | null;
 }
 
-/**
- * Scan all chats for due loops. One fire per chat per tick.
- * Injectable send + now for unit tests.
- */
+// ── Tick ─────────────────────────────────────────────────────────────────────
+
 export async function runLoopTick(options: {
   now?: number;
   send?: LoopSendFn;
@@ -208,7 +201,6 @@ export async function runLoopTick(options: {
       const loops = getActiveLoops(chat);
       if (!loops.length) continue;
 
-      // Drop expired loops first
       for (const loop of [...loops]) {
         if (!isLoopExpired(loop, now)) continue;
         removeActiveLoop(chat, loop.id);
@@ -235,7 +227,6 @@ export async function runLoopTick(options: {
         continue;
       }
 
-      // C.2 category-3: loops fire on non-active chats — hydrate before send mutates history.
       try {
         await ensureChatHistoryLoaded(chat.id);
         requireHistory(chat);
@@ -272,7 +263,6 @@ export async function runLoopTick(options: {
       }
 
       if (shouldSyncHint) syncLoopActiveHint();
-      // One fire per chat per tick
     }
   } finally {
     ticking = false;
@@ -303,7 +293,6 @@ export function startLoopTicker(options: {
     });
   };
   tickTimer = setInterval(tick, intervalMs);
-  // Catch up soon after boot without waiting a full interval
   tick();
   scheduleLoopWake();
 }

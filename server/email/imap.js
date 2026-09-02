@@ -1,12 +1,3 @@
-/**
- * IMAP connect, folder listing, and incremental message sync (imapflow).
- *
- * Sync is incremental: new mail is fetched with `UID lastSeen+1:*` (headers +
- * text part only), and a cheap FLAGS-only pass over the visible window
- * reconciles reads/deletes/moves made in another client. Full bodies and
- * attachment metadata are downloaded lazily on first open (`ensureMessageBody`).
- */
-
 import { createHash } from 'node:crypto';
 import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
@@ -41,27 +32,19 @@ import { listFoldersCached, withMailbox } from './imap-session.js';
 import { backfillCategoriesIfNeeded, deriveBulkSignals } from './categorize.js';
 import { withImapErrors } from './imap-errors.js';
 
-/** Default page size for one backfill/incremental batch. */
 export const DEFAULT_FETCH_LIMIT = 50;
 
-/** Maximum messages fetched in a single sync batch. */
 export const MAX_SYNC_BATCH = 500;
 
-/** Maximum messages per agent/tool request. */
 export const MAX_TOOL_LIMIT = 20;
 
-/** How many recent UIDs the FLAGS reconcile pass covers. */
 export const FLAGS_RECONCILE_WINDOW = 200;
 
-/** Cap on new messages ingested in one incremental pass (protects a cold 5k mailbox). */
 export const MAX_NEW_PER_SYNC = MAX_SYNC_BATCH;
 
-/** Skip inline text-part download above this size; the body loads lazily instead. */
 const MAX_PREVIEW_PART_BYTES = 256 * 1024;
 
 /**
- * Build a one-shot imapflow client (connection tests; pooled work uses
- * `withMailbox` from imap-session.js).
  * @param {import('./accounts.js').EmailAccount} account
  * @param {string} password
  */
@@ -80,8 +63,6 @@ export function createImapClient(account, password) {
 }
 
 /**
- * Test IMAP login for an account. Deliberately unpooled — a credential check
- * must not reuse (or poison) the live session.
  * @param {string} accountId
  */
 export async function testImapConnection(accountId) {
@@ -100,14 +81,12 @@ export async function testImapConnection(accountId) {
       try {
         await client.close();
       } catch {
-        /* ignore */
       }
     }
   });
 }
 
 /**
- * List selectable IMAP folders (served from the per-account folder cache).
  * @param {string} accountId
  * @param {{ force?: boolean }} [options]
  */
@@ -120,7 +99,6 @@ export async function listImapFolders(accountId, options = {}) {
 }
 
 /**
- * Parse a raw RFC822 source into normalized metadata.
  * @param {Buffer} source
  * @param {{ uid: number, folder: string, flags?: Set<string> | string[] }} context
  */
@@ -159,8 +137,6 @@ export async function parseRawMessage(source, context) {
         filename: att.filename ?? 'attachment',
         contentType: att.contentType ?? 'application/octet-stream',
         size: att.size ?? 0,
-        // `cid` is the bracket-stripped Content-ID; the reader matches
-        // `cid:` body sources against it.
         contentId: String(att.cid ?? '').trim(),
         inline: String(att.contentDisposition ?? '').toLowerCase() === 'inline',
       }))
@@ -200,8 +176,6 @@ export async function parseRawMessage(source, context) {
 }
 
 /**
- * Walk an imapflow bodyStructure and return the first text/plain (else
- * text/html) leaf small enough to fetch inline during sync.
  * @param {Record<string, any> | undefined} node
  */
 export function pickPreviewPart(node) {
@@ -237,7 +211,6 @@ export function pickPreviewPart(node) {
   return htmlFallback;
 }
 
-/** Does this bodyStructure carry a real attachment part? */
 export function structureHasAttachments(node) {
   if (!node) return false;
   const queue = [node];
@@ -255,9 +228,8 @@ export function structureHasAttachments(node) {
 }
 
 /**
- * Build a message row from headers + body structure, without the full source.
  * @param {{ uid: number, folder: string, headers?: Buffer, flags?: Set<string> | string[], bodyStructure?: object }} input
- * @param {string} previewSource — decoded text of the preview part (may be empty)
+ * @param {string} previewSource
  */
 export async function parseEnvelopeMessage(input, previewSource = '') {
   const headerBuffer = Buffer.isBuffer(input.headers)
@@ -289,7 +261,6 @@ export async function parseEnvelopeMessage(input, previewSource = '') {
   const bodyHash = createHash('sha256').update(bodyText).digest('hex');
   const date = parsed.date ? parsed.date.toISOString() : new Date().toISOString();
 
-  // Bulk-mail signals for local inbox tabs — derived only, never stored raw.
   const categorySignals = deriveBulkSignals(parsed.headers);
 
   return {
@@ -306,8 +277,6 @@ export async function parseEnvelopeMessage(input, previewSource = '') {
     bodyPreview,
     bodyText,
     bodyHash,
-    // Envelope sync stores text only; HTML arrives with the lazy body fetch so
-    // tracking markup for unopened mail never touches disk.
     bodyComplete: false,
     hasAttachments: structureHasAttachments(input.bodyStructure),
     inReplyTo,
@@ -318,7 +287,6 @@ export async function parseEnvelopeMessage(input, previewSource = '') {
 }
 
 /**
- * Decode one bodyPart buffer to text.
  * @param {Map<string, Buffer> | undefined} bodyParts
  * @param {string} part
  * @param {string | undefined} encoding
@@ -331,7 +299,6 @@ function readBodyPart(bodyParts, part, encoding) {
 }
 
 /**
- * Fetch and store rows for a UID range.
  * @param {import('imapflow').ImapFlow} client
  * @param {string} folder
  * @param {string} range
@@ -373,7 +340,6 @@ async function fetchEnvelopeRange(client, folder, range, max) {
         );
         previewText = readBodyPart(fetched?.bodyParts, preview.part, preview.encoding);
       } catch {
-        // A missing part must not abort the whole sync — the body loads lazily.
       }
     }
     rows.push(await parseEnvelopeMessage({ ...descriptor, folder }, previewText));
@@ -383,7 +349,6 @@ async function fetchEnvelopeRange(client, folder, range, max) {
 }
 
 /**
- * Read server flags for a set of UIDs (the reconcile pass).
  * @param {import('imapflow').ImapFlow} client
  * @param {number[]} uids
  */
@@ -400,7 +365,6 @@ async function fetchFlagsForUids(client, uids) {
 }
 
 /**
- * Emit a sync progress event for SSE subscribers.
  * @param {string} accountId
  * @param {string} folder
  * @param {Record<string, unknown>} detail
@@ -410,8 +374,6 @@ function emitSyncProgress(accountId, folder, detail) {
 }
 
 /**
- * Resolve the lowest UID the backfill has reached, inferring from cache when
- * older stores never recorded the column (pre-backfill migration).
  * @param {string} accountId
  * @param {string} folder
  * @param {{ lowestUid?: number, backfillComplete?: boolean }} state
@@ -428,15 +390,10 @@ async function resolveBackfillCursor(accountId, folder, state) {
 }
 
 /**
- * Run one incremental + backfill batch inside an open mailbox session.
  * @param {import('imapflow').ImapFlow} client
  * @param {string} accountId
  * @param {string} folder
- * @param {{
- *   state: Awaited<ReturnType<typeof getSyncState>>,
- *   batchSize: number,
- *   reset: boolean,
- * }} ctx
+ * @param {{ state: Awaited<ReturnType<typeof getSyncState>>, batchSize: number, reset: boolean, }} ctx
  */
 async function syncFolderBatch(client, accountId, folder, ctx) {
   const mailbox = client.mailbox;
@@ -462,8 +419,6 @@ async function syncFolderBatch(client, accountId, folder, ctx) {
   /** @type {Array<Record<string, unknown>>} */
   const rows = [];
 
-  // New mail above the cursor lands first so the inbox feels live while older
-  // pages trickle in below.
   if (highestUid > 0 && !ctx.reset) {
     const { rows: incoming, highestUid: batchHigh } = await fetchEnvelopeRange(
       client,
@@ -487,10 +442,6 @@ async function syncFolderBatch(client, accountId, folder, ctx) {
     } else {
       const minUid = allUids[0];
       const maxUid = allUids[allUids.length - 1];
-      // Walk the real UID list, not a numeric `start:end` range: take the next
-      // page of UIDs strictly below the cursor. This skips the gaps left by
-      // deleted/moved mail, so every pass fetches a real page and the cursor
-      // always advances — a numeric range would re-scan an empty gap forever.
       const cursor = lowestUid > 0 ? lowestUid : Number.POSITIVE_INFINITY;
       const below = allUids.filter((uid) => uid < cursor);
 
@@ -532,21 +483,8 @@ async function syncFolderBatch(client, accountId, folder, ctx) {
 }
 
 /**
- * Incrementally sync one folder into the mail store.
- *
- * Runs a single batch: new mail above the cursor, then one page of history
- * backfill below it. The caller (or the background backfill driver) loops this
- * to walk a large folder, so no single pass holds the shared IMAP connection
- * long enough to stall foreground work like opening a message.
- *
  * @param {string} accountId
- * @param {{
- *   folder?: string,
- *   limit?: number,
- *   offset?: number,
- *   full?: boolean,
- *   onProgress?: (detail: Record<string, unknown>) => void,
- * }} [options]
+ * @param {{ folder?: string, limit?: number, offset?: number, full?: boolean, onProgress?: (detail: Record<string, unknown>) => void, }} [options]
  */
 export async function syncFolderMessages(accountId, options = {}) {
   const account = await getEmailAccount(accountId);
@@ -555,7 +493,6 @@ export async function syncFolderMessages(accountId, options = {}) {
   }
 
   await migrateJsonCacheIfNeeded(accountId);
-  // One-time local tab labels for mail that predated the category columns.
   await backfillCategoriesIfNeeded(accountId);
 
   const folder = String(options.folder ?? account.folders[0] ?? 'INBOX');
@@ -628,9 +565,6 @@ export async function syncFolderMessages(accountId, options = {}) {
 }
 
 /**
- * FLAGS-only pass over the visible window — picks up reads, stars, deletes and
- * moves performed in another mail client, which previously drifted silently.
- *
  * @param {string} accountId
  * @param {string} folder
  * @param {{ window?: number, changedSince?: string }} [options]
@@ -646,10 +580,6 @@ export async function reconcileFolder(accountId, folder, options = {}) {
   }
 
   const serverFlags = await withMailbox(accountId, folder, async (client) => {
-    // When the server advertises CONDSTORE and its HIGHESTMODSEQ has not moved
-    // since the last pass, nothing in the folder changed — skip the fetch
-    // entirely. A plain FLAGS fetch already reports both flags and existence,
-    // so `changedSince` buys nothing beyond this early-out.
     const modseq = client.mailbox?.highestModseq ? String(client.mailbox.highestModseq) : '';
     if (
       client.enabled?.has?.('CONDSTORE') &&
@@ -671,9 +601,6 @@ export async function reconcileFolder(accountId, folder, options = {}) {
 }
 
 /**
- * Download and cache the full body (and attachment metadata) for one message.
- * Called on first open — sync itself only stores headers + a text preview.
- *
  * @param {string} accountId
  * @param {string} messageKey
  * @param {{ force?: boolean }} [options]

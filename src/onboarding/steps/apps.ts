@@ -43,7 +43,6 @@ export const appsStep: OnboardingStep = {
     container.innerHTML = '';
     container.className = 'mn-onboarding-step mn-onboarding-step--apps';
 
-    // Resume from live preferences so reruns reflect the current dock.
     syncSelectionFromPrefs();
 
     renderStepHeader(container, appsStep, actions.stepIndex, actions.totalSteps);
@@ -84,7 +83,6 @@ export const appsStep: OnboardingStep = {
         },
       });
     } else {
-      // No selectable apps yet — keep the step useful with a clear empty state.
       appendAppPickerComingSoon(container);
     }
 
@@ -98,8 +96,6 @@ export const appsStep: OnboardingStep = {
   },
 
   commit(ctx) {
-    // Continue persists the in-memory selection (seeded from prefs on render).
-    // Skip does not call commit, so defaults / current prefs stay unchanged.
     const enabled = [...selectedOptional];
     setEnabledOptionalApps(enabled);
 

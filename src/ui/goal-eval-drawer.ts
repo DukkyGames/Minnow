@@ -1,7 +1,3 @@
-/**
- * Goal evaluator overlay — inset sheet over the chat column (read-only, sub-agent family).
- */
-
 import {
   getGoalEvalSession,
   subscribeGoalEvalSessions,

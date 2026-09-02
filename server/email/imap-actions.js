@@ -141,7 +141,6 @@ export async function appendToSentFolder(accountId, raw) {
   }
 
   try {
-    // No mailbox is selected for an APPEND — it names its target directly.
     await withMailbox(accountId, null, async (client) => {
       await client.append(target, raw, ['\\Seen']);
     });

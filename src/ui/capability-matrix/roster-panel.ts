@@ -1,7 +1,3 @@
-/**
- * Capability matrix — roster panel grouped by provider host band.
- */
-
 import type { CapabilityMatrixRosterEntry } from '../../benchmark/capabilities/roster-store.ts';
 import { groupRosterByHost } from '../../benchmark/capabilities/view-model.ts';
 import { fillModelSelect, fillProviderSelect, fetchAllCatalogRosterTargets } from '../settings-model-binding.ts';

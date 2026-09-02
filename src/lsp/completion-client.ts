@@ -154,9 +154,7 @@ export async function notifyLspDocument(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path, event, ...(text !== undefined ? { text } : {}) }),
     });
-  } catch {
-    /* offline or transient — LSP UX degrades gracefully */
-  }
+  } catch {}
 }
 
 export interface FetchCompletionsOptions {

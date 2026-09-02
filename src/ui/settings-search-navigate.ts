@@ -1,11 +1,3 @@
-/**
-
- * Navigate to a settings search result and scroll to the best DOM target.
-
- */
-
-
-
 import {
 
   categoryForArea,
@@ -30,13 +22,13 @@ import { openSettings } from './settings-page';
 
 import type { SettingsSearchEntry } from './settings-search-types';
 
-
-
 const TARGET_FLASH_CLASS = 'settings-search-target-flash';
 
 const FLASH_MS = 1800;
 
 const SETTINGS_CONTENT_SCROLL_PAD = 12;
+
+// ── Scroll ───────────────────────────────────────────────────────────────────
 
 /** Scroll inside `.settings-content` so floating OS window chrome is not shifted. */
 export function scrollSettingsTargetIntoView(
@@ -82,15 +74,11 @@ function expandSettingsDetailsForTarget(node: HTMLElement): void {
   }
 }
 
-
-
 function getSectionRoot(sectionId: SettingsSectionId): HTMLElement | null {
 
   return document.getElementById(`settingsSection-${sectionId}`);
 
 }
-
-
 
 function getCategoryPanel(category: SettingsCategoryId): HTMLElement | null {
 
@@ -102,7 +90,7 @@ function getCategoryPanel(category: SettingsCategoryId): HTMLElement | null {
 
 }
 
-
+// ── Area ─────────────────────────────────────────────────────────────────────
 
 /** Show one integrations hub panel; other hubs stay in the DOM for deep links and search. */
 
@@ -124,8 +112,6 @@ export function activateIntegrationsHub(hubId: string): void {
 
 }
 
-
-
 function syncAreaPanels(area: SettingsSectionId): void {
 
   const category = categoryForArea(area);
@@ -133,8 +119,6 @@ function syncAreaPanels(area: SettingsSectionId): void {
   const panel = getCategoryPanel(category);
 
   if (!panel) return;
-
-
 
   if (category === 'integrations') {
 
@@ -152,8 +136,6 @@ function syncAreaPanels(area: SettingsSectionId): void {
 
   }
 
-
-
   panel.querySelectorAll<HTMLElement>('.settings-area').forEach((section) => {
 
     section.classList.toggle('is-active', section.dataset.area === area);
@@ -161,8 +143,6 @@ function syncAreaPanels(area: SettingsSectionId): void {
   });
 
 }
-
-
 
 /** Ensure the area's category panel is visible, area active, and expand collapsed groups. */
 
@@ -182,8 +162,6 @@ export function ensureSettingsAreaVisible(sectionId: SettingsSectionId): void {
 
   }
 
-
-
   syncAreaPanels(sectionId);
 
   updateSettingsNavActive(
@@ -194,13 +172,9 @@ export function ensureSettingsAreaVisible(sectionId: SettingsSectionId): void {
 
   );
 
-
-
   const sectionRoot = getSectionRoot(sectionId);
 
   if (!sectionRoot) return;
-
-
 
   sectionRoot.querySelectorAll('details:not([open])').forEach((details) => {
     if (details.classList.contains('tool-group--collapsible')) return;
@@ -209,8 +183,6 @@ export function ensureSettingsAreaVisible(sectionId: SettingsSectionId): void {
   });
 
 }
-
-
 
 /** Scroll to an integrations hub container and sync sidebar. */
 
@@ -232,7 +204,7 @@ export function scrollToSettingsHub(hubId: string): void {
 
 }
 
-
+// ── Nav ──────────────────────────────────────────────────────────────────────
 
 /** Highlight the unified sidebar item for an area or integrations hub. */
 
@@ -254,8 +226,6 @@ export function updateSettingsNavActive(
 
       : undefined);
 
-
-
   document.querySelectorAll<HTMLElement>('[data-settings-nav-area]').forEach((item) => {
 
     const isActive = Boolean(area) && item.dataset.settingsNavArea === area;
@@ -267,8 +237,6 @@ export function updateSettingsNavActive(
     else item.removeAttribute('aria-current');
 
   });
-
-
 
   document.querySelectorAll<HTMLElement>('[data-settings-nav-hub]').forEach((item) => {
 
@@ -284,8 +252,6 @@ export function updateSettingsNavActive(
 
 }
 
-
-
 /** @deprecated Use updateSettingsNavActive */
 
 export function updateSettingsSubnavActive(
@@ -299,8 +265,6 @@ export function updateSettingsSubnavActive(
   updateSettingsNavActive(area, hubId as SettingsIntegrationsHubId | undefined);
 
 }
-
-
 
 /** Scroll to an area anchor within the active category panel. */
 
@@ -324,7 +288,7 @@ export function scrollToSettingsArea(
 
 }
 
-
+// ── Search ───────────────────────────────────────────────────────────────────
 
 /** Resolve scroll target: search key, then first group, then section root. */
 
@@ -341,8 +305,6 @@ export function resolveSettingsSearchDomTarget(
   const sectionRoot = getSectionRoot(sectionId);
 
   if (!sectionRoot) return null;
-
-
 
   if (searchKey) {
 
@@ -361,19 +323,13 @@ export function resolveSettingsSearchDomTarget(
 
   }
 
-
-
   const group = sectionRoot.querySelector('.settings-group');
 
   if (group instanceof HTMLElement) return group;
 
-
-
   return sectionRoot;
 
 }
-
-
 
 /** Brief highlight so users see where they landed. */
 
@@ -388,8 +344,6 @@ export function flashSettingsSearchTarget(node: HTMLElement): void {
   }, FLASH_MS);
 
 }
-
-
 
 /** Open settings or Models app, refresh the section, then scroll to the resolved target. */
 
@@ -409,27 +363,19 @@ export async function navigateToSettingsSearchEntry(
 
   }
 
-
-
   if (entry.brainSection) {
     const { openBrain } = await import('./brain-page');
     openBrain(entry.brainSection as import('./brain-page').BrainSectionId);
     return;
   }
 
-
-
   const category = categoryForArea(entry.sectionId);
 
   openSettings(entry.sectionId, { searchKey: entry.searchKey });
 
-
-
   const areas = SETTINGS_CATEGORY_AREAS[category];
 
   await Promise.all(areas.map((area) => refreshSettingsSection(area)));
-
-
 
   await new Promise<void>((resolve) => {
 
@@ -441,8 +387,6 @@ export async function navigateToSettingsSearchEntry(
 
   });
 
-
-
   const target = resolveSettingsSearchDomTarget(
 
     entry.sectionId,
@@ -453,12 +397,9 @@ export async function navigateToSettingsSearchEntry(
 
   if (!target) return;
 
-
-
   scrollSettingsTargetIntoView(target, { block: 'center', behavior: 'smooth' });
 
   flashSettingsSearchTarget(target);
 
 }
-
 

@@ -1,8 +1,3 @@
-/**
- * Composer Expand button — one click rewrites the draft into a fuller prompt.
- * Streams in place, never sends: the result stays in the composer for editing.
- */
-
 import { autoResizeDesktopComposer } from '../os/desktop-composer-resize';
 import { fetchExpandedPrompt, EXPAND_FAILED_MESSAGE } from './composer-expand-client';
 import { iconHtml } from './icon';
@@ -52,6 +47,8 @@ const TARGETS: readonly ExpandTarget[] = [
     bar: true,
   },
 ];
+
+// ── Targets ──────────────────────────────────────────────────────────────────
 
 /** Find an id under a possibly-disconnected tree (Super Plan builds off-document). */
 function findEl(id: string, root: ParentNode = document): HTMLElement | null {
@@ -111,11 +108,9 @@ function resizeComposerInput(input: HTMLTextAreaElement): void {
   autoResize(input);
 }
 
-/**
- * Write text into the composer.
- * Streaming partials only paint — `input` listeners (draft persistence, sidebar
- * rails, send state) fire once on the settled value instead of once per chunk.
- */
+// ── Apply ────────────────────────────────────────────────────────────────────
+
+/** Write text into the composer. */
 function applyToComposer(
   input: HTMLTextAreaElement,
   text: string,
@@ -160,6 +155,8 @@ export function cancelComposerExpandFor(inputId: string): boolean {
   if (activeRun?.input.id !== inputId) return false;
   return cancelComposerExpand();
 }
+
+// ── Run ──────────────────────────────────────────────────────────────────────
 
 async function runExpand(btn: HTMLButtonElement, target: ExpandTarget): Promise<void> {
   const input = expandInputByButton.get(btn) ?? resolveInput(target);
@@ -209,7 +206,6 @@ async function runExpand(btn: HTMLButtonElement, target: ExpandTarget): Promise<
     input.classList.remove('composer-expanding');
     setButtonBusy(btn, false);
     syncAllButtons();
-    // Caret to the end so the user can keep typing where the expansion left off.
     const end = input.value.length;
     input.setSelectionRange(end, end);
     input.focus();
@@ -297,6 +293,8 @@ function ensureExpandButton(target: ExpandTarget, root: ParentNode = document): 
   bindExpandButton(target, btn, root);
   anchor.insertAdjacentElement('afterend', btn);
 }
+
+// ── Init ─────────────────────────────────────────────────────────────────────
 
 /** Mount Expand buttons. Pass a search root for disconnected Super Plan trees. */
 export function initComposerExpand(root: ParentNode = document): void {

@@ -1,7 +1,3 @@
-/**
- * Pure helpers for ask-question card validation and answer serialization (unit-tested).
- */
-
 import {
   ASK_QUESTION_OTHER_ID,
   type AskQuestionAnswerEntry,

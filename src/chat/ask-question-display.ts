@@ -1,7 +1,3 @@
-/**
- * When ask_question UI may mount: only in the owning chat's surface (not global overlays).
- */
-
 import { expertsPageOpen } from '../app-state';
 import { getForegroundAppId, subscribeInstances } from '../os/instances';
 import { getActiveChat } from '../state/sessions';
@@ -46,9 +42,7 @@ export function notifyAskQuestionDisplayContextChanged(): void {
   for (const listener of displayListeners) {
     try {
       listener();
-    } catch {
-      /* ignore subscriber errors */
-    }
+    } catch {}
   }
   runAskQuestionDisplayContextSync();
 }
@@ -63,10 +57,6 @@ export function subscribeAskQuestionDisplayContext(
   };
 }
 
-/**
- * True when the question strip for `chatId` should be visible in the current UI.
- * Plan-screen embed counts as visible for the planning chat only.
- */
 export function isAskQuestionDomVisible(chatId: string): boolean {
   const trimmed = chatId.trim();
   if (!trimmed) return false;

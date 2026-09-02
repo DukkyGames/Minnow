@@ -1,15 +1,3 @@
-/**
- * Brain usage counters (~/.minnow/brain/usage.json).
- *
- * The point of the Brain overhaul was to make the wiki actually get read and
- * written. That claim needs a number behind it, so this records four coarse
- * events in ISO-week buckets. Deliberately tiny: no per-page stats, no
- * timestamps beyond the week, nothing that would make this a second index.
- *
- * Every export is best-effort and never throws — a counter failing must never
- * break a tool call or a synthesis run.
- */
-
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getBrainDir } from './paths.js';
@@ -23,7 +11,6 @@ const VALID_KINDS = new Set([
   'proposal-accepted',
 ]);
 
-/** Weeks of history retained. */
 export const USAGE_WEEKS_KEPT = 12;
 
 function usagePath() {
@@ -31,17 +18,11 @@ function usagePath() {
 }
 
 /**
- * ISO-8601 week key, e.g. "2026-W29".
- *
- * ISO weeks start Monday and belong to the year containing their Thursday, so a
- * week spanning New Year lands in exactly one bucket rather than splitting.
- *
  * @param {Date} [date]
  * @returns {string}
  */
 export function isoWeekKey(date = new Date()) {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  // Shift to the Thursday of this week (getUTCDay: Sunday=0 → treat as 7).
   const day = d.getUTCDay() || 7;
   d.setUTCDate(d.getUTCDate() + 4 - day);
   const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
@@ -65,8 +46,6 @@ async function loadStore() {
 }
 
 /**
- * Keep only the most recent `USAGE_WEEKS_KEPT` buckets.
- * Week keys sort lexicographically in chronological order by construction.
  * @param {Record<string, Record<string, number>>} weeks
  * @returns {Record<string, Record<string, number>>}
  */
@@ -80,7 +59,6 @@ export function pruneWeeks(weeks) {
 }
 
 /**
- * Record one usage event. Fire-and-forget: callers should `void` this.
  * @param {BrainUsageKind} kind
  * @param {Date} [now]
  * @returns {Promise<void>}
@@ -101,7 +79,6 @@ export async function recordBrainUsage(kind, now = new Date()) {
     await fs.writeFile(tmp, `${JSON.stringify(store, null, 2)}\n`, 'utf8');
     await fs.rename(tmp, filePath);
   } catch {
-    /* counters are diagnostics — never let them break the caller */
   }
 }
 

@@ -70,6 +70,8 @@ const SAMPLES = {
 /** @param {string} type */
 const sample = (type) => makeEvent(type, { ...SAMPLES[type] });
 
+// ── Vocabulary ───────────────────────────────────────────────────────────────
+
 describe('event vocabulary', () => {
   it('declares exactly the seventeen types', () => {
     assert.equal(EVENT_TYPES.length, 17);
@@ -77,7 +79,6 @@ describe('event vocabulary', () => {
   });
 
   it('names no event after an intent', () => {
-    // The completed-side-effect invariant, enforced mechanically.
     for (const type of EVENT_TYPES) {
       assert.doesNotMatch(type, /\.(requested|pending|starting|will)$/, `${type} names an intent`);
     }
@@ -104,6 +105,8 @@ describe('event vocabulary', () => {
     assert.equal(isKnownEventType('toString'), false); // not inherited from Object.prototype
   });
 });
+
+// ── Happy path ───────────────────────────────────────────────────────────────
 
 describe('validateEvent — the happy path', () => {
   for (const type of EVENT_TYPES) {
@@ -144,6 +147,8 @@ describe('validateEvent — the happy path', () => {
   });
 });
 
+// ── Per-field tests ──────────────────────────────────────────────────────────
+
 describe('validateEvent — one test per required field', () => {
   for (const type of EVENT_TYPES) {
     for (const field of Object.keys(EVENT_SCHEMAS[type].required)) {
@@ -157,9 +162,6 @@ describe('validateEvent — one test per required field', () => {
 
       it(`rejects ${type} with a wrong-typed ${field}`, () => {
         const event = sample(type);
-        // A number is the wrong type for every declared field: ids and strings
-        // reject it, arrays reject it, objects reject it, and enums reject it.
-        // `concurrency` is the one integer field, so give that one a string.
         event[field] = EVENT_SCHEMAS[type].required[field] === 'posint' ? 'two' : 42;
         const result = validateEvent(event);
         assert.equal(result.ok, false, `${type}.${field} accepted a wrong type`);
@@ -189,6 +191,8 @@ describe('validateEvent — one test per required field', () => {
     assert.equal(validateEvent(makeEvent('board.started', { concurrency: 1 })).ok, true);
   });
 });
+
+// ── Envelope ─────────────────────────────────────────────────────────────────
 
 describe('validateEvent — envelope', () => {
   it('requires a non-empty type', () => {
@@ -239,6 +243,8 @@ describe('validateEvent — envelope', () => {
   });
 });
 
+// ── Tolerance ────────────────────────────────────────────────────────────────
+
 describe('validateEvent — tolerance', () => {
   it('tolerates an unknown type as opaque rather than erroring', () => {
     const result = validateEvent({ v: 1, type: 'some.future.event' });
@@ -259,7 +265,6 @@ describe('validateEvent — tolerance', () => {
   });
 
   it('still rejects a malformed known event on a future envelope version', () => {
-    // Tolerance is about vocabulary, not about giving up on the schema.
     assert.equal(validateEvent({ v: 2, type: 'merge.succeeded', taskId: 'W1-A' }).ok, false);
   });
 

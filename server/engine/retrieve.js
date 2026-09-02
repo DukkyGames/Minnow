@@ -90,6 +90,7 @@ export function formatMemoryBlock(items, maxChars, query = '') {
 
 /**
  * Retrieve ranked entries and format injection block.
+ * Keyword misses still inject recent/pinned notes (v1 has no embeddings).
  * @param {Array<{ meta: object, body: string }>} allEntries
  * @param {{ query?: string, limit?: number, tags?: string[], maxChars?: number }} opts
  */
@@ -112,7 +113,6 @@ export function retrieveMemoryBlock(allEntries, opts = {}) {
 
   ranked = ranked.filter((r) => (tokens.length > 0 ? r.score > 0 : r.score >= 0));
 
-  // Keyword queries with no matches still inject recent/pinned notes (v1 has no embeddings).
   if (ranked.length === 0 && allEntries.length > 0) {
     ranked = allEntries.map(({ meta, body }) => ({
       meta,

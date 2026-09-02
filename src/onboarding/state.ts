@@ -80,7 +80,6 @@ export async function loadOnboardingState(): Promise<OnboardingPersistedState> {
     Promise.resolve(readLocalMirror()),
   ]);
 
-  // Fresh ~/.minnow install has no onboarding.json — ignore stale browser mirror.
   if (server.kind === 'missing' && isServerStorageMode()) {
     const fresh = createDefaultOnboardingState();
     writeLocalMirror(fresh);

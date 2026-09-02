@@ -1,17 +1,3 @@
-/**
- * P8-F — production delivery host (MIN-759).
- *
- * The renderer is a view: spawn/cancel are POSTs, the fold is the journal.
- * Completions still have to reach the parent chat, and that inject is a
- * completed side effect recorded as `result.delivered` *after* it lands —
- * the same ordering as `attempt.started`.
- *
- * At boot there is no renderer. `deliverToParent` throws when nobody is
- * listening so the fold stays pending. Opening an SSE stream ticks after
- * subscribe — that is the retry, not a 5s warn loop. `tickAll` at process
- * start re-offers work that survived a restart (and parks until a viewer).
- */
-
 import {
   createDelivery,
   buildProductionParentMessage,
@@ -29,20 +15,10 @@ import { emitDeliver } from '../orchestrator/live-events.js';
 /** @type {import('./delivery.js').DeliveryHandle | null} */
 let production = null;
 
-/**
- * Parent streaming is a renderer fact. Production defaults to "not streaming"
- * because the server cannot see the composer. P8-H re-asserts the coalesce
- * (complete while parent streams → reload still delivers) by swapping this
- * probe for the duration of a test — not by teaching the fold about UI state.
- *
- * @type {(parentChatId: string) => import('./delivery.js').ParentStatus}
- */
+/** @type {(parentChatId: string) => import('./delivery.js').ParentStatus} */
 let parentStatusProbe = () => ({ streaming: false, skip: null });
 
 /**
- * Test seam for the "parent is streaming" row of the P8-H gate table.
- * Production never calls this. A missing probe restores the default.
- *
  * @param {((parentChatId: string) => import('./delivery.js').ParentStatus) | null} [fn]
  * @returns {void}
  */
@@ -52,9 +28,6 @@ export function setProductionParentStatus(fn) {
 }
 
 /**
- * Disk journal as the delivery store. Pending vs delivered is `derive()`,
- * not a process-lifetime Set — that is the whole of MIN-639 surviving restart.
- *
  * @returns {import('./delivery.js').DeliveryJournal}
  */
 function diskJournal() {
@@ -101,15 +74,9 @@ export function getProductionDelivery() {
       journal: diskJournal(),
       deliverToParent: productionDeliver,
       buildMessage: buildProductionParentMessage,
-      // Streaming coalesce is a renderer fact. A missing viewer parks the
-      // queue; a connected stream ticks after subscribeDeliver and resumes.
-      // The probe is called on every tick so a test can flip streaming without
-      // rebuilding the handle (the journal stays the queue).
       parentStatus: (parentChatId) => parentStatusProbe(parentChatId),
       onDeliverError: (err) => {
         const message = err instanceof Error ? err.message : err;
-        // A missing viewer is handled in delivery.js (park, no retry).
-        // Anything else is a real inject/journal failure worth a warn.
         if (message === NO_DELIVERY_LISTENER) return;
         console.warn('[agents] delivery failed:', message);
       },
@@ -119,8 +86,6 @@ export function getProductionDelivery() {
 }
 
 /**
- * Re-offer every pending completion. A restart must not drop MIN-639's queue.
- *
  * @returns {Promise<void>}
  */
 export async function bootAgentsRuntime() {

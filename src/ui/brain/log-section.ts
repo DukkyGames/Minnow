@@ -1,7 +1,3 @@
-/**
- * Brain app — Log section: read-only render of log.md.
- */
-
 import { fetchBrainLog } from '../../brain/client';
 import { renderBrainMarkdown } from './wikilink-markdown';
 import { renderBrainLoading } from './empty-state';

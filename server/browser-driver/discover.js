@@ -1,15 +1,3 @@
-/**
- * P5-A — Chromium executable discovery (MIN-719).
- *
- * The driver never ships a browser (see the assessment doc, §3): it finds one.
- * The only contract that matters here is that **absence is a report, not a
- * throw**. A machine with no Chromium-family browser must let the Final Tester
- * ladder skip its browser rung, not fail the run.
- *
- * `browserCandidates()` is pure so the search order is unit-testable on a
- * platform you are not running.
- */
-
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -17,46 +5,37 @@ import { loadBrowserConfig } from '../cdp/browser-config.js';
 
 /**
  * @typedef {'chrome' | 'chrome-canary' | 'edge' | 'brave' | 'chromium'} BrowserFamily
- *
  * @typedef {object} BrowserCandidate
  * @property {string} executablePath
  * @property {BrowserFamily} family
- *
  * @typedef {object} BrowserCapabilityAvailable
  * @property {true} available
  * @property {string} executablePath
  * @property {BrowserFamily} family
  * @property {'env' | 'probe'} source
- *
  * @typedef {object} BrowserCapabilityUnavailable
  * @property {false} available
  * @property {'disabled-in-settings' | 'no-chromium-browser' | 'env-path-missing'} reason
  * @property {string} detail
  * @property {string[]} searched
- *
  * @typedef {BrowserCapabilityAvailable | BrowserCapabilityUnavailable} BrowserCapability
  */
 
-/** Env override — an explicit executable wins over every probe. */
 export const BROWSER_PATH_ENV = 'MINNOW_BROWSER_PATH';
 
 /**
- * Candidate executables in preference order for a platform.
- *
- * Chrome first (the reference Chromium and what most projects are developed
- * against), then Edge (present on every Windows install, so it is the practical
- * floor), then Brave/Chromium.
- *
- * Pure — takes the environment rather than reading `process.env`.
- *
- * @param {string} platform `process.platform`
+ * @param {string} platform
  * @param {Record<string, string | undefined>} env
  * @returns {BrowserCandidate[]}
  */
 export function browserCandidates(platform, env = {}) {
   /** @type {BrowserCandidate[]} */
   const out = [];
-  /** @param {string | undefined} base @param {string[]} parts @param {BrowserFamily} family */
+  /**
+   * @param {string | undefined} base
+   * @param {string[]} parts
+   * @param {BrowserFamily} family
+   */
   const push = (base, parts, family) => {
     if (!base) return;
     out.push({ executablePath: path.join(base, ...parts), family });
@@ -95,7 +74,6 @@ export function browserCandidates(platform, env = {}) {
     return out;
   }
 
-  // linux / other posix — absolute paths only; PATH entries are appended by the caller.
   const linux = /** @type {[string, BrowserFamily][]} */ ([
     ['/usr/bin/google-chrome', 'chrome'],
     ['/usr/bin/google-chrome-stable', 'chrome'],
@@ -125,7 +103,6 @@ async function isExecutableFile(filePath) {
 }
 
 /**
- * Guess a family from a path so an env override still reports something useful.
  * @param {string} executablePath
  * @returns {BrowserFamily}
  */
@@ -140,16 +117,10 @@ export function familyFromPath(executablePath) {
 }
 
 /**
- * Find a usable Chromium-family browser.
- *
- * Never throws, never consults settings — settings gating lives in
- * {@link probeBrowserCapability} so a caller can ask "is there a browser on this
- * machine at all?" separately from "is the user allowing it?".
- *
  * @param {object} [opts]
  * @param {string} [opts.platform]
  * @param {Record<string, string | undefined>} [opts.env]
- * @param {string} [opts.executablePath] Explicit path (wins over env + probes)
+ * @param {string} [opts.executablePath]
  * @returns {Promise<BrowserCapability>}
  */
 export async function discoverBrowser(opts = {}) {
@@ -200,13 +171,7 @@ export async function discoverBrowser(opts = {}) {
 }
 
 /**
- * Discovery **plus** the `browser.enabled` setting.
- *
- * This is what the Final Tester ladder should call before deciding whether the
- * browser rung can run. A disabled setting and a missing browser are both a
- * clean `available: false`, which is the whole point.
- *
- * @param {object} [opts] see {@link discoverBrowser}
+ * @param {object} [opts]
  * @returns {Promise<BrowserCapability>}
  */
 export async function probeBrowserCapability(opts = {}) {
@@ -215,7 +180,6 @@ export async function probeBrowserCapability(opts = {}) {
     const cfg = await loadBrowserConfig();
     enabled = cfg.enabled !== false;
   } catch {
-    // A broken config must not be a crash; fall back to the shipped default.
     enabled = true;
   }
   if (!enabled) {

@@ -1,7 +1,3 @@
-/**
- * Inline new file/folder on the file tree (replaces window.prompt; Electron-safe).
- */
-
 import { getFilterQuery } from './file-tree-filter';
 import { getFilePanelState } from '../state/file-panel';
 import { setStatus } from './status';
@@ -17,6 +13,8 @@ const CREATE_INPUT_CLASS = 'file-tree-rename-input';
 
 let activeCreateParent: string | null = null;
 let activeCreateRow: HTMLElement | null = null;
+
+// ── State ────────────────────────────────────────────────────────────────────
 
 /** True while the tree shows the new file/folder name input. */
 export function isFileTreeCreateActive(): boolean {
@@ -42,6 +40,8 @@ export function cancelInlineCreate(showStatus = true): void {
     setStatus('idle', 'Create cancelled');
   }
 }
+
+// ── Row ──────────────────────────────────────────────────────────────────────
 
 function buildCreateRow(kind: FileTreeEntryKind, depth: number): HTMLElement {
   const row = document.createElement('div');
@@ -99,6 +99,8 @@ function findChildrenHost(parentDir: string): HTMLElement | null {
   }
   return null;
 }
+
+// ── Start ────────────────────────────────────────────────────────────────────
 
 /** Expand parent if needed, then show an inline name field for a new file or folder. */
 export async function startInlineCreate(

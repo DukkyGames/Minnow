@@ -1,7 +1,3 @@
-/**
- * Debounced LLM client for editor inline completions (POLISH-006, Phase 6).
- */
-
 import { extractMessageText } from '../api/chat';
 import {
   formatGenerationErrorMessage,
@@ -281,8 +277,6 @@ export async function fetchEditorAiCompletion(
   });
   const { messages } = promptResult;
 
-  // Strict: the binding is already remapped off any synthetic My Models id, so a
-  // miss here means the request would land on an unrelated backend.
   let provider;
   try {
     provider = await resolveProv(input.binding.providerId, { strict: true });
@@ -304,7 +298,6 @@ export async function fetchEditorAiCompletion(
   const modelCaps =
     modelRow?.capabilities ??
     (modelRow ? catalogCapabilitiesFromRow(modelRow) : undefined);
-  // Inline completion always disables thinking (ignores chat/global toggles).
   const { body: thinkingPatch } = thinkingToCompletionBody(
     'off',
     provider.apiKind,

@@ -32,12 +32,9 @@ function emitError(kind: string, message: string, stack: string | undefined): vo
           surface: window.location.hash || 'app',
         }),
       }).catch(() => {
-        /* offline or Vite-only */
       });
     }
-  } catch {
-    /* logging must never throw */
-  }
+  } catch {}
 }
 
 export function reportBackgroundError(kind: string, err: unknown): void {
@@ -53,8 +50,6 @@ export function reportBackgroundError(kind: string, err: unknown): void {
 
   emitError(kind, message, stack);
 
-  // Register a dedupe window; identical errors within it are counted, then
-  // a single summary line is emitted when the window closes.
   let entry!: { count: number; flushTimer: ReturnType<typeof setTimeout> };
   const flushTimer = setTimeout(() => {
     recentErrors.delete(key);

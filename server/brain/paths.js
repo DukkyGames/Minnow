@@ -126,6 +126,7 @@ export function assertSafeRelativePagePath(relPath) {
 
 /**
  * Resolve a relative page path under pages/ with realpath containment check.
+ * Skip a pre-realpath path.relative check — Windows CI mixes 8.3 and long paths.
  * @param {string} relPath — e.g. facts/my-note.md
  * @returns {Promise<string>} Absolute path inside the pages tree
  */
@@ -141,9 +142,6 @@ export async function resolvePagePath(relPath) {
     realPagesRoot = path.resolve(pagesDir);
   }
 
-  // Build under the canonical pages root. assertSafeRelativePagePath already rejects "..".
-  // Skip a pre-realpath path.relative check: on Windows CI, mixing short (8.3) and long
-  // path forms makes path.relative falsely report escapes when resolving from pagesDir.
   const segments = normalized.split('/').filter((segment) => segment.length > 0);
   const candidate = path.resolve(realPagesRoot, ...segments);
 

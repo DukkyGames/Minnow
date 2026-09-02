@@ -1,8 +1,3 @@
-/**
- * Tool client router (SA-5): server detection, execution routing, enabled definitions.
- * Browser tools run in TS; server tools POST to /api/tools when the local server is up.
- */
-
 import { STOPPED_TOOL_MSG } from './execute-tool-batch';
 import { executeBrowserTool } from './browser-executor';
 import { executeTodoWrite } from './todo-tools';
@@ -89,6 +84,8 @@ let cachedMcpToolDefinitions: OpenAIFunctionDefinition[] = [];
 /** Cached native plugin tool definitions from GET /api/plugins/tools. */
 let cachedPluginToolDefinitions: OpenAIFunctionDefinition[] = [];
 
+// ── Detect ───────────────────────────────────────────────────────────────────
+
 /**
  * Probes the dev server tools API with a short timeout and updates availability in config.
  */
@@ -148,10 +145,6 @@ export interface ExecuteToolContext {
   signal?: AbortSignal;
 }
 
-// run_python is intentionally excluded: the streaming path can only spawn a single
-// hardcoded interpreter, whereas the server handler probes python/py/python3 in order.
-// Routing it through the server keeps behavior identical with and without a chatId
-// (e.g. on Windows machines that only ship the `py` launcher).
 const STREAMING_TOOL_NAMES = new Set([
   'execute_command',
   'run_javascript',
@@ -160,9 +153,6 @@ const STREAMING_TOOL_NAMES = new Set([
 /** Plan alias: readable flag after detectLocalServer(). */
 export { getLocalServerAvailable as localServerAvailable };
 
-/**
- * Runs a tool by name: browser executor, server POST, or web_search → web_search_ddg fallback.
- */
 /** Refresh MCP tool definitions when the local server is available. */
 export async function refreshMcpToolCache(): Promise<void> {
   try {
@@ -199,6 +189,8 @@ function isAbortError(err: unknown): boolean {
   );
 }
 
+// ── Execute ──────────────────────────────────────────────────────────────────
+
 export async function executeTool(
   name: string,
   args: Record<string, unknown> = {},
@@ -212,10 +204,6 @@ export async function executeTool(
       args,
     );
   } catch (err) {
-    // A throwing executor used to unwind the whole tool batch, leaving the
-    // assistant `tool_calls` row unanswered and the chat unsendable. Every tool
-    // failure has to come back as a result instead. The "Error: " prefix is
-    // protocol — callers branch on it and the result cache refuses to store it.
     if (isAbortError(err)) {
       return { content: STOPPED_TOOL_MSG };
     }
@@ -339,8 +327,6 @@ async function executeToolInner(
     }
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
-    // MCP/plugin tools are never cacheable, but they can write files the file
-    // tools cached reads for — route through the wrapper for its invalidation.
     return executeWithResultCache(name, args, context, () =>
       executeServerTool(name, args, context.modeId, context),
     );
@@ -354,10 +340,6 @@ async function executeToolInner(
   ) {
     const blocked = await maybeBlockToolForUserApproval(name, args, context, name);
     if (blocked) return blocked;
-    // context.signal is the parent chat AbortSignal. Do not forward it into
-    // spawn wait:true — that would journal run.cancelled when the parent
-    // turn stops (MIN-777). Background spawn already returned; wait:true
-    // uses waitForSubAgent(runId) with no signal.
     const text = await executeSubAgentTool(name, args);
     return { content: text };
   }
@@ -419,8 +401,6 @@ async function executeToolInner(
       return { content: route.message };
     }
 
-    // deep_read makes the search backend fetch result pages, which is what
-    // fetch_web_content is permissioned for — don't let web_search route around it.
     const deepRead =
       enrichedArgs.deep_read === true &&
       getToolPermissionForId(config, 'fetch_web_content') !== 'off';
@@ -560,6 +540,8 @@ async function executeToolBodyAfterGates(
   return { content: await executeBrowserTool(name, enrichedArgs) };
 }
 
+// ── Catalog ──────────────────────────────────────────────────────────────────
+
 /** User + server gating only (no mode filter). */
 export function getEnabledToolCatalogEntries(): ToolDefinition[] {
   return BUILT_IN_TOOLS.filter((tool) => {
@@ -579,10 +561,6 @@ export function getEnabledToolCatalogEntries(): ToolDefinition[] {
   });
 }
 
-/**
- * Returns OpenAI function definitions for tools the user enabled and that can run here.
- * Server-required tools are omitted when the local server was not detected.
- */
 function getEnabledDynamicToolDefinitions(): OpenAIFunctionDefinition[] {
   return [...cachedMcpToolDefinitions, ...cachedPluginToolDefinitions].filter(
     (def) => isToolEnabled(def.function.name),
@@ -718,6 +696,8 @@ function mapCodeToolToCommand(
   return null;
 }
 
+// ── Streaming ────────────────────────────────────────────────────────────────
+
 async function executeStreamingCodeTool(
   name: string,
   args: Record<string, unknown>,
@@ -784,6 +764,8 @@ async function resolveToolWorkspaceRoot(
   const path = await getChatsWorkspacePath();
   return path ?? undefined;
 }
+
+// ── Server ───────────────────────────────────────────────────────────────────
 
 /** POST { name, args, modeId?, workspaceRoot? } to the Node tools middleware. */
 const SERVER_TOOL_TIMEOUT_MS = 600_000;

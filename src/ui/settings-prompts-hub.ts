@@ -1,7 +1,3 @@
-/**
- * Settings → Prompts hub — searchable list of every role prompt editor.
- */
-
 import { listExperts } from '../chat/experts/registry';
 import { listModes } from '../chat/modes/registry';
 import { isModeVisibleInSettingsSearch } from '../chat/modes/settings-visibility';
@@ -30,6 +26,8 @@ export interface PromptHubRow extends EntityEditorRow {
   filter: Exclude<PromptHubFilter, 'all' | 'rules'>;
   renderBody: (body: HTMLElement) => void;
 }
+
+// ── Load ─────────────────────────────────────────────────────────────────────
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -106,6 +104,8 @@ export async function loadPromptHubRows(): Promise<PromptHubRow[]> {
   return rows;
 }
 
+// ── Row ──────────────────────────────────────────────────────────────────────
+
 function mountRulesHubRow(body: HTMLElement): void {
   body.appendChild(
     el(
@@ -116,6 +116,8 @@ function mountRulesHubRow(body: HTMLElement): void {
   );
   appendSettingsCrosslinks(body, [{ label: 'Open Rules', sectionId: 'rules' }]);
 }
+
+// ── Render ───────────────────────────────────────────────────────────────────
 
 /** Render searchable "All role prompts" panel under base prompt parts. */
 export async function renderPromptsHubPanel(mount: HTMLElement): Promise<void> {

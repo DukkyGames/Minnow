@@ -149,9 +149,7 @@ function readLocalSuperPlanConfig(): SuperPlanConfig {
 function writeLocalSuperPlanConfig(config: SuperPlanConfig): void {
   try {
     localStorage.setItem(SUPER_PLAN_META_STORAGE_KEY, JSON.stringify(config));
-  } catch {
-    /* private mode / missing localStorage in unit tests */
-  }
+  } catch {}
 }
 
 function extractSuperPlanFromMeta(meta: Record<string, unknown>): SuperPlanConfig {

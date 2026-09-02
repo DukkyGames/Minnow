@@ -1,11 +1,4 @@
 #!/usr/bin/env node
-/**
- * Build a Linux AppImage on Windows/macOS via electronuserland/builder (Docker).
- * On native Linux, use `npm run package:linux` instead.
- *
- * Requires Docker. Runs `npm ci` inside the container with a Linux node_modules
- * volume so native addons (better-sqlite3, node-pty) match the target OS.
- */
 
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -15,7 +8,6 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const outputDir = 'release/pkg-linux';
 const image = 'electronuserland/builder:22';
 
-// Same contract as electron-builder-run.mjs: catch missing asar files before Docker npm ci.
 const validate = spawnSync('node', ['scripts/validate-packaged-runtime-files.mjs'], {
   cwd: repoRoot,
   stdio: 'inherit',

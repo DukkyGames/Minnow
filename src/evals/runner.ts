@@ -197,9 +197,7 @@ export const defaultEvalRunner: EvalRunner = {
             input.providerId,
           );
           prose = extractMessageText(fallback.choices?.[0]?.message).trim();
-        } catch {
-          /* keep empty */
-        }
+        } catch {}
       }
 
       if (prose) {

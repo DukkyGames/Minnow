@@ -1,7 +1,3 @@
-/**
- * Global agent activity panel — all in-flight workers across chats.
- */
-
 import { listActiveSubAgentRuns } from '../agents/orchestrator';
 import { getSubAgentTypeConfig } from '../agents/sub-agent-config';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
@@ -179,7 +175,6 @@ export function setAgentActivityPanelOpen(open: boolean): void {
   try {
     localStorage.setItem(AGENT_ACTIVITY_OPEN_KEY, open ? '1' : '0');
   } catch {
-    /* ignore */
   }
 
   if (open) {
@@ -489,8 +484,6 @@ function bindActivitySubscriptions(): void {
   subscribeSubAgentRuns(() => scheduleRefresh());
   subscribeMainTurnActivity(() => scheduleRefresh());
   subscribeTitleJobActivity(() => scheduleRefresh());
-  // Rows built from `chat.currentGenerationId` alone emit no main-turn event,
-  // so stream end is the only signal that clears them.
   subscribeChatStreamEnd(() => scheduleRefresh());
 }
 

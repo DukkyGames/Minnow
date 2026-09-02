@@ -1,7 +1,3 @@
-/**
- * Resolve shipped built-in baselines for custom prompt-config part editors.
- */
-
 import { getActiveChat, getExpertSelection } from '../../state/sessions';
 import { normalizeModeId } from '../modes/types';
 import { loadPromptMetaSettings } from '../../config/prompt-meta';

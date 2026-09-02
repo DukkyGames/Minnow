@@ -87,8 +87,6 @@ export function createIssueTypeChip(
 ): HTMLElement {
   const chip = document.createElement('span');
   const extra = options.className ? ` ${options.className}` : '';
-  // List rows stay icon-only; the peek adds a label so the type is readable
-  // without hovering the glyph.
   chip.className = `issues-type-chip issues-type-chip--${typeId}${options.labeled ? '' : ' issues-row__type'}${extra}`;
   const label = item?.label ?? `${typeId} (unknown)`;
   chip.title = label;

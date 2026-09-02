@@ -27,7 +27,6 @@ const DROP_CLASS = 'is-drop-target';
 function isQuickCaptureChord(event: KeyboardEvent): boolean {
   if (event.ctrlKey || event.metaKey || event.shiftKey) return false;
   if (!event.altKey) return false;
-  // `event.key` under Alt varies by layout on some platforms; `code` does not.
   return event.code === 'KeyC' || event.key.toLowerCase() === 'c';
 }
 
@@ -65,8 +64,6 @@ export function initMenubarCapture(btn: HTMLButtonElement): () => void {
   btn.addEventListener('dragleave', onDragLeave);
   btn.addEventListener('drop', onDrop);
 
-  // Highlight while any capture is in flight, so the target is obvious before
-  // the pointer arrives rather than only once it is over the button.
   const unsubscribe = subscribeCaptureDrag((payload) => {
     btn.classList.toggle('is-drop-armed', payload !== null);
     if (!payload) btn.classList.remove(DROP_CLASS);

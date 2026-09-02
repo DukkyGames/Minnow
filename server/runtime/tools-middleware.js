@@ -1,7 +1,3 @@
-/**
- * Connect middleware for POST /api/tools and server-side tool execution.
- */
-
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
@@ -154,7 +150,8 @@ import { purgeFileFromIndex, getCodeDb } from '../brain/code/schema.js';
 
 const execFileAsync = promisify(execFile);
 
-/** Read the autopilot.guardCdOutsideWorktree toggle from config.json (defaults true). */
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 async function isGuardCdEnabled() {
   try {
     const meta = await readConfigJson('config.json');
@@ -164,18 +161,15 @@ async function isGuardCdEnabled() {
       if (typeof flag === 'boolean') return flag;
     }
   } catch {
-    // ignore — default true
   }
   return true;
 }
 
-/** Path relative to workspace root for display in tool output. */
 function toRelativePath(absPath) {
   const rel = path.relative(getEffectiveWorkspaceRoot(), absPath);
   return rel === '' ? '.' : rel.replace(/\\/g, '/');
 }
 
-/** Run git with arguments in the project root. */
 async function runGit(args) {
   try {
     const result = await runProcess('git', args, { cwd: getEffectiveWorkspaceRoot() });
@@ -186,7 +180,6 @@ async function runGit(args) {
   }
 }
 
-/** Convert a simple glob pattern to a RegExp (supports * and **). */
 function globToRegExp(globPattern) {
   let re = '^';
   for (let i = 0; i < globPattern.length; i += 1) {
@@ -211,21 +204,18 @@ function globToRegExp(globPattern) {
   return new RegExp(re, 'i');
 }
 
-// --- Web tools ---
+// ── Web tools ────────────────────────────────────────────────────────────────
 
-/** Read Tavily API key from search.json with tools.json fallback. */
 async function readTavilyApiKeyFromConfig() {
   const settings = await loadSearchSettings();
   return settings.tavilyApiKey;
 }
 
-/** True when the caller asked for ranked page excerpts alongside the snippets. */
 function wantsDeepRead(args) {
   return args?.deep_read === true || args?.deep_read === 'true';
 }
 
 /**
- * Shared tail for the web search backends: format, then optionally read the top hits.
  * @param {string} query
  * @param {{ results: import('../tools/search-result.js').SearchResult[]; error?: string }} outcome
  * @param {(query: string, results: import('../tools/search-result.js').SearchResult[]) => string} format
@@ -243,7 +233,6 @@ async function finishWebSearch(query, outcome, format, args) {
   return appendResultExcerpts(query, outcome.results, formatted);
 }
 
-/** DuckDuckGo HTML search (no API key); detects bot challenges before parsing. */
 async function toolWebSearchDdg(args) {
   const query = args?.query;
   if (!query || typeof query !== 'string') {
@@ -254,7 +243,6 @@ async function toolWebSearchDdg(args) {
   return finishWebSearch(query, outcome, formatDdgSearchResults, args);
 }
 
-/** Tavily Search API (requires tavilyApiKey in search.json or tools.json). */
 async function toolWebSearchTavily(args) {
   const query = args?.query;
   if (!query || typeof query !== 'string') {
@@ -270,7 +258,6 @@ async function toolWebSearchTavily(args) {
   return finishWebSearch(query, outcome, formatTavilySearchResults, args);
 }
 
-/** SearXNG JSON search (requires searxngUrl in search.json). */
 async function toolWebSearchSearxng(args) {
   const query = args?.query;
   if (!query || typeof query !== 'string') {
@@ -282,7 +269,7 @@ async function toolWebSearchSearxng(args) {
   return finishWebSearch(query, outcome, formatSearxngSearchResults, args);
 }
 
-// --- File tools ---
+// ── File tools ───────────────────────────────────────────────────────────────
 
 async function toolListDirectory(args) {
   const dirPath = resolveSafePath(args?.path ?? '.');
@@ -293,14 +280,11 @@ async function toolListDirectory(args) {
   return lines.length ? lines.join('\n') : '(empty directory)';
 }
 
-/** Human-readable megabyte figure for size-guard messages. */
 function formatMb(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(0)}MB`;
 }
 
 /**
- * True when this path should go through read_document (Excel/PDF/Word), not UTF-8.
- *
  * @param {string} filePath
  * @param {unknown} requestedPath
  */
@@ -317,8 +301,6 @@ async function toolReadFile(args) {
   }
   const rel = toRelativePath(filePath);
 
-  // Agents (and workspace chips) call read_file on .xlsx; decoding ZIP as UTF-8
-  // produced the PK… garbage reported in MIN-614. Extract sheet/PDF text instead.
   if (shouldExtractAsDocument(filePath, args?.path)) {
     return toolReadDocument({ path: args.path });
   }
@@ -338,7 +320,6 @@ async function toolReadFile(args) {
   return text;
 }
 
-/** Read UTF-8 file or empty string when missing (for before-write diffs). */
 async function readUtf8OrEmpty(filePath) {
   try {
     return await fs.readFile(filePath, 'utf8');
@@ -349,14 +330,8 @@ async function readUtf8OrEmpty(filePath) {
   }
 }
 
-/**
- * Skip computing line-diff stats for files above this size. Reading a multi-GB or binary
- * file into memory as UTF-8 just to count added/removed lines wastes memory and produces
- * garbage stats; move/copy/delete stay correct, they just omit the codeChange payload.
- */
 const MAX_DIFF_STAT_BYTES = 5 * 1024 * 1024;
 
-/** File size in bytes, or null when the path is missing/unstatable. */
 async function statSizeOrNull(filePath) {
   try {
     return (await fs.stat(filePath)).size;
@@ -365,12 +340,10 @@ async function statSizeOrNull(filePath) {
   }
 }
 
-/** True when a size (null = missing) is small enough to diff as text. */
 function isDiffableSize(size) {
   return size === null || size <= MAX_DIFF_STAT_BYTES;
 }
 
-/** Attach codeChange when line stats are non-zero. */
 function withCodeChange(message, codeChange) {
   if (codeChange && (codeChange.additions > 0 || codeChange.deletions > 0)) {
     return { result: message, codeChange };
@@ -378,7 +351,6 @@ function withCodeChange(message, codeChange) {
   return message;
 }
 
-/** Drop brain code-index rows for paths removed by delete_path (best-effort). */
 function purgeBrainCodeIndexAfterDelete(relPath, isDirectory) {
   try {
     const normalized = String(relPath ?? '').trim().replace(/\\/g, '/');
@@ -400,13 +372,10 @@ function purgeBrainCodeIndexAfterDelete(relPath, isDirectory) {
       purgeFileFromIndex(db, repo, normalized);
     }
   } catch {
-    /* code index is optional — never fail delete_path */
   }
 }
 
 /**
- * Render a 1-based inclusive line slice with prefixed line numbers.
- *
  * @param {string} content
  * @param {number} startLine
  * @param {number} endLine
@@ -415,8 +384,6 @@ function renderNumberedLineRange(content, startLine, endLine) {
   const lines = content.split(/\r?\n/);
   const slice = lines.slice(startLine - 1, endLine);
   const rendered = slice.map((line, idx) => `${startLine + idx}: ${line}`).join('\n');
-  // Cap total output but keep a high per-line ceiling so a legitimate long-line range
-  // is not chopped at 400 chars.
   const { text } = capTextOutput(rendered, {
     maxLineChars: getOutputCapPolicy().maxOutputChars,
     footerHint: 'request a smaller line range',
@@ -432,7 +399,6 @@ async function toolReadFileRange(args) {
     return 'Error: start_line and end_line must be valid integers (1-based, start <= end)';
   }
 
-  // Line numbers apply to extracted sheet/PDF text, not the binary container.
   if (shouldExtractAsDocument(filePath, args?.path)) {
     const extracted = await extractWorkspaceDocumentText(args.path);
     if (typeof extracted === 'string') {
@@ -475,8 +441,6 @@ async function toolSaveFile(args) {
   await fs.writeFile(filePath, normalizedContent, 'utf8');
   const eolNote =
     converted && eol ? `, preserved ${eol === '\r\n' ? 'CRLF' : 'LF'} line endings` : '';
-  // Signal a blind overwrite so the model notices it replaced existing content (it may
-  // not have read the file first).
   const overwriteNote = before
     ? `, overwrote ${countLinesInText(before)} existing line(s)`
     : '';
@@ -595,8 +559,6 @@ async function toolReplaceTextInFile(args) {
     const hint = result.hint ?? 'No occurrences of search text';
     return `${hint} in ${rel}`;
   }
-  // Optional safety check: refuse the edit when the match count differs from what the
-  // caller expected, so an over-broad search string does not silently rewrite N sites.
   if (args?.expected_count !== undefined && args?.expected_count !== null) {
     const expected = Number(args.expected_count);
     if (Number.isInteger(expected) && expected >= 0 && result.count !== expected) {
@@ -617,9 +579,6 @@ async function toolSearchInFile(args) {
   if (!pattern || typeof pattern !== 'string') {
     return 'Error: pattern is required';
   }
-  // Route through ripgrep (subprocess, linear-time Rust regex) instead of running a
-  // model-supplied regex per line on the event loop — a catastrophic-backtracking
-  // pattern would otherwise freeze the whole host. Also inherits grep's output caps.
   return runGrepSearch(
     { pattern, path: args?.path, output_mode: 'content' },
     {
@@ -663,7 +622,6 @@ async function toolMoveFile(args) {
         sourceContent = await fs.readFile(source, 'utf8');
       }
     } catch {
-      /* Non-file or missing source — stats omitted below. */
     }
   }
 
@@ -680,8 +638,6 @@ async function toolMoveFile(args) {
   } catch (err) {
     const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : '';
     if (code === 'EXDEV') {
-      // Cross-device move (e.g. C: -> D: on Windows): rename cannot span volumes,
-      // so fall back to copy + remove.
       try {
         await fs.cp(source, destination, { recursive: true, force: true });
         await fs.rm(source, { recursive: true, force: true });
@@ -723,14 +679,8 @@ async function toolCopyFile(args) {
     : message;
 }
 
-/** Max bytes for UI drag-import (matches client attachment cap). */
 const IMPORT_WORKSPACE_FILE_MAX_BYTES = 10 * 1024 * 1024;
 
-/**
- * Write binary file bytes from a base64 payload (OS drag-import into workspace).
- * UI-only — not registered in the LLM tool catalog.
- * `kind: 'dir'` creates an empty directory (folder drops that have no files).
- */
 async function toolImportWorkspaceFile(args) {
   const filePath = resolveSafePath(args?.path, { write: true });
   const kind = String(args?.kind ?? 'file').toLowerCase();
@@ -769,7 +719,6 @@ async function toolDeletePath(args) {
     return `Deleted ${rel}`;
   }
   if (stat.size > MAX_DIFF_STAT_BYTES) {
-    // Too large to load for line-diff stats — delete without the codeChange payload.
     await fs.unlink(target);
     purgeBrainCodeIndexAfterDelete(rel, false);
     return `Deleted ${rel}`;
@@ -819,8 +768,6 @@ async function toolGetFileMetadata(args) {
   ];
   if (stat.isFile() && stat.size > 0) {
     try {
-      // Sample only the first 64KB for EOL detection — reading a whole large/binary file
-      // into memory just to classify line endings is wasteful.
       const sampleBytes = Math.min(stat.size, 64 * 1024);
       const handle = await fs.open(target, 'r');
       let sample;
@@ -843,13 +790,12 @@ async function toolGetFileMetadata(args) {
         lines.push('line_ending: mixed');
       }
     } catch {
-      /* skip line-ending hint for non-UTF-8 files */
     }
   }
   return lines.join('\n');
 }
 
-// --- Git tools ---
+// ── Git tools ────────────────────────────────────────────────────────────────
 
 async function toolGitStatus() {
   return runGit(['status', '--porcelain', '-b']);
@@ -907,7 +853,6 @@ async function toolGitAdd(args) {
   if (!Array.isArray(paths) || paths.length === 0) {
     return 'Error: paths array is required';
   }
-  // `--` stops a path like "--force" or "-A" from being parsed as a git flag.
   return runGit(['add', '--', ...paths.map(String)]);
 }
 
@@ -929,8 +874,6 @@ async function toolGitCheckout(args) {
   if (!branch || typeof branch !== 'string') {
     return 'Error: branch is required';
   }
-  // A ref name starting with "-" would be parsed as a git flag (e.g. -f, --detach).
-  // Git ref names cannot legally start with "-", so reject rather than smuggle a flag.
   if (branch.startsWith('-')) {
     return `Error: invalid branch name "${branch}" (cannot start with "-")`;
   }
@@ -947,7 +890,7 @@ async function toolGitBranch(args) {
   return runGit(gitArgs);
 }
 
-// --- Code execution tools ---
+// ── Code exec ────────────────────────────────────────────────────────────────
 
 const BLOCK_UNTIL_MS_MAX = 120_000;
 
@@ -964,9 +907,6 @@ function resolveCommandCwd(args) {
 }
 
 /**
- * Resolve the default working directory for a command: the chat's worktree when available,
- * otherwise the global workspace root. Used when args.cwd is absent.
- * Does NOT route through resolveSafePath so worktree paths are not constrained to global root.
  * @param {string | undefined} chatId
  * @returns {Promise<string>}
  */
@@ -979,7 +919,6 @@ async function resolveDefaultCwd(chatId) {
 }
 
 /**
- * Wrapper around guardCdOutsideWorktree that also fires a board-log warning.
  * @param {string} command
  * @param {string} worktreeRoot
  * @param {{ chatId?: string; groupId?: string }} meta
@@ -1234,12 +1173,6 @@ async function toolListRunningCommands(args) {
   return JSON.stringify({ ok: true, runs }, null, 2);
 }
 
-/**
- * run_javascript / run_python previously called runProcess directly and bypassed
- * the resolveOneShotSpawn → applyAgentShellSandbox chokepoint (MIN-553 Phase 2).
- * Route through executeCommandBlocking → createRun so agent code-exec inherits the
- * same Seatbelt/Landlock wrap as execute_command when MINNOW_SHELL_SANDBOX=1.
- */
 async function toolRunJavascript(args) {
   const code = args?.code;
   if (!code || typeof code !== 'string') {
@@ -1247,8 +1180,6 @@ async function toolRunJavascript(args) {
   }
 
   try {
-    // Argv form (not a shell one-shot) so the model code is not re-parsed by cmd/zsh.
-    // Result label is the binary name ("node"), matching createRun's state.command.
     return await executeCommandBlocking({
       command: 'node',
       args: ['-e', code],
@@ -1265,11 +1196,6 @@ async function toolRunJavascript(args) {
   }
 }
 
-/**
- * Probe interpreters with a trusted --version spawn (not model code), then run the
- * real payload through createRun. createRun maps spawn ENOENT to a finished exit-1
- * string, so the old try/catch candidate loop cannot drive selection by itself.
- */
 async function resolvePythonBin(cwd) {
   const candidates =
     process.platform === 'win32' ? ['python', 'py', 'python3'] : ['python3', 'python'];
@@ -1316,9 +1242,8 @@ async function toolRunPython(args) {
   }
 }
 
-// --- Utility tools ---
+// ── Utility ──────────────────────────────────────────────────────────────────
 
-/** Desktop notification via OS-native commands. */
 async function toolSendNotification(args) {
   const title = String(args?.title ?? 'Minnow');
   const message = String(args?.message ?? args?.body ?? '');
@@ -1360,7 +1285,6 @@ async function toolSendNotification(args) {
   }
 }
 
-/** Map tool name -> handler (serverRequired tools + web search backends, send_notification). */
 const SERVER_TOOL_HANDLERS = {
   web_search_ddg: toolWebSearchDdg,
   web_search_tavily: toolWebSearchTavily,
@@ -1487,17 +1411,11 @@ const SERVER_TOOL_HANDLERS = {
   summarize_inbox: toolSummarizeInbox,
   generate_reply_variants: toolGenerateReplyVariants,
   email_action: toolEmailAction,
-  // P5-B: the browser driver surface (MIN-720). Registered here and nowhere
-  // else, so the Final Tester's browser calls take the same dispatch, guards,
-  // and output path as `grep` — never a side channel. Which agents may *call*
-  // them is a separate question, answered by `server/runner/tool-set.js`.
   ...BROWSER_DRIVER_TOOL_HANDLERS,
 };
 
-/**
- * Execute a server-side tool by name.
- * All tools return strings; errors are returned as string messages, not thrown to HTTP layer.
- */
+// ── Dispatch ─────────────────────────────────────────────────────────────────
+
 /**
  * @param {string} name
  * @param {Record<string, unknown>} [args]
@@ -1543,9 +1461,10 @@ export async function executeServerTool(name, args, options = {}) {
   });
 }
 
+// ── Middleware ───────────────────────────────────────────────────────────────
+
 const MAX_TOOLS_BODY_BYTES = 32 * 1024 * 1024;
 
-/** Read JSON body from POST /api/tools. */
 function readJsonBody(req, maxBytes = MAX_TOOLS_BODY_BYTES) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -1571,16 +1490,12 @@ function readJsonBody(req, maxBytes = MAX_TOOLS_BODY_BYTES) {
   });
 }
 
-/** Map readJsonBody failures to HTTP status codes. */
 function statusForToolsBodyError(err) {
   const message = err instanceof Error ? err.message : String(err);
   if (message === 'Body too large') return 413;
   return 400;
 }
 
-/**
- * Connect middleware: handles /api/tools before Vite serves the SPA.
- */
 export function createToolsMiddleware() {
   return async (req, res, next) => {
     const url = req.url?.split('?')[0] ?? '';

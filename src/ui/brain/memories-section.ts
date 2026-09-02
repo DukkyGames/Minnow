@@ -1,7 +1,3 @@
-/**
- * Brain app — Memories: store toggles, entry list + detail, backup/clear.
- */
-
 import {
   backupMemory,
   clearMemory,
@@ -60,9 +56,10 @@ async function saveFeatureToggle(key: string, enabled: boolean): Promise<void> {
       body: JSON.stringify(config),
     });
   } catch {
-    /* offline */
   }
 }
+
+// ── Compose panes ────────────────────────────────────────────────────────────
 
 function clearMemoryAddForm(): void {
   const form = document.getElementById('brainMemoryAddForm') as HTMLFormElement | null;
@@ -251,6 +248,8 @@ function selectMemoryEntry(id: string | null): void {
   renderMemoryDetail(entry);
 }
 
+// ── List ─────────────────────────────────────────────────────────────────────
+
 function renderMemoryListItem(entry: MemoryEntryWithBody): HTMLElement {
   const row = document.createElement('article');
   row.className = 'brain-memory-list-item';
@@ -324,6 +323,8 @@ function bindMemoryListActions(): void {
   document.getElementById('brainMemoryList')?.addEventListener('click', onClick);
   document.getElementById('brainMemoryDetailPane')?.addEventListener('click', onClick);
 }
+
+// ── Forms ────────────────────────────────────────────────────────────────────
 
 function bindMemoryAddForm(): void {
   if (addFormBound) return;
@@ -453,7 +454,6 @@ async function hydrateToggles(): Promise<void> {
       injectionEl.checked = config.features.memoryInjection;
     }
   } catch {
-    /* offline */
   }
 }
 
@@ -524,6 +524,8 @@ function bindMemoriesSection(): void {
 
   bindMemoryAddForm();
 }
+
+// ── Refresh ──────────────────────────────────────────────────────────────────
 
 async function refreshMemoryEntriesList(): Promise<void> {
   const countEl = document.getElementById('brainMemoryEntryCount');

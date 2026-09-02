@@ -10,18 +10,15 @@ function normalizeLetter(text: string): string {
   const trimmed = text.trim();
   if (!trimmed) return '';
 
-  // Direct letter-only answers (e.g. "B" or "B.")
   if (/^[A-D][\s.!?:;]*$/i.test(trimmed)) {
     return trimmed[0]!.toUpperCase();
   }
 
-  // Final line is often the letter when the model follows "answer with the letter only"
   const lastLine = trimmed.split(/\n+/).pop()?.trim() ?? '';
   if (/^[A-D][\s.!?:;]*$/i.test(lastLine)) {
     return lastLine[0]!.toUpperCase();
   }
 
-  // Explicit conclusion phrases beat option-list mentions (A) Ag, B) Au, …)
   const answerPatterns = [
     /(?:final\s+(?:answer|response|choice)|construct\s+final\s+response|correct\s+(?:answer|option|choice)|answer\s+is|option|choice)\s*[:\-—*]*\s*([A-D])\b/i,
     /\b([A-D])\s*(?:is\s+)?(?:correct|right)\b/i,
@@ -31,7 +28,6 @@ function normalizeLetter(text: string): string {
     if (match?.[1]) return match[1].toUpperCase();
   }
 
-  // Last standalone letter — avoids scoring "A) Ag" at the start of option walkthroughs
   const letters = [...trimmed.matchAll(/\b([A-D])\b/gi)];
   if (letters.length > 0) {
     return letters[letters.length - 1]![1]!.toUpperCase();

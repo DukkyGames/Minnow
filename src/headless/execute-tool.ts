@@ -180,7 +180,6 @@ export async function executeHeadlessTool(
       name,
     );
     if (blockedWeb) return blockedWeb;
-    // Mirrors client.ts: deep_read fetches result pages, so it needs fetch_web_content.
     const deepRead =
       args.deep_read === true &&
       getToolPermissionForId(config, 'fetch_web_content') !== 'off';

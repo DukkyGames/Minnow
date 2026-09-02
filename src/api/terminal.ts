@@ -1,7 +1,3 @@
-/**
- * Terminal streaming API client (POST run + GET SSE stream).
- */
-
 export interface TerminalRunStart {
   runId: string;
   startedAt: number;
@@ -26,9 +22,7 @@ export function parseTerminalSseChunk(
     if (!payload) continue;
     try {
       onEvent(JSON.parse(payload) as TerminalStreamEvent);
-    } catch {
-      /* ignore malformed lines */
-    }
+    } catch {}
   }
 }
 

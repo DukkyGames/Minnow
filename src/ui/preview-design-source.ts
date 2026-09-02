@@ -1,7 +1,3 @@
-/**
- * Resolve which preview tab/source a Design Mode instance is attached to (primary vs split secondary).
- */
-
 import type { PreviewSource } from '../state/file-panel';
 import { getFilePanelState } from '../state/file-panel';
 import { getActivePreviewTabId, getPreviewTab } from './preview-tab-store';

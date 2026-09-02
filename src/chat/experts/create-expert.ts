@@ -1,7 +1,3 @@
-/**
- * Generate and persist a custom expert via a one-shot LLM call.
- */
-
 import { extractMessageText } from '../../api/chat';
 import { loadPromptById } from '../prompts/prompt-loader';
 import { savePromptFileOverride } from '../prompts/prompt-file-api';

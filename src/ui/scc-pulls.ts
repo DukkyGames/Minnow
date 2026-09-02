@@ -1,11 +1,3 @@
-/**
- * Source Control Center — Pull requests.
- *
- * List on the left, detail on the right. Everything runs through the user's own
- * `gh` auth, so the first thing this view does is establish whether it can work
- * at all and say so plainly when it cannot.
- */
-
 import { appConfirm } from './app-dialog';
 import {
   forgeRefresh,
@@ -45,6 +37,8 @@ import {
   type SccView,
 } from './scc-shared';
 
+// ── Selection ────────────────────────────────────────────────────────────────
+
 /** Palette / command-palette can ask the next refresh to select this PR. */
 let pendingSelectNumber: number | null = null;
 
@@ -52,6 +46,8 @@ let pendingSelectNumber: number | null = null;
 export function requestPullsSelection(number: number): void {
   pendingSelectNumber = number;
 }
+
+// ── Pulls view ───────────────────────────────────────────────────────────────
 
 type PrFilter = 'open' | 'all';
 
@@ -108,8 +104,6 @@ export function createPullsView(
   });
 
   toolbar.append(filterToggle, createBtn);
-
-  // ── Load ───────────────────────────────────────────────────────────────────
 
   async function refresh(): Promise<void> {
     if (destroyed) return;
@@ -273,8 +267,6 @@ export function createPullsView(
       }),
     );
   }
-
-  // ── Detail ─────────────────────────────────────────────────────────────────
 
   async function renderDetail(number: number): Promise<void> {
     if (!detailCol.querySelector('.scc-prdetail')) detailCol.replaceChildren(skeletonRows(8));
@@ -604,8 +596,6 @@ export function createPullsView(
     await refresh();
   }
 
-  // ── Create ─────────────────────────────────────────────────────────────────
-
   async function openCreateForm(): Promise<void> {
     const status = options.getForgeStatus();
     if (status && !status.supported) {
@@ -724,6 +714,8 @@ export function createPullsView(
     },
   };
 }
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function sectionTitle(title: string, count?: number): HTMLElement {
   const head = el('div', 'scc-prdetail__section');

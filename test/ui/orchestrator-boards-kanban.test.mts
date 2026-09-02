@@ -113,6 +113,8 @@ function board(extra: Record<string, unknown>[] = []): BoardState {
   ]);
 }
 
+// ── column mapping ───────────────────────────────────────────────────────────
+
 describe('column mapping', () => {
   test('every phase lands in exactly one column', () => {
     const state = board();
@@ -166,6 +168,8 @@ describe('column mapping', () => {
     );
   });
 });
+
+// ── renderTaskList ───────────────────────────────────────────────────────────
 
 describe('renderTaskList', () => {
   test('renders one kanban grid per wave, with four lanes', () => {
@@ -300,6 +304,8 @@ describe('renderTaskList', () => {
   });
 });
 
+// ── renderEngineErrors ───────────────────────────────────────────────────────
+
 describe('renderEngineErrors (P9-A)', () => {
   test('renders nothing when nothing is failing', () => {
     setupDom();
@@ -339,6 +345,8 @@ describe('renderEngineErrors (P9-A)', () => {
   });
 });
 
+// ── renderRunLedger ──────────────────────────────────────────────────────────
+
 describe('renderRunLedger (P9-G)', () => {
   test('is absent while the run is still going', () => {
     setupDom();
@@ -372,6 +380,8 @@ describe('renderRunLedger (P9-G)', () => {
     assert.match(renderRunLedger(state)!.textContent!, /abandoned by hand/);
   });
 });
+
+// ── renderTaskDetail ─────────────────────────────────────────────────────────
 
 describe('renderTaskDetail', () => {
   /** A task with a spec but no attempts, for the "never run" reading. */
@@ -619,6 +629,8 @@ describe('renderTaskDetail', () => {
   });
 });
 
+// ── loading states ───────────────────────────────────────────────────────────
+
 describe('loading states (P9-I)', () => {
   test('the board skeleton announces itself without animating', () => {
     setupDom();
@@ -629,6 +641,8 @@ describe('loading states (P9-I)', () => {
     assert.ok(node.querySelectorAll('.ov2-skeleton__line').length > 0);
   });
 });
+
+// ── renderBoardHeader ────────────────────────────────────────────────────────
 
 describe('renderBoardHeader', () => {
   test('uses the orchestrator instrument strip, not a boxed control card', () => {

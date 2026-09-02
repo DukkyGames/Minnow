@@ -1,9 +1,4 @@
 #!/usr/bin/env node
-/**
- * Rename the compiled preload to .mjs so Electron loads it as an ES module.
- * Electron treats .js preloads as CommonJS regardless of package.json type,
- * but our preload uses ESM imports (project type: module).
- */
 
 import fs from 'node:fs';
 import path from 'node:path';

@@ -1,7 +1,3 @@
-/**
- * Tokenize /loop slash input (session-scoped repeating prompts — not a SKILL.md skill).
- */
-
 /** Max stored loop prompt length (same cap as /goal conditions). */
 export const MAX_LOOP_PROMPT_CHARS = 4000;
 
@@ -43,10 +39,6 @@ export function isLoopSlashCommand(text: string): boolean {
   return /(?:^|\s)\/loop\b/i.test(text.trim());
 }
 
-/**
- * Parse interval token into ms. Sub-minute values round up to {@link MIN_LOOP_INTERVAL_MS}.
- * Returns null when the token is not a valid interval.
- */
 export function parseLoopIntervalToken(token: string): number | null {
   const match = INTERVAL_TOKEN_RE.exec(token.trim());
   if (!match) return null;
@@ -73,11 +65,6 @@ export function isNestedLoopOrGoalPrompt(promptText: string): boolean {
   return /^\/(?:loop|goal)\b/i.test(trimmed);
 }
 
-/**
- * Parse `/loop`, `/loop 5m <prompt>`, etc.
- * List/stop are handled in the chat loop panel, not slash subcommands.
- * Returns null when the text is not a loop command.
- */
 export function parseLoopSlashInput(text: string): ParsedLoopSlash | null {
   const trimmed = text.trim();
   const match = trimmed.match(/(?:^|\s)\/loop\b/i);
@@ -88,7 +75,6 @@ export function parseLoopSlashInput(text: string): ParsedLoopSlash | null {
   const removeEnd = removeStart + match[0].length - leadingWs;
   const rest = `${trimmed.slice(0, removeStart)}${trimmed.slice(removeEnd)}`.trim();
 
-  // Bare /loop → maintenance auto-loop
   if (!rest) {
     return { kind: 'arm', loopKind: 'auto', promptText: '' };
   }

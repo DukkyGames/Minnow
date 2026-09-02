@@ -26,11 +26,9 @@ export function rankLanAddress(addr) {
   }
   const [a, b] = octets;
 
-  // Tailscale and other CGNAT overlays (RFC 6598).
   if (a === 100 && b >= 64 && b <= 127) return 80;
 
   if (a === 192 && b === 168) {
-    // VirtualBox / Hyper-V host-only adapters are rarely reachable from phones.
     if (octets[2] === 56 || octets[2] === 137) return 70;
     return 0;
   }

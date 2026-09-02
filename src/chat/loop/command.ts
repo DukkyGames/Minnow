@@ -1,7 +1,3 @@
-/**
- * /loop command dispatch — arm handler.
- */
-
 import type { Chat } from '../../types';
 import {
   addActiveLoop,
@@ -33,14 +29,9 @@ function formatDuration(ms: number): string {
 
 function syncLoopHints(): void {
   syncLoopActiveHint();
-  // Goal hint shares composer strip space; refresh both so neither goes stale.
   syncGoalActiveHint();
 }
 
-/**
- * Handle `/loop` before slash-skill resolution and before `/goal`.
- * Arm always returns `handled` (composer cleared by caller).
- */
 export function handleLoopCommand(
   chat: Chat,
   rawText: string,
@@ -55,7 +46,6 @@ export function handleLoopCommand(
     return 'handled';
   }
 
-  // Arm path
   if (isGoalLoopActive(chat)) {
     reportStatus('err', 'Stop the active goal first (/goal clear) before starting a loop');
     return 'handled';
@@ -77,7 +67,6 @@ export function handleLoopCommand(
     intervalMs: parsed.intervalMs,
     currentDelayMs:
       parsed.loopKind === 'auto' ? INITIAL_LOOP_AUTO_DELAY_MS : undefined,
-    // First fire when dueAt arrives (wake timer; 15s poll is a safety net)
     dueAt: now,
     createdAt: now,
     expiresAt: now + LOOP_TTL_MS,

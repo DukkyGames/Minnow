@@ -1,7 +1,3 @@
-/**
- * Serializes ask_question UI so only one question strip runs at a time.
- */
-
 import { getChatAbort } from '../app-state';
 import { waitForAskQuestionDisplayContext } from '../chat/ask-question-display';
 import { getActiveChat } from '../state/sessions';
@@ -55,9 +51,6 @@ async function drainQueue(): Promise<void> {
     const modalOptions: QuestionCardsModalOptions = embedHost
       ? { host: embedHost, embedded: true, chatId }
       : { chatId };
-    // Surface the block on the issue too, not only in the chat. An agent
-    // waiting on a question you never noticed is the worst outcome the
-    // dispatch loop has, and the chat may not be the surface you are looking at.
     void import('../chat/issues/agent-watch').then((m) => m.markIssueAwaitingInput(chatId));
 
     const result = await showQuestionCardsModal(

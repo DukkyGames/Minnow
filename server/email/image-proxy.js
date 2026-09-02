@@ -96,9 +96,6 @@ export async function fetchRemoteImage(rawUrl) {
         referrerPolicy: 'no-referrer',
         signal: controller.signal,
         headers: {
-          // A bare Accept keeps the request from advertising anything the
-          // sender could fingerprint. No Referer, no Cookie, no User-Agent
-          // beyond the runtime default.
           Accept: 'image/*',
         },
       });
@@ -111,7 +108,6 @@ export async function fetchRemoteImage(rawUrl) {
       if (!location) {
         throw new Error('redirect without a location');
       }
-      // Re-validate: a public host must not be able to bounce us onto the LAN.
       target = await validateImageUrl(new URL(location, target).toString());
       continue;
     }

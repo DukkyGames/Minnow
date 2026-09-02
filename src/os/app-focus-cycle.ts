@@ -106,7 +106,6 @@ export function initAppFocusCycleKeyboard(): void {
       if (!event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.key !== 'Tab') return;
 
-      // Let the keyboard-help overlay keep Tab focus trapping.
       const helpPanel = document.getElementById('shellKeyboardHelpPanel');
       if (helpPanel && !helpPanel.hidden) return;
 

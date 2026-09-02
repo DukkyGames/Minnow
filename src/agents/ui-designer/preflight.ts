@@ -1,7 +1,3 @@
-/**
- * Impeccable preflight instruction line for UI Designer turns (Step 15).
- */
-
 import type { UiDesignerMode } from './constants';
 
 export interface PreflightGateState {
@@ -13,7 +9,6 @@ export interface PreflightGateState {
   mutation?: 'open' | 'closed';
 }
 
-/** Build the IMPECCABLE_PREFLIGHT status line required before edits. */
 export function formatImpeccablePreflightLine(
   gates: PreflightGateState,
   mode: UiDesignerMode,
@@ -36,7 +31,6 @@ export function formatImpeccablePreflightLine(
   ].join(' ');
 }
 
-/** Static instruction block appended to skill / work-agent context. */
 export const UI_DESIGNER_PREFLIGHT_INSTRUCTION = [
   'Before any UI file mutation, emit exactly one line:',
   'IMPECCABLE_PREFLIGHT: context=pass product=pass command_reference=pass shape=pass|not_required image_gate=pass|skipped:<reason> mutation=open|closed',

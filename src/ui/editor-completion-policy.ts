@@ -1,7 +1,3 @@
-/**
- * Pure LSP/AI completion arbitration — shared by ghost text, debounce, and Tab keymaps.
- */
-
 import { completionStatus, pickedCompletion } from '@codemirror/autocomplete';
 import type { EditorState, Transaction } from '@codemirror/state';
 
@@ -11,10 +7,7 @@ export const COMPLETION_ACCEPT_COOLDOWN_MS = 300;
 /** Inline completion shape: single-line vs multi-line continuation. */
 export type CompletionMode = 'single' | 'multi';
 
-/**
- * Whether the cursor sits on a blank tail of the line (multi-line completions)
- * or mid-line (single-line insert only).
- */
+/** Whether the cursor sits on a blank tail of the line (multi-line completions) or mid-line (single-line insert only). */
 export function completionModeAt(state: EditorState, pos: number): CompletionMode {
   const clamped = Math.max(0, Math.min(pos, state.doc.length));
   const line = state.doc.lineAt(clamped);
@@ -58,11 +51,7 @@ export interface VisibleSuggestions {
   completion: boolean;
 }
 
-/**
- * Arbitrate Tab between the LSP menu, an intent proposal, a completion ghost,
- * and plain indentation. `lsp` and `indent` mean the suggestion keymap must
- * return false so the lower-precedence file editor keymap handles the key.
- */
+/** Arbitrate Tab between the LSP menu, an intent proposal, a completion ghost, and plain indentation. */
 export function suggestionTabTarget(
   state: EditorState,
   visible: VisibleSuggestions,
@@ -118,10 +107,7 @@ function isWithinCompletionAcceptCooldown(
   return completionAcceptedAt > 0 && now - completionAcceptedAt < cooldownMs;
 }
 
-/**
- * Whether the AI completion plugin may start (or restart) its debounce timer.
- * LSP-busy updates are handled upstream; callers should bail before scheduling when busy.
- */
+/** Whether the AI completion plugin may start (or restart) its debounce timer. */
 export function shouldScheduleAi(
   update: ShouldScheduleAiUpdate,
   options: ShouldScheduleAiOptions = {},

@@ -227,7 +227,6 @@ export async function renderSchedulerPanel(
     defaultWorkspacePath = defaultWorkspace.path;
     defaultWorkspaceLabel = defaultWorkspace.label || 'Scheduler';
   } catch {
-    /* offline guard above should prevent this; keep list usable */
   }
 
   try {
@@ -236,7 +235,6 @@ export async function renderSchedulerPanel(
       providerLabelById.set(provider.id, provider.label || provider.id);
     }
   } catch {
-    /* model list labels degrade to ids when providers are unreachable */
   }
 
   async function openSchedulerRunChat(chatId: string): Promise<void> {

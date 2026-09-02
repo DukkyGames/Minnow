@@ -1,7 +1,3 @@
-/**
- * Models → Voice — runtime, STT catalog/downloads/settings, TTS shell.
- */
-
 import '../../styles/settings-general.css';
 import '../../styles/settings-voice.css';
 
@@ -370,7 +366,6 @@ function ensureDownloadSubscription(job: VoiceDownloadJob): void {
   });
   downloadUnsubs.set(job.id, unsub);
 }
-
 
 function renderDownloadProgress(job: VoiceDownloadJob): HTMLElement {
   const wrap = el('div', 'models-download-progress');
@@ -968,7 +963,6 @@ async function runTtsVoiceTest(): Promise<void> {
       try {
         await sinkable.setSinkId(voiceMeta.audio.outputDeviceId);
       } catch {
-        /* ignore */
       }
     }
     ttsTestAudio.onended = () => {

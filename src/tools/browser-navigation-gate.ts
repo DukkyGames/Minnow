@@ -1,8 +1,3 @@
-/**
- * Pre-flight user approval for browser_navigate when the URL is outside the allowlist.
- * Uses the ask_question card UI (same option ids as tool-usage/browser-allowlist prompts).
- */
-
 import {
   approveBrowserNavigation,
   checkBrowserNavigationAllowed,
@@ -22,6 +17,8 @@ import type { ToolExecutionResult } from '../types';
 import { blockAfkInteractionAttempt } from './permission-gate';
 
 export const ALLOWLIST_QUESTION_ID = 'browser_allow_origin';
+
+// ── Format ───────────────────────────────────────────────────────────────────
 
 /** Map allowlist API failures to actionable tool errors (auth vs network vs bad URL). */
 export function formatBrowserAllowlistCheckFailure(
@@ -104,10 +101,8 @@ function questionLooksLikeBrowserAllowlist(
   return optionIds.has(DECISION_ONCE) && (optionIds.has(DECISION_PERSIST) || optionIds.has(DECISION_DENY));
 }
 
-/**
- * When ask_question collected browser allowlist consent, persist the choice immediately
- * (do not rely on the model to call request_browser_origin_access afterward).
- */
+// ── Ask ──────────────────────────────────────────────────────────────────────
+
 export async function applyBrowserAllowlistFromAskQuestion(
   args: AskQuestionArgs,
   result: AskQuestionToolResult,
@@ -131,6 +126,8 @@ export async function applyBrowserAllowlistFromAskQuestion(
     return;
   }
 }
+
+// ── Navigate ─────────────────────────────────────────────────────────────────
 
 /**
  * Shows ask_question cards for a blocked origin; returns null when navigation may proceed.

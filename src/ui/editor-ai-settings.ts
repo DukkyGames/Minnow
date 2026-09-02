@@ -1,7 +1,3 @@
-/**
- * Settings UI for editor AI inline completion (POLISH-006).
- */
-
 import '../styles/settings-general.css';
 
 import {

@@ -1,8 +1,3 @@
-/**
- * Classifies tool calls for bounded parallel execution within one assistant turn.
- * Read-only / cacheable tools may run concurrently; mutating and interactive tools stay sequential.
- */
-
 import { USER_INPUT_BLOCKING_TOOLS } from '../chat/incomplete-tool-batch.ts';
 import { TOOL_GROUP_IDS } from '../chat/modes/tool-groups.ts';
 import {
@@ -96,10 +91,6 @@ export type ToolCallSegment =
   | { kind: 'parallel'; calls: ToolCall[] }
   | { kind: 'sequential'; calls: ToolCall[] };
 
-/**
- * Split tool_calls into ordered segments: consecutive parallel-safe calls share one
- * parallel segment; each non-safe call is its own sequential segment.
- */
 export function partitionToolCalls(toolCalls: ToolCall[]): ToolCallSegment[] {
   if (toolCalls.length === 0) {
     return [];

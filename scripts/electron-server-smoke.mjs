@@ -1,7 +1,3 @@
-/**
- * Smoke test for electron/server-host (MIN-111) without launching Electron.
- * Usage: node scripts/electron-server-smoke.mjs
- */
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

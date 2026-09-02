@@ -1,8 +1,3 @@
-/**
- * Code view bar control for showing/hiding the chat session list.
- * Replaces the foreground Code tile on the OS app rail as the panel toggle.
- */
-
 import { CHAT_SIDEBAR_CHANGED_EVENT } from './layout-events';
 import { isChatSidebarOpen, toggleSidebarLayout } from './layout';
 import {
@@ -11,7 +6,6 @@ import {
 } from './main-column-overlay';
 
 function isCodeViewsChatsPanelOpen(): boolean {
-  // Stage views hide the session list in CSS; Chats exits the surface instead of toggling it.
   if (isCodeStageViewHidingChatSidebar()) return false;
   return isChatSidebarOpen();
 }

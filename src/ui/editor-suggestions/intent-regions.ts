@@ -1,7 +1,3 @@
-/**
- * Accepted intent regions (post-Tab) for neighbor context and staleness chrome.
- */
-
 import {
   Annotation,
   Facet,
@@ -71,7 +67,6 @@ export function mapRegionsThroughTransaction(
   }
 
   if (tr.docChanged) {
-    // Staleness is recomputed on idle — see acceptedIntentStalenessPlugin.
   }
 
   return next;

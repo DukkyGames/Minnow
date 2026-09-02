@@ -31,7 +31,6 @@ async function loadBuiltinSkillRaw(id: string): Promise<string | null> {
   const loader = getBuiltinSkillModules()[`./${id}/SKILL.md`];
   if (loader) return loader();
 
-  // Node benchmark tests have no Vite glob; read shipped SKILL.md from disk.
   if (process.env.MINNOW_TEST === '1') {
     const { readFile } = await import('node:fs/promises');
     const { dirname, join } = await import('node:path');

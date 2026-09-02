@@ -1,7 +1,3 @@
-/**
- * Persisted tool settings types (shared by config module and defaults consumers).
- */
-
 /** How a tool may run: no prompt, prompt each use, or hidden from the model. */
 export type ToolPermissionMode = 'full' | 'ask' | 'off';
 
@@ -39,10 +35,6 @@ export interface ToolConfig {
   webSearchProvider: WebSearchProvider;
   /** Optional session cache for repeated read-only tool invocations. */
   toolCache?: ToolCacheConfig;
-  /**
-   * Execute-time product caps for file/grep/shell/web results (not chat context policy).
-   * Missing key means truncation on at the default character budget.
-   */
   toolOutput?: {
     enabled: boolean;
     maxChars: number;

@@ -1,7 +1,3 @@
-/**
- * Shared Orchestrate plan list: populate a <select>, map server errors to hints, optional auto-select.
- */
-
 import {
   discoverOrchestratePlans,
   type DiscoverOrchestratePlansResult,
@@ -25,10 +21,7 @@ export function shortPlanLabel(fullPath: string): string {
 }
 
 export interface PopulateOrchestratePlanSelectOptions {
-  /**
-   * When true and exactly one plan is returned (no list error), persist that path on the chat
-   * if the user had no saved path yet.
-   */
+  /** When true and exactly one plan is returned (no list error), persist that path on the chat if the user had no saved path yet. */
   autoSelectSingle?: boolean;
   /** Test override: supply a fake plan list instead of discoverOrchestratePlans. */
   discoverPlans?: () => Promise<DiscoverOrchestratePlansResult>;
@@ -39,10 +32,7 @@ export interface PopulateOrchestratePlanSelectResult {
   error?: string;
 }
 
-/**
- * Fills a plan <select> from discoverOrchestratePlans, restores saved path, and updates hint text.
- * Does not touch chat except when autoSelectSingle applies a single-plan default.
- */
+/** Fills a plan <select> from discoverOrchestratePlans, restores saved path, and updates hint text. */
 export async function populateOrchestratePlanSelect(
   sel: HTMLSelectElement,
   hintEl: HTMLElement | null,

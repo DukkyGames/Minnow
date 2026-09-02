@@ -1,41 +1,9 @@
-/**
- * P8-C — `derive(events) -> AgentsState`.
- *
- * The only way sub-agent state is produced. A renderer reload and a server
- * restart are both this function: replay.
- *
- * ## There are no counters
- *
- * Attempt counts are a filter over the journal — see {@link attemptCount}.
- * Do not add a retry field that is incremented. If the fold is slow, that is
- * a snapshot problem (P0-G's shape), not a reason to cache a count.
- *
- * ## Totality
- *
- * Malformed lines and unknown types are skipped. The fold has no throw path.
- *
- * ## Purity
- *
- * No clock. `ts` and `requestedAt` are stored for display; scheduling never
- * reads them. Replaying a journal twice must produce identical state.
- */
-
 import { validateEvent } from './events.js';
 
-/**
- * Shipped default from `sub-agents.json` *values*. The core never reads the
- * file; tests and `plan()` take caps as arguments instead.
- */
 export const DEFAULT_GLOBAL_MAX_CONCURRENT = 3;
 
-/** Shipped per-type default from `sub-agents.json` *values*. */
 export const DEFAULT_TYPE_MAX_CONCURRENT = 2;
 
-/**
- * Journal namespace P8-B added. Documented here so the graph and the store
- * agree on the path `~/.minnow/agents/<parentChatId>/` without this module
- * touching the filesystem.
- */
 export const AGENTS_NAMESPACE = 'agents';
 
 /**
@@ -193,7 +161,6 @@ function apply(state, event) {
       if (!run) return;
       let attempt = run.attempts.find((a) => a.attemptId === event.attemptId);
       if (!attempt) {
-        // Missing `started` would undercount, and the count is what policy runs on.
         attempt = {
           attemptId: event.attemptId,
           seedKind: null,
@@ -229,10 +196,6 @@ function apply(state, event) {
       const run = state.runs.get(event.runId);
       if (!run) return;
       run.cancelledReason = 'user';
-      // Leave the attempt open. closeOpenAttempts here was the freeze: the
-      // fold looked terminal while the effector was still emitting, and
-      // onLive dropped every live frame. reapVanished journals attempt.ended
-      // after stop() so replay still settles to cancelled (P10-L / MIN-777).
       return;
     }
 
@@ -256,16 +219,10 @@ function apply(state, event) {
       return;
     }
 
-    // No default. Unknown types never reach here.
   }
 }
 
 /**
- * Abandon still closes in-flight attempts in the fold. Cancel does not —
- * that window is `cancelling` until reapVanished sees the effector gone
- * (P10-L). Closing on abandon keeps reapVanished from double-writing a
- * crashed end for work policy already gave up on.
- *
  * @param {import('./types').RunState} run
  * @returns {void}
  */
@@ -330,23 +287,6 @@ function recompute(state) {
 }
 
 /**
- * Phase is computed from the record, not maintained incrementally — so there
- * is no transition table to get wrong.
- *
- * P10-L / MIN-777 precedence (replay-correct):
- * 1. cancelledReason + an open attempt → `cancelling`. The journal has the
- *    user's stop; the effector has not confirmed it. A journal that *ends*
- *    here (crash mid-stop) replays as cancelling, not as a fake completed
- *    cancel. Cards keep painting live frames.
- * 2. cancelledReason with no open attempt → `cancelled`. Either the run
- *    never started, or reapVanished wrote `attempt.ended` after stop().
- * 3. abandonedReason → `abandoned` (abandon still closes attempts).
- * 4. open attempt → `running`.
- * 5. last ended pass → `passed`, else `idle`.
- *
- * cancelledReason used to win before the open-attempt check, so a cancel
- * froze the card while tools were still on disk. Do not restore that order.
- *
  * @param {import('./types').RunState} run
  * @returns {import('./types').RunPhase}
  */
@@ -361,11 +301,6 @@ function phaseOf(run) {
 }
 
 /**
- * A run that should never receive another attempt.
- *
- * Passed is terminal for scheduling even before `result.delivered` — delivery
- * is P8-E, and starting a second attempt after a pass would duplicate work.
- *
  * @param {import('./types').RunState} run
  * @returns {boolean}
  */
@@ -374,13 +309,6 @@ export function isTerminal(run) {
 }
 
 /**
- * Engine `desired`: do not start or keep this attempt. Includes `cancelling`
- * so the next tick calls effector.stop. Not the same as {@link isTerminal} —
- * reapVanished must still see cancelling as unsettled so it can journal
- * `attempt.ended` (the effector confirmation). pendingDeliveries stays on
- * isTerminal so the parent is not told "cancelled, 0 tool turns" while the
- * attempt is still winding down.
- *
  * @param {import('./types').RunState} run
  * @returns {boolean}
  */
@@ -401,9 +329,6 @@ export function lastEndedAttempt(run) {
 }
 
 /**
- * How many attempts have finished for a run. The single accessor — there is
- * no stored counter to read instead.
- *
  * @param {import('./types').AgentsState} state
  * @param {string} runId
  * @returns {number}
@@ -419,12 +344,6 @@ export function attemptCount(state, runId) {
 }
 
 /**
- * Runs whose terminal event has no matching `result.delivered`.
- *
- * This is the durable queue MIN-639 asked for: a completion stays pending
- * until the journal records that it was known delivered. A process-lifetime
- * Set cannot survive reload; this list can.
- *
  * @param {import('./types').AgentsState} state
  * @returns {import('./types').RunState[]}
  */

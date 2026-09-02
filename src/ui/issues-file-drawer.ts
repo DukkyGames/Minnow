@@ -1,11 +1,3 @@
-/**
- * File-tree drawer while the fullscreen Issues app is foreground.
- *
- * Code owns `#fileSidebar` inside `#appBody`, which is hidden when another app
- * is active. Reparent the sidebar to `document.body` as a fixed right dock so
- * workspace files stay reachable for capture drags and attachment drops.
- */
-
 import '../styles/issues-file-drawer.css';
 
 import { getForegroundAppId, subscribeInstances } from '../os/instances';
@@ -25,7 +17,6 @@ function emit(): void {
     try {
       listener();
     } catch {
-      /* ignore */
     }
   }
 }

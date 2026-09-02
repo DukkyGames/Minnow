@@ -1,7 +1,3 @@
-/**
- * Client-side navigation allowlist matching (mirrors server/cdp/allowlist.js).
- */
-
 /** Origin key for a URL, e.g. https://example.com */
 export function originFromUrl(url: string): string {
   const parsed = new URL(url);
@@ -87,9 +83,7 @@ export function isNavigationAllowed(url: string, patterns: string[]): boolean {
       if (normalized && normalized !== trimmed) {
         candidates.push(normalized);
       }
-    } catch {
-      /* keep trimmed only */
-    }
+    } catch {}
     for (const candidate of candidates) {
       if (patternToRegExp(candidate).test(originKey) || patternToRegExp(candidate).test(url)) {
         return true;

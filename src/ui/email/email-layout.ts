@@ -1,9 +1,3 @@
-/**
-
- * Three-pane mail layout — folders, message list, reading pane.
-
- */
-
 import type {
   EmailAccount,
   EmailMessage,
@@ -62,28 +56,19 @@ import { snoozeEmailMessage } from "../../email/client-drafts";
 
 import { getMode, getStoredTheme } from "../../theme";
 
+// ── Theme ────────────────────────────────────────────────────────────────────
+
 /** True when the resolved app palette is a dark theme. */
 function isAppDarkTheme(): boolean {
   return getMode(getStoredTheme()) === "dark";
 }
 
-/**
- * Row height, in px. Must match `.email-list-row` in email.css — the virtual
- * list does its arithmetic from this rather than measuring.
- */
+/** Row height, in px. */
 const LIST_ROW_HEIGHT = 64;
 
-/**
- * Senders allowed to load remote images, cached for the session. `null` until
- * the first fetch resolves — bodies paint blocked in the meantime, so a slow
- * request can never cause images to load before the allowlist is known.
- */
+/** Senders allowed to load remote images, cached for the session. */
 let imageAllowlist: string[] | null = null;
 
-/**
- * Global "always load remote images" preference. `null` until the first fetch
- * resolves so we never flash images before the stored choice is known.
- */
 let alwaysLoadRemoteImages: boolean | null = null;
 
 /** Update the cached global image preference (e.g. after a settings toggle). */
@@ -157,13 +142,9 @@ function iconBtn(
   return btn;
 }
 
-/**
- * Render one message body plus the remote-content bar.
- *
- * Images stay withheld until the user asks for this message, or has previously
- * trusted the sender — see `server/email/remote-content.js` for why they are
- * blocked in the first place.
- */
+// ── Body render ──────────────────────────────────────────────────────────────
+
+/** Render one message body plus the remote-content bar. */
 export function renderBodyWithRemoteControls(
   msg: EmailMessage,
   viewMode: EmailBodyViewMode,
@@ -174,13 +155,10 @@ export function renderBodyWithRemoteControls(
   const sender = normalizeSender(msg.from);
   const hasHtml = Boolean(msg.bodyHtml?.trim());
 
-  // Per-message state: whether remote images have been let through, and whether
-  // the user has opted out of dark-theme recolouring. Both feed one repaint.
   let loaded =
     alwaysLoadRemoteImages === true ||
     imagesLoadedFor.has(msg.id) ||
     (imageAllowlist?.includes(sender) ?? false);
-  // When true, keep the sender's original light canvas even while the app is dark.
   let forceOriginalColors = false;
 
   const matchTheme = (): boolean => !forceOriginalColors && isAppDarkTheme();
@@ -243,8 +221,6 @@ export function renderBodyWithRemoteControls(
     });
   };
 
-  // HTML mail is authored on a white canvas. In a dark app theme we smart-invert
-  // by default; the toggle below lets the reader opt back into original colors.
   let themeToggle: HTMLButtonElement | null = null;
   let themeControls: HTMLElement | null = null;
 
@@ -278,7 +254,6 @@ export function renderBodyWithRemoteControls(
   wrap.appendChild(bodyRegion);
   paint();
 
-  // Repaint when the app theme changes so open messages follow light/dark mode.
   const themeRoot = document.documentElement;
   let lastThemeId = themeRoot.getAttribute("data-theme") ?? "";
   const themeObserver = new MutationObserver(() => {
@@ -301,7 +276,6 @@ export function renderBodyWithRemoteControls(
   });
   detachObserver.observe(document.body, { childList: true, subtree: true });
 
-  // Prime the allowlist and global image preference once, then repaint if needed.
   if (imageAllowlist === null) {
     void fetchImageAllowlist()
       .then((senders) => {
@@ -332,6 +306,8 @@ export function renderBodyWithRemoteControls(
 
   return wrap;
 }
+
+// ── Formatters ───────────────────────────────────────────────────────────────
 
 export function formatWhen(iso?: string): string {
   if (!iso) return "—";
@@ -446,12 +422,9 @@ function findSpamFolder(folders: Array<{ path: string }>): string | undefined {
   })?.path;
 }
 
-/**
+// ── Layout render ────────────────────────────────────────────────────────────
 
- * Render Acme-style three-column mail client with standard mail affordances.
-
- */
-
+/** Render Acme-style three-column mail client with standard mail affordances. */
 export async function renderEmailLayout(
   mount: HTMLElement,
   options: EmailLayoutOptions,
@@ -476,11 +449,7 @@ export async function renderEmailLayout(
 
   let filter: "all" | "unread" | "flagged" | "snoozed" = "all";
 
-  /**
-   * Conversations are the default: a ten-message thread should occupy one row,
-   * not ten. Per-message stays available for folders where the distinction
-   * matters (Sent, or hunting one message in a long exchange).
-   */
+  /** Conversations are the default: a ten-message thread should occupy one row, not ten. */
   let listMode: "threads" | "messages" = "threads";
 
   /** Conversation rollups, populated in threads mode. */
@@ -501,10 +470,7 @@ export async function renderEmailLayout(
 
   const checked = new Set<string>();
 
-  /**
-   * Rows live here so an action can paint before the server answers. `messages`
-   * above stays as the read view of the same data for the code that only reads.
-   */
+  /** Rows live here so an action can paint before the server answers. */
   const store = createMailStore({
     onError: (message) => options.onStatus?.("err", message),
   });
@@ -731,12 +697,7 @@ export async function renderEmailLayout(
     }
   };
 
-  /**
-   * The message ids the current selection stands for.
-   *
-   * Conversation rows are checked by thread id, so each one expands to every
-   * message it contains before any bulk action runs.
-   */
+  /** The message ids the current selection stands for. */
   const resolveCheckedMessageIds = async (): Promise<string[]> => {
     if (listMode === "messages") {
       return [...checked];
@@ -751,8 +712,6 @@ export async function renderEmailLayout(
           );
           return rows.map((row) => row.id);
         } catch {
-          // A thread that cannot be read is skipped rather than failing the
-          // whole batch; the others still get their action.
           return [];
         }
       }),
@@ -807,8 +766,6 @@ export async function renderEmailLayout(
           await bulkEmailAction({
             accountId: options.account.id,
 
-            // In conversation mode `checked` holds thread ids, which the bulk
-            // endpoint does not understand — expand them to their messages.
             ids: await resolveCheckedMessageIds(),
 
             action,
@@ -845,7 +802,6 @@ export async function renderEmailLayout(
     const syncBtn = iconBtn(EMAIL_ICONS.sync, "Sync folder");
 
     syncBtn.addEventListener("click", async () => {
-      // No disabled-as-status: the chrome progress bar carries sync state.
       syncBtn.classList.add("is-syncing");
       options.onSyncActivity?.(true);
 
@@ -871,7 +827,6 @@ export async function renderEmailLayout(
 
     toolbar.appendChild(syncBtn);
 
-    // "Updated 2m ago" — the freshness readout that pairs with the sync bar.
     const updated = el("span", "email-list-updated");
     updated.setAttribute("role", "status");
     const paintUpdated = (): void => {
@@ -953,8 +908,6 @@ export async function renderEmailLayout(
 
     toolbar.appendChild(filterSelect);
 
-    // Conversation vs per-message. Selection is cleared on the way across:
-    // the two modes key their checkboxes differently (thread id vs message id).
     const modeBtn = el(
       "button",
       "email-btn email-list-mode",
@@ -1240,8 +1193,6 @@ export async function renderEmailLayout(
 
       deleteBtn.classList.add("email-icon-btn--danger");
 
-      // No confirm: trash is recoverable, so the reader closes at once and an
-      // Undo toast is the safety net (see removeOpenMessage).
       deleteBtn.addEventListener("click", () =>
         void removeOpenMessage(selected, "delete", "Trashed"),
       );
@@ -1283,8 +1234,6 @@ export async function renderEmailLayout(
         await refreshAll();
       });
 
-      // Snooze presets cover what people actually pick; the message stays put
-      // on the server and simply drops out of the list until it is due.
       const snoozePresets: Array<{ label: string; at: () => Date }> = [
         {
           label: "Later today",
@@ -1419,18 +1368,12 @@ export async function renderEmailLayout(
 
       readerPane.appendChild(header);
 
-      // "Catch up" (§3.3) — a rolling summary atop genuinely long threads.
-      // Requested async so opening the thread never waits on the LLM; the
-      // server reuses its cached summary unless new mail changed the hash.
       if (thread.length > 3 || thread.some((msg) => (msg.bodyText?.length ?? 0) > 8000)) {
         const catchup = el("details", "email-reader-catchup");
         catchup.open = true;
         const catchupLabel = el("summary", "email-reader-catchup-label", "Catch up");
         catchup.appendChild(catchupLabel);
 
-        // Busy state: opacity-pulse skeleton lines plus a cancel, until the
-        // summary lands. Cancel abandons the wait rather than the request —
-        // there is nothing to abort server-side — and drops the block.
         const busy = el("div", "email-reader-catchup-busy");
         busy.setAttribute("aria-busy", "true");
         busy.appendChild(el("span", "visually-hidden", "Summarizing thread…"));
@@ -1535,15 +1478,11 @@ export async function renderEmailLayout(
           block.appendChild(triage);
         }
 
-        // Inline parts are rendered by the body iframe; listing them here would
-        // offer the reader a signature logo as a download.
         const downloadable = (msg.attachments ?? []).filter((att) => !att.inline);
         if (downloadable.length > 0) {
           const attRow = el("div", "email-reader-attachments");
           attRow.appendChild(el("span", "email-reader-att-label", "Attachments"));
 
-          // One shared preview slot below the chips: image/PDF attachments open
-          // here; everything else downloads on click.
           const previewMount = el("div", "email-reader-att-preview");
           previewMount.hidden = true;
 
@@ -1606,7 +1545,7 @@ export async function renderEmailLayout(
               );
               return;
             }
-            if (openIndex !== att.index) return; // superseded by another click
+            if (openIndex !== att.index) return;
 
             previewUrl = URL.createObjectURL(blob);
 
@@ -1751,12 +1690,7 @@ export async function renderEmailLayout(
     virtualList.setItems(listMode === "threads" ? threads : messages);
   };
 
-  /**
-   * Build one conversation row.
-   *
-   * Rendered on demand by the virtual list, so this runs for the visible
-   * window only — which is what makes a 10k-message folder scroll.
-   */
+  /** Build one conversation row. */
   const renderRow = (message: EmailMessage, index: number): HTMLElement => {
     const row = el("div", "email-list-row");
 
@@ -1765,12 +1699,7 @@ export async function renderEmailLayout(
     row.classList.toggle("is-flagged", Boolean(message.flags?.flagged));
     row.classList.toggle("is-cursor", index === cursorIndex);
 
-    // Roving tabindex: one stop for the whole list, so Tab does not walk
-    // through every conversation on the way to the reading pane.
     row.tabIndex = index === cursorIndex ? 0 : -1;
-    // A list item, not an option: the row carries interactive controls (open,
-    // star, select), which a listbox option may not. aria-current marks the
-    // open message.
     row.setAttribute("role", "listitem");
     if (message.id === selectedId) row.setAttribute("aria-current", "true");
 
@@ -1934,13 +1863,9 @@ export async function renderEmailLayout(
     },
   });
 
-  // The store owns the rows; the list repaints whenever they change, which is
-  // what lets an action show its result before the server has answered.
   store.subscribe((state) => {
     messages = state.messages;
     total = state.total;
-    // In conversation mode the list is fed by `threads`; an optimistic message
-    // edit still updates the store, it just does not repaint these rows.
     if (listMode === "messages") {
       virtualList.updateItems(state.messages);
     }
@@ -1952,12 +1877,8 @@ export async function renderEmailLayout(
     bodyViewMode = "html";
     composeMode = null;
 
-    // The reader is keyed by message; open the newest one in the thread.
     try {
       const { messages: rows } = await fetchEmailThread(options.account.id, threadId);
-      // Seed the thread so the reader can resolve the open message in
-      // conversation mode, where the per-message store stays empty. Without
-      // this the reading pane opens blank on every conversation click.
       selectedThread = rows;
       selectedId = rows[rows.length - 1]?.id ?? null;
     } catch (err) {
@@ -2004,8 +1925,6 @@ export async function renderEmailLayout(
   /** Remember how to reverse the last action, for `z`. */
   const pushUndo = (label: string, run: () => Promise<void>): void => {
     undoStack.push({ label, run });
-    // One level deep is what people actually reach for, and a longer stack
-    // would start replaying actions against rows that have since changed.
     if (undoStack.length > 1) undoStack.shift();
   };
 
@@ -2037,8 +1956,6 @@ export async function renderEmailLayout(
       filter,
     });
 
-    // The store is authoritative from here on; `messages`/`total` are kept in
-    // step by its subscriber above.
     store.replace(result.messages, result.total);
 
     cursorIndex = Math.min(cursorIndex, Math.max(0, result.messages.length - 1));
@@ -2109,13 +2026,7 @@ export async function renderEmailLayout(
     ]);
   };
 
-  /**
-   * Archive or trash the open message with no confirm.
-   *
-   * Both are recoverable (Trash is a folder; Archive is a move), so the reader
-   * closes at once — the message feels gone — and an Undo toast, plus `z`, is
-   * the only safety net. A failure restores the reader so nothing is lost.
-   */
+  /** Archive or trash the open message with no confirm. */
   const removeOpenMessage = async (
     message: EmailMessage,
     action: "archive" | "delete",
@@ -2159,21 +2070,10 @@ export async function renderEmailLayout(
     }
   };
 
-  // ---------------------------------------------------------------------
-  // Keyboard model
-  // ---------------------------------------------------------------------
-
   /** How many rows the list is currently showing, whichever mode it is in. */
   const rowCount = (): number =>
     listMode === "threads" ? threads.length : messages.length;
 
-  /**
-   * Message ids the cursor row stands for.
-   *
-   * In conversation mode one row is a whole thread, so an action has to apply
-   * to every message in it — archiving "the row" while leaving four of its five
-   * messages in the inbox would be worse than not offering the shortcut.
-   */
   const cursorMessageIds = async (): Promise<string[]> => {
     if (listMode === "messages") {
       const message = messages[cursorIndex];
@@ -2199,7 +2099,6 @@ export async function renderEmailLayout(
     cursorIndex = Math.min(rowCount() - 1, Math.max(0, cursorIndex + delta));
     virtualList.refresh();
     virtualList.scrollToIndex(cursorIndex);
-    // Follow the cursor with focus so a screen reader announces the row.
     const row = virtualList.root.querySelector<HTMLElement>(".email-list-row.is-cursor");
     row?.focus();
   };
@@ -2213,13 +2112,7 @@ export async function renderEmailLayout(
       ? threads[cursorIndex]?.subject
       : messages[cursorIndex]?.subject) || "message";
 
-  /**
-   * Apply a removing action (archive/trash) to the cursor row.
-   *
-   * In message mode this is one optimistic removal; in conversation mode the
-   * whole thread goes through the bulk endpoint, then the list reloads —
-   * a rollup row has no single id for the store to take back.
-   */
+  /** Apply a removing action (archive/trash) to the cursor row. */
   const removeCursor = async (
     action: "archive" | "delete",
     label: string,
@@ -2243,7 +2136,6 @@ export async function renderEmailLayout(
         await refreshMessages();
       };
       pushUndo(label, undo);
-      // The toast is the feedback and the way back; `z` mirrors it.
       showActionUndoToast(`${label} "${subject}"`, {
         onUndo: undo,
         onStatus: options.onStatus,
@@ -2254,7 +2146,6 @@ export async function renderEmailLayout(
     const ids = await cursorMessageIds();
     if (ids.length === 0) return;
 
-    // Remember where each message was so the undo can put it back.
     const origins = ids.map((id) => ({
       id,
       folder: store.get(id)?.folder ?? activeFolder,
@@ -2286,14 +2177,11 @@ export async function renderEmailLayout(
 
   const archiveCursor = (): Promise<void> => removeCursor("archive", "Archived");
 
-  // Deleting means "moved to trash", which is recoverable — so no confirm
-  // dialog, just a way back.
   const trashCursor = (): Promise<void> => removeCursor("delete", "Trashed");
 
   const composeIn = (mode: ComposeMode): void => {
     composeMode = mode;
     if (mode !== "new" && !selectedId) {
-      // Nothing is open yet, so open the cursor row first and compose into it.
       if (listMode === "threads") {
         const thread = threads[cursorIndex];
         if (!thread) return;
@@ -2339,7 +2227,6 @@ export async function renderEmailLayout(
     trash: () => void trashCursor(),
     star: () => {
       if (listMode === "threads") {
-        // Star the whole conversation, matching what the row represents.
         void (async () => {
           const thread = threads[cursorIndex];
           const ids = await cursorMessageIds();
@@ -2364,8 +2251,6 @@ export async function renderEmailLayout(
       if (message) void toggleStar(message.id);
     },
     select: () => {
-      // Checkboxes are keyed by thread id in conversation mode and message id
-      // otherwise; the bulk actions read the same set, so they must agree.
       const id =
         listMode === "threads"
           ? threads[cursorIndex]?.threadId
@@ -2400,11 +2285,9 @@ export async function renderEmailLayout(
     help: () => showShortcutCheatSheet(mount),
   });
 
-  // The shell is the shortcut root, so it must be able to hold focus.
   mount.tabIndex = -1;
   void teardownShortcuts;
 
-  // Bootstrap sidebar from cached account folders so panes are not empty while fetching.
   folderRows = options.account.folders.map((path) => ({
     path,
     name: folderLabel(path),

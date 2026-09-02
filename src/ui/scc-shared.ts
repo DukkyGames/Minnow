@@ -1,10 +1,3 @@
-/**
- * Shared vocabulary for the Source Control Center: the view contract plus the
- * handful of primitives every section reuses (rows, chips, state dots, empties).
- *
- * Keeping these in one place is what makes seven sections feel like one surface.
- */
-
 import { createIcon, iconHtml, type IconName } from './icon';
 import type { CheckState } from '../state/forge-api';
 
@@ -49,7 +42,7 @@ export interface SccView {
   activate?: () => void;
 }
 
-// ── Element builders ─────────────────────────────────────────────────────────
+// ── DOM ──────────────────────────────────────────────────────────────────────
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -110,10 +103,8 @@ export function paneHeader(
   return head;
 }
 
-/**
- * Empty state that teaches the section rather than saying "nothing here".
- * `action` is the one thing worth doing from an empty screen.
- */
+// ── Empty states ─────────────────────────────────────────────────────────────
+
 export function emptyState(options: {
   icon?: IconName;
   title: string;
@@ -159,16 +150,15 @@ export function skeletonRows(count = 6): HTMLElement {
   wrap.setAttribute('aria-hidden', 'true');
   for (let i = 0; i < count; i++) {
     const row = el('div', 'scc-skeleton__row');
-    // Staggered widths read as content rather than a progress bar.
     row.style.setProperty('--scc-skeleton-w', `${88 - (i % 4) * 13}%`);
     wrap.appendChild(row);
   }
   return wrap;
 }
 
-// ── State vocabulary ─────────────────────────────────────────────────────────
-
 export type RunState = CheckState | 'cancelled' | 'skipped';
+
+// ── Run state ────────────────────────────────────────────────────────────────
 
 const STATE_LABEL: Record<RunState, string> = {
   success: 'Passing',
@@ -179,10 +169,7 @@ const STATE_LABEL: Record<RunState, string> = {
   none: 'No checks',
 };
 
-/**
- * Status dot. Colour is never the only signal — every caller pairs it with a
- * label or an aria-label, per PRODUCT.md's accessibility rules.
- */
+/** Status dot. */
 export function stateDot(state: RunState, label?: string): HTMLElement {
   const dot = el('span', `scc-dot scc-dot--${state}`);
   dot.setAttribute('role', 'img');
@@ -194,6 +181,8 @@ export function stateDot(state: RunState, label?: string): HTMLElement {
 export function stateLabel(state: RunState): string {
   return STATE_LABEL[state];
 }
+
+// ── Stats ────────────────────────────────────────────────────────────────────
 
 /** Small mono chip: refs, shas, counts, labels. */
 export function chip(text: string, variant?: string): HTMLElement {
@@ -211,11 +200,11 @@ export function diffStat(additions: number, deletions: number): HTMLElement {
   return wrap;
 }
 
-// ── Formatting ───────────────────────────────────────────────────────────────
-
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
+
+// ── Time ─────────────────────────────────────────────────────────────────────
 
 /** Compact relative time: 4m, 3h, 6d, 12w. Empty string for unparseable input. */
 export function relativeTime(iso: string): string {
@@ -240,6 +229,8 @@ export function duration(startIso: string, endIso: string): string {
   return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, '0')}s`;
 }
 
+// ── Paths ────────────────────────────────────────────────────────────────────
+
 /** Split `src/ui/thing.ts` into a dimmable directory and a bright filename. */
 export function pathParts(filePath: string): { dir: string; name: string } {
   const normalized = filePath.replace(/\\/g, '/');
@@ -258,12 +249,9 @@ export function pathLabel(filePath: string): HTMLElement {
   return wrap;
 }
 
-// ── List keyboard navigation ─────────────────────────────────────────────────
+// ── Navigation ───────────────────────────────────────────────────────────────
 
-/**
- * Arrow-key roving selection over a list of rows. Sections wire this into their
- * own `onKey` so up/down/enter work the same everywhere.
- */
+/** Arrow-key roving selection over a list of rows. */
 export function listNavigator(options: {
   getRows: () => HTMLElement[];
   onActivate?: (row: HTMLElement, index: number) => void;

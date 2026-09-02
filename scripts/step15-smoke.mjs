@@ -1,7 +1,3 @@
-/**
- * Step 15 smoke: uiDesigner meta, run_impeccable, browser_screenshot shape.
- * Usage: node scripts/step15-smoke.mjs [baseUrl]
- */
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -83,7 +79,6 @@ async function testI2bTeachHarnessGuidance() {
 }
 
 async function testI3ScreenshotMock() {
-  // Minimal PNG header bytes as base64 (preview tools upload the same shape).
   const b64 = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString('base64');
   record('I3', b64.length >= 8, `base64 length ${b64.length}`);
 }

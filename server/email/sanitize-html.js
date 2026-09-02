@@ -32,6 +32,7 @@ const PURIFY_CONFIG = {
 };
 
 /**
+ * DOMPurify hooks are global — add them only for this call so later outbound mail is not stripped.
  * @param {string | undefined | null} html
  * @param {{ blockRemoteContent?: boolean }} [options]
  * @returns {string | undefined}
@@ -42,9 +43,6 @@ export function sanitizeEmailHtml(html, options = {}) {
     return undefined;
   }
 
-  // Hooks are global to the DOMPurify instance, so they are installed only for
-  // the duration of this (synchronous) call — otherwise outbound mail composed
-  // in a later call would get its own images stripped too.
   if (options.blockRemoteContent) {
     DOMPurify.addHook('afterSanitizeAttributes', blockRemoteContentHook);
   }

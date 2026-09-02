@@ -1,8 +1,3 @@
-/**
- * Pure seed/task builders for Issues workflow toolbar (MIN-261 Phase 3).
- * Keep side-effect free so unit tests can assert envelopes without DOM/agents.
- */
-
 import type { IssueCard, IssueCodeRef } from '../../types.ts';
 import {
   isClosedStatus,
@@ -10,6 +5,8 @@ import {
   isReviewStatus,
 } from '../../issues/taxonomy.ts';
 import { getIssuesTaxonomySync } from '../../state/issues-taxonomy-store.ts';
+
+// ── Paths ────────────────────────────────────────────────────────────────────
 
 /** Canonical plan path for an issue id (mirrors issues-store.defaultIssuePlanPath). */
 export function issuePlanPathForId(issueId: string): string {
@@ -81,6 +78,8 @@ export function buildIssueContextBlock(issue: IssueCard): string {
   }
   return lines.join('\n');
 }
+
+// ── Seeds ────────────────────────────────────────────────────────────────────
 
 /** Debugger sub-agent task (Investigate). */
 export function buildIssueInvestigateTask(issue: IssueCard): string {
@@ -175,6 +174,8 @@ export function resolveIssuePlanPath(issue: IssueCard): string {
   return issue.planPath?.trim() || issuePlanPathForId(issue.id);
 }
 
+// ── Gates ────────────────────────────────────────────────────────────────────
+
 /** True when Send to board should be enabled. */
 export function canSendIssueToBoard(issue: IssueCard): boolean {
   return Boolean(issue.planPath?.trim());
@@ -200,7 +201,6 @@ export function issueActivityChip(issue: IssueCard): string | null {
   const taxonomy = getIssuesTaxonomySync();
   if (isReviewStatus(taxonomy, issue.status)) return 'In review';
   if (issue.boardChatId && isInProgressStatus(taxonomy, issue.status)) return 'On board';
-  // Background plan sets in_progress + planRunId until settle → planned.
   if (
     issue.planRunId &&
     isInProgressStatus(taxonomy, issue.status) &&
@@ -208,7 +208,6 @@ export function issueActivityChip(issue: IssueCard): string | null {
   ) {
     return 'Planning…';
   }
-  // Investigating until notes land (debugger settle writes notes).
   if (
     issue.investigateRunId &&
     isInProgressStatus(taxonomy, issue.status) &&

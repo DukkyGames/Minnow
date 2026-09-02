@@ -1,8 +1,3 @@
-/**
- * Detect when an iframe failed to embed an external URL (X-Frame-Options / CSP).
- */
-
-/** True when the iframe location or error-page text indicates embed blocking. */
 export function detectEmbedBlockedFrame(
   frameHref: string,
   bodyText: string,

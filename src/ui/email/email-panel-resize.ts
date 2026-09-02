@@ -1,8 +1,3 @@
-/**
- * Draggable width resizers for the Email spine rail and reader dock.
- * Widths persist in localStorage so the layout survives reloads.
- */
-
 const STORAGE_KEY = 'minnow.email.panelWidths';
 const MOBILE_LAYOUT_MQ = '(max-width: 640px)';
 const ASSISTANT_OVERLAY_MQ = '(max-width: 900px)';
@@ -35,6 +30,8 @@ function isAssistantOverlayLayout(): boolean {
   return window.matchMedia(ASSISTANT_OVERLAY_MQ).matches;
 }
 
+// ── Stored widths ────────────────────────────────────────────────────────────
+
 function readStored(): StoredPanelWidths {
   if (storedWidths) return storedWidths;
   try {
@@ -52,9 +49,10 @@ function writeStored(patch: Partial<StoredPanelWidths>): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   } catch {
-    // Quota or privacy mode — live drag still works for the session.
   }
 }
+
+// ── Clamps ───────────────────────────────────────────────────────────────────
 
 export function clampEmailRailWidth(px: number): number {
   if (!Number.isFinite(px)) return DEFAULT_EMAIL_RAIL_W;
@@ -121,6 +119,8 @@ interface BindPanelResizerOptions {
   isEnabled?: () => boolean;
   onDragEnd?: () => void;
 }
+
+// ── Bind resizer ─────────────────────────────────────────────────────────────
 
 function bindPanelResizer(options: BindPanelResizerOptions): void {
   const {
@@ -192,6 +192,8 @@ function createResizer(className: string, label: string): HTMLElement {
   resizer.setAttribute('aria-label', label);
   return resizer;
 }
+
+// ── Mount ────────────────────────────────────────────────────────────────────
 
 /** Mount the rail's right-edge drag handle once per shell. */
 export function mountEmailRailResizer(rail: HTMLElement, shell: HTMLElement): void {
@@ -352,7 +354,6 @@ export function resetEmailPanelWidthsForTests(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch {
-    // ignore
   }
 }
 

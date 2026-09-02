@@ -1,32 +1,15 @@
-/**
- * Disk checkpoints for backend-owned generations.
- *
- * The generation store is a plain in-memory Map, so a server restart mid-stream
- * used to lose the reply outright — the client came back, found no state, and got
- * "This reply was lost when the server restarted." Persisted generations now append
- * their raw SSE bytes to `~/.minnow/generations/<id>.sse` with an `<id>.json` sidecar,
- * so the same stream can be replayed byte-for-byte from disk afterwards.
- *
- * Writes are throttled (time or size) — never one fsync per chunk.
- */
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
 
-/** Flush no more often than this, however fast chunks arrive. */
 const FLUSH_INTERVAL_MS = 250;
 
-/** …unless this much is already queued, which forces an immediate flush. */
 const FLUSH_BYTES = 64 * 1024;
 
-/** Checkpoints older than this are swept on boot. */
 const RETENTION_MS = 24 * 60 * 60 * 1000;
 
-/** Total on-disk cap; oldest checkpoints are dropped first past this. */
 const MAX_DIR_BYTES = 256 * 1024 * 1024;
 
-/** Sidecar `status: streaming` after a restart means the process died mid-stream. */
 export const INTERRUPTED_BY_RESTART_MESSAGE =
   'Reply interrupted when the server restarted.';
 
@@ -35,13 +18,12 @@ export const INTERRUPTED_BY_RESTART_MESSAGE =
  * @property {Buffer[]} pending
  * @property {number} pendingBytes
  * @property {ReturnType<typeof setTimeout> | null} timer
- * @property {boolean} broken a write failed; stop trying for this generation
+ * @property {boolean} broken
  */
 
 /** @type {Map<string, CheckpointWriter>} */
 const writers = new Map();
 
-/** Only a valid UUID may become a path segment. */
 const ID_RE = /^[0-9a-fA-F-]{36}$/;
 
 function checkpointDir() {
@@ -60,7 +42,6 @@ function isCheckpointableId(id) {
   return typeof id === 'string' && ID_RE.test(id);
 }
 
-/** True when this generation is worth checkpointing (main chat / resumable turns). */
 function shouldCheckpoint(state) {
   return Boolean(state?.persist) && isCheckpointableId(state?.id);
 }
@@ -102,7 +83,6 @@ function writeSidecar(state) {
       'utf8',
     );
   } catch {
-    /* checkpointing is best-effort; a failed write must never fail the stream */
   }
 }
 
@@ -120,10 +100,6 @@ function getWriter(id) {
 }
 
 /**
- * Append queued bytes in one write. Synchronous on purpose: the throttle keeps this
- * to a handful of calls per second, and a serialized append is far simpler to reason
- * about than interleaved async writes to the same file.
- *
  * @param {string} id
  */
 function flushWriter(id) {
@@ -148,16 +124,12 @@ function flushWriter(id) {
   }
 }
 
-/** Record the generation before any bytes arrive, so a crash still leaves a sidecar. */
 export function checkpointCreated(state) {
   if (!shouldCheckpoint(state)) return;
   writeSidecar(state);
 }
 
 /**
- * Queue one SSE chunk. Flushes on {@link FLUSH_BYTES} immediately, otherwise after
- * {@link FLUSH_INTERVAL_MS}.
- *
  * @param {import('./store.js').GenerationState} state
  * @param {Buffer} buf
  */
@@ -177,7 +149,6 @@ export function checkpointAppend(state, buf) {
   }
 }
 
-/** Flush remaining bytes and stamp the terminal sidecar. */
 export function checkpointFinalize(state) {
   if (!shouldCheckpoint(state)) return;
   flushWriter(state.id);
@@ -185,7 +156,6 @@ export function checkpointFinalize(state) {
   writeSidecar(state);
 }
 
-/** Flush every open writer without touching sidecars (process shutdown). */
 export function flushAllCheckpoints() {
   for (const id of [...writers.keys()]) {
     flushWriter(id);
@@ -202,12 +172,6 @@ export function flushAllCheckpoints() {
  */
 
 /**
- * Read one checkpoint back from disk.
- *
- * A sidecar still reading `pending`/`streaming` means the process died mid-stream;
- * it comes back as `error` so the client stops waiting on a stream nothing will
- * finish — the bytes it did produce are replayed first either way.
- *
  * @param {string} id
  * @returns {ReadCheckpoint | null}
  */
@@ -228,7 +192,6 @@ export function readCheckpoint(id) {
   const stored = typeof meta?.status === 'string' ? meta.status : '';
   const interrupted = stored !== 'complete' && stored !== 'error' && stored !== 'cancelled';
   if (sse.length === 0 && interrupted) {
-    // Nothing produced and nothing finished — no better than having no checkpoint.
     return null;
   }
   return {
@@ -244,22 +207,17 @@ export function readCheckpoint(id) {
   };
 }
 
-/** Remove both files for one generation. */
 export function deleteCheckpoint(id) {
   if (!isCheckpointableId(id)) return;
   for (const file of [ssePath(id), metaPath(id)]) {
     try {
       fs.rmSync(file, { force: true });
     } catch {
-      /* ignore */
     }
   }
 }
 
 /**
- * Drop checkpoints older than {@link RETENTION_MS}, then oldest-first until the
- * directory fits {@link MAX_DIR_BYTES}. Cheap enough to run on every boot.
- *
  * @returns {{ removed: number, bytesAfter: number }}
  */
 export function sweepCheckpoints() {
@@ -314,7 +272,6 @@ export function sweepCheckpoints() {
   return { removed, bytesAfter: total };
 }
 
-/** Clear in-process writer state (tests). */
 export function resetCheckpointWritersForTests() {
   for (const w of writers.values()) {
     if (w.timer) clearTimeout(w.timer);

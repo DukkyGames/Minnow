@@ -1,22 +1,8 @@
-/**
- * Per-library-model llama.cpp launch prefs in config.json → models.launch.
- *
- * The inspector used to keep drafts in a session Map (`draftSettings`). That
- * vanished on reload, so My Models Load fell back to empty `{}` / planner
- * defaults and the last ctx / ngl / KV choice was lost. These prefs are the
- * durable copy of that draft — same idea as models.inference sampler overrides.
- */
-
 import { getModelsConfig, patchModelsConfig } from './models-config.js';
 import { normalizeExtraArgs } from '../../src/models/argv-tokenize.mjs';
 import { KV_TYPE_BYTES } from '../../src/models/memory-model.mjs';
 import { SPEC_TYPES } from '../../src/models/spec-decode.mjs';
 
-/**
- * LlamaServeSettings keys we persist. Unknown keys are dropped so a typo or a
- * future client field cannot poison argv. lastLoadMs / lastWeightsBytes are the
- * Phase 1d time-based load-progress prior (non-goal 7) — not spawn flags.
- */
 const LAUNCH_SETTING_KEYS = [
   'fit_mode',
   'ctx',
@@ -79,7 +65,7 @@ const PROGRESS_KEYS = ['lastLoadMs', 'lastWeightsBytes'];
  * @property {string} [cache_type_k]
  * @property {string} [cache_type_v]
  * @property {string} [reasoning_budget_message]
- * @property {number} [idle_ttl_ms] Minnow-side idle eviction; not a spawn flag.
+ * @property {number} [idle_ttl_ms]
  * @property {string} [spec_type]
  * @property {string} [spec_draft_model]
  * @property {number} [spec_draft_ngl]
@@ -92,8 +78,8 @@ const PROGRESS_KEYS = ['lastLoadMs', 'lastWeightsBytes'];
  * @property {boolean} [mlock]
  * @property {string} [chat_template]
  * @property {string} [chat_template_file]
- * @property {number} [lastLoadMs] Wall time of the last successful llama.cpp load.
- * @property {number} [lastWeightsBytes] Weight file size observed for that load.
+ * @property {number} [lastLoadMs]
+ * @property {number} [lastWeightsBytes]
  */
 
 /**
@@ -122,8 +108,6 @@ function nonNegativeInt(value) {
 }
 
 /**
- * `--cache-type-k/v` values llama.cpp accepts. Anything else is dropped rather than
- * forwarded, so a typo cannot abort the launch.
  * @param {unknown} value
  * @returns {string | undefined}
  */
@@ -134,7 +118,6 @@ function kvCacheType(value) {
 }
 
 /**
- * Strip progress fields so they never reach buildLlamaServerLaunch / argv.
  * @param {LibraryLaunchSettings | null | undefined} row
  * @returns {LibraryLaunchSettings | undefined}
  */
@@ -145,7 +128,6 @@ export function llamaSettingsFromLaunchRow(row) {
 }
 
 /**
- * Keep only known launch / progress keys with typed values.
  * @param {unknown} raw
  * @param {{ includeProgress?: boolean }} [opts]
  * @returns {LibraryLaunchSettings}
@@ -189,7 +171,6 @@ export function normalizeLaunchSettings(raw, opts = {}) {
   const ctxCheckpoints = nonNegativeInt(src.ctx_checkpoints);
   if (ctxCheckpoints != null) out.ctx_checkpoints = ctxCheckpoints;
 
-  // Only `-1` (random) and non-negative seeds are meaningful to llama.cpp.
   const seed = finiteInt(src.seed);
   if (seed != null && seed >= -1) out.seed = seed;
 
@@ -211,7 +192,6 @@ export function normalizeLaunchSettings(raw, opts = {}) {
     out.flash_attn = src.flash_attn;
   }
 
-  // Allowlisted so a typo cannot reach argv and abort the launch.
   const cacheTypeK = kvCacheType(src.cache_type_k);
   if (cacheTypeK) out.cache_type_k = cacheTypeK;
   const cacheTypeV = kvCacheType(src.cache_type_v);
@@ -224,8 +204,6 @@ export function normalizeLaunchSettings(raw, opts = {}) {
     out.reasoning_budget_message = src.reasoning_budget_message.trim();
   }
 
-  // Speculative decoding. An unknown --spec-type aborts the launch before the port
-  // binds, so only the modes this build accepts are stored.
   if (typeof src.spec_type === 'string' && SPEC_TYPES.has(src.spec_type.trim())) {
     out.spec_type = src.spec_type.trim();
   }
@@ -278,9 +256,6 @@ export function normalizeLaunchSettings(raw, opts = {}) {
 }
 
 /**
- * Later layers win. Drops lastLoadMs / lastWeightsBytes so they never become argv.
- * Does **not** run the persist whitelist — request bodies still carry `fit`,
- * `no_warmup`, split flags, etc.
  * @param {...(Record<string, unknown> | null | undefined)} layers
  * @returns {LibraryLaunchSettings}
  */
@@ -332,11 +307,6 @@ export async function getLaunchPrefs() {
 }
 
 /**
- * Replace the launch-settings slice for one library row. `null` or an empty
- * object deletes the row (including the load-progress prior). Progress fields
- * already on the row are kept when the incoming payload omits them, so a slider
- * save cannot wipe lastLoadMs.
- *
  * @param {string} libraryId
  * @param {LibraryLaunchSettings | null} settings
  * @returns {Promise<ModelsLaunchBlock>}
@@ -358,7 +328,6 @@ export async function setLibraryLaunchSettings(libraryId, settings) {
   }
 
   const normalized = normalizeLaunchSettings(settings, { includeProgress: true });
-  // Empty object / no known keys: delete, matching inference-prefs clearing.
   if (Object.keys(normalized).length === 0) {
     delete launch.byLibraryId[id];
     await patchModelsConfig({ launch });
@@ -367,7 +336,6 @@ export async function setLibraryLaunchSettings(libraryId, settings) {
 
   /** @type {LibraryLaunchSettings} */
   const next = { ...normalized };
-  // Preserve the load-progress prior unless this write is itself a prior update.
   if (existing) {
     if (next.lastLoadMs == null && existing.lastLoadMs != null) next.lastLoadMs = existing.lastLoadMs;
     if (next.lastWeightsBytes == null && existing.lastWeightsBytes != null) {
@@ -381,10 +349,6 @@ export async function setLibraryLaunchSettings(libraryId, settings) {
 }
 
 /**
- * Record how long a llama.cpp serve took to reach `running`, plus the weights
- * size used for that load. Creates a progress-only row when the user never
- * touched inspector sliders.
- *
  * @param {string} libraryId
  * @param {{ lastLoadMs: number, lastWeightsBytes: number }} prior
  * @returns {Promise<ModelsLaunchBlock>}

@@ -1,9 +1,6 @@
-/**
- * Tool group definitions for per-mode allowlists (Input Token Reduction — Phase 2).
- * Group token costs are documented in documentation/plans/context-reduction.md.
- */
-
 import type { ModeId, ModeToolPolicy } from './types';
+
+// ── IDs ──────────────────────────────────────────────────────────────────────
 
 /** Named tool groups keyed for mode matrix expansion. */
 export const TOOL_GROUP_IDS = {
@@ -91,8 +88,6 @@ export const TOOL_GROUP_IDS = {
     'browser_screenshot',
     'request_browser_origin_access',
   ],
-  // Split so board workers can read the wiki and save what they learn without
-  // also getting page rewrites, ingest, or destructive brain management.
   'brain-core': ['brain_search', 'brain_read_page', 'brain_list', 'save_memory'],
   'brain-admin': [
     'brain_write_page',
@@ -129,13 +124,10 @@ export const TOOL_GROUP_ID_LIST: ToolGroupId[] = Object.keys(
 /** Plan mode: files-write limited to planner doc writes (see context-reduction matrix footnote 1). */
 export const PLAN_FILES_WRITE_ALLOW = ['save_file', 'make_directory'] as const;
 
-/**
- * Per-mode matrix: ● keep · ○ drop. See documentation/plans/context-reduction.md.
- * Orchestrate sub-agents: group is ● but spawn/cancel stay denied (footnote 2).
- * Plan code-exec: kept per final matrix (MIN-332) — shell runs allowed for planning probes.
- */
 /** Desktop chat: every built-in tool group (full Minnow assistant surface). */
 export const DESKTOP_ALLOWED_GROUPS: readonly ToolGroupId[] = TOOL_GROUP_ID_LIST;
+
+// ── Matrix ───────────────────────────────────────────────────────────────────
 
 export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
   desktop: DESKTOP_ALLOWED_GROUPS,
@@ -302,6 +294,8 @@ export const MODE_TOOL_ALLOW_OVERRIDES: Partial<Record<ModeId, readonly string[]
   'super-plan': [...PLAN_FILES_WRITE_ALLOW],
 };
 
+// ── Expand ───────────────────────────────────────────────────────────────────
+
 /** Flatten group ids to a deduplicated tool id list. */
 export function expandToolGroups(groups: readonly ToolGroupId[]): string[] {
   const ids = new Set<string>();
@@ -332,20 +326,10 @@ export function allowGroupsToolPolicy(
   return { default: 'deny', tools };
 }
 
-/**
- * Leftover V1 board member roles (builder / tester / fixer). V2 attempts use
- * the server runner's tool set, not this matrix. Kept so leftover task chats
- * still get a sensible allowlist if they stream.
- */
 export type BoardMemberRole = 'build' | 'test' | 'fix';
 
-/**
- * Per-role group matrix for leftover orchestrator board chats (MIN-333). Build and fix differ
- * only by browser (build ●, fix ○). Tester omits files-write.
- *
- * All three get `brain-core` for read/search during work; durable writes on board
- * tasks go through milestone synthesis at build pass and post-merge, not `save_memory`.
- */
+// ── Board ────────────────────────────────────────────────────────────────────
+
 export const BOARD_ROLE_ALLOWED_GROUPS: Record<BoardMemberRole, readonly ToolGroupId[]> = {
   build: [
     'util-basic',

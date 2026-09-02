@@ -1,7 +1,3 @@
-/**
- * Email mail-view icons — delegates to the central Uicons registry.
- */
-
 import { iconHtml } from '../icon';
 
 const EMAIL_KEYS = [

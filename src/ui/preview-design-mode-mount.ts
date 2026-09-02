@@ -1,10 +1,3 @@
-/**
- * Design Mode mount targets for the workspace preview instance.
- * The overlay always mounts in `#previewBody`. The tool strip starts there too; Electron
- * reparents it to `#previewDesignChrome` only while the native WebContentsView is the guest
- * (cross-origin Select), via `syncDesignModeElectronGuest` in preview-panel.ts.
- */
-
 import type { DesignModeMountOptions } from '../design/design-mode';
 
 /** Default preview instance id (see electron/preview-instance-registry.ts). */

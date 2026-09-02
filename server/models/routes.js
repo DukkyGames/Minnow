@@ -1,7 +1,3 @@
-/**
- * HTTP routes for Models download + serve APIs.
- */
-
 import { cancelDownload, listDownloads, startDownload, subscribeDownload } from './download.js';
 import { searchHubModels } from './hf-search.js';
 import { listCachedModels } from './cached.js';
@@ -28,6 +24,8 @@ import {
 } from './llama-runtime.js';
 import { writeLlamaCppConfig, readLlamaCppConfig, buildLlamaServerArgs } from './llama-args.js';
 
+// ── HTTP helpers ─────────────────────────────────────────────────────────────
+
 function sendJson(res, status, payload) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json');
@@ -49,6 +47,8 @@ function readJsonBody(req) {
     req.on('error', reject);
   });
 }
+
+// ── Dispatch ─────────────────────────────────────────────────────────────────
 
 /**
  * @param {import('http').IncomingMessage} req
@@ -113,7 +113,6 @@ export async function handleModelsRequest(req, res, pathname) {
       try {
         res.write(`data: ${JSON.stringify(event)}\n\n`);
       } catch {
-        /* client disconnected — keep download running */
         return;
       }
       if (event.status === 'completed' || event.status === 'failed' || event.status === 'cancelled') {
@@ -148,8 +147,6 @@ export async function handleModelsRequest(req, res, pathname) {
     return true;
   }
 
-  // Attention geometry read out of a local GGUF header, so the inspector can show exact
-  // memory numbers and a real layer count instead of guessing from parameter count.
   if (pathname === '/api/models/gguf-meta' && req.method === 'GET') {
     const parsed = new URL(req.url ?? '/', 'http://127.0.0.1');
     const filePath = parsed.searchParams.get('path') || '';
@@ -230,8 +227,6 @@ export async function handleModelsRequest(req, res, pathname) {
     return true;
   }
 
-  // Per-model llama.cpp launch drafts. Survive reload; My Models Load and the
-  // inspector send the same payload via settingsFor() + startServe merge.
   if (pathname === '/api/models/launch' && req.method === 'GET') {
     const launch = await getLaunchPrefs();
     sendJson(res, 200, launch);
@@ -277,7 +272,6 @@ export async function handleModelsRequest(req, res, pathname) {
           : undefined,
         is_moe: parsed.searchParams.get('is_moe') === '1',
       };
-      // When the weights are already on disk their header beats every heuristic.
       const modelPath = parsed.searchParams.get('model_path') || '';
       const ggufMeta = modelPath ? await readGgufMetadata(modelPath) : null;
       const profiles = computeServeProfiles(hardware, model, {
@@ -288,8 +282,6 @@ export async function handleModelsRequest(req, res, pathname) {
       const variant = (await getInstalledLlamaVariant()) ?? 'cpu';
       const profilesWithArgs = profiles.map((p) => ({
         ...p,
-        // Preview argv must use the same GGUF header as startServe so inspector
-        // and launch share one geometry source (exact nLayers, not a guess).
         llama_args: buildLlamaServerArgs({
           modelPath: '/model.gguf',
           port: 8085,
@@ -400,9 +392,6 @@ export async function handleModelsRequest(req, res, pathname) {
     return true;
   }
 
-  // Deliberately its own stream. `/serve/events` fires a whole serve list on every
-  // commit; telemetry ticks every ~400 ms while a slot is busy and must not drag that
-  // payload along with it.
   if (pathname === '/api/models/serve/activity/stream' && req.method === 'GET') {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -455,8 +444,6 @@ export async function handleModelsRequest(req, res, pathname) {
       Connection: 'keep-alive',
     });
     const serveId = serve.id;
-    // Re-read the row each poll: the first commit is `starting` with no runId,
-    // and a spawn retry writes a different log file.
     const unsubscribe = subscribeServeLogForServe(() => getServe(serveId), (event) => {
       try {
         res.write(`data: ${JSON.stringify(event)}\n\n`);
@@ -523,7 +510,8 @@ export async function handleModelsRequest(req, res, pathname) {
   return false;
 }
 
-/** Vite connect middleware factory. */
+// ── Middleware ───────────────────────────────────────────────────────────────
+
 export function createModelsMiddleware() {
   return async (req, res, next) => {
     const rawUrl = req.url ?? '/';

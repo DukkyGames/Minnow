@@ -1,7 +1,3 @@
-/**
- * Managed local server process manager (install, spawn, health, logs).
- */
-
 import { spawn, spawnSync } from 'node:child_process';
 import fsp from 'node:fs/promises';
 import net from 'node:net';
@@ -48,14 +44,12 @@ const processes = new Map();
 /** @type {Map<string, ServerJob>} */
 const jobs = new Map();
 
-/** In-flight background install promises (one per server id). */
 /** @type {Map<string, Promise<{ ok: boolean; error?: string; alreadyInstalled?: boolean; job?: ServerJob | null }>>} */
 const installPromises = new Map();
 
 /** @type {Map<string, string[]>} */
 const logRingBuffers = new Map();
 
-/** Listeners for managed-process lifecycle (serve.js watches mlx-lm exits). */
 /** @type {Map<string, Set<(event: object) => void>>} */
 const serverStateListeners = new Map();
 
@@ -68,12 +62,10 @@ let spawnOverrideForTests = null;
 let fetchOverrideForTests = null;
 
 /**
- * When set, replaces provisioner.provision during installServer (unit tests only).
  * @type {((serverId: string, onProgress?: (message: string) => void) => Promise<void>) | null}
  */
 let installProvisionOverrideForTests = null;
 
-/** Replace killProcessTreeAndWait in unit tests (Windows taskkill cannot mock children). */
 /** @type {typeof killProcessTreeAndWait | null} */
 let killTreeWaitOverrideForTests = null;
 
@@ -92,7 +84,6 @@ async function killManagedChildAndWait(child, opts) {
   return killProcessTreeAndWait(child, opts);
 }
 
-/** Replace child_process.spawn for unit tests. */
 export function setManagerSpawnOverrideForTests(fn) {
   spawnOverrideForTests = fn;
 }
@@ -101,7 +92,6 @@ export function resetManagerSpawnOverrideForTests() {
   spawnOverrideForTests = null;
 }
 
-/** Replace global fetch for health-check unit tests. */
 export function setManagerFetchOverrideForTests(fn) {
   fetchOverrideForTests = fn;
 }
@@ -110,7 +100,6 @@ export function resetManagerFetchOverrideForTests() {
   fetchOverrideForTests = null;
 }
 
-/** Replace install provision step for unit tests. */
 export function setInstallProvisionOverrideForTests(fn) {
   installProvisionOverrideForTests = fn;
 }
@@ -119,7 +108,6 @@ export function resetInstallProvisionOverrideForTests() {
   installProvisionOverrideForTests = null;
 }
 
-/** Clear runtime maps and stop mocked children between tests. */
 export function resetManagerStateForTests() {
   for (const [, state] of processes) {
     killProcessTree(state.child);
@@ -132,9 +120,6 @@ export function resetManagerStateForTests() {
 }
 
 /**
- * Subscribe to managed-server process events (currently `exit` from the child).
- * serve.js uses this so an mlx-lm death flips MLX serve rows to `crashed`
- * without polling. Tests stub this export — no Apple Silicon required.
  * @param {string} serverId
  * @param {(event: object) => void} listener
  * @returns {() => void}
@@ -163,7 +148,6 @@ function emitServerState(serverId, event) {
     try {
       listener(event);
     } catch {
-      /* listener errors must not break process cleanup */
     }
   }
 }
@@ -225,7 +209,6 @@ async function appendServerLog(serverId, chunk) {
 }
 
 /**
- * Thin wrapper: shared helper returns `{ ok }`; managed-server start still throws.
  * @param {string} serverId
  * @param {number} port
  * @param {string} healthPath
@@ -269,12 +252,10 @@ async function writeServerRunRecord(serverId, record) {
   await fsp.writeFile(runPath, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
 }
 
-/** Remove persisted spawn record when the child is gone or ownership is lost. */
 async function deleteServerRunRecord(serverId) {
   try {
     await fsp.rm(getServerRunPath(serverId), { force: true });
   } catch {
-    /* already absent */
   }
 }
 
@@ -313,7 +294,6 @@ function readProcessCommandLine(pid) {
     }
   }
   try {
-    // macOS truncates `ps` output unless -ww is set (orphan reaper needs the venv path).
     const psArgs =
       process.platform === 'darwin'
         ? ['-ww', '-o', 'command=', '-p', String(pid)]
@@ -359,7 +339,6 @@ function processCommandMatchesServer(serverId, recordedCommand, liveCommand, pid
   try {
     venvReal = path.normalize(realpathForBoundaryCheck(path.resolve(venvDir)));
   } catch {
-    /* use unresolved */
   }
   const venvNorm = path.normalize(venvDir);
   const executable = Number.isInteger(pid) && pid > 0 ? readDarwinProcessExecutable(pid) : null;
@@ -378,9 +357,6 @@ function processCommandMatchesServer(serverId, recordedCommand, liveCommand, pid
 }
 
 /**
- * Kill a PID tree without a ChildProcess handle (orphan reaper).
- * Goes through `killProcessTree` so ancestor-kill guards still apply — a raw
- * `taskkill /T /F` here would be able to tear down the tool server.
  * @param {number} pid
  * @param {{ graceMs?: number }} [opts]
  */
@@ -394,7 +370,6 @@ async function killPidTreeAndWait(pid, opts = {}) {
 }
 
 /**
- * Reap a leftover managed-server process recorded in run.json from a prior boot.
  * @param {string} serverId
  */
 async function reapOrphanedServerRun(serverId) {
@@ -439,7 +414,6 @@ async function reapOrphanedServerRun(serverId) {
   await deleteServerRunRecord(serverId);
 }
 
-/** Reap orphaned managed-server processes before auto-start on boot. */
 export async function reapOrphanedServers() {
   for (const def of listServerDefs()) {
     try {
@@ -478,9 +452,6 @@ export async function getInstallStatus(serverId) {
   };
 }
 
-/**
- * List catalog entries merged with servers.json and runtime state.
- */
 export async function listServers() {
   const config = await readResource('servers');
   const defs = listServerDefs();
@@ -509,7 +480,6 @@ export async function listServers() {
       running: proc?.phase === 'running' && proc?.healthy === true,
       phase: proc?.phase ?? (install.installed ? 'stopped' : 'pending'),
       job: install.job,
-      // Forwarded so Settings can hide MLX Install on Windows/Linux (mlx-lm sets these).
       supported: install.supported,
       installable: install.installable,
       reason: install.reason ?? null,
@@ -520,7 +490,6 @@ export async function listServers() {
 }
 
 /**
- * Run provision + settings for a server (updates in-memory install job).
  * @param {string} serverId
  */
 async function runInstallServer(serverId) {
@@ -545,7 +514,6 @@ async function runInstallServer(serverId) {
 }
 
 /**
- * Kick off install in the background; returns immediately with the current job.
  * @param {string} serverId
  */
 export async function startInstallServer(serverId) {
@@ -585,7 +553,6 @@ export async function startInstallServer(serverId) {
 }
 
 /**
- * Await install completion (used by tests and synchronous callers).
  * @param {string} serverId
  */
 export async function installServer(serverId) {
@@ -673,7 +640,6 @@ export async function startServer(serverId) {
 
   const commandLine = [spec.command, ...(spec.args ?? [])].join(' ');
 
-  /** Reject health success when the child exits during startup (e.g. EADDRINUSE). */
   const exitDuringStartup = new Promise((_, reject) => {
     const onExit = (code) => {
       reject(
@@ -693,8 +659,6 @@ export async function startServer(serverId) {
       void deleteServerRunRecord(serverId);
       void appendServerLog(serverId, `\n[exit] code=${code ?? 'null'}\n`);
     }
-    // Fire even when the map already dropped this child (startup failure path)
-    // so serve.js can mark MLX rows crashed.
     emitServerState(serverId, {
       type: 'exit',
       code: code ?? null,
@@ -757,20 +721,17 @@ export async function stopServer(serverId) {
 }
 
 /**
- * Best-effort synchronous kill for process.on('exit') where await is impossible.
  * @param {import('node:child_process').ChildProcess} child
  */
 function killServerChildNow(child) {
   killProcessTree(child);
 }
 
-/** Stop every managed server process (server shutdown). */
 export async function shutdownAllServers() {
   const ids = [...processes.keys()];
   await Promise.all(ids.map((id) => stopServer(id)));
 }
 
-/** Sync teardown for process exit handlers that cannot await. */
 export function shutdownAllServersNow() {
   for (const [, state] of processes) {
     killServerChildNow(state.child);
@@ -802,7 +763,6 @@ export async function uninstallServer(serverId) {
   return { ok: true };
 }
 
-/** Start installed servers that are enabled with autoStart (never auto-install). */
 export async function autoStartEnabledServers() {
   const config = await readResource('servers');
   for (const def of listServerDefs()) {
@@ -819,7 +779,6 @@ export async function autoStartEnabledServers() {
   }
 }
 
-/** Provision then start enabled+autoStart servers flagged for auto-provision when not yet installed. */
 export async function autoProvisionEnabledServers() {
   const config = await readResource('servers');
   for (const def of listServerDefs()) {
@@ -850,9 +809,6 @@ export function getServerLogs(serverId, tailLines = 200) {
   return ring.slice(-n);
 }
 
-/**
- * Managed SearXNG base URL when enabled and running; otherwise null.
- */
 export async function getManagedSearxngUrl() {
   const config = await readResource('servers');
   const entry = config.searxng;
@@ -865,7 +821,6 @@ export async function getManagedSearxngUrl() {
 }
 
 /**
- * Configured port for a managed server, falling back to its catalog default.
  * @param {string} serverId
  * @returns {Promise<number | null>}
  */
@@ -878,11 +833,6 @@ export async function getManagedServerPort(serverId) {
 }
 
 /**
- * True when the managed process is up and passing health checks.
- *
- * Deliberately does not consult the `enabled` flag: mlx-lm is started on demand
- * by a model load rather than by the Settings toggle, so "enabled" and "running"
- * are independent for it.
  * @param {string} serverId
  */
 export function isManagedServerRunning(serverId) {
@@ -945,7 +895,6 @@ export async function setServerPort(serverId, port) {
   return config[serverId];
 }
 
-/** Ensure managed server directories exist under ~/.minnow. */
 export async function ensureServersLayout() {
   await fsp.mkdir(getServersRoot(), { recursive: true });
   await fsp.mkdir(path.dirname(getServerLogPath('_')), { recursive: true });

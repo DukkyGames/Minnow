@@ -1,8 +1,3 @@
-/**
- * Detect assistant tool_call rows at the history tail that lack matching tool results.
- * Used to restore ask_question UI and other blocking tools after reload.
- */
-
 import type {
   AssistantToolCallMessage,
   Chat,
@@ -32,10 +27,6 @@ function isAssistantWithTools(msg: Message): msg is AssistantToolCallMessage {
   );
 }
 
-/**
- * Returns the incomplete tool batch at the end of session history, or null when the
- * tail is a finished turn (prose assistant, user message, or fully answered tool_calls).
- */
 export function findIncompleteToolBatchAtTail(chat: Chat): IncompleteToolBatch | null {
   const history = chat.history;
   if (history.length === 0) {
@@ -90,7 +81,6 @@ export function findIncompleteToolBatchAtTail(chat: Chat): IncompleteToolBatch |
 
 /** True when the next pending tool in the tail batch needs user input (question cards). */
 export function chatAwaitingUserInputTool(chat: Chat): boolean {
-  // Lazy-history summaries omit message bodies; incomplete-tool detection needs full history.
   if (chat.historyLoaded === false) {
     return false;
   }

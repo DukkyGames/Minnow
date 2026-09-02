@@ -1,15 +1,3 @@
-/**
- * Settings drill-down for phones.
- *
- * The desktop layout is a 220px sidebar beside a scrolling content column. The
- * 768px fallback reflows that sidebar into a wrapped row of pills — with 29
- * sections across 7 groups that row is ~840px tall on a 375px screen, which
- * pushes every actual setting below the fold.
- *
- * On phones the two panes become two screens instead: the section list, then
- * the section. A bar above the content carries the way back.
- */
-
 import { isPhoneLayout, onPhoneLayoutChange } from './mobile-layout';
 
 const SECTION_OPEN_CLASS = 'settings-page--phone-section';
@@ -67,10 +55,7 @@ function ensureBar(root: HTMLElement): void {
   body.prepend(bar);
 }
 
-/**
- * Wire the phone drill-down. Idempotent — Settings init may run more than once
- * across window open/close cycles.
- */
+/** Wire the phone drill-down. */
 export function initSettingsMobileNav(): void {
   const root = getRoot();
   if (!root) return;
@@ -82,11 +67,6 @@ export function initSettingsMobileNav(): void {
   }
   installed = true;
 
-  // Delegated: nav items are static markup, but hub jumps and search results
-  // activate sections too, and all of them land on a `[data-area-jump]` or
-  // `[data-hub-jump]` control.
-  // Bubble phase on the page root, so the item's own handler (which activates the
-  // section and updates the sidebar) has already run by the time this fires.
   root.addEventListener('click', (event) => {
     if (!isPhoneLayout()) return;
     const target = event.target as HTMLElement | null;

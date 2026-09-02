@@ -1,14 +1,3 @@
-/**
- * Attachments section of the issue peek panel.
- *
- * Three ways in, because a screenshot arrives by whichever is nearest: the
- * button, a paste into the panel, or a drop onto it. Images render as thumbnails
- * because a bug report with a screenshot you have to click to see is a bug
- * report you do not read.
- *
- * Phase 2 of `documentation/plans/issues-app-v2.md`.
- */
-
 import {
   addIssueAttachment,
   removeIssueAttachment,
@@ -28,6 +17,8 @@ import { showToast } from './toast';
 
 /** Called after any change so the panel re-renders from store state. */
 export type AttachmentsChanged = () => void;
+
+// ── Ingest ───────────────────────────────────────────────────────────────────
 
 /** Upload dropped or picked files and append attachment records on the issue. */
 export async function ingestIssueFiles(
@@ -74,6 +65,8 @@ function filesFromClipboard(event: ClipboardEvent): File[] {
   return out;
 }
 
+// ── Rows ─────────────────────────────────────────────────────────────────────
+
 function buildAttachmentRow(
   issue: IssueCard,
   attachment: IssueAttachment,
@@ -115,8 +108,6 @@ function buildAttachmentRow(
     meta.appendChild(sizeEl);
   }
 
-  // The absolute path is what an agent gets handed, so it is visible and
-  // copyable rather than hidden behind the link.
   const pathEl = document.createElement('button');
   pathEl.type = 'button';
   pathEl.className = 'issues-attachment__path';
@@ -155,10 +146,9 @@ function buildAttachmentRow(
   return row;
 }
 
-/**
- * Build the section. `body` is the caller's section body so this stays
- * consistent with the panel's other sections rather than inventing chrome.
- */
+// ── Render ───────────────────────────────────────────────────────────────────
+
+/** Build the section. */
 export function renderIssueAttachments(
   body: HTMLElement,
   issue: IssueCard,
@@ -197,8 +187,6 @@ export function renderIssueAttachments(
   controls.append(attachBtn, picker);
   body.appendChild(controls);
 
-  // Paste and drop are bound on the section body, so anywhere in the block
-  // works rather than only over the button.
   body.addEventListener('paste', (event) => {
     const files = filesFromClipboard(event as ClipboardEvent);
     if (files.length === 0) return;

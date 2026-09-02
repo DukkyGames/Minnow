@@ -1,14 +1,3 @@
-/**
- * P10-D (MIN-769) — chat-only decorating `TranscriptStore`.
- *
- * The runner persists an API transcript (`reasoning` / `reasoning_content`,
- * inner-loop nudge user rows, tool rows with `content` only).
- * `renderChatFromHistory` reads `thinking[]`, `stats`/`usage`, `attachments`,
- * and `codeChange`. This wrapper rewrites each `append` into that shape and
- * marks the chat dirty. It wraps {@link createSessionTranscriptStore} rather
- * than forking it — sub-agent callers still share the bare store.
- */
-
 import { createSessionTranscriptStore } from '../agents/session-transcript-store';
 import { splitThinkingSegments } from '../api/reasoning';
 import { applyClassifiedStreamEnd, classifyStreamEnd } from '../api/stream-end';
@@ -51,25 +40,13 @@ export interface ChatTranscriptStore extends TranscriptStore {
   observe(event: TurnEvent): void;
   /** `onGenerationId` dirty-tracking — generation ids live on the turn run. */
   noteGeneration(chatId: string, generationId: string): void;
-  /**
-   * Stop the in-store thinking-duration ticker on abort/error.
-   * Live timer chrome is P10-F; this only prevents a leaked interval.
-   */
   abortThinking(): void;
-  /**
-   * History index of the last assistant row this store actually appended.
-   * Live rows must use this instead of guessing `chat.history.length - 1`.
-   */
   lastAssistantHistoryIndex(): number | undefined;
 }
 
 export interface CreateChatTranscriptStoreOptions {
   /** Defaults to the shared session wrapper. Do not fork that store. */
   inner?: TranscriptStore;
-  /**
-   * Live thought controller when the chat path has one. Snapshots
-   * `thinking[]` without consuming (P10-F owns live chrome / per-round DOM).
-   */
   thoughtController?: ThoughtBubbleController | null;
   turnRunId?: TurnRunId;
 }
@@ -105,8 +82,6 @@ function isInnerLoopControlUserRow(message: TranscriptMessage): boolean {
 }
 
 function cloneRow(message: TranscriptMessage): Record<string, unknown> {
-  // Clone so stripping wire reasoning cannot mutate the inner loop's in-memory
-  // transcript — the next completion still needs those outbound replay fields.
   return { ...(message as unknown as Record<string, unknown>) };
 }
 
@@ -131,11 +106,6 @@ function toolCallCountOf(row: Record<string, unknown>): number {
   return Array.isArray(calls) ? calls.length : 0;
 }
 
-/**
- * Chat-facing transcript store. `load` delegates so the `have` count that
- * aligns suffix persist stays the same UI-only filter as the inner store and
- * `overlayMultimodalHistoryForRunTurn` — a third model-facing view would drift.
- */
 export function createChatTranscriptStore(
   options: CreateChatTranscriptStoreOptions = {},
 ): ChatTranscriptStore {
@@ -147,7 +117,6 @@ export function createChatTranscriptStore(
 
   let round = emptyRound(0);
   let lastPersistedAssistantIndex: number | undefined;
-  // `observe` has no chatId; persist always names the chat first.
   let lastChatId: string | undefined;
 
   function thinkingSegmentsForRow(): string[] {
@@ -180,11 +149,6 @@ export function createChatTranscriptStore(
     }
   }
 
-  /**
-   * Land `truncated: true` (the runner currently discards this return) and
-   * throw on a provider error so the turn does not complete silently.
-   * Abort is P10-E — do not mint a `stopped` row here.
-   */
   function applyStreamEndToRow(row: Record<string, unknown>): void {
     const tools = toolCallCountOf(row);
     const textLength =
@@ -288,9 +252,6 @@ export function createChatTranscriptStore(
     },
     observe(event) {
       if (event.type === 'round_start') {
-        // Later rounds must not inherit the previous round's thoughts or
-        // duration — consume resets the live controller after that round's
-        // row was already snapshotted on append (live chrome is P10-F).
         if (event.index > 0) {
           thoughtController?.consumePersistedSegments();
           thoughtController?.resetStreamPhaseHints();
@@ -337,8 +298,6 @@ export function createChatTranscriptStore(
         if (stats) round.stats = stats;
         if (usage) round.usage = usage;
         if (event.finishReason) round.finishReason = event.finishReason;
-        // Tool-round persist of the assistant happens before this event.
-        // Patch so stats / truncated still land on the row the renderer reads.
         if (lastChatId) patchPersistedAssistant(lastChatId);
       }
     },

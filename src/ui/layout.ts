@@ -62,7 +62,6 @@ export function applySidebarVisuals(): void {
   scheduleElectronPreviewHostLayoutAfterChatSidebarChange();
   syncAppBodySidebarWidthVars();
   syncChatSidebarResizer();
-  // Code view chrome mirrors this state on the Chats toggle.
   emitChatSidebarChanged();
 }
 
@@ -82,7 +81,6 @@ export function toggleSidebarLayout(): void {
     if (side && side.classList.contains('mobile-open')) closeMobileSidebar();
     else openMobileSidebar();
     applySidebarVisuals();
-    // Mobile overlay vs icon rail changes board wave flattening in the list.
     void import('./sidebar').then((m) => m.renderSidebar());
   } else {
     sessionState!.sidebarCollapsed = !sessionState!.sidebarCollapsed;

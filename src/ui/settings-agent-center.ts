@@ -1,8 +1,3 @@
-/**
- * Settings → Agents center — card grid for modes, work agents, and sub-agents.
- * Opens a lightbox with prompt, model binding, and entity-specific settings.
- */
-
 import '../styles/settings-general.css';
 import '../styles/settings-agent-center.css';
 
@@ -61,6 +56,7 @@ export interface AgentCenterCard {
   disabled?: boolean;
 }
 
+// ── Load ─────────────────────────────────────────────────────────────────────
 
 async function saveSubAgentTypePatch(
   typeId: string,
@@ -143,6 +139,8 @@ export async function loadAgentCenterCards(
 
   return cards;
 }
+
+// ── Lightboxes ───────────────────────────────────────────────────────────────
 
 async function mountPlanGranularityField(container: HTMLElement): Promise<void> {
   const select = document.createElement('select');
@@ -318,6 +316,8 @@ function openSubAgentLightbox(
   });
 }
 
+// ── Cards ────────────────────────────────────────────────────────────────────
+
 function createCardChevron(): HTMLElement {
   return createIcon('chevronRight', { className: 'settings-agent-card__chevron' });
 }
@@ -413,6 +413,8 @@ const AGENT_CENTER_CARD_SECTIONS: {
     searchKey: 'agents.subAgents',
   },
 ];
+
+// ── Global ───────────────────────────────────────────────────────────────────
 
 /** Mount global context policy default for all agents. */
 async function mountGlobalContextPolicy(mount: HTMLElement): Promise<void> {

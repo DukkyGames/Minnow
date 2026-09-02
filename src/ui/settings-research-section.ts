@@ -1,14 +1,4 @@
-/**
-
- * Settings → Deep Research — dedicated model binding and engine parameters.
-
- */
-
-
-
 import '../styles/settings-general.css';
-
-
 
 import {
 
@@ -60,8 +50,6 @@ import {
 
 import { setStatus } from './status';
 
-
-
 function el<K extends keyof HTMLElementTagNameMap>(
 
   tag: K,
@@ -81,8 +69,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 
 }
-
-
 
 /** Append a labeled numeric field for research.json limits. */
 
@@ -136,8 +122,6 @@ function appendNumberField(
 
 }
 
-
-
 const SEARCH_OVERRIDE_OPTIONS: { value: SearchProvider | ''; label: string }[] = [
 
   { value: '', label: '(use Search section primary)' },
@@ -154,21 +138,15 @@ const SEARCH_OVERRIDE_OPTIONS: { value: SearchProvider | ''; label: string }[] =
 
 ];
 
-
-
 /** Render Settings → Deep Research into the section mount. */
 
 export async function renderDeepResearchSettingsSection(mount: HTMLElement): Promise<void> {
 
   mount.replaceChildren();
 
-
-
   const shell = el('div', 'settings-general');
 
   mount.appendChild(shell);
-
-
 
   const lead = el('p', 'settings-section-lead');
 
@@ -192,8 +170,6 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
 
   shell.appendChild(lead);
 
-
-
   const serverUp = await detectConfigServer();
 
   if (!serverUp) {
@@ -210,13 +186,9 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
 
   }
 
-
-
   const content = el('div', 'settings-general__content');
 
   shell.appendChild(content);
-
-
 
   const modelGroup = appendSettingsGroup(
 
@@ -245,8 +217,6 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
   providerSelect.disabled = !serverUp;
 
   modelSelect.disabled = !serverUp;
-
-
 
   const searchOverrideGroup = appendSettingsGroup(
 
@@ -295,8 +265,6 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
     }).row,
 
   );
-
-
 
   const loopGroup = appendSettingsGroup(
 
@@ -382,8 +350,6 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
 
   );
 
-
-
   const extractGroup = appendSettingsGroup(
 
     content,
@@ -468,8 +434,6 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
 
   );
 
-
-
   const reportGroup = appendSettingsGroup(
 
     content,
@@ -498,8 +462,6 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
 
   );
 
-
-
   let current: ResearchConfig = { ...DEFAULT_RESEARCH_CONFIG };
 
   try {
@@ -512,8 +474,6 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
 
   }
 
-
-
   await fillProviderSelect(providerSelect, current.model.providerId, {
 
     includeEmptyOption: true,
@@ -522,15 +482,11 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
 
   await fillModelSelect(modelSelect, current.model.providerId, current.model.model);
 
-
-
   providerSelect.addEventListener('change', () => {
 
     void fillModelSelect(modelSelect, providerSelect.value, modelSelect.value);
 
   });
-
-
 
   const applyToForm = (config: ResearchConfig): void => {
 
@@ -565,8 +521,6 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
   };
 
   applyToForm(current);
-
-
 
   const readForm = (): ResearchConfig => ({
 
@@ -603,8 +557,6 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
     maxReportTokens: Number(maxReportTokens.value),
 
   });
-
-
 
   content.appendChild(
 
@@ -665,8 +617,6 @@ export async function renderDeepResearchSettingsSection(mount: HTMLElement): Pro
     ),
 
   );
-
-
 
   appendSettingsCrosslinks(content, [
 

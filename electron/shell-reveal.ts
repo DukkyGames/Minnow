@@ -1,16 +1,9 @@
-/**
- * Open a validated absolute path in the OS file manager from the Electron main process.
- */
-
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { shell } from 'electron';
 
 export type ShellRevealKind = 'file' | 'dir';
 
-/**
- * Reveal a file (select in parent folder) or open a directory in Explorer / Finder.
- */
 export async function revealAbsolutePathInExplorer(
   absolutePath: string,
   kind: ShellRevealKind,

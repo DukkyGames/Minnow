@@ -1,4 +1,3 @@
-/** Show persisted millisecond durations as whole seconds in settings inputs. */
 export function msToSeconds(ms: number): number {
   return Math.round(ms / 1000);
 }

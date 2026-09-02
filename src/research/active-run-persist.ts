@@ -8,9 +8,7 @@ const STORAGE_KEY = 'minnow.research.activeRunId';
 export function persistActiveResearchRunId(researchId: string): void {
   try {
     sessionStorage.setItem(STORAGE_KEY, researchId);
-  } catch {
-    /* private mode / quota */
-  }
+  } catch {}
 }
 
 /** Last persisted in-flight run id, if any. */
@@ -27,7 +25,5 @@ export function readPersistedActiveResearchRunId(): string | null {
 export function clearPersistedActiveResearchRunId(): void {
   try {
     sessionStorage.removeItem(STORAGE_KEY);
-  } catch {
-    /* ignore */
-  }
+  } catch {}
 }

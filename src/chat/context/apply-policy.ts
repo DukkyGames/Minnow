@@ -1,7 +1,3 @@
-/**
- * Async context enforcement orchestration (archive pre-pass stays in loop.ts).
- */
-
 import type { ApiMessage } from '../../types';
 import {
   applyContextBudget,

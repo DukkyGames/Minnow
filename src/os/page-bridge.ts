@@ -33,7 +33,6 @@ function isCodeForeground(): boolean {
 export function shouldHideAppBody(): boolean {
   if (!isOsShellEnabled()) return false;
   if (isCodeForeground()) return false;
-  // Legacy Code embed — keep appBody visible until the view is reparented back.
   if (isResearchPanelOpen()) return false;
   if (getOsView() === 'workspaces') return true;
   return getForegroundAppId() !== 'code';

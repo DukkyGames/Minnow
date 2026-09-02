@@ -176,6 +176,8 @@ function stateFor(kind) {
   throw new Error(`unknown kind ${kind}`);
 }
 
+// ── SEED_KINDS ───────────────────────────────────────────────────────────────
+
 describe('SEED_KINDS', () => {
   it('is the seven kinds in policy-table order, plus integration-fix', () => {
     assert.deepEqual([...SEED_KINDS], [
@@ -189,6 +191,8 @@ describe('SEED_KINDS', () => {
     ]);
   });
 });
+
+// ── purity ───────────────────────────────────────────────────────────────────
 
 describe('buildSeed — purity', () => {
   it('is a pure function: same inputs, same string', () => {
@@ -223,6 +227,8 @@ describe('buildSeed — purity', () => {
     );
   });
 });
+
+// ── goldens ──────────────────────────────────────────────────────────────────
 
 describe('buildSeed — goldens', () => {
   for (const kind of SEED_KINDS) {

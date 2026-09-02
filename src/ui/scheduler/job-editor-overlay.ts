@@ -1,7 +1,3 @@
-/**
- * Scheduler job editor — movable window for creating and editing scheduled jobs.
- */
-
 import { listModes } from '../../chat/modes/registry';
 import {
   createSchedulerJob,
@@ -149,7 +145,6 @@ async function mountEditor(
     defaultWorkspacePath = defaultWorkspace.path;
     defaultWorkspaceLabel = defaultWorkspace.label || 'Scheduler';
   } catch {
-    /* form remains usable without default workspace metadata */
   }
 
   try {
@@ -158,7 +153,6 @@ async function mountEditor(
       providerLabelById.set(provider.id, provider.label || provider.id);
     }
   } catch {
-    /* model list labels degrade to ids when providers are unreachable */
   }
 
   const editorHead = el('div', 'scheduler-editor__head');

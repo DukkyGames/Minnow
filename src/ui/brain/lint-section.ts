@@ -1,7 +1,3 @@
-/**
- * Brain app — Lint section: AI wiki cleanup planner (plan → confirm → execute).
- */
-
 import { executeBrainWikiCleanup, planBrainWikiCleanup } from '../../brain/client';
 import type {
   BrainCleanupExecuteLogEntry,
@@ -64,6 +60,8 @@ function stopAnalyzeStageTimer(): void {
   }
 }
 
+// ── Analyze ──────────────────────────────────────────────────────────────────
+
 function startAnalyzeStageTimer(onStage: (message: string) => void): void {
   stopAnalyzeStageTimer();
   let index = 0;
@@ -112,6 +110,8 @@ function summaryChipModifier(key: keyof BrainCleanupPlanSummaryCounts): string {
       return '';
   }
 }
+
+// ── Plan UI ──────────────────────────────────────────────────────────────────
 
 function renderSummaryChips(summary: BrainCleanupPlanSummaryCounts): HTMLElement {
   const row = document.createElement('div');
@@ -343,6 +343,8 @@ function buildExecuteConfirmMessage(summary: BrainCleanupPlanSummaryCounts): str
       : '';
   return `Run the cleanup agent on this plan? This may delete or rewrite wiki pages.${detail}`;
 }
+
+// ── Execute ──────────────────────────────────────────────────────────────────
 
 async function generateCleanupPlan(): Promise<void> {
   const mount = getLintMount();

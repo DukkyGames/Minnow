@@ -1,12 +1,3 @@
-/**
- * Issues row/card context menu.
- *
- * The implementation moved to the shared primitive in `context-menu.ts` — this
- * file is the Issues-shaped door onto it. The item type stays exported because
- * the Issues page builds its rows against it and because `submenu` here maps to
- * a real nested menu rather than the reopened-at-an-offset menu it used to be.
- */
-
 import {
   closeContextMenu,
   openContextMenu,
@@ -79,10 +70,7 @@ export function closeIssuesContextMenu(): void {
   closeContextMenu();
 }
 
-/**
- * Open a context menu at the pointer (or keyboard synthetic) coordinates.
- * Replaces any previously open menu.
- */
+/** Open a context menu at the pointer (or keyboard synthetic) coordinates. */
 export function openIssuesContextMenu(
   options: OpenIssuesContextMenuOptions,
 ): IssuesContextMenuHandle {

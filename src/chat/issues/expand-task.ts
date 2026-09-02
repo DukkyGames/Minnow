@@ -1,7 +1,3 @@
-/**
- * Pure builders for Issues Expand with agent (MIN-261 Phase 2).
- */
-
 import { isTriageStatus } from '../../issues/taxonomy.ts';
 import { getIssuesTaxonomySync } from '../../state/issues-taxonomy-store.ts';
 import type { IssueCard } from '../../types.ts';

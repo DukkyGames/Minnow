@@ -1,7 +1,3 @@
-/**
- * Resolve merged sampler presets for work agents and sub-agent types at send time.
- */
-
 import WORK_AGENT_SAMPLER_DEFAULTS from './defaults/work-agent-samplers.json';
 import SUB_AGENT_DEFAULTS from './defaults/sub-agents.json';
 import { isPassthroughWorkAgentId } from './resolve-work-agent';
@@ -17,14 +13,10 @@ import type { SubAgentTypeConfig } from './types';
 export type SamplerResolveKind = 'work-agent' | 'sub-agent';
 
 export interface ResolveSamplerInput {
-  /** Work agent id or sub-agent type id; null for passthrough main chat. */
   agentKey: string | null;
   kind: SamplerResolveKind;
-  /** Main chat: persisted global defaults (+ optional drawer overrides for temp/max). */
   global: GlobalSamplerForSend;
-  /** Sub-agent runs: legacy max token hint when type omits maxTokens. */
   subAgentMaxTokensFallback?: number;
-  /** Sub-agent merged type row (includes shipped + user sampler). */
   subAgentType?: SubAgentTypeConfig | null;
 }
 
@@ -56,10 +48,6 @@ function userWorkAgentSampler(agentId: string | null): SamplerPreset {
   return override ? { ...override } : {};
 }
 
-/**
- * Merge global drawer → role defaults → user overrides (main chat);
- * sub-agents use shipped + merged type config only (no drawer temperature).
- */
 export function resolveSamplerPreset(input: ResolveSamplerInput): ResolvedSampler {
   let merged: SamplerPreset;
 

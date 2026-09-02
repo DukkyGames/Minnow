@@ -1,8 +1,3 @@
-/**
- * Tool enablement and API keys — ~/.minnow/tools.json when npm start,
- * else localStorage (`minnow.tools`). Settings drawer uses `data-tool-id`.
- */
-
 import { bumpToolConfigEpoch } from '../chat/outbound-estimate-epochs';
 import { getTools, putTools } from '../config/api-client';
 import { defaultToolConfig as buildDefaultToolConfig } from '../config/defaults';
@@ -37,6 +32,8 @@ export { defaultToolConfig } from '../config/defaults';
 export const TOOL_CONFIG_STORAGE_KEY = 'minnow.tools';
 
 const PERMISSION_SET = new Set<ToolPermissionMode>(['full', 'ask', 'off']);
+
+// ── Permissions ──────────────────────────────────────────────────────────────
 
 function defaultPermissionForBuiltIn(id: string, enabled: boolean): ToolPermissionMode {
   if (BRAIN_FULL_PERMISSION_TOOL_ID_SET.has(id)) {
@@ -137,10 +134,6 @@ function backfillBrainTools(config: ToolConfig, raw: unknown): void {
   }
 }
 
-/**
- * Normalizes built-in `permissions` entries and mirrors `enabled` for those ids.
- * Leaves unrelated keys (for example MCP tool names) unchanged.
- */
 export function syncEnabledFromPermissions(config: ToolConfig): void {
   for (const tool of BUILT_IN_TOOLS) {
     const raw = config.permissions.default[tool.id];
@@ -154,10 +147,6 @@ export function syncEnabledFromPermissions(config: ToolConfig): void {
   }
 }
 
-/**
- * Effective permission for a tool id: stored value, or `ask` for unknown MCP-style ids,
- * or derived default for built-ins when missing.
- */
 export function getToolPermissionForId(
   config: ToolConfig,
   id: string,
@@ -286,6 +275,8 @@ export function invalidateToolConfigCache(): void {
   loadFromStoragePromise = null;
 }
 
+// ── Load ─────────────────────────────────────────────────────────────────────
+
 /** Load tool config from API or localStorage (call during initApp). */
 export async function loadToolConfigFromStorage(): Promise<ToolConfig> {
   if (loadFromStoragePromise) return loadFromStoragePromise;
@@ -301,8 +292,6 @@ export async function loadToolConfigFromStorage(): Promise<ToolConfig> {
         } catch {
           serverToolsFetchFailed = true;
           setStatus('err', 'Could not load tool settings from ~/.minnow');
-          // Do not fall back to browser localStorage in server mode — stale empty
-          // minnow.tools would show every tool as Disabled on the settings page.
           cachedConfig = cachedConfig ?? buildDefaultToolConfig();
           toolConfigLoaded = true;
           return cachedConfig;
@@ -332,10 +321,6 @@ export async function loadToolConfigFromStorage(): Promise<ToolConfig> {
   return loadFromStoragePromise;
 }
 
-/**
- * Load tool config for Settings → Tools without re-fetching on every visit.
- * Retries once when the initial server-mode fetch failed during app boot.
- */
 export async function loadToolConfigForSettingsUi(): Promise<ToolConfig> {
   if (cachedConfig !== null && !serverToolsFetchFailed) {
     return cachedConfig;
@@ -351,10 +336,6 @@ export function isToolConfigReadyForSettingsUi(): boolean {
   return cachedConfig !== null && !serverToolsFetchFailed;
 }
 
-/**
- * Ensures tool config is loaded before permission checks (avoids treating tools as `ask`
- * when `executeTool` runs before `initApp` finishes loading `tools.json`).
- */
 export async function ensureToolConfigReady(): Promise<ToolConfig> {
   if (cachedConfig !== null) return cachedConfig;
   return loadToolConfigFromStorage();
@@ -389,10 +370,6 @@ export function saveToolConfig(config: ToolConfig): void {
   });
 }
 
-/**
- * Persists tool config and awaits the network round-trip when using `npm start`
- * so a full reload does not race ahead of the completed `PUT /api/config/tools`.
- */
 export async function saveToolConfigAsync(config: ToolConfig): Promise<void> {
   syncEnabledFromPermissions(config);
   cachedConfig = config;
@@ -409,9 +386,7 @@ export async function saveToolConfigAsync(config: ToolConfig): Promise<void> {
 
   try {
     localStorage.setItem(TOOL_CONFIG_STORAGE_KEY, JSON.stringify(config));
-  } catch {
-    /* ignore quota / private mode */
-  }
+  } catch {}
 }
 
 /** Update local tool server availability and refresh server-only rows. */
@@ -480,6 +455,8 @@ function syncToolRowSegmentAvailability(
     }
   }
 }
+
+// ── Drawer ───────────────────────────────────────────────────────────────────
 
 /** Sync permission selects and Brave key field from config; dim server tools when offline. */
 export function loadToolConfigIntoDrawer(
@@ -559,6 +536,8 @@ export function getToolBulkCheckboxState(ids: string[]): {
   }
   return { checked: false, indeterminate: true };
 }
+
+// ── Bulk ─────────────────────────────────────────────────────────────────────
 
 /** Apply enabled flag to many tools, persist, and refresh list UI under `root`. */
 export function setToolsEnabled(
@@ -761,6 +740,8 @@ export function syncToolSelectAllControls(root: ParentNode = document): void {
   }
 }
 
+// ── Toggle ───────────────────────────────────────────────────────────────────
+
 /** Flip enabled state for one tool, persist, and update drawer UI. */
 export function onToolToggle(id: string): void {
   if (typeof document === 'undefined') return;
@@ -923,6 +904,8 @@ function isWebSearchProviderSelect(element: EventTarget | null): element is HTML
   return (WEB_SEARCH_PROVIDER_SELECT_IDS as readonly string[]).includes(element.id);
 }
 
+// ── Web search ───────────────────────────────────────────────────────────────
+
 /** Keep every web-search provider dropdown in sync. */
 export function setWebSearchProviderSelects(provider: string): void {
   for (const id of WEB_SEARCH_PROVIDER_SELECT_IDS) {
@@ -941,9 +924,7 @@ export async function syncWebSearchProviderFromSearchConfig(): Promise<void> {
     const search = await loadSearchConfig();
     if (search.provider === 'disabled') return;
     setWebSearchProviderSelects(search.provider);
-  } catch {
-    // Vite-only or server down — tools.json value from loadToolConfigIntoDrawer is enough.
-  }
+  } catch {}
 }
 
 /** Persist web search provider and API keys from drawer or composer popover fields. */
@@ -989,9 +970,7 @@ export function saveWebSearchSettingsFromDrawer(event?: Event): void {
       try {
         const search = await loadSearchConfig();
         await saveSearchConfig({ ...search, provider: searchProvider });
-      } catch {
-        // search.json is server-backed; tools.json still updated for legacy providers.
-      }
+      } catch {}
       loadToolConfigIntoDrawer(document);
     })();
     return;

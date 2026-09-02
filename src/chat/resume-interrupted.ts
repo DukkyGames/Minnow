@@ -1,9 +1,3 @@
-/**
- * Persist a "turn was interrupted" marker so the boot resume gate can prompt
- * after a graceful Quit (which cancels generations and clears currentGenerationId)
- * or a force-kill mid-tools when no generation id is on disk.
- */
-
 import { isChatStreaming } from './streaming-state';
 import { findIncompleteToolBatchAtTail } from './incomplete-tool-batch';
 import {
@@ -34,23 +28,14 @@ export function clearChatResumeInterrupted(chat: Chat): void {
   touchChat(chat);
 }
 
-/**
- * Whether this chat looks like in-flight work that quit must not silently drop.
- * Used by the shutdown preparer when deciding what to stamp.
- */
 export function chatLooksInFlightForShutdown(chat: Chat): boolean {
   if (chat.resumeInterrupted === true) return true;
   if (chat.currentGenerationId?.trim()) return true;
   if (isChatStreaming(chat.id)) return true;
-  // Lazy-unloaded histories cannot be scanned; generation id / streaming cover those.
   if (chat.historyLoaded === false) return false;
   return Boolean(findIncompleteToolBatchAtTail(chat));
 }
 
-/**
- * Before Electron tears down generations: stamp every in-flight chat, set stop
- * reason to `system` so AbortError teardown keeps the marker, and flush now.
- */
 export function markInterruptedChatsForShutdown(): void {
   const state = sessionState;
   if (!state?.chats?.length) return;

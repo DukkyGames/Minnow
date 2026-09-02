@@ -1,8 +1,3 @@
-/**
- * Session-scoped in-memory cache for read-mostly tool results.
- * Keyed on (tool name, normalized args) with explicit invalidation after writes.
- */
-
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path.ts';
 import type { ToolExecutionResult } from '../types.ts';
 import { extractPathLikeArgs, normalizePathArg } from './path-args.ts';
@@ -18,6 +13,8 @@ export interface ToolCacheContext {
 
 /** Workspace root reader (bound at app init to avoid importing workspace state in tests). */
 let readWorkspacePathForCache: () => string = () => '';
+
+// ── Bind ─────────────────────────────────────────────────────────────────────
 
 /** Wire workspace path into cache scope ids (call from initApp). */
 export function bindWorkspacePathForToolCache(reader: () => string): void {
@@ -100,13 +97,6 @@ const saveFileInvalidation: InvalidationRule = {
   pathFromArgs: (_, args) => pathKeysFromArgs(args, PATH_WRITE_KEYS),
 };
 
-/**
- * Shell and extension tools write files without going through a Minnow file tool,
- * so nothing in {@link INVALIDATION_MAP} can name the paths they touched. Reads are
- * cached with an indefinite TTL, so without this a `prettier --write` (or any MCP
- * server that edits files) leaves the model reading pre-write content for the rest
- * of the session. Bust everything path-scoped rather than guess.
- */
 const opaqueWriteInvalidation: InvalidationRule = {
   invalidateTools: FILE_AND_GIT_READ_INVALIDATION_TARGETS,
   pathFromArgs: () => ['**'],
@@ -187,6 +177,8 @@ export function resetResultCacheForTests(): void {
   cacheNowMs = 0;
   scopeStores.clear();
 }
+
+// ── Policy ───────────────────────────────────────────────────────────────────
 
 /** Whether session tool caching is enabled in settings (default on). */
 export function isToolCacheEnabled(): boolean {
@@ -293,6 +285,8 @@ function normalizeValue(value: unknown, pathKeys: Set<string>, key?: string): un
   return value;
 }
 
+// ── Keys ─────────────────────────────────────────────────────────────────────
+
 /** Build a stable cache key from tool name and normalized args. */
 export function buildCacheKey(name: string, normalizedArgs: Record<string, unknown>): string {
   return `${name}${CACHE_KEY_SEP}${JSON.stringify(normalizedArgs)}`;
@@ -333,6 +327,8 @@ function evictIfNeeded(scopeId: string): void {
   const oldest = scope.keys().next().value as string | undefined;
   if (oldest) scope.delete(oldest);
 }
+
+// ── Cache ────────────────────────────────────────────────────────────────────
 
 /** Lookup a cached result when policy + TTL allow. */
 export function getCachedResult(
@@ -402,10 +398,6 @@ function parentDirOf(normalizedPath: string): string {
   return slash >= 0 ? normalizedPath.slice(0, slash) : '.';
 }
 
-/**
- * True when a mutating tool touched a path that would change a list_directory listing.
- * Inverse of pathMatchesBustPrefix: bust is a file/dir path; cached listing is its parent dir.
- */
 export function changedPathAffectsDirectoryListing(
   listingDir: string,
   changedPath: string,
@@ -490,6 +482,8 @@ function invalidateScopeEntries(
   return removed;
 }
 
+// ── Invalidate ───────────────────────────────────────────────────────────────
+
 /** Remove cache entries invalidated by a successful mutating tool. */
 export function invalidateAfterTool(
   scopeId: string,
@@ -517,10 +511,6 @@ export function invalidateAfterTool(
   }
 }
 
-/**
- * Drop cached list_directory / find_files results (e.g. manual file-tree refresh).
- * When workspacePath is omitted, clears those tools in every scope.
- */
 export function invalidateCachedDirectoryListings(workspacePath?: string): void {
   const prefix = workspacePath
     ? `${normalizeWorkspacePath(workspacePath)}:`
@@ -591,6 +581,8 @@ function logCacheDebug(kind: string, scopeId: string, detail: string): void {
   if (localStorage.getItem('minnowDebugToolCache') !== '1') return;
   console.debug(`[tool-cache] ${kind} scope=${scopeId} ${detail}`);
 }
+
+// ── Execute ──────────────────────────────────────────────────────────────────
 
 /**
  * Run tool execution with session cache lookup/store and post-write invalidation.

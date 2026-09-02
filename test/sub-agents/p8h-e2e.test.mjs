@@ -351,6 +351,8 @@ after(async () => {
   resetMinnowHomeCache();
 });
 
+// ── P8-H renderer exclusion ──────────────────────────────────────────────────
+
 describe('P8-H renderer exclusion', { concurrency: false }, () => {
   test('runs without a document or window', () => {
     assert.equal(typeof globalThis.document, 'undefined');
@@ -365,6 +367,8 @@ describe('P8-H renderer exclusion', { concurrency: false }, () => {
     assert.equal(/^\s*import\s+.+['"]\.\.\/\.\.\/src\//m.test(source), false);
   });
 });
+
+// ── P8-H dead supervisor keys ────────────────────────────────────────────────
 
 describe('P8-H dead supervisor keys', { concurrency: false }, () => {
   test('src/ has no lastHeartbeatAt, tier1Attempted, or progressStallMs', () => {
@@ -389,6 +393,8 @@ describe('P8-H dead supervisor keys', { concurrency: false }, () => {
     assert.deepEqual(hits, [], hits.join('\n'));
   });
 });
+
+// ── P8-H HTTP spawn ──────────────────────────────────────────────────────────
 
 describe('P8-H HTTP spawn (UI closed)', { concurrency: false }, () => {
   beforeEach(async () => {
@@ -556,6 +562,8 @@ describe('P8-H HTTP spawn (UI closed)', { concurrency: false }, () => {
     }
   });
 });
+
+// ── P8-H induced failures ────────────────────────────────────────────────────
 
 describe('P8-H induced failures', { concurrency: false }, () => {
   beforeEach(async () => {
@@ -737,6 +745,8 @@ describe('P8-H induced failures', { concurrency: false }, () => {
     assert.equal(toolExecuted, false, 'cancelled run must not execute the waiting tool');
   });
 });
+
+// ── P8-H reliability ─────────────────────────────────────────────────────────
 
 describe('P8-H reliability (10-run)', { concurrency: false }, () => {
   beforeEach(async () => {

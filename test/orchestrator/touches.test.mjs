@@ -104,6 +104,8 @@ async function gitCommit(dir, message) {
   await execFileAsync('git', ['commit', '-m', message], { cwd: dir, windowsHide: true });
 }
 
+// ── pure matching ────────────────────────────────────────────────────────────
+
 describe('expandTouches — pure matching', () => {
   it('expands globs against a frozen file list and records empty globs', () => {
     const files = ['src/a/one.ts', 'src/b/two.ts', 'README.md'];
@@ -123,6 +125,8 @@ describe('expandTouches — pure matching', () => {
     assert.deepEqual(overflowPaths(['src/a/**'], ['src/a/one.ts']), []);
   });
 });
+
+// ── summarizeTouchesOverflow ─────────────────────────────────────────────────
 
 describe('summarizeTouchesOverflow', () => {
   it('aggregates frequency and hottest files across a multi-task journal', () => {
@@ -159,6 +163,8 @@ describe('summarizeTouchesOverflow', () => {
     ]);
   });
 });
+
+// ── journaled expansion vs ───────────────────────────────────────────────────
 
 describe('journaled expansion vs the live filesystem', () => {
   it('a file created after board start does not change what plan() decided', async () => {
@@ -237,6 +243,8 @@ describe('journaled expansion vs the live filesystem', () => {
     assert.equal(state.tasks.get('A').phase, 'merged');
   });
 });
+
+// ── builder overflow journaling ──────────────────────────────────────────────
 
 describe('builder overflow journaling', () => {
   it('writes outside its globs produce one overflow event and the attempt still passes', async () => {

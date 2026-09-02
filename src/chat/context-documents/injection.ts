@@ -1,7 +1,3 @@
-/**
- * Assemble workspace context document bodies for first-turn system prompt injection.
- */
-
 import { readWorkspaceTextFile } from '../../attachments/workspace-text-read';
 import { parseListDirectoryResult } from '../../lib/list-directory-parse';
 import { wrapUntrusted } from '../../lib/untrusted.mjs';

@@ -357,9 +357,7 @@ async function refreshConfiguredCloudPresets(
       actions.setPrimaryEnabled(true);
     }
     rerenderCloud(container, ctx, actions);
-  } catch {
-    // Offline / vite-only — chip state stays session-local.
-  }
+  } catch {}
 }
 
 /** Create provider or update when npm start already seeded the same id. */

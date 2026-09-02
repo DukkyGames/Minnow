@@ -1,17 +1,3 @@
-/**
- * P5-B — Browser driver tools against a real browser (MIN-720).
- *
- * Every call here goes through `executeInProcessTool` — P2-D's dispatch, the
- * same one a Builder's `grep` takes — into a real Chromium driving a real
- * fixture server. On a machine with no browser these **skip**, the same
- * degradation the Final Tester ladder does.
- *
- * Nothing asserts on a screenshot. The reads are the assertion mechanism; the
- * screenshot test asserts only that a file appeared, because P5-A's hazard note
- * is that those round-trips hang and a hung one must not be able to fail a run.
- *
- * The unit counterpart is `browser-tools.test.mjs`.
- */
 
 import assert from 'node:assert/strict';
 import fsp from 'node:fs/promises';
@@ -67,13 +53,6 @@ const PAGE_HTML = `<!doctype html>
   </script>
 </body></html>`;
 
-/**
- * A page whose DOM comfortably exceeds the shared output cap.
- *
- * Sized from `DEFAULT_MAX_OUTPUT_CHARS` rather than a literal: MIN-667 made the
- * cap configurable and raised the default from 32k to 128k, which silently made
- * a fixed-size fixture too small to truncate at all.
- */
 const BIG_PARAGRAPH_COUNT = Math.ceil((DEFAULT_MAX_OUTPUT_CHARS * 2) / 190);
 const BIG_HTML = `<!doctype html>
 <html><head><title>Big</title><link rel="icon" href="data:,"></head><body>
@@ -104,8 +83,6 @@ function startFixtureServer() {
   });
 }
 
-// Module scope, not `before`: node:test evaluates a suite's `skip` when the
-// suite is *defined*, which is earlier than any hook.
 const previousHome = process.env.MINNOW_HOME;
 const homeDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mn-btools-live-'));
 process.env.MINNOW_HOME = homeDir;
@@ -145,9 +122,6 @@ async function callTool(name, args = {}) {
 }
 
 /**
- * Poll a text read until it contains `needle`. The fixture loads data
- * asynchronously and a determinism assertion taken mid-flight would be
- * measuring the fetch, not the reader.
  * @param {string} needle
  * @param {number} [timeoutMs]
  */
@@ -164,8 +138,6 @@ async function waitForText(needle, timeoutMs = 15_000) {
 }
 
 /**
- * First uid whose rendered line matches. The a11y tree is the addressing
- * surface, so this is also how a Final Tester finds what to click.
  * @param {string} tree
  * @param {RegExp} pattern
  * @returns {number}
@@ -219,7 +191,6 @@ describe('browser tools — live, through the real dispatch', { skip: skipReason
     const second = await callTool('browser_drive_read_network', {});
     assert.equal(first, second, 'a settled page must give the same network twice');
 
-    // Sorted by url, not by when the response landed.
     const urls = first
       .split('\n')
       .filter((line) => /^(GET|POST) /.test(line))
@@ -242,8 +213,6 @@ describe('browser tools — live, through the real dispatch', { skip: skipReason
     const text = await callTool('browser_drive_read_page', { mode: 'text' });
     assert.match(text, /status: clicked/, text);
 
-    // The uid was invalidated by the click, so reusing it is refused rather
-    // than silently acting on a page that has moved on.
     const stale = await callTool('browser_drive_click', { uid });
     assert.match(stale, /^Error: no current page snapshot/);
   });
@@ -254,7 +223,6 @@ describe('browser tools — live, through the real dispatch', { skip: skipReason
 
     const typed = await callTool('browser_drive_type', { uid, text: 'minnow' });
     assert.match(typed, /typed 6 chars/, typed);
-    // The `input` event fired — an assignment to `.value` would not have.
     assert.match(await callTool('browser_drive_read_page', { mode: 'text' }), /typed: minnow/);
 
     const fresh = await callTool('browser_drive_read_page', { mode: 'a11y' });
@@ -277,7 +245,6 @@ describe('browser tools — live, through the real dispatch', { skip: skipReason
     await callTool('browser_drive_navigate', { url: `${fixture.origin}/big` });
     const content = await callTool('browser_drive_read_page', { mode: 'dom' });
     assert.match(content, /\[truncated — \d+ of \d+ chars;/, content.slice(0, 400));
-    // Cap plus the fence and truncation footer — not a fixed byte count.
     assert.ok(
       content.length < DEFAULT_MAX_OUTPUT_CHARS * 1.05,
       `capped read was ${content.length} chars`,
@@ -289,7 +256,6 @@ describe('browser tools — live, through the real dispatch', { skip: skipReason
     const content = await callTool('browser_drive_navigate', { url: 'https://example.com/' });
     assert.ok(content.startsWith(BROWSER_BLOCKED_PREFIX), content);
     assert.match(content, /no interactive approval/);
-    // The live session is untouched: a refusal is not a teardown.
     const text = await callTool('browser_drive_read_page', { mode: 'text' });
     assert.match(text, /paragraph 0/, text);
   });
@@ -299,7 +265,6 @@ describe('browser tools — live, through the real dispatch', { skip: skipReason
     assert.match(content, /Evidence for the report only/);
     const filePath = content.match(/^path: (.+)$/m)?.[1];
     if (!filePath) {
-      // A capture failure is reported, never thrown, and never fails a run.
       assert.match(content, /screenshot: not captured/);
       return;
     }
@@ -312,8 +277,6 @@ describe('browser tools — live, through the real dispatch', { skip: skipReason
       url: `${fixture.origin}/`,
       timeout_ms: 1,
     });
-    // Either the load beat the 1ms deadline or the deadline fired; both are one
-    // tool-call outcome, and neither may reject upward.
     assert.ok(
       /timed out after 1ms/.test(content) || /outcome: (loaded|timeout)/.test(content),
       content,
@@ -328,7 +291,6 @@ describe('browser tools — live, through the real dispatch', { skip: skipReason
     await closeAllBrowserToolSessions();
     assert.deepEqual(browserToolSessionKeys(), []);
 
-    // And the tools say so rather than hanging on a dead socket.
     const content = await callTool('browser_drive_read_page', { mode: 'text' });
     assert.match(content, /no browser is open/);
   });

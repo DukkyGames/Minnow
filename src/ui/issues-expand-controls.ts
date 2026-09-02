@@ -1,11 +1,3 @@
-/**
- * Thin Issues sparkles controls — button + busy/overlay flags only.
- *
- * The generations client and review overlay live in `issues-expand.ts` and are
- * loaded on first click so the store chunk (pulled in via messages → issues-page)
- * does not grow by the utility expand graph (MIN-635 / MIN-400).
- */
-
 import { canExpandIssueDraft } from '../chat/issues/expand-issue-guards';
 import { findIssueById } from '../state/issues-store';
 import type { IssueCard } from '../types';

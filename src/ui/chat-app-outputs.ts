@@ -1,7 +1,3 @@
-/**
- * Chat app outputs drawer — lazy file tree + download actions for ~/.minnow/chats.
- */
-
 import {
   downloadChatsWorkspaceFile,
   listChatsWorkspaceFiles,
@@ -164,7 +160,6 @@ export async function refreshChatAppOutputsPanel(): Promise<void> {
 function flushDebouncedRefresh(): void {
   debounceTimer = null;
   void refreshChatAppOutputsPanel().catch(() => {
-    /* setStatus already surfaces download/list errors when user acts */
   });
 }
 

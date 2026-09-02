@@ -1,8 +1,3 @@
-/**
- * DOM accessibility-style snapshot tree for built-in preview browser tools.
- * Mirrors server/cdp/snapshot.js renderTree output: `[uid] role "name"`.
- */
-
 export interface PreviewSnapshotNode {
   uid: number;
   role: string;
@@ -15,7 +10,6 @@ export interface PreviewSnapshotNode {
 export function renderPreviewSnapshotTree(nodes: PreviewSnapshotNode[], indent = 0): string {
   const lines: string[] = [];
   for (const node of nodes) {
-    // uid 0 marks non-interactive wrapper nodes — recurse without emitting a line.
     if (!node.uid) {
       if (node.children?.length) {
         lines.push(renderPreviewSnapshotTree(node.children, indent));
@@ -34,10 +28,6 @@ export function renderPreviewSnapshotTree(nodes: PreviewSnapshotNode[], indent =
   return lines.join('\n');
 }
 
-/**
- * JavaScript executed in the preview guest to stamp `data-mn-uid` and return a tree.
- * Must be a single expression statement for executeJavaScript.
- */
 export const PREVIEW_DOM_SNAPSHOT_SCRIPT = `(() => {
   const INTERACTIVE =
     'a,button,input,textarea,select,[role],[aria-label],h1,h2,h3,h4,h5,h6,label';

@@ -1,26 +1,10 @@
-/**
- * Baseline commands for the global palette: move between apps, and the two
- * shell-level things worth reaching without a pointer.
- *
- * Everything richer is contributed by the surface that owns it — Source Control
- * registers its git verbs while it is open, and later phases register Issues'
- * own actions the same way. This file only holds what belongs to the shell.
- */
-
 import { listAvailableApps } from '../os/app-preferences';
 import { isOsShellEnabled } from '../os/page-bridge';
 import type { AppId } from '../os/types';
 import { registerCommandSource, type Command } from './command-registry';
 import { showShellKeyboardHelp } from './shell-keyboard-help';
 
-/**
- * Apps that know better than `launchApp` how to open themselves.
- *
- * Issues can embed in Code's main column rather than taking the foreground,
- * which is the right behaviour mid-session and the reason its own entry point
- * exists. Keyed rather than special-cased so the next one is a line, not a
- * branch.
- */
+/** Apps that know better than `launchApp` how to open themselves. */
 const APP_LAUNCH_OVERRIDES: Partial<Record<AppId, () => void>> = {
   issues: () => {
     void import('./issues-page').then((m) => m.openIssuesFromSidebar());

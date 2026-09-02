@@ -1,7 +1,3 @@
-/**
- * Shared /api/generations streaming for editor AI (inline completion, intent, quick edit).
- */
-
 import {
   cancelGeneration,
   createGeneration,
@@ -92,7 +88,6 @@ export async function streamEditorGeneration(
       finish();
       handlers.onAbort?.();
       void cancelGen(generationId).catch(() => {
-        /* best-effort */
       });
     },
     { once: true },

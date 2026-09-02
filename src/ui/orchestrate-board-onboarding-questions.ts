@@ -1,7 +1,3 @@
-/**
- * Embedded ask_question host for orchestrate board onboarding (git-setup skill, etc.).
- */
-
 import { isChatStreaming } from '../chat/streaming-state';
 import { findChatById, getActiveChat } from '../state/sessions';
 import type { Chat } from '../types';
@@ -19,8 +15,6 @@ export function isBoardOnboardingMounted(): boolean {
 }
 
 function resolveOnboardingPlannerChat(_forChatId?: string): Chat | null {
-  // P4-C retired planner-chat board setup. Leftover onboarding chrome must
-  // not claim the main column just because a folder had a plan path.
   return null;
 }
 

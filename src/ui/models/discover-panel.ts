@@ -1,17 +1,3 @@
-/**
- * Models → Discover — two sources behind one toggle.
- *
- * **Catalog** ranks the bundled catalog against the hardware Minnow measured.
- * **Hugging Face** searches the Hub live. They are separated rather than merged
- * because only catalog rows can carry a fit level and a tok/s estimate; putting
- * both in one ranked list would mean inventing those numbers for Hub rows.
- *
- * The two sources also differ in how they repaint. Catalog filtering is
- * synchronous, so it rebuilds the panel. Hub search is not: results arrive after
- * the keystroke that asked for them, so they replace only the result list. A
- * full rebuild on every resolve would fight the user's typing for focus.
- */
-
 import {
   resolveDownloadRepo,
   searchHubModels,
@@ -147,11 +133,7 @@ let formatDefaulted = false;
 
 /** The node Hub results paint into, so a resolve never rebuilds the toolbar. */
 let hubListHost: HTMLElement | null = null;
-/**
- * Persistent live region. It has to outlive the paints it describes: a
- * role="status" node inserted together with its own text is unreliable to
- * announce, because assistive tech watches existing regions for changes.
- */
+/** Persistent live region. */
 let hubStatusNode: HTMLElement | null = null;
 let hubDebounce: number | null = null;
 let hubAbort: AbortController | null = null;
@@ -283,10 +265,7 @@ function renderHardwareStrip(hw: HardwareSnapshot): HTMLElement {
   return strip;
 }
 
-/**
- * A segmented pair, focus restored to the button the user pressed because
- * choosing a source rebuilds the toolbar underneath it.
- */
+/** A segmented pair, focus restored to the button the user pressed because choosing a source rebuilds the toolbar underneath it. */
 function segmentedControl<T extends string>(
   ariaLabel: string,
   options: Array<{ value: T; label: string }>,
@@ -350,8 +329,6 @@ function renderSearchField(): HTMLElement {
   search.addEventListener('input', () => {
     filters.search = search.value;
     if (isHub) {
-      // No re-render: only the result list changes, and it repaints in place
-      // when the request resolves. Rebuilding here would drop the caret.
       void runHubSearch({});
       return;
     }
@@ -444,8 +421,6 @@ function renderCatalogControls(bar: HTMLElement): void {
 }
 
 function renderHubControls(bar: HTMLElement, hw: HardwareSnapshot | null): void {
-  // Off Apple Silicon there is only one format worth offering, so the control
-  // is omitted rather than shown with a permanently unusable option.
   if (supportsMlx(hw)) {
     bar.appendChild(
       segmentedControl<ModelDownloadFormat>(
@@ -533,7 +508,6 @@ function downloadCard(job: DownloadJob): HTMLElement {
     state.textContent = pct != null ? `${pct.toFixed(1)}%` : 'Downloading';
     state.appendChild(el('span', 'models-spinner'));
   }
-  // MLX jobs fetch a whole repo, so they carry no filename to print.
   const artifact = job.format === 'mlx' ? 'MLX repo' : job.filename;
   head.append(
     state,
@@ -654,8 +628,6 @@ function hubRow(row: HubSearchResult, onDisk: Set<string>): HTMLElement {
   name.appendChild(el('span', 'models-card__name', tail));
   if (owner) name.appendChild(el('span', 'models-card__owner', owner));
   head.appendChild(name);
-  // Occupies the slot a catalog row gives its fit chip — same place, and the
-  // one fact that actually distinguishes these rows from each other.
   head.appendChild(chip(row.format === 'mlx' ? 'MLX' : 'GGUF'));
   item.appendChild(head);
 
@@ -663,8 +635,6 @@ function hubRow(row: HubSearchResult, onDisk: Set<string>): HTMLElement {
   if (row.paramsB) facts.appendChild(chip(formatParams(row.paramsB)));
   if (row.quant) facts.appendChild(chip(row.quant));
   if (row.sizeBytes) facts.appendChild(chip(formatBytes(row.sizeBytes)));
-  // Only shown when the Hub actually returned a chat template to read, so its
-  // absence never claims a model lacks tool support.
   if (row.toolCapable) facts.appendChild(chip('Tools'));
   const downloadsChip = chip(`${formatCount(row.downloads)} downloads`);
   downloadsChip.classList.add('models-chip--optional');
@@ -680,7 +650,6 @@ function hubRow(row: HubSearchResult, onDisk: Set<string>): HTMLElement {
   if (downloaded) {
     actions.append(onDiskBadge(), textButton('Open in My Models', openMyModels));
   } else if (row.gated && !hub.hasToken) {
-    // Sending them at a download that can only 401 would be the worse option.
     actions.appendChild(
       textButton('Add a Hugging Face token', () => {
         void import('../models-page').then((m) => m.openModels('settings'));
@@ -754,8 +723,6 @@ function hubBody(): Node {
   }
 
   const list = el('div', 'models-card-list');
-  // Dimmed rather than replaced by skeletons: the previous results stay readable
-  // and the list does not collapse and re-expand on every keystroke.
   if (hub.stale) list.classList.add('is-stale');
   const onDisk = downloadedRepos();
   for (const row of hub.results) list.appendChild(hubRow(row, onDisk));
@@ -777,7 +744,6 @@ function paintHubResults(): void {
   if (!hubListHost?.isConnected) return;
   hubListHost.replaceChildren(hubBody());
   hubListHost.setAttribute('aria-busy', String(hub.stale || hub.status === 'loading'));
-  // Text change on a region that was already in the DOM, not a fresh insertion.
   if (hubStatusNode) hubStatusNode.textContent = hubStatusText();
 }
 
@@ -813,7 +779,6 @@ async function runHubSearch(options: { immediate?: boolean }): Promise<void> {
       sort: hub.sort,
       signal: controller.signal,
     });
-    // A slower earlier request must not overwrite a newer one's results.
     if (seq !== hubRequestSeq) return;
     hub.results = response.results;
     hub.reason = response.reason;
@@ -847,7 +812,6 @@ export function render(): void {
     return;
   }
 
-  // Apple Silicon opens Hub search on MLX, which is the whole point of it there.
   if (!formatDefaulted) {
     formatDefaulted = true;
     hub.format = supportsMlx(hw) ? 'mlx' : 'gguf';

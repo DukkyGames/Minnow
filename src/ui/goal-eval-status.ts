@@ -1,7 +1,3 @@
-/**
- * Transcript + sidebar affordances while the /goal evaluator runs between turns.
- */
-
 import { isGoalEvaluating } from '../chat/goal/evaluating-state';
 import { getGoalEvalSession } from '../chat/goal/eval-session';
 import { isChatStreaming, isStreamDomVisible } from '../chat/streaming-state';

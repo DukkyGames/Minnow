@@ -1,7 +1,3 @@
-/**
- * File tree effective listing root — mirrors git panel worktree cwd for tool calls.
- */
-
 import { getWorkspacePath } from '../state/workspace';
 import { panelPathsEqual, resolvePanelWorktreeCwd } from './panel-worktree-cwd';
 

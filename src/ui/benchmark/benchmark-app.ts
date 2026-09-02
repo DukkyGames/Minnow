@@ -1,7 +1,3 @@
-/**
- * Benchmark app shell: tabs, header, hash routing for #/app/bench/:tab.
- */
-
 import type { BenchmarkTabId } from '../../benchmark/campaign-types.ts';
 import { BENCHMARK_TAB_IDS } from '../../benchmark/campaign-types.ts';
 import { invalidateChartsPanel, renderChartsPanel } from './charts-panel.ts';

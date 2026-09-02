@@ -1,7 +1,3 @@
-/**
- * Replay the assistant turn from an existing user message (delegates to fork-from-run).
- */
-
 import { forkFromUserIndex } from './fork-from-run';
 
 /** Resend from a user history index (truncate after, then run tool loop). */

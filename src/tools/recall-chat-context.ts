@@ -1,7 +1,3 @@
-/**
- * Chat-scoped Brain archive recall tool (MIN-139).
- */
-
 import { brainWorkspaceKeyFromPath } from '../lib/brain-workspace-key';
 import { retrieveArchive } from '../chat/archive/store-client';
 import type { ArchiveRecallHit, ArchiveRetrieveScope } from '../chat/archive/types';

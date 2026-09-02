@@ -1,14 +1,6 @@
-/**
- * Shared terminal dock sizing (PTY viewport + panel chrome).
- */
-
-/** Minimum interactive PTY viewport height (`#terminalXtermHost`). */
 export const TERMINAL_XTERM_MIN_HEIGHT_PX = 311;
 
-/**
- * Panel chrome above `#terminalXtermHost` when not yet measured
- * (resize handle, header, shell hint).
- */
+/** Panel chrome above `#terminalXtermHost` when not yet measured (resize handle, header, shell hint). */
 export const TERMINAL_PANEL_CHROME_FALLBACK_PX = 80;
 
 export const TERMINAL_PANEL_MIN_HEIGHT_PX =

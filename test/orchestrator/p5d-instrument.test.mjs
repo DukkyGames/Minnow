@@ -1,12 +1,3 @@
-/**
- * P5-D — instrumentation and harness (MIN-722), without an overnight run.
- *
- * The overnight runs themselves cannot be a test: they take hours, cost money,
- * and one of them has to happen on a machine that sleeps. What *can* be tested
- * — and what this file tests — is that the instrument tells the truth when the
- * night finally happens. A metric that silently reports zero instead of
- * "unknown" is worse than no metric, because it is believed.
- */
 
 import assert from 'node:assert/strict';
 import fsp from 'node:fs/promises';
@@ -49,12 +40,12 @@ const started = (attemptId, role, ts) => ({
   ts,
 });
 
+// ── Plan size ────────────────────────────────────────────────────────────────
+
 describe('P5-D the plan is the size the proof requires', () => {
   test('18 tasks across 5 waves, every dependency resolvable', async () => {
     const parsed = parsePlan(await fsp.readFile(PLAN_PATH, 'utf8'));
     assert.equal(isParseErrors(parsed), false, JSON.stringify(parsed));
-    // The issue asks for 15–25 tasks in 4–6 waves. Assert the range, not the
-    // exact number — the plan may be edited, and the requirement is the shape.
     assert.ok(parsed.tasks.length >= 15 && parsed.tasks.length <= 25, `${parsed.tasks.length} tasks`);
     assert.ok(parsed.waves.length >= 4 && parsed.waves.length <= 6, `${parsed.waves.length} waves`);
     const ids = new Set(parsed.tasks.map((t) => t.id));
@@ -67,7 +58,7 @@ describe('P5-D the plan is the size the proof requires', () => {
 
   test('touches genuinely overlap, or the merge queue never contends', async () => {
     const parsed = parsePlan(await fsp.readFile(PLAN_PATH, 'utf8'));
-    /** @type {Map<string, string[]>} */
+/** @type {Map<string, string[]>} */
     const byFile = new Map();
     for (const task of parsed.tasks) {
       assert.ok((task.touches ?? []).length > 0, `${task.id} declares no touches`);
@@ -86,6 +77,8 @@ describe('P5-D the plan is the size the proof requires', () => {
     assert.ok(withDeps.length >= 10, `only ${withDeps.length} tasks depend on anything`);
   });
 });
+
+// ── Cost accounting ──────────────────────────────────────────────────────────
 
 describe('P5-D cost accounting refuses to guess', () => {
   test('an attempt with no usage is unreported, never zero', () => {
@@ -126,6 +119,8 @@ describe('P5-D cost accounting refuses to guess', () => {
   });
 });
 
+// ── Attempt durations ────────────────────────────────────────────────────────
+
 describe('P5-D attempt durations report the tail, not the mean', () => {
   test('an unpaired start is open, never a zero-length attempt', () => {
     const durations = attemptDurations([
@@ -162,6 +157,8 @@ describe('P5-D attempt durations report the tail, not the mean', () => {
   });
 });
 
+// ── One report ───────────────────────────────────────────────────────────────
+
 describe('P5-D exactly one report is the headline criterion', () => {
   test('one report is exactly once', () => {
     const counts = reportCount([{ type: REPORT_EVENT_TYPE }, { type: 'run.finished' }]);
@@ -180,6 +177,8 @@ describe('P5-D exactly one report is the headline criterion', () => {
     assert.equal(counts.finishedWithoutReporting, true);
   });
 });
+
+// ── Sampler ──────────────────────────────────────────────────────────────────
 
 describe('P5-D the sampler survives its own failures', () => {
   test('a throwing sample does not stop the series', async () => {
@@ -219,6 +218,8 @@ describe('P5-D the sampler survives its own failures', () => {
   });
 });
 
+// ── Baseline ─────────────────────────────────────────────────────────────────
+
 describe('P5-D baseline comparison states the caveat it has to state', () => {
   const baseline = {
     label: 'P2-G (N=1)',
@@ -251,12 +252,12 @@ describe('P5-D baseline comparison states the caveat it has to state', () => {
   });
 });
 
+// ── Harness ──────────────────────────────────────────────────────────────────
+
 describe('P5-D harness argument handling', () => {
   test('induction specs parse, and an unknown one is loud', () => {
     assert.deepEqual(parseInduction('kill-server@2h'), { kind: 'kill-server', atMs: 7_200_000 });
     assert.deepEqual(parseInduction('revoke-key@30m'), { kind: 'revoke-key', atMs: 1_800_000 });
-    // A typo here means the night's most important variable silently never
-    // happens, and you find out in the morning.
     assert.throws(() => parseInduction('kil-server@2h'), /unknown induction/);
     assert.throws(() => parseInduction('kill-server'), /bad --induce spec/);
   });
@@ -268,6 +269,8 @@ describe('P5-D harness argument handling', () => {
     assert.deepEqual(args.induce, ['kill-server@2h', 'revoke-key@3h']);
   });
 });
+
+// ── Report ───────────────────────────────────────────────────────────────────
 
 describe('P5-D the report answers the three questions it must', () => {
   const base = {

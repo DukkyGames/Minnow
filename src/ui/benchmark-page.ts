@@ -1,7 +1,3 @@
-/**
- * Benchmark full-page UI (#/benchmark) — active-model integration battery.
- */
-
 import '../styles/benchmark-page.css';
 import '../styles/sub-agent-drawer.css';
 
@@ -1027,7 +1023,6 @@ function onBenchmarkProgress(event: BenchmarkProgressEvent): void {
     lastRun = event.run;
     renderSummary(lastRun);
     renderSuites(lastRun);
-    // Campaign may still run Academic packs after Minnow suites finish.
     if (liveStandardPackIds.length === 0) {
       finishLiveRunUI();
     }

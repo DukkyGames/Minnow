@@ -1,7 +1,3 @@
-/**
- * Chat viewport scroll: stick-to-bottom while streaming (80px threshold; terminal uses 24px).
- */
-
 import {
   isChatAppForeground,
   isEmailAssistantForeground,
@@ -32,8 +28,6 @@ export interface ChatScrollAnchor {
 
 /** Scroll container for messages: Orchestrate chat pane, split bottom pane, else #chatArea. */
 export function getChatScrollRoot(): HTMLElement | null {
-  // #chatArea is overflow:hidden while Orchestrate owns the column, so the
-  // embedded board chat brings its own scroller.
   const boardChatPane = document.querySelector<HTMLElement>(OB_CHAT_SCROLL_SELECTOR);
   if (boardChatPane) return boardChatPane;
   const splitPane = document.querySelector(

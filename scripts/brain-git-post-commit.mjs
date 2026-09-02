@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Git post-commit hook — notify a running Minnow dev server to incrementally reindex
- * files touched in HEAD. User-installed via Brain Settings (not auto-installed).
- */
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -49,7 +45,7 @@ async function listChangedFiles() {
 async function notifyCascade(files) {
   const baseUrl = resolveBaseUrl();
   const token = resolveSessionToken();
-  /** @type {Record<string, string>} */
+/** @type {Record<string, string>} */
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['X-Minnow-Token'] = token;
 

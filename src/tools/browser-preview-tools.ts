@@ -1,13 +1,3 @@
-/**
- * Built-in preview browser automation (Electron WebContentsView via window.minnow.preview).
- *
- * MIN-364: every function below accepts an optional trailing `instance` id (default
- * 'workspace-preview', see electron/preview-instance-registry.ts) so agent-driven automation can
- * eventually target a non-default preview surface. No caller passes one today — the browser_*
- * tool JSON schemas in tools/definitions.ts are not yet extended with an `instance` field, since
- * no other named instance (e.g. a Design surface) exists to target — so behavior is unchanged.
- */
-
 import { loadBrowserMeta } from '../config/browser-meta';
 import type { ToolExecutionResult } from '../types';
 import {
@@ -29,6 +19,8 @@ const DESKTOP_SHELL_MESSAGE =
 const STALE_SHELL_MESSAGE =
   'Error: Browser automation IPC is missing. Quit the app, run npm run electron:build, then restart the desktop shell.';
 
+// ── Preview ──────────────────────────────────────────────────────────────────
+
 function previewApi(): NonNullable<Window['minnow']>['preview'] {
   if (!isMinnowElectronShell()) {
     throw new Error(DESKTOP_SHELL_MESSAGE.replace(/^Error: /, ''));
@@ -47,11 +39,6 @@ async function assertBrowserAutomationEnabled(): Promise<string | null> {
   return null;
 }
 
-/**
- * Ensure the renderer's active preview tab has a main-process WebContentsView guest.
- * Browser tools historically called execJs without tabId; during orchestrate AFK runs the guest
- * often did not exist yet, which surfaced as "Preview guest is not available" in Electron logs.
- */
 async function ensureBrowserPreviewTab(instance?: string): Promise<string> {
   const { getActivePreviewTabId, ensureDefaultPreviewTab } = await import('../ui/preview-tab-store');
   const tabId = getActivePreviewTabId() ?? ensureDefaultPreviewTab().id;
@@ -76,9 +63,7 @@ async function consumeEphemeralNavigationGrant(url: string): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
     });
-  } catch {
-    /* best-effort */
-  }
+  } catch {}
 }
 
 function formatEvalResult(val: unknown): string {
@@ -93,10 +78,6 @@ function formatEvalResult(val: unknown): string {
   return String(val);
 }
 
-/**
- * Renderer-side deadline for preview execJs. Mirrors Electron `PREVIEW_EXEC_JS_TIMEOUT_MS`
- * so a stale desktop shell (no main-process bound) still cannot pin the tool loop.
- */
 export const BROWSER_EVAL_TIMEOUT_MS = 30_000;
 
 const PREVIEW_SCRIPT_TIMEOUT_HINT =
@@ -111,10 +92,8 @@ function previewScriptTimeoutMessage(timeoutMs: number): string {
   return `preview script timed out after ${timeoutMs}ms. ${PREVIEW_SCRIPT_TIMEOUT_HINT}`;
 }
 
-/**
- * Race guest execJs against a wall-clock timeout and optional chat abort.
- * Does not cancel Chromium's executeJavaScript; it only unblocks the tool loop.
- */
+// ── Exec ─────────────────────────────────────────────────────────────────────
+
 export function racePreviewExecJs<T>(
   promise: Promise<T>,
   options?: { timeoutMs?: number; signal?: AbortSignal },
@@ -201,6 +180,8 @@ const EMPTY_SCREENSHOT_MESSAGE =
 
 const BLANK_PAGE_SCREENSHOT_MESSAGE =
   'Error: Nothing to screenshot — preview page is empty (about:blank). Use browser_navigate to open a URL first.';
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
 
 export async function browserPreviewList(instance?: string): Promise<string> {
   if (!isElectronPreviewAvailable()) return DESKTOP_SHELL_MESSAGE;
@@ -327,7 +308,6 @@ export async function browserPreviewNavigate(url: string, instance?: string): Pr
   }
 
   await consumeEphemeralNavigationGrant(url);
-  // Hide if still occluded (Issues, wiki, popover); show once Code panel layout is ready.
   const { scheduleElectronPreviewHostVisibilitySync } = await import('../ui/preview-electron-visibility');
   scheduleElectronPreviewHostVisibilitySync();
   const title = result.title || '(no title)';
@@ -365,6 +345,8 @@ export async function browserPreviewSnapshot(
 
   return EMPTY_SNAPSHOT_HINT;
 }
+
+// ── Actions ──────────────────────────────────────────────────────────────────
 
 export async function browserPreviewClick(
   uid: number,
@@ -502,7 +484,6 @@ export async function browserPreviewScreenshot(instance?: string): Promise<ToolE
           url,
           mime: 'image/png',
           alt: 'Browser screenshot',
-          // Keep pixels on the tool row so the next model round can attach them as image_url.
           dataUrl: `data:image/png;base64,${dataBase64}`,
         },
       ],
@@ -519,8 +500,6 @@ export async function executeBrowserPreviewTool(
   args: Record<string, unknown>,
   signal?: AbortSignal,
 ): Promise<ToolExecutionResult> {
-  // MIN-364: optional instance override (undocumented in tool schemas today — no consumer
-  // targets a non-default preview instance yet). Falls back to workspace-preview when absent.
   const instance =
     typeof args.instance === 'string' && args.instance.trim()
       ? args.instance.trim()
@@ -586,8 +565,6 @@ export async function executeBrowserPreviewTool(
         return { content: `Error: unknown preview browser tool "${name}"` };
     }
   } catch (err) {
-    // Abort must surface as AbortError so executeTool maps it to Stopped-by-user,
-    // otherwise stall recovery / Stop wait out the hung guest script.
     if (isAbortError(err)) throw err;
     const message = err instanceof Error ? err.message : String(err);
     return { content: `Error: ${message}` };

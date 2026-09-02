@@ -1,7 +1,3 @@
-/**
- * Client fetch helpers for /api/agent-packs.
- */
-
 import type { AgentPackListItem } from './pack-types';
 
 export async function fetchAgentPacksList(): Promise<AgentPackListItem[]> {
@@ -25,7 +21,6 @@ export async function patchAgentPackEnabled(
   return body.pack ?? null;
 }
 
-/** Trigger a browser download for an agent-pack zip endpoint. */
 async function downloadAgentPackArchive(
   path: string,
   fallbackFilename: string,
@@ -37,9 +32,7 @@ async function downloadAgentPackArchive(
       try {
         const body = (await res.json()) as { error?: string };
         if (body.error) message = body.error;
-      } catch {
-        /* non-JSON error body */
-      }
+      } catch {}
       return new Error(message);
     }
 
@@ -63,7 +56,6 @@ async function downloadAgentPackArchive(
   }
 }
 
-/** GET /api/agent-packs/template — authenticated fetch + browser save dialog. */
 export async function downloadAgentPackTemplate(): Promise<true | Error> {
   return downloadAgentPackArchive(
     '/api/agent-packs/template',
@@ -71,7 +63,6 @@ export async function downloadAgentPackTemplate(): Promise<true | Error> {
   );
 }
 
-/** GET /api/agent-packs/builtin — shipped work agents as a customizable pack. */
 export async function downloadBuiltinAgentPack(): Promise<true | Error> {
   return downloadAgentPackArchive(
     '/api/agent-packs/builtin',
@@ -83,7 +74,6 @@ export type AgentPackUploadResult =
   | { ok: true; pack: AgentPackListItem; filesWritten: number; packRoot: string }
   | { ok: false; error: string };
 
-/** POST /api/agent-packs/upload — install a pack from a zip archive. */
 export async function uploadAgentPackZip(file: File): Promise<AgentPackUploadResult> {
   const form = new FormData();
   form.append('file', file, file.name);

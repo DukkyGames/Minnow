@@ -1,8 +1,3 @@
-/**
- * Composer drag-and-drop: workspace file-tree paths, OS files, editor
- * selections, and Code/browser tabs → composer or durable chat links.
- */
-
 import { addCodeReferenceToComposer } from '../attachments/code-ref';
 import { parseCodeSelectionDragData } from '../attachments/code-selection-drag';
 import { addAttachments } from '../attachments/store';
@@ -19,6 +14,8 @@ import { attachWorkspacePathToComposer } from './workspace-composer-link';
 import { syncChatLinkChipsFromActiveChat } from './chat-link-chips';
 
 const DROP_ACTIVE_CLASS = 'composer-drop-active';
+
+// ── Detect ───────────────────────────────────────────────────────────────────
 
 /** Map a drop target element to its composer textarea. */
 function resolveComposerInputFromDropTarget(target: HTMLElement): HTMLTextAreaElement | null {
@@ -103,6 +100,8 @@ function outermostDropTargets(targets: HTMLElement[]): HTMLElement[] {
   );
 }
 
+// ── Bind ─────────────────────────────────────────────────────────────────────
+
 function bindDropTarget(
   element: HTMLElement,
   dropTargets: HTMLElement[],
@@ -175,10 +174,9 @@ function bindDropTarget(
   });
 }
 
-/**
- * Wires dragover/drop on Code, Chat app, and desktop composer surfaces.
- * Safe to call before markup exists (no-op when elements are missing).
- */
+// ── Init ─────────────────────────────────────────────────────────────────────
+
+/** Wires dragover/drop on Code, Chat app, and desktop composer surfaces. */
 export function initComposerDrop(): void {
   const selectors = [
     '#msgInput',

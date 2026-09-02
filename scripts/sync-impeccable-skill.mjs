@@ -1,11 +1,3 @@
-/**
- * Vendors Impeccable upstream reference/ and scripts/ into src/skills/impeccable/.
- * Preserves Minnow-authored SKILL.md; writes SKILL.upstream.md from upstream.
- *
- * Env:
- *   IMPECCABLE_SYNC_STRICT=1  — exit non-zero on install/sync failure (CI)
- *   IMPECCABLE_SKILL_TARGET   — override built-in skill dir (default src/skills/impeccable)
- */
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -21,7 +13,6 @@ const TARGET_DIR = path.resolve(
   process.env.IMPECCABLE_SKILL_TARGET || 'src/skills/impeccable',
 );
 
-/** Provider dirs where `npx impeccable skills install` places the skill. */
 const UPSTREAM_CANDIDATES = [
   path.join(PROJECT_ROOT, '.agents', 'skills', 'impeccable'),
   path.join(PROJECT_ROOT, '.cursor', 'skills', 'impeccable'),
@@ -30,7 +21,6 @@ const UPSTREAM_CANDIDATES = [
 
 const SYNC_SUBDIRS = ['reference', 'scripts'];
 
-/** Minnow-only scripts restored after upstream scripts/ sync (not in Impeccable npm package). */
 const MINNOW_SCRIPT_PRESERVES = [
   {
     source: path.join(PROJECT_ROOT, 'scripts', 'impeccable-preserves', 'minnow-context.mjs'),
@@ -67,9 +57,6 @@ function findUpstreamDir() {
   return null;
 }
 
-/**
- * Run upstream installer when vendored assets are missing.
- */
 function ensureUpstreamInstalled() {
   if (findUpstreamDir()) return;
 

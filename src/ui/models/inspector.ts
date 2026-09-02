@@ -1,11 +1,3 @@
-/**
- * Models inspector — the persistent right column.
- *
- * Info describes the selected weights, Load owns the llama.cpp launch config
- * (replacing the old serve modal), and Inference shows what the running process
- * was actually given plus per-model sampling overrides.
- */
-
 import {
   getLibrarySamplerForId,
   loadLibraryInferencePrefs,
@@ -91,10 +83,7 @@ const TAB_LABELS: Record<InspectorTab, { label: string; glyph: string }> = {
 let activeTab: InspectorTab = 'info';
 let bound = false;
 let inspectorRenderRaf: number | null = null;
-/**
- * Store / GGUF / runtime updates that arrived while a launch slider still had
- * focus. Flushed on blur (next frame) so we do not remount the range mid-drag.
- */
+/** Store / GGUF / runtime updates that arrived while a launch slider still had focus. */
 let inspectorRenderDeferred = false;
 /** Per-model launch settings, kept while the app is open. Empty = auto (server planner). */
 const draftSettings = new Map<string, LlamaServeSettings>();
@@ -102,24 +91,13 @@ const draftSettings = new Map<string, LlamaServeSettings>();
 const launchSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const LAUNCH_SAVE_DEBOUNCE_MS = 300;
 
-/**
- * Installed llama.cpp variant (`cuda-12.4`, …). Decides flash-attn on vs auto.
- * `hardware.backend` is the fallback until GET /api/models/llama-runtime returns.
- */
 let llamaVariant: string | null = null;
 let llamaVariantFetched = false;
-/**
- * Which advanced Load-tab groups are open, kept across re-renders after a slider
- * touch. Keys are the `advancedSection` ids below.
- */
+/** Which advanced Load-tab groups are open, kept across re-renders after a slider touch. */
 /** Memory and Sampling match the LM Studio default: open on first visit. */
 const loadSectionOpen = new Set<string>(['memory', 'sampling']);
 
-/**
- * `--cache-type-k/v` values, ordered largest to smallest. The shared "KV cache" select
- * above only offers the three the planner's degrade ladder uses; pinning one side is an
- * expert move, so it gets the full set llama.cpp accepts.
- */
+/** `--cache-type-k/v` values, ordered largest to smallest. */
 const KV_CACHE_TYPE_OPTIONS = [
   { value: 'f32', label: 'f32 — full float' },
   { value: 'f16', label: 'f16 — full precision' },
@@ -142,12 +120,7 @@ const IDLE_TTL_OPTIONS = [
   { value: String(60 * 60_000), label: '1 hour' },
 ];
 
-/**
- * `--spec-type` modes worth exposing. The ngram families draft from the prompt itself
- * and need no second model; `draft-mtp` needs heads inside the GGUF; the remaining two
- * need a draft file. Modes llama.cpp accepts but nobody asks for (`ngram-map-k4v`,
- * `ngram-cache`) stay reachable through extra_args.
- */
+/** `--spec-type` modes worth exposing. */
 const SPEC_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'none', label: 'Off' },
   { value: 'draft-mtp', label: 'MTP — heads inside these weights' },
@@ -162,10 +135,6 @@ function idleTtlValue(draft: LlamaServeSettings | undefined): string {
   return draft?.idle_ttl_ms == null ? '' : String(draft.idle_ttl_ms);
 }
 
-/**
- * GGUF headers by file path — exact layer count and attention geometry for models already on
- * disk. `null` records a file we tried and could not parse, so we do not retry every render.
- */
 const ggufGeometry = new Map<string, GgufGeometryFacts | null>();
 const ggufGeometryPending = new Set<string>();
 
@@ -187,10 +156,7 @@ function ensureLlamaVariant(): string | null {
   return llamaVariant || getModelsState().hardware?.backend || null;
 }
 
-/**
- * Read the header for a model's weights, re-rendering once it lands.
- * Until it does, the estimate falls back to architecture + parameter count.
- */
+/** Read the header for a model's weights, re-rendering once it lands. */
 function ensureGgufGeometry(model: LibraryModel): GgufGeometryFacts | null {
   const filePath = model.path;
   if (!filePath || model.format !== 'GGUF') return null;
@@ -221,10 +187,7 @@ function memoryHints(model: LibraryModel): {
   };
 }
 
-/**
- * Whether these weights can drive `--spec-type draft-mtp`.
- * `null` while the header is still in flight — the UI must not claim either way then.
- */
+/** Whether these weights can drive `--spec-type draft-mtp`. */
 function mtpCapable(model: LibraryModel): boolean | null {
   const facts = ensureGgufGeometry(model);
   if (!facts) return null;
@@ -238,7 +201,6 @@ function root(): HTMLElement | null {
 function isLaunchRange(node: EventTarget | null): node is HTMLInputElement {
   if (!node || typeof node !== 'object') return false;
   const candidate = node as HTMLInputElement;
-  // Duck-type: happy-dom tests do not install HTMLInputElement on globalThis.
   return (
     candidate.tagName === 'INPUT' &&
     candidate.type === 'range' &&
@@ -253,10 +215,7 @@ function launchRangeHasFocus(): boolean {
   return Boolean(host && isLaunchRange(active) && host.contains(active));
 }
 
-/**
- * Replace only the occupancy cluster. Rebuilding the inspector on every range
- * `input` destroys the slider and drops pointer capture after one tick.
- */
+/** Replace only the occupancy cluster. */
 function patchLaunchMemoryMeter(model: LibraryModel): void {
   const host = root();
   if (!host) return;
@@ -265,10 +224,7 @@ function patchLaunchMemoryMeter(model: LibraryModel): void {
   existing.replaceWith(launchMemoryHint(model, displayedFor(model)));
 }
 
-/**
- * After a deferred full render, wait a frame so the click that blurred the
- * slider still hits the existing tab or footer button.
- */
+/** After a deferred full render, wait a frame so the click that blurred the slider still hits the existing tab or footer button. */
 function bindLaunchRangeLifecycle(range: HTMLInputElement): void {
   range.addEventListener('blur', () => {
     if (!inspectorRenderDeferred) return;
@@ -350,8 +306,6 @@ function contextLengthField(
   const maxTokens = contextSliderMax(displayed.trainCtx);
   const minTokens = Math.min(CONTEXT_SLIDER_MIN, maxTokens);
   const ctxPerSlot = snapCtxPerSlot(displayed.ctxPerSlot, maxTokens);
-  // Div, not label: Chromium retargets pointermove on a range nested in a
-  // <label>, so the thumb snaps one step and the drag dies.
   const wrap = el('div', 'models-field');
   const head = el('div', 'models-field__range-head');
   head.append(el('span', 'models-field__label', 'Context length'));
@@ -363,7 +317,6 @@ function contextLengthField(
 
   const range = el('input', 'models-field__range') as HTMLInputElement;
   range.type = 'range';
-  // Token values, 1k step: auto-planning still uses CONTEXT_LADDER (13 rungs).
   range.min = String(minTokens);
   range.max = String(maxTokens);
   range.step = String(CONTEXT_SLIDER_STEP);
@@ -444,11 +397,7 @@ function selectField(
   return wrap;
 }
 
-/**
- * Select whose empty option means "leave it to llama.cpp / the planner". Keeps the
- * distinction between "the user chose f16" and "nobody chose", which matters because
- * only the former pins the flag.
- */
+/** Select whose empty option means "leave it to llama.cpp / the planner". */
 function optionalSelectField(
   label: string,
   options: Array<{ value: string; label: string }>,
@@ -498,10 +447,7 @@ function textField(
   return wrap;
 }
 
-/**
- * One collapsible group in the Load tab's advanced area. Open/closed is remembered
- * per group for the session, the way the single Advanced block used to be.
- */
+/** One collapsible group in the Load tab's advanced area. */
 function advancedSection(key: string, title: string, ...children: Node[]): HTMLElement {
   const section = el('details', 'models-advanced');
   section.open = loadSectionOpen.has(key);
@@ -516,18 +462,12 @@ function advancedSection(key: string, title: string, ...children: Node[]): HTMLE
   return section;
 }
 
-/**
- * Launch payload for Load. Empty until a control is touched — do not pre-seed 125k/999.
- * Seeds from models.launch.byLibraryId when the session Map has no row yet (reload).
- */
+/** Launch payload for Load. */
 export function settingsFor(model: LibraryModel): LlamaServeSettings {
   return settingsForDraft(draftFor(model.id));
 }
 
-/**
- * In-memory draft, or the saved row after a reload. Progress fields (lastLoadMs)
- * stay out of the spawn payload.
- */
+/** In-memory draft, or the saved row after a reload. */
 function draftFor(modelId: string): LlamaServeSettings | undefined {
   if (draftSettings.has(modelId)) return draftSettings.get(modelId);
   const saved = llamaSettingsFromLaunchPrefs(getLibraryLaunchSettingsForId(modelId));
@@ -542,9 +482,6 @@ function persistDraft(model: LibraryModel, next: LlamaServeSettings): void {
   const pending = launchSaveTimers.get(model.id);
   if (pending) clearTimeout(pending);
 
-  // Load sends `{}` for planner auto. An empty PUT would delete the row and
-  // wipe lastLoadMs, so restoring Auto writes `{ fit_mode: 'auto' }` over a
-  // previously saved ngl/ctx row instead.
   let toSave: LlamaServeSettings = payload;
   if (Object.keys(payload).length === 0) {
     const savedLlama = llamaSettingsFromLaunchPrefs(getLibraryLaunchSettingsForId(model.id));
@@ -552,8 +489,6 @@ function persistDraft(model: LibraryModel, next: LlamaServeSettings): void {
     toSave = { fit_mode: 'auto' };
   }
 
-  // Fire-and-forget after debounce (sampler save is immediate on `change`;
-  // sliders use `input` so we wait until the user pauses).
   launchSaveTimers.set(
     model.id,
     setTimeout(() => {
@@ -584,27 +519,19 @@ function displayedFor(model: LibraryModel): DisplayedLaunch {
   return displayedLaunchFrom(draft, plan, trainCtx);
 }
 
-/**
- * llama.cpp offload slots for a model with `nLayers` repeating blocks. The output layer
- * takes a slot of its own, so "everything on the GPU" is `nLayers + 1` — at `-ngl nLayers`
- * llama.cpp offloads the output layer plus only `nLayers - 1` blocks and leaves one block
- * on the CPU, which costs ~25% tok/s for no VRAM saving.
- */
+/** llama.cpp offload slots for a model with `nLayers` repeating blocks. */
 function offloadSlotCount(maxLayers: number): number {
   return maxLayers + 1;
 }
 
 function sliderValueFromNGpu(nGpuLayers: number | null | undefined, slots: number): number {
   if (nGpuLayers === 0) return 0;
-  // Auto (null) sits at max visually; the label says Auto, not "all / 999".
   if (nGpuLayers == null) return slots;
   return Math.min(slots, Math.max(0, nGpuLayers));
 }
 
 function nGpuLayersFromSlider(sliderValue: number, slots: number): number {
   if (sliderValue <= 0) return 0;
-  // Send the real slot count, not 999 — 999 was the old "all" sentinel the server
-  // could not tell from a deliberate user choice.
   return Math.min(slots, sliderValue);
 }
 
@@ -615,7 +542,6 @@ function formatGpuLayersSliderLabel(
 ): string {
   if (auto) return 'Auto';
   if (sliderValue <= 0) return 'CPU only';
-  // Top of the range is every block plus the output layer — report the block count.
   if (sliderValue >= offloadSlotCount(maxLayers)) return `All (${maxLayers})`;
   return String(sliderValue);
 }
@@ -627,7 +553,6 @@ function ensureGpuAutoRestoreButton(meta: HTMLElement, onAuto: () => void): void
   autoBtn.type = 'button';
   autoBtn.setAttribute('aria-label', 'Restore GPU layers to Auto');
   autoBtn.addEventListener('click', () => {
-    // Drop range focus so render() is not deferred mid-drag.
     const range = meta.closest('.models-field')?.querySelector<HTMLInputElement>('.models-field__range');
     range?.blur();
     onAuto();
@@ -644,7 +569,6 @@ function gpuLayersSlider(
   const slots = offloadSlotCount(maxLayers);
   const auto = displayed.n_gpu_layers == null;
   const sliderValue = sliderValueFromNGpu(displayed.n_gpu_layers, slots);
-  // Same label-wrap trap as contextLengthField: keep the range outside <label>.
   const wrap = el('div', 'models-field');
   const head = el('div', 'models-field__range-head');
   head.append(el('span', 'models-field__label', 'GPU layers'));
@@ -655,8 +579,6 @@ function gpuLayersSlider(
     formatGpuLayersSliderLabel(sliderValue, maxLayers, auto),
   );
   meta.appendChild(valueEl);
-  // The slider cannot represent "unset". Show Auto only after the user wrote a
-  // count (including CPU 0). A CPU-plan 0 is not an override.
   if (draftFor(model.id)?.n_gpu_layers != null) {
     ensureGpuAutoRestoreButton(meta, () => onChange(null));
   }
@@ -685,7 +607,6 @@ function gpuLayersSlider(
       'aria-valuetext',
       formatGpuLayersSliderLabel(nextSlider, maxLayers, false),
     );
-    // First tick leaves auto: drop the hint and reveal Auto without remounting.
     wrap.querySelector('.models-field__auto-hint')?.remove();
     ensureGpuAutoRestoreButton(meta, () => onChange(null));
     onChange(nGpuLayersFromSlider(nextSlider, slots));
@@ -709,7 +630,6 @@ function launchMemoryHint(model: LibraryModel, displayed: DisplayedLaunch): HTML
     weightsGb,
     paramsB: model.paramsB,
     ctx: displayed.ctx,
-    // A pinned K or V is sized on its own side; unpinned sides follow the shared type.
     cacheType: {
       k: draft?.cache_type_k ?? displayed.cache_type,
       v: draft?.cache_type_v ?? displayed.cache_type,
@@ -726,7 +646,6 @@ function launchMemoryHint(model: LibraryModel, displayed: DisplayedLaunch): HTML
 /** Time-based estimate from the last successful load — not a fake percent. */
 function loadDurationHint(model: LibraryModel): HTMLElement | null {
   const loading = getModelsState().loads.some((l) => l.modelId === model.id && !l.error);
-  // Skip while the table/footer already show load.phase text.
   if (loading) return null;
   const saved = getLibraryLaunchSettingsForId(model.id);
   if (!saved) return null;
@@ -743,13 +662,7 @@ function loadDurationHint(model: LibraryModel): HTMLElement | null {
   return el('p', 'models-muted', text);
 }
 
-/**
- * Other GGUF weights on this machine that could act as a draft model.
- *
- * Restricted to files smaller than the target and listed smallest first: drafting only
- * pays off when the draft model is much cheaper to run than the model it is guessing
- * for, and a larger one costs memory to make generation slower.
- */
+/** Other GGUF weights on this machine that could act as a draft model. */
 function draftModelOptions(model: LibraryModel): Array<{ value: string; label: string }> {
   return getModelsState()
     .library.filter(
@@ -768,11 +681,7 @@ function draftModelOptions(model: LibraryModel): Array<{ value: string; label: s
     }));
 }
 
-/**
- * Speculative decoding. The mode list is gated on what these weights can actually do:
- * `draft-mtp` only appears once the GGUF header confirms `nextn_predict_layers > 0`,
- * because picking it otherwise makes llama-server exit.
- */
+/** Speculative decoding. */
 function speculativeSection(
   model: LibraryModel,
   touch: (patch: LlamaServeSettings) => void,
@@ -784,8 +693,6 @@ function speculativeSection(
   const needsDraftModel = specType === 'draft-simple' || specType === 'draft-eagle3';
 
   const options = SPEC_TYPE_OPTIONS.filter(
-    // Keep a previously-saved mtp choice visible even if the header says no, so the
-    // reason below is attached to something the user can see and change.
     (opt) => opt.value !== 'draft-mtp' || mtp !== false || specType === 'draft-mtp',
   );
 
@@ -912,7 +819,6 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
     memoryHint,
     contextLengthField(displayed, (ctxPerSlot) => {
       persistDraft(model, applyCtxPerSlotTouch(draftFor(model.id), displayed, ctxPerSlot));
-      // Keep the range mounted; only the occupancy cluster needs a live refresh.
       patchLaunchMemoryMeter(model);
     }),
     gpuLayersSlider(model, displayed, (nGpuLayers) => {
@@ -922,8 +828,6 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
           ? applyGpuLayersAuto(draftFor(model.id), displayed)
           : applyGpuLayersTouch(draftFor(model.id), displayed, nGpuLayers),
       );
-      // Restoring Auto remounts so the hint and slider position return; a
-      // count tick only patches the occupancy cluster so the thumb stays grabbed.
       if (nGpuLayers == null) refreshAfterTouch();
       else patchLaunchMemoryMeter(model);
     }),
@@ -1097,7 +1001,6 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
   extraInput.value = joinArgv(draft?.extra_args ?? []);
   extraInput.addEventListener('change', () => {
     const raw = extraInput.value.trim();
-    // POSIX-ish tokenize so `--chat-template "hello world"` stays two argv tokens.
     const tokens = raw ? tokenizeArgv(raw) : [];
     touch({ extra_args: tokens.length ? tokens : undefined });
   });
@@ -1114,11 +1017,7 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
   body.appendChild(advancedStack);
 }
 
-
-/**
- * Flags the running (or failed) process was actually started with.
- * Empty when the serve has no stored settings — do not bounce to My Models.
- */
+/** Flags the running (or failed) process was actually started with. */
 function appendLoadedWithBlock(
   body: HTMLElement,
   settings: LlamaServeSettings | null | undefined,
@@ -1155,7 +1054,6 @@ function appendLoadedWithBlock(
     infoRow('Fit', settings.fit_mode === 'manual' ? 'Manual' : 'Auto'),
     infoRow('Parallel', String(settings.parallel ?? 1)),
   );
-  // Only flags the user actually pinned — an all-defaults launch keeps this short.
   const extras: Array<[string, string]> = [];
   if (settings.flash_attn) extras.push(['Flash attention', settings.flash_attn]);
   if (settings.threads != null) extras.push(['Threads', String(settings.threads)]);
@@ -1319,8 +1217,6 @@ function renderFooter(model: LibraryModel, footer: HTMLElement): void {
 
   if (!model.servable) return;
 
-  // A spec-decode mode with no draft model does not fail cleanly — llama-server
-  // segfaults with nothing in the log. Refuse here rather than spawn it.
   const blocked = launchValidationError(draftFor(model.id), mtpCapable(model));
   if (blocked) {
     footer.appendChild(el('p', 'models-hint models-hint--warning', blocked));
@@ -1365,7 +1261,6 @@ export function render(): void {
   const host = root();
   if (!host) return;
 
-  // Recreating the panel mid-drag drops pointer capture on the range thumb.
   if (launchRangeHasFocus()) {
     inspectorRenderDeferred = true;
     const focusedModel = getSelectedModel();
@@ -1434,7 +1329,6 @@ export function render(): void {
   const footer = el('footer', 'models-inspector__footer');
   renderFooter(model, footer);
 
-  // Footer mount is always present so tab switches do not change panel height.
   host.replaceChildren(head, tabs, body, footer);
 }
 
@@ -1509,10 +1403,7 @@ export function initInspector(): void {
   render();
 }
 
-/**
- * Select a library row and show the inspector (opens the panel when hidden).
- * Used by My Models rows and quant pickers.
- */
+/** Select a library row and show the inspector (opens the panel when hidden). */
 export function showModelInInspector(modelId: string, tab: InspectorTab = 'info'): void {
   selectModel(modelId);
   activeTab = tab;
@@ -1525,10 +1416,7 @@ export function showModelInInspector(modelId: string, tab: InspectorTab = 'info'
   });
 }
 
-/**
- * Open the inspector on a Local Server card. Binds by serve id so a JIT path
- * mismatch still shows Loaded with. Repeat click does not close the panel.
- */
+/** Open the inspector on a Local Server card. */
 export function showServeInInspector(serveId: string): void {
   selectServe(serveId);
   activeTab = 'inference';

@@ -1,10 +1,3 @@
-/**
- * Background email sync — IMAP IDLE push with an interval poller as fallback.
- *
- * IDLE carries the real-time load (new mail lands within seconds); the poller
- * stays because some servers advertise IDLE and then never notify.
- */
-
 import { listEmailAccounts } from './accounts.js';
 import { clearDueSnoozes, getSyncState, listDueSnoozes } from './cache.js';
 import { sweepOverdueFollowups } from './followups.js';
@@ -18,28 +11,19 @@ import {
   stopIdleWatcher,
 } from './imap-session.js';
 
-/** Minimum interval between poll ticks. */
 export const POLL_TICK_MS = 60_000;
 
-/** Debounce window for IDLE-triggered syncs (servers fire bursts). */
 export const IDLE_DEBOUNCE_MS = 2_000;
 
-/**
- * Page size for one sync batch. Kept modest so a single pass never holds the
- * shared IMAP connection long enough to stall an open-message request.
- */
 export const SYNC_BATCH = 200;
 
-/** Pause between background backfill passes so foreground IMAP work interleaves. */
 export const BACKFILL_PASS_DELAY_MS = 350;
 
-/** Safety cap on backfill passes (each fetches up to SYNC_BATCH real UIDs). */
 const MAX_BACKFILL_PASSES = 5_000;
 
 /** @type {Map<string, number>} */
 const lastPolledAt = new Map();
 
-/** Folders with a live backfill driver, so we never run two at once. */
 /** @type {Set<string>} */
 const backfillDrivers = new Set();
 
@@ -60,22 +44,9 @@ let polling = false;
 const idleDebounce = new Map();
 
 /**
- * Sync one folder and run the agent hooks for genuinely new mail.
- *
- * This performs a single batch (new mail + one backfill page) and returns
- * promptly. When `untilComplete` is set and the folder is not yet fully
- * backfilled, it kicks off a paced background driver to finish the history
- * without blocking the caller or monopolizing the shared IMAP connection.
- *
  * @param {string} accountId
  * @param {string} folder
- * @param {{
- *   background?: boolean,
- *   limit?: number,
- *   full?: boolean,
- *   untilComplete?: boolean,
- *   onProgress?: (detail: Record<string, unknown>) => void,
- * }} [options]
+ * @param {{ background?: boolean, limit?: number, full?: boolean, untilComplete?: boolean, onProgress?: (detail: Record<string, unknown>) => void, }} [options]
  */
 export async function syncFolderWithHooks(accountId, folder, options = {}) {
   const before = await getSyncState(accountId, folder);
@@ -96,11 +67,6 @@ export async function syncFolderWithHooks(accountId, folder, options = {}) {
 }
 
 /**
- * Drive a folder's history backfill to completion in the background, one paced
- * batch at a time. Idempotent — a second call while a driver is live is a no-op.
- * Runs detached so the connection is released (and yielded to foreground work)
- * between passes.
- *
  * @param {string} accountId
  * @param {string} folder
  */
@@ -133,9 +99,6 @@ export function ensureBackfill(accountId, folder) {
   })();
 }
 
-/**
- * Poll all accounts with pollingEnabled.
- */
 export async function runEmailPollTick() {
   if (polling) {
     return { skipped: 'poll_in_progress' };
@@ -149,13 +112,8 @@ export async function runEmailPollTick() {
     const now = Date.now();
 
     for (const account of accounts) {
-      // Snoozes are checked for every account, polling-enabled or not: the user
-      // asked for the message back at a time, and that promise does not depend
-      // on whether background sync happens to be on.
       woken += await wakeDueSnoozes(account.id);
 
-      // Same reasoning for overdue follow-ups — the nudge was promised at send
-      // time, not conditioned on background sync being enabled.
       await sweepOverdueFollowups(account.id).catch((err) => {
         console.warn(
           `[email] follow-up sweep failed for ${account.id}:`,
@@ -198,13 +156,8 @@ export async function runEmailPollTick() {
 }
 
 /**
- * Resurface any message whose snooze has elapsed.
- *
- * Announced as an event so an open list can bring the row back without the
- * user having to refresh — a snooze that silently expires is a broken promise.
- *
  * @param {string} accountId
- * @returns {Promise<number>} how many messages woke
+ * @returns {Promise<number>}
  */
 async function wakeDueSnoozes(accountId) {
   try {
@@ -232,8 +185,6 @@ async function wakeDueSnoozes(accountId) {
 }
 
 /**
- * Start an INBOX IDLE watcher for an account (no-op if already watching or if
- * the server refuses the connection — the poller still covers that account).
  * @param {string} accountId
  */
 export async function ensureIdleWatcher(accountId) {
@@ -251,7 +202,6 @@ export async function ensureIdleWatcher(accountId) {
   }
 }
 
-/** Open IDLE watchers for every polling-enabled account. */
 export async function startIdleWatchersForEnabledAccounts() {
   const accounts = await listEmailAccounts();
   for (const account of accounts) {
@@ -261,7 +211,6 @@ export async function startIdleWatchersForEnabledAccounts() {
   }
 }
 
-/** Coalesce an IDLE burst into a single sync pass. */
 function scheduleIdleSync(accountId, folder) {
   const key = `${accountId}\0${folder}`;
   const pending = idleDebounce.get(key);
@@ -281,14 +230,10 @@ function scheduleIdleSync(accountId, folder) {
   idleDebounce.set(key, timer);
 }
 
-/**
- * Start the email poll loop after server bootstrap.
- */
 export function startEmailPollLoop() {
   if (pollTimer) {
     return;
   }
-  // Bring IDLE up at boot rather than waiting a full tick for push to start.
   void startIdleWatchersForEnabledAccounts().catch(() => {});
   pollTimer = setInterval(() => {
     void runEmailPollTick().catch((err) => {
@@ -298,7 +243,6 @@ export function startEmailPollLoop() {
   pollTimer.unref?.();
 }
 
-/** Stop polling and IDLE watchers (shutdown). */
 export function stopEmailPollLoop() {
   if (pollTimer) {
     clearInterval(pollTimer);
@@ -312,7 +256,6 @@ export function stopEmailPollLoop() {
   void closeAllImapSessions().catch(() => {});
 }
 
-/** Reset poll state (tests). */
 export function resetEmailPollForTests() {
   stopEmailPollLoop();
   lastPolledAt.clear();

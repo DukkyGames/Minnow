@@ -1,7 +1,3 @@
-/**
- * Composer code map injection toggle — tri-state (inherit / on / off) like thinking.
- */
-
 import { nextThinkingTriStateOnClick } from './composer-thinking';
 import {
   chatUsesDesktopSandboxWorkspace,

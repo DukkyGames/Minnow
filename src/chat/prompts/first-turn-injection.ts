@@ -1,7 +1,3 @@
-/**
- * Gate Brain notes, code map, and workspace context documents to the first user turn only.
- */
-
 import type { Chat } from '../../types';
 import { isFirstUserMessagePending } from '../titles/schedule';
 

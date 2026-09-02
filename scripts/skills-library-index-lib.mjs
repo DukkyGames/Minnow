@@ -1,8 +1,3 @@
-/**
- * Shared Skills Library index builder (MIN-474).
- * Used by the generator script and unit tests.
- */
-
 import {
   defaultSkillLabel,
   parseSkillFrontmatter,
@@ -11,7 +6,6 @@ import {
 const SKILL_MD_SUFFIX = '/SKILL.md';
 
 /**
- * Convert a simple glob (with * and **) to a RegExp for full-path matching.
  * @param {string} glob
  * @returns {RegExp}
  */

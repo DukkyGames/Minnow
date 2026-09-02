@@ -1,11 +1,3 @@
-/**
- * Electron preview guest visibility while Design Mode is active (MIN-365).
- *
- * WebContentsView paints above renderer DOM, so Design Mode hides the native guest and
- * drives a same-origin iframe under the SVG overlay. Tracked per preview instance so a
- * split secondary browser can use Design Mode independently of the primary pane.
- */
-
 import { WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID } from './preview-design-mode-mount';
 
 const iframeGuestInstances = new Set<string>();

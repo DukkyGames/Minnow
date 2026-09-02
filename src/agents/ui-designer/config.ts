@@ -1,7 +1,3 @@
-/**
- * UI Designer model binding from ~/.minnow config.json (Step 15).
- */
-
 import { listProviders } from '../../providers/store';
 import type { ProviderPublic } from '../../providers/types';
 import {
@@ -23,7 +19,6 @@ export { normalizeUiDesignerConfig, resolveUiDesignerModel };
 
 let cachedUiDesigner: UiDesignerConfig | null = null;
 
-/** Load uiDesigner section from GET /api/config/meta (cached until reset). */
 export async function loadUiDesignerConfig(): Promise<UiDesignerConfig> {
   if (cachedUiDesigner) return cachedUiDesigner;
   try {
@@ -41,12 +36,10 @@ export async function loadUiDesignerConfig(): Promise<UiDesignerConfig> {
   }
 }
 
-/** Clear uiDesigner config cache (tests). */
 export function resetUiDesignerConfigCache(): void {
   cachedUiDesigner = null;
 }
 
-/** Persist partial uiDesigner block via PUT /api/config/meta. */
 export async function saveUiDesignerConfig(patch: Partial<UiDesignerConfig>): Promise<void> {
   const current = await loadUiDesignerConfig();
   const next = normalizeUiDesignerConfig({ ...current, ...patch });
@@ -62,7 +55,6 @@ export interface ResolveUiDesignerBindingOptions {
   providers?: ProviderPublic[];
 }
 
-/** Full binding for chat send (mirrors resolveWorkAgentBinding). */
 export async function resolveUiDesignerBinding(
   chat: Chat,
   defaults: { providerId: string; modelId: string },

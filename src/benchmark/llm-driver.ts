@@ -114,6 +114,8 @@ export interface ToolLoopInput extends OneShotInput {
   ) => ReturnType<typeof executeTool>;
 }
 
+// ── Timing ───────────────────────────────────────────────────────────────────
+
 /** Retain the last turn that emitted tool calls (final loop turn is often text-only). */
 export function preserveLastToolCalls(previous: ToolCall[], turn: ToolCall[]): ToolCall[] {
   return turn.length > 0 ? turn : previous;
@@ -191,6 +193,8 @@ interface StreamTurnResult {
   timing: LlmTurnTiming;
   thinkingBudgetExceeded?: boolean;
 }
+
+// ── Stream turn ──────────────────────────────────────────────────────────────
 
 /** Stream one completion turn without touching chat history. */
 async function streamTurn(input: StreamTurnInput): Promise<StreamTurnResult> {
@@ -307,12 +311,10 @@ async function commitAfterThinkingBudget(
     if (!retry.contentText.trim() && retry.toolCalls.length === 0) return tripped;
     return {
       ...retry,
-      // Keep the reasoning the watchdog cut off: it is the evidence for why this row is slow.
       reasoningText: tripped.reasoningText || retry.reasoningText,
       thinkingBudgetExceeded: true,
     };
   } catch {
-    // A failed retry must not lose the tripped turn — the caller still scores what it has.
     return tripped;
   }
 }
@@ -357,7 +359,6 @@ async function streamTurnWithBody(
 
   const cancelReader = (): void => {
     void reader.cancel().catch(() => {
-      /* stream may already be closed */
     });
   };
   turnAbort.signal.addEventListener('abort', cancelReader, { once: true });
@@ -400,8 +401,6 @@ async function streamTurnWithBody(
   } catch (err) {
     const e = err as { name?: string };
     if (e?.name !== 'AbortError' || !contentRouter.thinkingBudgetExceeded) {
-      // Timeout or cancel: hand back whatever streamed so the cell shows the model's
-      // partial work instead of an empty transcript.
       contentRouter.flush();
       input.onPartial?.({
         contentText: contentRouter.getProseText(),
@@ -506,6 +505,8 @@ function createProbeThinkingBudget(input: OneShotInput): ThinkingBudgetTracker {
   );
 }
 
+// ── One shot ─────────────────────────────────────────────────────────────────
+
 async function runOneShotInner(input: OneShotInput): Promise<OneShotResult> {
   const messages = applyBenchmarkSystemPrompt([...input.messages]);
 
@@ -588,6 +589,8 @@ export function appendAssistantToMessages(
   return messages;
 }
 
+// ── Tool loop ────────────────────────────────────────────────────────────────
+
 async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
   const messages: ApiMessage[] = applyBenchmarkSystemPrompt([...input.messages]);
   const maxRounds = input.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
@@ -595,8 +598,6 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
     input.executeToolFn ??
     ((name, args, ctx) => executeTool(name, args, { ...ctx, modeId: input.modeId }));
 
-  // One watchdog for the whole probe: a chain that thinks hard in every round must not win
-  // a fresh allowance per round when the timeout that kills it is probe-wide.
   const thinkingBudgetTracker = createProbeThinkingBudget(input);
   let lastTiming: LlmTurnTiming = EMPTY_TURN_TIMING;
   let lastText = '';
@@ -623,9 +624,6 @@ async function runToolLoopInner(input: ToolLoopInput): Promise<OneShotResult> {
     });
   };
 
-  // Once the probe's reasoning allowance is gone it is gone: the tracker latches
-  // `exceeded`, so later rounds must run with thinking off rather than trip on their first
-  // delta and pay a retry each time.
   let thinkingSpent = false;
 
   for (let round = 0; round < maxRounds; round++) {

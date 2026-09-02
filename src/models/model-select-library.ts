@@ -24,6 +24,8 @@ import {
   type LibraryModel,
 } from './library';
 
+// ── Keys ─────────────────────────────────────────────────────────────────────
+
 /** Pseudo-provider id for composite #modelSelect keys (not in providers registry). */
 export const LIBRARY_MODEL_PROVIDER_ID = 'minnow-library';
 
@@ -53,9 +55,7 @@ export async function loadableLibraryFromCached(
   try {
     const hw = await fetchHardware();
     backend = hw.backend ?? null;
-  } catch {
-    /* Tool server down or probe failed — MLX stays hidden until backend is known. */
-  }
+  } catch {}
   return loadableLibrary(await buildLibrary(cached), { backend });
 }
 
@@ -96,6 +96,8 @@ export interface LibraryModelSelectMerge {
   library: LibraryModel[];
   serves: ServeRecord[];
 }
+
+// ── Serve state ──────────────────────────────────────────────────────────────
 
 /**
  * Context window a chat actually gets from a running serve.
@@ -157,8 +159,6 @@ export function resolveServedBindingForLibraryId(
   const model = library.find((m) => m.id === libraryId.trim());
   const upstreamId = upstreamProviderForLibraryModel(model);
 
-  // mlx_lm.server keys requests by absolute snapshot directory, not picker ids or
-  // short labels from /v1/models.
   if (upstreamId === MLX_LM_LOCAL_PROVIDER_ID || serve.runtime === 'mlx-lm') {
     const mlxModelId =
       serve.modelPath?.trim() ||
@@ -301,6 +301,8 @@ export function dedupLlamaCppModelsAgainstLibrary(
   });
 }
 
+// ── Merge ────────────────────────────────────────────────────────────────────
+
 /**
  * Fetch local weights and build optgroup HTML + modelCache rows for the picker.
  * Returns null when the tool server is down or the library scan is empty.
@@ -327,12 +329,7 @@ export async function fetchLibraryModelSelectMerge(
       const key = encodeLibraryModelSelectKey(model.id);
       const serve = activeServeFor(model, serves);
       const state = serveLoadState(serve);
-      // Minnow serves these itself (llama-server --mmproj / mlx-lm), so the local
-      // library row is the only place vision can come from — there is no upstream
-      // catalog to read it back off.
       const vision = model.capabilities.includes('vision');
-      // Same for context: only the running serve knows the window it was started
-      // with, and for an uncatalogued GGUF it is the only number there is.
       const loadedContext = servedContextLength(serve);
       cacheEntries.push({
         key,
@@ -390,7 +387,6 @@ export async function loadLibraryModelFromPicker(libraryId: string): Promise<voi
   if (existing?.status === 'running') return;
 
   const { loadModel } = await import('../ui/models/store');
-  // Same inspector drafts as My Models Load — omitting settings used to spawn at 125k.
   await loadModel(model);
 
   const started = Date.now();

@@ -1,8 +1,3 @@
-/**
- * Prompt + output sanitizer for the composer Expand button.
- * One-shot rewrite of a rough draft into a fuller prompt — never an answer to it.
- */
-
 import { extractInlineThinkingFromContent } from '../../api/inline-thinking';
 import { GUARD_CLOSE, isWrappedUntrusted, wrapUntrusted } from '../../lib/untrusted.mjs';
 import type { Attachment } from '../../attachments/types';
@@ -41,10 +36,6 @@ const OPEN_THINK_RE = /<(?:redacted_)?think(?:ing)?(?:\s+[^>]*)?>/gi;
 const CLOSE_THINK_RE = /<\/(?:redacted_)?think(?:ing)?>/gi;
 
 export interface SanitizeExpandedPromptOptions {
-  /**
-   * Mid-stream text. Suppresses output while the model is inside an unterminated
-   * thinking block so `<think>` never lands in the composer.
-   */
   partial?: boolean;
 }
 
@@ -69,11 +60,6 @@ function cut(text: string, limit: number): string {
   return text.length <= limit ? text : `${text.slice(0, limit)}\n… [truncated]`;
 }
 
-/**
- * Truncated file body that keeps its untrusted fence balanced.
- * Attachment text arrives pre-fenced from the reader; slicing it naively drops
- * the closing marker, which would swallow the draft into the untrusted block.
- */
 function excerpt(text: string, limit: number, source: string): string {
   const trimmed = text.trim();
   const fence = splitUntrustedFence(trimmed);
@@ -102,7 +88,6 @@ function attachmentEntry(att: Attachment, budget: number): string | null {
     att.lineStart && att.lineEnd ? ` lines="${att.lineStart}-${att.lineEnd}"` : '';
   const body = att.text?.trim();
   if (!body) {
-    // Workspace refs resolve their text on send; the path alone is still useful.
     return `<file name="${name}"${path}${lines} />`;
   }
   const limit = Math.min(MAX_ATTACHMENT_CHARS, budget);
@@ -110,11 +95,6 @@ function attachmentEntry(att: Attachment, budget: number): string | null {
   return `<file name="${name}"${path}${lines}>\n${excerpt(body, limit, source)}\n</file>`;
 }
 
-/**
- * Compact digest of the composer's pending attachments.
- * Excerpts only — the expander needs to know what the user is working on, not
- * to receive the files, which the real send already carries in full.
- */
 export function buildExpandAttachmentBlock(attachments: readonly Attachment[]): string {
   let budget = MAX_ATTACHMENT_TOTAL_CHARS;
   const entries: string[] = [];
@@ -131,11 +111,6 @@ export function buildExpandAttachmentBlock(attachments: readonly Attachment[]): 
   return `<attachments>\n${entries.join('\n')}\n</attachments>`;
 }
 
-/**
- * System + user messages for a one-shot expand request.
- * The draft is fenced in a <draft> block: bare drafts (especially terse ones)
- * get read as instructions and echoed back instead of expanded.
- */
 export function buildExpandPromptMessages(
   draft: string,
   attachments: readonly Attachment[] = [],
@@ -175,14 +150,9 @@ function stripWrappingQuotes(text: string): string {
   const match = /^(["'“”])([\s\S]+)(["'“”])$/.exec(trimmed);
   if (!match) return trimmed;
   const inner = match[2] ?? '';
-  // Only unwrap when the quotes really are a wrapper, not part of the prose.
   return /["'“”]/.test(inner) ? trimmed : inner.trim();
 }
 
-/**
- * Reduce raw model output to the expanded prompt: drop reasoning channels,
- * lead-ins, and wrapping fences/quotes. Returns '' when nothing usable remains.
- */
 export function sanitizeExpandedPrompt(
   raw: string,
   options: SanitizeExpandedPromptOptions = {},
@@ -192,7 +162,6 @@ export function sanitizeExpandedPrompt(
   if (options.partial && hasUnterminatedThinking(raw)) return '';
 
   const { reply } = extractInlineThinkingFromContent(raw);
-  // A thinking-only response has no reply yet; don't surface the reasoning.
   const body = reply.trim();
   if (!body) return '';
 

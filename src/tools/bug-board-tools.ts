@@ -1,8 +1,3 @@
-/**
- * Bug tracker tools — compatibility aliases to the Issues store (MIN-261).
- * Screen-gating removed; bug_* maps onto issue_* with column/severity translation.
- */
-
 import {
   addIssue,
   bugColumnToIssueStatus,
@@ -122,7 +117,6 @@ export async function executeBugBoardTool(
   name: string,
   args: Record<string, unknown>,
 ): Promise<string> {
-  // Keep override readable so unused-var lint stays quiet in tests that still set it.
   void globalBugsPageOpenOverride;
   void executorContext;
 

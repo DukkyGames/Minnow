@@ -1,14 +1,9 @@
-/**
- * One-shot mechanical rename: legacy CSS vars → --mn-* across src/styles.
- * Run: node scripts/migrate-theme-vars.mjs
- */
 import fs from 'node:fs';
 import path from 'node:path';
 
 const stylesDir = path.join(process.cwd(), 'src', 'styles');
 const files = fs.readdirSync(stylesDir).filter((f) => f.endsWith('.css'));
 
-/** Longest-first so partial names are not double-replaced. */
 const VAR_RENAMES = [
   ['--text-muted', '--mn-fg-muted'],
   ['--text-hover', '--mn-fg-on-accent'],

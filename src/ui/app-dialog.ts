@@ -1,8 +1,3 @@
-/**
- * In-app alert / confirm / prompt dialogs for the Minnow Shell.
- * Replaces blocking native window dialogs that break Electron input on Windows.
- */
-
 import {
   registerChromePopover,
   unregisterChromePopover,
@@ -207,7 +202,6 @@ function openDialogShell(
   open = true;
   overlayEl.hidden = false;
   overlayEl.classList.remove('hidden');
-  // Re-append so the overlay stays on top of other body children.
   document.body.appendChild(overlayEl);
   registerChromePopover();
   chromePopoverRegistered = true;
@@ -391,10 +385,6 @@ function captureNativeDialogs(targetWindow: Window): NativeDialogs {
   };
 }
 
-/**
- * Install Minnow in-app dialogs in Electron. Patched window.alert / confirm / prompt
- * delegate to async modals; call sites must use await appConfirm() (etc.) in async code.
- */
 export function installAppDialogs(targetWindow: Window = window): void {
   if (installedWindows.has(targetWindow)) return;
 

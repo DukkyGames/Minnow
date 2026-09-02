@@ -1,18 +1,3 @@
-/**
- * The unified inbox stream (MIN-358 Direction A).
- *
- * One surface where the agent's read of the inbox (a quiet instrument readout,
- * the narrative digest, and the "Needs attention" queue) is the head of the
- * same column the raw conversation stream flows into. The old Dashboard and
- * Mail tabs collapse into this. The reader docks in from the right rather than
- * occupying a permanent third pane.
- *
- * It reuses the mail client's proven pieces: `renderHighlightRow` for the
- * triage queue, `renderBodyWithRemoteControls` for message bodies, and
- * `mountEmailCompose` for replies — so this is a re-composition of the IA, not
- * a re-implementation of mail behaviour.
- */
-
 import type {
   EmailAccount,
   EmailCategoryCounts,
@@ -136,6 +121,8 @@ let emailInboxShortcutTeardown: (() => void) | null = null;
 /** Conversations shown per page. */
 const PAGE = 40;
 
+// ── DOM helpers ──────────────────────────────────────────────────────────────
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -156,6 +143,8 @@ function iconBtn(svg: string, label: string, className = 'email-icon-btn'): HTML
   return btn;
 }
 
+// ── Scope ────────────────────────────────────────────────────────────────────
+
 /** IMAP folder the scope reads from; INBOX for the agent Views. */
 function scopeFolder(scope: InboxScope): string {
   return scope.kind === 'folder' ? scope.path : 'INBOX';
@@ -164,7 +153,6 @@ function scopeFolder(scope: InboxScope): string {
 /** Server-side filter for the scope, if any. */
 function scopeFilter(scope: InboxScope): 'unread' | 'flagged' | 'snoozed' | undefined {
   if (scope.kind === 'filter') return scope.filter;
-  // The triage "Everything else" list is unread-only; highlights cover urgent mail.
   if (scope.kind === 'triage') return 'unread';
   return undefined;
 }
@@ -206,6 +194,8 @@ function scopeContextLabel(scope: InboxScope): string {
   return scopeMarker(scope);
 }
 
+// ── Inbox render ─────────────────────────────────────────────────────────────
+
 export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOptions): Promise<void> {
   const session = ++emailInboxSession;
   const surface = mount;
@@ -230,7 +220,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   mountEmailReaderDockResizer(surface);
   scrim.addEventListener('click', () => closeReader());
 
-  // ---- State -----------------------------------------------------------
   let search = '';
   /** Active inbox tab — internal state via reload(), never applyNav (avoids remount). */
   let category: EmailInboxCategory = 'primary';
@@ -287,7 +276,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   const markerMount = el('div', 'email-stream-marker');
   const markerLabel = el('span', '', scopeMarker(scope));
   const markerTools = el('div', 'email-stream-tools');
-  // Sit outside the tools cluster so CSS can pin it past the marker hairline.
   const markerAssistantSlot = el('div', 'email-readout-actions email-stream-assistant');
   markerMount.append(markerLabel, markerTools, markerAssistantSlot);
   const pager = el('div', 'email-stream-pager');
@@ -321,7 +309,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     onSyncActivity: options.onSyncActivity,
     onOpenThread: (threadId) => void openThread(threadId),
     onOpenMail: () => {
-      // Already on the inbox surface; nothing to route to.
     },
     onRefresh: () => void reload({ showLoading: false }),
   };
@@ -345,7 +332,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   };
   publishContext();
 
-  // ---- Data ------------------------------------------------------------
   const reportCounts = (payload: {
     summary: EmailInboxSummary;
     unreadByFolder: Record<string, number>;
@@ -363,8 +349,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   };
 
   const loadSummary = async (): Promise<void> => {
-    // The summary feeds both the triage head and the rail counts; it is cached
-    // server-side, so fetching it for every scope is cheap.
     try {
       const payload = await fetchInboxSummary(account.id);
       summary = payload.summary;
@@ -373,7 +357,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       followups = payload.followups ?? [];
       reportCounts(payload);
 
-      // Cold cache: sync once so triage and the stream have something to show.
       if (scope.kind === 'triage' && payload.summary.text.includes('Sync to fetch new mail')) {
         options.onSyncActivity?.(true);
         try {
@@ -407,7 +390,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       limit: PAGE,
       filter: scopeFilter(scope),
       query: search || undefined,
-      // Tab filter only on the Inbox folder when the account toggle is on.
       ...(scopeShowsCategoryTabs(scope, account) ? { category } : {}),
       ...(opts?.categoryCounts ? { categoryCounts: true } : {}),
     });
@@ -485,8 +467,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     }
     listGeneration += 1;
     await fetchThreadsPage(page);
-    // A deletion elsewhere can shrink the folder; if the page we asked for now
-    // sits past the end, drop back to the last real page.
     if (page > pageCount() - 1) {
       page = pageCount() - 1;
       await fetchThreadsPage(page);
@@ -506,13 +486,11 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       total = result.total;
       threads = result.threads;
       page = clamped;
-      // Page changes clear page-only selection; folder-wide selection persists.
       if (!selection.allInFolder) {
         resetSelection();
       }
       focusIndex = -1;
       closeEmailContextMenu();
-      // Full re-render so the triage head shows on page 1 and hides beyond it.
       renderStream();
       stream.scrollTop = 0;
     } catch (err) {
@@ -758,10 +736,7 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     });
   };
 
-  /**
-   * File conversation(s) into a local inbox tab.
-   * Local label only — never creates IMAP folders or server labels.
-   */
+  /** File conversation(s) into a local inbox tab. */
   const fileThreadsAs = async (
     threadIds: string[],
     next: EmailInboxCategory,
@@ -817,7 +792,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
         id: tab.id,
         label: tab.label,
         onSelect: () => {
-          // Second step: this conversation only vs pin the sender.
           openEmailContextMenu({
             clientX: clientX ?? rect.left,
             clientY: clientY ?? rect.bottom + 4,
@@ -862,7 +836,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     clientY: number,
     restoreFocus: HTMLElement,
   ): void => {
-    // Unselected row → act on that row alone without rewriting the checkbox set.
     const targets = resolveActionTargetIds(selection.selected, thread.threadId);
     const targetSet = new Set(targets);
     const readAction = selectionReadAction(threads, targetSet);
@@ -939,7 +912,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   /** Keep the master checkbox + action buttons in sync with selection. */
   let paintToolbar: () => void = () => {};
 
-  // ---- Stream rendering ------------------------------------------------
   const renderReadout = (): HTMLElement | null => {
     if (!summary) return null;
     const readout = el('div', 'email-readout');
@@ -967,7 +939,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     const synced = el('span', 'email-readout-synced', relativeTime(summary.generatedAt));
     synced.title = `Last synced ${new Date(summary.generatedAt).toLocaleString()}`;
     freshness.appendChild(synced);
-    // Keep the assistant on the far right of the readout row, past freshness.
     const assistantSlot = el('div', 'email-readout-actions email-readout-assistant-slot');
     readout.append(freshness, assistantSlot);
     return readout;
@@ -993,7 +964,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     checkbox.setAttribute('aria-label', `Select ${model.subject}`);
     checkbox.addEventListener('click', (event) => {
       event.stopPropagation();
-      // Handle selection on click so Shift/Ctrl modifiers are available.
       event.preventDefault();
       if (event.shiftKey) {
         selectEmailShiftRange(selection, pageIds(), thread.threadId);
@@ -1205,10 +1175,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     pager,
   );
 
-  /**
-   * Scope-marker toolbar: master checkbox, selection actions or idle tools
-   * (refresh / Read all / search / help), plus the assistant mount slot.
-   */
   paintToolbar = (): void => {
     const tools = el('div', 'email-stream-toolbar');
     tools.classList.toggle('is-busy', bulkBusy || folderSelectBusy);
@@ -1405,8 +1371,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
   const renderHead = (): void => {
     headMount.replaceChildren();
 
-    // The instrument readout and triage queue lead the first page only; deeper
-    // pages are a plain conversation list.
     if (page !== 0 || !scopeShowsHead(scope) || !summary) {
       mountAssistantToggle(markerAssistantSlot);
       return;
@@ -1422,8 +1386,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       mountAssistantToggle(markerAssistantSlot);
     }
 
-    // Narrative digest leads when available; the heuristic template is the
-    // instant fallback until the LLM pass lands via `digest_updated` SSE.
     const narrative = (digest?.narrative ?? '').trim();
     const brief = narrative || (summary.text ?? '').trim();
     if (brief) {
@@ -1525,7 +1487,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     return 'Sync this mailbox or pick another view.';
   };
 
-  // ---- Reader dock -----------------------------------------------------
   const closeReader = (): void => {
     selectedThreadId = null;
     selectedThreadSubject = '';
@@ -1622,7 +1583,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     const scrollArea = el('div', 'email-reader-dock-scroll');
     dockBody.appendChild(scrollArea);
 
-    // --- Header ---
     const header = el('header', 'email-reader-head');
     header.appendChild(el('h2', 'email-reader-subject', selected.subject || '(no subject)'));
     const sender = parseSender(selected.from);
@@ -1676,7 +1636,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     header.appendChild(secondary);
     scrollArea.appendChild(header);
 
-    // --- Catch-up on long threads ---
     if (thread.length > 3 || thread.some((m) => (m.bodyText?.length ?? 0) > 8000)) {
       const catchup = el('details', 'email-reader-catchup');
       catchup.open = true;
@@ -1696,7 +1655,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
         .catch(() => catchup.remove());
     }
 
-    // --- Bodies ---
     const bodyStack = el('div', 'email-reader-body-stack');
     for (const msg of thread) {
       const block = el('article', 'email-reader-msg');
@@ -1737,7 +1695,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     }
     scrollArea.appendChild(bodyStack);
 
-    // --- Compose mount + collapsed affordance ---
     const composeMount = el('div', 'email-reader-compose-mount');
     scrollArea.appendChild(composeMount);
     const collapsed = el(
@@ -1763,11 +1720,9 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
       followups = payload.followups ?? [];
       reportCounts(payload);
     } catch {
-      // A failed refresh just leaves the badge as it was.
     }
   };
 
-  // ---- Reload ----------------------------------------------------------
   syncAndReload = async (): Promise<void> => {
     const folder = scopeFolder(scope);
     const refreshBtn = headMount.querySelector<HTMLButtonElement>('.email-readout-refresh');
@@ -1813,7 +1768,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     }
   };
 
-  // ---- Keyboard shortcuts (Gmail-compatible; suppressed while typing) ----
   const focusedThread = (): EmailThreadSummary | null =>
     focusIndex >= 0 && focusIndex < threads.length ? threads[focusIndex]! : null;
 
@@ -1882,7 +1836,6 @@ export async function renderEmailInbox(mount: HTMLElement, options: EmailInboxOp
     help: () => showShortcutCheatSheet(surface),
   });
 
-  // ---- Boot ------------------------------------------------------------
   loadingBanner.hidden = false;
   try {
     folderRows = await fetchEmailFolders(account.id);

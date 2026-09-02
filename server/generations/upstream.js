@@ -1,8 +1,3 @@
-/**
- * Fire-and-forget upstream fetch that buffers into generation state.
- * Supports pre-first-token failover across configured provider/model candidates.
- */
-
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -41,10 +36,9 @@ import { resolveModelApi } from './resolve-model-api.js';
 import { formatUpstreamHttpErrorMessage } from './upstream-error-detail.js';
 import { upstreamFetch } from './upstream-fetch.js';
 
+// ── Dump ─────────────────────────────────────────────────────────────────────
+
 /**
- * Best-effort diagnostic dump of the outbound body + upstream error body when an
- * openai-v1 upstream POST fails, mirroring the anthropic gateway dump so opaque
- * "Upstream request failed" 400s can be root-caused from the last occurrence.
  * @param {{ status: number, url: string, providerId: string, modelId: string, requestBody: Buffer, responseText: string }} info
  */
 function dumpUpstreamFailure(info) {
@@ -75,13 +69,12 @@ function dumpUpstreamFailure(info) {
       'utf8',
     );
   } catch {
-    // Best-effort diagnostic only.
   }
 }
 
+// ── Prepare ──────────────────────────────────────────────────────────────────
+
 /**
- * Kimi (Moonshot AI) thinking/code models only accept temperature=1.
- * OpenAI-v1 bodies are sanitized (sampler + reasoning fields) before upstream POST.
  * @param {Buffer} requestBody
  * @param {{ apiKind?: string, baseUrl?: string, id?: string }} profile
  * @param {string} modelId
@@ -108,18 +101,10 @@ function prepareUpstreamRequestBody(requestBody, profile, modelId, resolvedApi, 
       body = Buffer.from(JSON.stringify(sanitized), 'utf8');
     }
   } catch {
-    /* keep raw body */
   }
 
   if (apiKind !== 'openai-v1') return body;
 
-  // llama.cpp telemetry opt-ins, added once here rather than at each of the four
-  // body-building call sites. Both sanitizers are denylists, so these survive intact.
-  //
-  // `return_progress` is undocumented in `--help` but is the field that makes
-  // llama-server emit `prompt_progress` chunks — verified on b9628, where
-  // `stream_options.include_progress` is silently ignored. It is the only source of a
-  // real prefill percentage anywhere; `/slots` cannot produce one.
   if ((providerId ?? profile.id) === LLAMA_CPP_LOCAL_ID) {
     try {
       const parsed = JSON.parse(body.toString('utf8'));
@@ -129,7 +114,6 @@ function prepareUpstreamRequestBody(requestBody, profile, modelId, resolvedApi, 
         body = Buffer.from(JSON.stringify(withTelemetry), 'utf8');
       }
     } catch {
-      /* keep the body as-is; telemetry is not worth failing a generation over */
     }
   }
 
@@ -145,10 +129,9 @@ function prepareUpstreamRequestBody(requestBody, profile, modelId, resolvedApi, 
   }
 }
 
+// ── Pump ─────────────────────────────────────────────────────────────────────
+
 /**
- * Start pumping an upstream chat/completions response into state chunks.
- * Not awaited by route handlers — errors are handled inside the promise chain.
- *
  * @param {{ state: import('./store.js').GenerationState }} params
  */
 export function pumpUpstream({ state }) {
@@ -158,11 +141,9 @@ export function pumpUpstream({ state }) {
 }
 
 /**
- * Sleep, unless the generation is cancelled first.
- *
  * @param {import('./store.js').GenerationState} state
  * @param {number} ms
- * @returns {Promise<boolean>} false when the wait ended because of cancellation.
+ * @returns {Promise<boolean>}
  */
 function delayUnlessCancelled(state, ms) {
   return new Promise((resolve) => {
@@ -184,11 +165,6 @@ function delayUnlessCancelled(state, ms) {
 }
 
 /**
- * Whether a retryable failure is worth re-running against the same candidate.
- * Rate limits always are — the model is busy, not wrong. Other transient errors
- * only when there is no other candidate to fall through to, so a configured
- * fallback chain still switches immediately the way it always did.
- *
  * @param {{ kind: string, rateLimited?: boolean }} classified
  * @param {boolean} canFailover
  * @returns {boolean}
@@ -240,9 +216,6 @@ async function pumpUpstreamAsync({ state }) {
       return;
     }
 
-    // llama-cpp-local is one provider row with one profile.baseUrl, but two
-    // resident models are two llama-server processes on two ports. Route by
-    // body.model before the upstream fetch. Hosted OpenAI keeps profile.baseUrl.
     let completionAdmission = null;
     let url = resolveOpenCodeZenUpstreamUrl(
       runtime.profile.baseUrl,
@@ -326,10 +299,6 @@ async function pumpUpstreamAsync({ state }) {
 
     let result = await runAttempt();
 
-    // Re-run the *same* candidate before falling through. A 429/529 means this
-    // model is busy, not wrong — switching candidates silently swaps the user's
-    // model, and with fallback chains disabled (the default) there is nothing to
-    // switch to, so the turn used to die outright.
     for (
       let attempt = 1;
       result.outcome === 'retry' &&
@@ -351,10 +320,6 @@ async function pumpUpstreamAsync({ state }) {
     if (result.outcome === 'complete') {
       return;
     }
-    // Cooldown belongs to giving up on the candidate: marking it during a retry
-    // would trip the isHostDead pre-flight above on our own next attempt. Only
-    // cool a host off when there is somewhere else to go — locking out the sole
-    // provider would break the next turn too.
     if (result.hostSuspect && canFailover) {
       markHostDead(origin, fallbackConfig.cooldownSeconds);
     }
@@ -379,26 +344,11 @@ async function pumpUpstreamAsync({ state }) {
   markError(state, lastError ?? 'All fallback candidates failed');
 }
 
+// ── Attempt ──────────────────────────────────────────────────────────────────
+
 /**
- * @param {{
- *   state: import('./store.js').GenerationState,
- *   candidate: { providerId: string, modelId: string },
- *   index: number,
- *   url: string,
- *   headers: Record<string, string>,
- *   requestBody: Buffer,
- *   idleMs: number,
- *   maxMs: number,
- *   origin: string,
- *   canFailover: boolean,
- * }} params
- * @returns {Promise<{
- *   outcome: 'complete' | 'retry' | 'fatal',
- *   message?: string,
- *   retrySameCandidate?: boolean,
- *   retryAfterMs?: number,
- *   hostSuspect?: boolean,
- * }>}
+ * @param {{ state: import('./store.js').GenerationState, candidate: { providerId: string, modelId: string }, index: number, url: string, headers: Record<string, string>, requestBody: Buffer, idleMs: number, maxMs: number, origin: string, canFailover: boolean, }} params
+ * @returns {Promise<{ outcome: 'complete' | 'retry' | 'fatal', message?: string, retrySameCandidate?: boolean, retryAfterMs?: number, hostSuspect?: boolean, }>}
  */
 async function attemptCandidateStream({
   state,
@@ -458,7 +408,6 @@ async function attemptCandidateStream({
       try {
         rawBody = await upstream.text();
       } catch {
-        /* ignore */
       }
       const message = formatUpstreamHttpErrorMessage(upstream.status, rawBody);
       dumpUpstreamFailure({
@@ -476,7 +425,6 @@ async function attemptCandidateStream({
           message,
           retrySameCandidate: shouldRetrySameCandidate(classified, canFailover),
           retryAfterMs: classified.retryAfterMs,
-          // A rate limit is the host behaving correctly — do not cool it off.
           hostSuspect: classified.rateLimited !== true && upstream.status >= 500,
         };
       }
@@ -538,8 +486,6 @@ async function attemptCandidateStream({
     if (timeoutKind) {
       const message = generationTimeoutMessage({ idleMs, maxMs }, timeoutKind);
       if (!bytesEmitted) {
-        // Never re-run the same candidate after a stall: each attempt costs the
-        // full timeout budget and a wedged host will not unwedge in seconds.
         return { outcome: 'retry', message, retrySameCandidate: false, hostSuspect: true };
       }
       return { outcome: 'fatal', message };

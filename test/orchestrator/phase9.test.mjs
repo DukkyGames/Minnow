@@ -1,13 +1,3 @@
-/**
- * Phase 9 — the commands and channels that finish the Boards surface.
- *
- * P9-A is the one that is a bug rather than a port, and it gets the most
- * attention here: a rejected `effector.start()` must reach the screen without
- * ever reaching the journal. Those two halves are asserted together, because
- * either one alone is a different (and wrong) design — journaling it would make
- * replay disagree with reality, and swallowing it is what made a missing model
- * binding present as *Start does nothing*.
- */
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import fs from 'node:fs/promises';
@@ -62,7 +52,6 @@ let server;
 let base;
 /** @type {string | undefined} */
 let previousHome;
-/** Swapped per test so a case can install a failing or refusing effector. */
 let effectorFactory = () =>
   createScriptedEffector({ script: [{ emit: { outcome: 'pass', delayMs: 60_000 } }] });
 
@@ -136,7 +125,6 @@ async function createBoard() {
   return created.body.boardId;
 }
 
-/** An effector whose preconditions are broken, the way a missing binding is. */
 function unbindableEffector(message = 'no model bound for this attempt') {
   return {
     inspect: () => [],
@@ -151,7 +139,7 @@ function unbindableEffector(message = 'no model bound for this attempt') {
   };
 }
 
-// ---------------------------------------------------------------------------
+// ── engine failures reach ────────────────────────────────────────────────────
 
 describe('P9-A — engine failures reach the screen', () => {
   it('refuses Start at the button rather than entering a retry loop', async () => {
@@ -162,7 +150,6 @@ describe('P9-A — engine failures reach the screen', () => {
     assert.equal(started.status, 400);
     assert.match(started.body.error, /no model bound/);
 
-    // The board never went to `running`, so nothing is retrying forever.
     const after = await call('GET', `/api/boards/${boardId}`);
     assert.equal(after.body.state.status, 'created');
     const journal = await call('GET', `/api/boards/${boardId}/journal`);
@@ -174,15 +161,13 @@ describe('P9-A — engine failures reach the screen', () => {
   });
 
   it('emits a non-journaled error frame when start fails mid-run', async () => {
-    // The board is already running when the precondition breaks — tick 40 of a
-    // six-hour run, which no amount of validation at the button can catch.
     const boardId = await createBoard();
     const okStart = await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
     assert.equal(okStart.status, 200);
     disposeEngines(boardId);
 
     effectorFactory = () => unbindableEffector('the provider is unreachable');
-    /** @type {any[]} */
+/** @type {any[]} */
     const seen = [];
     const unsubscribe = subscribeErrors(boardId, (payload) => seen.push(payload));
     const engine = await getEngine(boardId, () => effectorFactory(boardId));
@@ -194,18 +179,13 @@ describe('P9-A — engine failures reach the screen', () => {
     assert.equal(seen[0].taskId, 'W1-A');
     assert.equal(seen[0].role, 'builder');
     assert.match(seen[0].message, /provider is unreachable/);
-    // The counter is what turns forty identical failures into one line.
     assert.equal(seen[0].consecutive, 1);
     assert.equal(seen[1].consecutive, 2);
 
-    // And nothing about it is on the journal: no process ever existed, so there
-    // is no completed side effect to record.
     const journal = await call('GET', `/api/boards/${boardId}/journal`);
     for (const event of journal.body.events) {
       assert.doesNotMatch(String(event.type), /error|failed/i, `journaled ${event.type}`);
     }
-    // Exactly the one start that really happened, before the effector was
-    // swapped — the two failed ones added nothing.
     assert.equal(
       journal.body.events.filter((e) => e.type === 'task.attempt.started').length,
       1,
@@ -256,6 +236,8 @@ describe('P9-A — engine failures reach the screen', () => {
   });
 });
 
+// ── per-board model binding ──────────────────────────────────────────────────
+
 describe('P9-C — per-board model binding', () => {
   it('journals the binding and derives it back', async () => {
     const boardId = await createBoard();
@@ -271,13 +253,11 @@ describe('P9-C — per-board model binding', () => {
       reasoning: 'on',
     });
 
-    // On the journal, so replay reproduces which model an attempt ran against.
     const journal = await call('GET', `/api/boards/${boardId}/journal`);
     const event = journal.body.events.find((e) => e.type === 'board.model.set');
     assert.ok(event, 'board.model.set is not on the journal');
     assert.equal(event.id, 'claude-opus-5');
 
-    // And it survives a cold engine, which is the point of journaling it.
     disposeEngines(boardId);
     const reread = await call('GET', `/api/boards/${boardId}`);
     assert.equal(reread.body.state.model.id, 'claude-opus-5');
@@ -310,6 +290,8 @@ describe('P9-C — per-board model binding', () => {
   });
 });
 
+// ── board lifecycle ──────────────────────────────────────────────────────────
+
 describe('P9-E — board lifecycle', () => {
   it('renames through the journal, not through a field', async () => {
     const boardId = await createBoard();
@@ -340,11 +322,12 @@ describe('P9-E — board lifecycle', () => {
     assert.equal((await call('GET', `/api/boards/${boardId}`)).status, 404);
     assert.equal((await call('DELETE', `/api/boards/${boardId}`)).status, 404);
 
-    // A running engine must not write the directory back on its next tick.
     await new Promise((resolve) => setTimeout(resolve, 50));
     assert.equal(await boardExists(boardId), false, 'the board came back from the dead');
   });
 });
+
+// ── command parity ───────────────────────────────────────────────────────────
 
 describe('P9-H — command parity', () => {
   it('abandons a task by hand as a journaled command', async () => {
@@ -360,7 +343,6 @@ describe('P9-H — command parity', () => {
     assert.equal(event.reason, 'user', 'a hand abandonment is distinguishable from a policy one');
 
     const state = await call('GET', `/api/boards/${boardId}`);
-    // The wire form is the canonical snapshot shape: a Map is `{ __map: [[k, v]] }`.
     const task = state.body.state.tasks.__map.find(([id]) => id === 'W1-A')?.[1];
     assert.ok(task, 'W1-A is missing from the serialised state');
     assert.equal(task.phase, 'abandoned');
@@ -380,6 +362,8 @@ describe('P9-H — command parity', () => {
     assert.equal((await call('POST', '/api/boards/nope/tasks/W1-A/abandon')).status, 404);
   });
 });
+
+// ── attempt transcripts ──────────────────────────────────────────────────────
 
 describe('P9-D — attempt transcripts', () => {
   it('is readable through the API and is not on the journal', async () => {
@@ -451,8 +435,6 @@ describe('P9-D — attempt transcripts', () => {
 
   it('refuses an attempt id that is not a filename', async () => {
     const boardId = await createBoard();
-    // The id reaches this from HTTP, so it is never interpolated into a path
-    // unchecked — the same rule the journal applies to board ids.
     const bad = await call('GET', `/api/boards/${boardId}/attempts/${encodeURIComponent('../x')}`);
     assert.equal(bad.status, 500);
     assert.match(String(bad.body.error), /invalid attempt id/);
@@ -460,9 +442,6 @@ describe('P9-D — attempt transcripts', () => {
 
   it('folds a growing reasoning block into one line instead of one per snapshot', async () => {
     const boardId = await createBoard();
-    // `run-turn.js` emits `thinking` on every change to `partialReasoning`, and
-    // that field is the block *so far* — so the naive recording of 40 events was
-    // 40 duplicated prefixes, unreadable and 40 lines against the cap.
     const whole = 'Let me start by exploring the working directory to understand the layout.';
     for (let i = 1; i <= whole.length; i += 1) {
       recordTranscriptEvent({
@@ -523,8 +502,6 @@ describe('P9-D — attempt transcripts', () => {
 
   it('folds transcripts written before the recorder coalesced', async () => {
     const boardId = await createBoard();
-    // Written the old way, one line per snapshot. These files are never
-    // rewritten, so the read has to fold them too.
     const file = transcriptPath(boardId, 'r-old');
     await fs.mkdir(path.dirname(file), { recursive: true });
     await fs.writeFile(

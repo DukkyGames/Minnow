@@ -1,8 +1,3 @@
-/**
- * Models → Storage — where Minnow looks for weights, and the token it uses to
- * fetch gated ones.
- */
-
 import { fetchModelsConfig, saveModelsConfig } from '../../models/api-client';
 import { setStatus } from '../status';
 import { getLocalServerAvailable } from '../../tools/client';
@@ -67,7 +62,6 @@ export async function mountModelsSettingsSection(): Promise<void> {
 
   const fragment = document.createDocumentFragment();
 
-  // Scan roots
   const rootsBlock = el('section', 'models-block');
   rootsBlock.appendChild(el('h3', 'models-block__label', 'Always scanned'));
   const roots = el('div', 'models-path-list');
@@ -80,7 +74,6 @@ export async function mountModelsSettingsSection(): Promise<void> {
   rootsBlock.appendChild(roots);
   fragment.appendChild(rootsBlock);
 
-  // Extra folders
   const dirsBlock = el('section', 'models-block');
   dirsBlock.appendChild(el('h3', 'models-block__label', 'Extra folders'));
   const dirsList = el('div', 'models-path-list');
@@ -152,7 +145,6 @@ export async function mountModelsSettingsSection(): Promise<void> {
   dirsBlock.appendChild(addRow);
   fragment.appendChild(dirsBlock);
 
-  // Hugging Face token
   const hfBlock = el('section', 'models-block');
   hfBlock.appendChild(el('h3', 'models-block__label', 'Hugging Face token'));
   const hfInput = el('input', 'models-field__input') as HTMLInputElement;

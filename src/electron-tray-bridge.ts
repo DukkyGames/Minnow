@@ -74,9 +74,7 @@ async function publishTrayStatus(): Promise<void> {
     if (json === lastSnapshotJson) return;
     lastSnapshotJson = json;
     api.publishStatus(snapshot);
-  } catch {
-    /* ignore transient provider errors */
-  }
+  } catch {}
 }
 
 async function handleUnloadLocalModels(): Promise<void> {

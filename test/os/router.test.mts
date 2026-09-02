@@ -49,6 +49,8 @@ function setupChatAppDom(win: import('happy-dom').Window): void {
   `;
 }
 
+// ── resolveLegacyHash ────────────────────────────────────────────────────────
+
 describe('resolveLegacyHash', () => {
   test('redirects settings paths to the settings app', () => {
     assert.deepEqual(resolveLegacyHash('#/settings/providers'), {
@@ -95,6 +97,8 @@ describe('resolveLegacyHash', () => {
     });
   });
 });
+
+// ── parseOsHash ──────────────────────────────────────────────────────────────
 
 describe('parseOsHash', () => {
   test('parses workspaces and app routes', () => {
@@ -146,6 +150,8 @@ describe('parseOsHash', () => {
     assert.deepEqual(parseOsHash('#/app/unknown'), { view: 'workspaces' });
   });
 });
+
+// ── os router navigation ─────────────────────────────────────────────────────
 
 describe('os router navigation', () => {
   beforeEach(async () => {
@@ -357,6 +363,8 @@ describe('os router navigation', () => {
     assert.equal(getCurrentRoute().settingsSection, 'modes');
   });
 });
+
+// ── chat launch via Code ─────────────────────────────────────────────────────
 
 describe('chat launch via Code', () => {
   beforeEach(async () => {

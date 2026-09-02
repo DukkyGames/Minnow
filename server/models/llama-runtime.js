@@ -1,8 +1,3 @@
-/**
- * Resolve and install the bundled llama-server binary (ggml-org/llama.cpp releases).
- * Search order: system PATH → app vendor dir → ~/.minnow/models-runtime/llama-cpp.
- */
-
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
@@ -22,7 +17,6 @@ import {
   resolveLlamaAssets,
 } from './llama-variant.js';
 
-/** Pinned release — Qwen3.8 GGUF arch `qwen35` needs ggml-org b10430 or newer. */
 export const LLAMA_CPP_RELEASE_TAG = 'b10448';
 
 const GITHUB_OWNER = 'ggml-org';
@@ -33,8 +27,6 @@ const BINARY_BASE = 'llama-server';
 let installPromise = null;
 
 /**
- * `llama-server --help` thinking-budget probe, keyed by binary path.
- * Same path after a managed reinstall would otherwise keep a stale answer.
  * @type {Map<string, Promise<boolean>>}
  */
 const thinkingBudgetSupportCache = new Map();
@@ -49,9 +41,10 @@ let installJob = null;
 /** @type {Set<(job: LlamaInstallJob) => void>} */
 const installListeners = new Set();
 
-/** Avoid flooding SSE while llama.cpp release archives stream in. */
 const LLAMA_INSTALL_EMIT_MS = 200;
 let lastInstallEmitAt = 0;
+
+// ── Install job ──────────────────────────────────────────────────────────────
 
 function emitInstallJob() {
   if (!installJob) return;
@@ -64,7 +57,6 @@ function emitInstallJob() {
     try {
       listener(installJob);
     } catch {
-      /* ignore listener errors */
     }
   }
 }
@@ -98,24 +90,22 @@ export function subscribeLlamaInstallProgress(listener) {
   return () => installListeners.delete(listener);
 }
 
-/** Test helper — clear install progress subscribers and job state. */
 export function resetLlamaInstallJobForTests() {
   installJob = null;
   installListeners.clear();
   installPromise = null;
 }
 
-/** User-managed llama.cpp install root. */
+// ── Paths ────────────────────────────────────────────────────────────────────
+
 export function getManagedLlamaRoot() {
   return path.join(getMinnowHome(), 'models-runtime', 'llama-cpp');
 }
 
-/** Metadata written after a successful managed install. */
 export function getManagedLlamaMetaPath() {
   return path.join(getManagedLlamaRoot(), 'meta.json');
 }
 
-/** Shipped-with-app vendor directory (optional; populated by packaging or postinstall). */
 export function getVendorLlamaRoot() {
   return path.join(getAppRoot(), 'vendor', 'llama-cpp');
 }
@@ -133,7 +123,6 @@ function findBinaryInDir(dir) {
   const direct = path.join(dir, binaryFileName());
   if (fs.existsSync(direct)) return direct;
 
-  // Release archives may nest binaries one level down.
   let entries;
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -166,6 +155,8 @@ async function which(cmd) {
   }
 }
 
+// ── Resolve ──────────────────────────────────────────────────────────────────
+
 /**
  * @returns {Promise<{ path: string | null, source: 'path' | 'vendor' | 'managed' | null }>}
  */
@@ -188,13 +179,10 @@ export async function resolveLlamaServer() {
   return { path: null, source: null };
 }
 
-/** PE `Machine` for AMD64 / ARM64 Windows images. */
 const PE_MACHINE_AMD64 = 0x8664;
 const PE_MACHINE_ARM64 = 0xaa64;
 
 /**
- * Read the COFF machine type from a Windows PE, or null when the file is not a PE
- * (test stubs plant a text file named llama-server.exe).
  * @param {string} exePath
  * @returns {number | null}
  */
@@ -219,8 +207,6 @@ export function readWindowsPeMachine(exePath) {
 }
 
 /**
- * True when a managed llama-server.exe is a Windows PE for the other CPU.
- * Non-PE files (tests) are not a mismatch.
  * @param {string | null | undefined} exePath
  */
 export function llamaServerPeArchMismatch(exePath) {
@@ -231,7 +217,6 @@ export function llamaServerPeArchMismatch(exePath) {
 }
 
 /**
- * Refuse to spawn / record an install whose PE cannot run on this host.
  * @param {string} exePath
  */
 export function assertLlamaServerMatchesHostArch(exePath) {
@@ -245,7 +230,8 @@ export function assertLlamaServerMatchesHostArch(exePath) {
   );
 }
 
-/** True when this host can auto-download a prebuilt llama.cpp binary. */
+// ── Release ──────────────────────────────────────────────────────────────────
+
 export function isLlamaRuntimeInstallable() {
   const { platform, arch } = process;
   if (platform === 'win32') return arch === 'x64' || arch === 'arm64';
@@ -255,7 +241,6 @@ export function isLlamaRuntimeInstallable() {
 }
 
 /**
- * Pick the CPU prebuilt asset name for the current platform (legacy helper).
  * @returns {string}
  */
 export function pickLlamaReleaseAssetName(tag = LLAMA_CPP_RELEASE_TAG) {
@@ -279,9 +264,6 @@ export function pickLlamaReleaseAssetName(tag = LLAMA_CPP_RELEASE_TAG) {
 }
 
 /**
- * Compare ggml-org llama.cpp release tags.
- * `b9628` vs `b10448` strip a leading `b` and compare as integers when both
- * parse; otherwise fall back to string equality (pre-release / odd tags).
  * @param {string | null | undefined} a
  * @param {string | null | undefined} b
  * @returns {boolean}
@@ -301,7 +283,6 @@ export function llamaReleaseTagsEqual(a, b) {
 function normalizeLlamaReleaseTag(tag) {
   const raw = tag.trim();
   const stripped = raw.replace(/^b/i, '');
-  // Require the whole remainder to be digits so `b10448-rc` does not collide with `b10448`.
   if (/^\d+$/.test(stripped)) {
     return { raw, build: Number.parseInt(stripped, 10) };
   }
@@ -309,7 +290,6 @@ function normalizeLlamaReleaseTag(tag) {
 }
 
 /**
- * Managed-install metadata, or null when the file is missing / invalid.
  * @returns {Promise<Record<string, unknown> | null>}
  */
 async function readManagedLlamaMeta() {
@@ -322,7 +302,6 @@ async function readManagedLlamaMeta() {
 }
 
 /**
- * Read installed variant from meta.json when present.
  * @returns {Promise<string | null>}
  */
 export async function getInstalledLlamaVariant() {
@@ -330,20 +309,13 @@ export async function getInstalledLlamaVariant() {
   return typeof meta?.variant === 'string' ? meta.variant : null;
 }
 
-/**
- * Runtime status for GET /api/models/llama-runtime.
- */
 export async function getLlamaRuntimeStatus() {
   const resolved = await resolveLlamaServer();
   const meta = await readManagedLlamaMeta();
   const installedVersion = typeof meta?.version === 'string' ? meta.version : null;
   const pinnedVersion = LLAMA_CPP_RELEASE_TAG;
-  // Offer upgrade only for a managed tree we actually installed — PATH/vendor
-  // binaries are not something Settings can replace with the pin.
   const managedBinary = findBinaryInDir(getManagedLlamaRoot());
   const managedInstallExists = Boolean(managedBinary);
-  // Wrong-arch PE (b10448 cuda-13 picker took ARM64 on AMD64) is as stale as
-  // an old tag — Settings must offer Upgrade even when version === pin.
   const upgradeAvailable =
     managedInstallExists &&
     ((installedVersion != null && !llamaReleaseTagsEqual(installedVersion, pinnedVersion)) ||
@@ -362,7 +334,6 @@ export async function getLlamaRuntimeStatus() {
     path: resolved.path,
     source: resolved.source,
     variant: (typeof meta?.variant === 'string' ? meta.variant : null) ?? (resolved.path ? variant : preferredVariant),
-    // Prefer the installed tag when known so callers do not treat the pin as what is on disk.
     version: installedVersion ?? pinnedVersion,
     pinnedVersion,
     installedVersion,
@@ -375,15 +346,12 @@ export async function getLlamaRuntimeStatus() {
     ),
     preferredVariant,
     installableVariants,
-    // Rolling bytes-per-ms for this variant, folded in after every successful load.
-    // The load bar's fallback ETA when a model has never been loaded before — CUDA and
-    // CPU builds differ by an order of magnitude, hence the per-variant key.
     loadRateBytesPerMs: readLoadRateForVariant(config, variant),
   };
 }
 
 /**
- * @param {{ loadRate?: unknown }} config `~/.minnow/llama-cpp.json`
+ * @param {{ loadRate?: unknown }} config
  * @param {string | null | undefined} variant
  * @returns {number | null}
  */
@@ -438,7 +406,6 @@ async function downloadToFile(url, dest, onProgress) {
 }
 
 /**
- * sha256 a file without loading the whole zip into RAM.
  * @param {string} filePath
  */
 async function sha256File(filePath) {
@@ -449,18 +416,12 @@ async function sha256File(filePath) {
 }
 
 /**
- * Compare sha256 of a downloaded GitHub release archive to the asset `digest`.
- * Fail closed when a digest is present — extracting a corrupted zip has already
- * cost a 20 GB model load later. Skip when the API object omitted digest so
- * older GitHub snapshots / test fixtures still install.
- *
  * @param {string | Buffer | Uint8Array} filePathOrBuffer
- * @param {string | null | undefined} digest  e.g. `sha256:abc…`
+ * @param {string | null | undefined} digest
  */
 export async function assertArchiveDigest(filePathOrBuffer, digest) {
   const raw = typeof digest === 'string' ? digest.trim() : '';
   if (!raw) {
-    // GitHub added `digest` on release assets recently; older API responses omit it.
     return;
   }
   const expected = raw.replace(/^sha256:/i, '').trim().toLowerCase();
@@ -501,8 +462,6 @@ async function extractArchive(archivePath, destDir) {
 }
 
 /**
- * Copy all files from an extracted archive into the managed install root (flat).
- * Used for Windows cudart companion zips — they ship CUDA DLLs only, no llama-server.
  * @param {string} extractDir
  * @param {string} managedRoot
  */
@@ -525,7 +484,6 @@ export async function copyFlattenedExtractContents(extractDir, managedRoot) {
 }
 
 /**
- * Copy extracted binaries into the managed install root.
  * @param {string} extractDir
  * @param {string} managedRoot
  */
@@ -572,8 +530,9 @@ async function findExtractedBinary(searchDir) {
   return walk(searchDir);
 }
 
+// ── Install ──────────────────────────────────────────────────────────────────
+
 /**
- * Install llama-server into ~/.minnow/models-runtime/llama-cpp when missing.
  * @param {{ variant?: string, tag?: string, reinstall?: boolean, onProgress?: (patch: { percent: number, message: string }) => void }} [opts]
  * @returns {Promise<string>}
  */
@@ -586,8 +545,6 @@ export async function ensureLlamaServer(opts = {}) {
   if (resolved.path && !opts.reinstall) {
     const variantOk = !wantsVariant || wantsVariant === installedVariant;
     if (variantOk) {
-      // Compare against the pin so drift is detected here, but never download
-      // during a normal load — Settings offers Upgrade via upgradeAvailable.
       const meta = await readManagedLlamaMeta();
       const installedVersion = typeof meta?.version === 'string' ? meta.version : null;
       const pinnedVersion = opts.tag ?? LLAMA_CPP_RELEASE_TAG;
@@ -701,7 +658,6 @@ async function installManagedLlamaServer(opts) {
     if (!installed) {
       throw new Error('llama-server install completed but binary is missing');
     }
-    // Catch a host-arch picker miss before meta.json claims the pin is ready.
     assertLlamaServerMatchesHostArch(installed);
 
     await fsp.writeFile(
@@ -720,7 +676,6 @@ async function installManagedLlamaServer(opts) {
       'utf8',
     );
 
-    // Same managed path after a reinstall would otherwise keep the old --help probe.
     thinkingBudgetSupportCache.clear();
 
     onProgress({ percent: 100, message: 'llama-server ready' });
@@ -735,8 +690,9 @@ async function installManagedLlamaServer(opts) {
   }
 }
 
+// ── Spawn ────────────────────────────────────────────────────────────────────
+
 /**
- * Working directory for spawning llama-server (DLLs live beside the exe on Windows).
  * @param {string} binaryPath
  */
 export function llamaServerSpawnCwd(binaryPath) {
@@ -744,7 +700,6 @@ export function llamaServerSpawnCwd(binaryPath) {
 }
 
 /**
- * Merge the llama-server directory ahead of PATH so bundled DLLs resolve on Windows.
  * @param {string} binaryPath
  * @param {NodeJS.ProcessEnv} [baseEnv]
  */
@@ -758,15 +713,12 @@ export function buildLlamaServerEnv(binaryPath, baseEnv = process.env) {
   };
 }
 
-/** Test helper — clear in-flight install lock and the --help probe cache. */
 export function resetLlamaRuntimeInstallForTests() {
   installPromise = null;
   thinkingBudgetSupportCache.clear();
 }
 
 /**
- * Feature-detect per-request reasoning budget support via `llama-server --help`.
- * Memoized per binary path so a successful load does not respawn --help.
  * @param {string} binaryPath
  * @returns {Promise<boolean>}
  */

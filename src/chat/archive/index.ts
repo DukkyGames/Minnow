@@ -1,7 +1,3 @@
-/**
- * Archive policy pre-pass — offload stale turns to Brain and recall on demand (MIN-139).
- */
-
 import type { ApiMessage, Chat } from '../../types';
 import { brainWorkspaceKeyFromPath } from '../../lib/brain-workspace-key';
 import { getWorkspacePath } from '../../state/workspace';
@@ -77,13 +73,6 @@ async function pollArchiveReadiness(
   return { allReady: pending.length === 0, pending };
 }
 
-/**
- * Async pre-pass: bundle stale turns into Brain, collapse placeholders, inject recall.
- * Main chat only — sub-agents fall back to slide.
- *
- * CRITICAL: uses absolute history indices (`startIndex`/`endIndex`). Callers must
- * load the **entire** chat history first (`ensureChatHistoryLoaded`) — never page.
- */
 export async function applyArchivePolicy(
   messages: ApiMessage[],
   ctx: {

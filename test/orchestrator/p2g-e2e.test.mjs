@@ -227,8 +227,6 @@ function makeMiniEffector(opts) {
     cwd: sandbox,
     promptVariant: 'lite',
     limits: { maxTurns: 8, wallClockMs: 20_000 },
-    // Direct HTTP to the scripted host so induced failures cannot ride the
-    // shared happy-path provider URL left over from the HTTP tests.
     postChatCompletions: (_provider, body, signal) =>
       postChatCompletionsHttp(
         {
@@ -284,6 +282,8 @@ after(async () => {
   resetMinnowHomeCache();
 });
 
+// ── P2-G renderer exclusion ──────────────────────────────────────────────────
+
 describe('P2-G renderer exclusion', { concurrency: false }, () => {
   test('runs without a document or window', () => {
     assert.equal(typeof globalThis.document, 'undefined');
@@ -292,11 +292,12 @@ describe('P2-G renderer exclusion', { concurrency: false }, () => {
 
   test('this suite does not import a bundler or DOM adapter', () => {
     const source = fs.readFileSync(THIS_FILE, 'utf8');
-    // Import-line match only: a mention inside this assertion must not trip it.
     assert.equal(/^\s*import\s+.+['"]happy-dom['"]/m.test(source), false);
     assert.equal(/^\s*import\s+.+['"]vite['"]/m.test(source), false);
   });
 });
+
+// ── P2-G fixture plan ────────────────────────────────────────────────────────
 
 describe('P2-G fixture plan', { concurrency: false }, () => {
   test('parsePlan accepts the standing fixture', () => {
@@ -326,6 +327,8 @@ describe('P2-G fixture plan', { concurrency: false }, () => {
     assert.equal(tester.taskId, 'W1-B');
   });
 });
+
+// ── P2-G HTTP board ──────────────────────────────────────────────────────────
 
 describe('P2-G HTTP board (UI closed)', { concurrency: false }, () => {
   beforeEach(async () => {
@@ -387,7 +390,6 @@ describe('P2-G HTTP board (UI closed)', { concurrency: false }, () => {
 
     await waitFor(() => lastEffector && lastEffector.inspect().length === 1, 20_000, 'first attempt live');
 
-    // Drop in-flight work the way a process crash does: inspect empty, no onEnd.
     lastEffector.vanishAll();
     assert.equal(lastEffector.inspect().length, 0);
     disposeEngines();
@@ -408,14 +410,14 @@ describe('P2-G HTTP board (UI closed)', { concurrency: false }, () => {
   });
 });
 
+// ── P2-G induced failures ────────────────────────────────────────────────────
+
 describe('P2-G induced failures', { concurrency: false }, () => {
   /**
    * @param {string} boardId
    * @param {ReturnType<typeof failingBuildScenario>} scenario
    */
   async function runMini(boardId, scenario) {
-    // Dedicated host so the scripted failure is not mixed with the happy-path
-    // nth counters. Completions POST here directly, not via the provider store.
     const dedicated = createFakeModelServer({ scenario });
     dedicated.reset();
     const port = await dedicated.listen(0);
@@ -476,8 +478,6 @@ describe('P2-G induced failures', { concurrency: false }, () => {
   });
 
   test('killed model host → crashed then retry with continue seed', { timeout: 60_000 }, async () => {
-    // Closing an SSE hang is parsed as a finished turn (`no_report`). An
-    // erroring host must reject the in-flight POST, same as P2-F's explode path.
     const completionsUrl = { current: '' };
     /** @type {((err: Error) => void) | null} */
     let explode = null;
@@ -554,6 +554,8 @@ describe('P2-G induced failures', { concurrency: false }, () => {
     }
   });
 });
+
+// ── P2-G reliability ─────────────────────────────────────────────────────────
 
 describe('P2-G reliability (10-run)', { concurrency: false }, () => {
   beforeEach(async () => {

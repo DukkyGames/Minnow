@@ -1,7 +1,3 @@
-/**
- * Guards async settings section renders against stale navigation (MIN-130).
- */
-
 import type { SettingsSectionId } from './settings-page-types';
 
 const asyncSectionRenderGeneration: Partial<Record<SettingsSectionId, number>> = {};

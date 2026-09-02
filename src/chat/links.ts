@@ -1,10 +1,3 @@
-/**
- * Durable file/URL links pinned on a chat (MIN-630).
- *
- * Distinct from this-turn composer attachments: these chips live on the chat
- * row, survive reload, and are listed in the system prompt as standing context.
- */
-
 import type { Chat, ChatLink, ChatLinkKind } from '../types';
 import { ensureChatLinks } from '../state/session-schema.mjs';
 import { getActiveChat, scheduleSaveSessions, touchChat } from '../state/sessions';
@@ -64,10 +57,6 @@ export function listChatLinks(chat: Chat | null | undefined): ChatLink[] {
   return chat?.links?.length ? [...chat.links] : [];
 }
 
-/**
- * Pin a file or URL on the chat. Dedupes by path/URL. Returns the stored link,
- * or null when the draft was invalid.
- */
 export function addChatLink(chat: Chat, input: ChatLinkDraft): ChatLink | null {
   const draft = draftChatLink(input);
   if (!draft) return null;
@@ -108,10 +97,6 @@ export function chatLinkKey(link: ChatLink): string {
   return `url:${link.url ?? ''}`;
 }
 
-/**
- * Compact system-prompt block listing pinned files/URLs. Does not dump file
- * bodies — the model can `read_file` / open the URL itself.
- */
 export function formatChatLinksPromptBlock(links: ChatLink[] | undefined): string | null {
   if (!links?.length) return null;
   const lines = [

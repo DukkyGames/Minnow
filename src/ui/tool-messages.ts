@@ -1,11 +1,3 @@
-/**
- * Tool-call / tool-result rows in the chat transcript (SA-8).
- *
- * Collapsed, a row is one line of a build log: glyph, action, target, outcome.
- * Expanded, it shows a structured view of what the tool produced, with the raw
- * input and output tucked behind a single disclosure.
- */
-
 import { withSessionToken } from '../api/session-token.ts';
 import type { CodeChangeDiffLine, CodeChangeStats, ToolImageAttachment } from '../types';
 import { BUILT_IN_TOOLS } from '../tools/definitions';
@@ -206,10 +198,6 @@ function rowAriaLabel(row: ToolRow, status: 'running' | 'failed' | 'succeeded'):
   return `${parts.join(', ')}, show details`;
 }
 
-/**
- * Paint the target zone. Paths keep their basename visible when the row runs out
- * of width; everything else truncates normally.
- */
 function paintTarget(el: HTMLElement, row: ToolRow): void {
   el.textContent = '';
   el.classList.remove('tool-call-target--path', 'tool-call-target--code');
@@ -552,7 +540,6 @@ function appendCodeChangeBadge(summary: Element, codeChange?: CodeChangeStats): 
 
   const outcome = summary.querySelector('.tool-call-outcome');
   if (outcome) {
-    // +/− is the measurement for a write; a "Saved" acknowledgement beside it is noise.
     outcome.textContent = '';
     outcome.classList.remove('hidden');
     outcome.appendChild(badge);
@@ -631,10 +618,7 @@ function formatForPre(value: unknown): string {
   }
 }
 
-/**
- * Pending tool invocation row: collapsed summary with spinner, expandable body.
- * Returns the outer `.tool-call-msg` wrapper for `renderToolResult`.
- */
+/** Pending tool invocation row: collapsed summary with spinner, expandable body. */
 export function renderToolCall(
   name: string,
   argsObj: Record<string, unknown> | unknown
@@ -658,7 +642,6 @@ export function renderToolCall(
   const pathArg = typeof argsRecord.path === 'string' ? argsRecord.path : undefined;
   const isFileCard = FILE_MUTATION_TOOLS.has(name) && pathArg !== undefined;
 
-  // Glyph slot: spinner while running, tool icon once settled.
   const statusGlyph = document.createElement('span');
   statusGlyph.className = 'tool-call-status';
   const spinner = document.createElement('span');
@@ -733,18 +716,13 @@ function applyFileCardTarget(wrap: HTMLElement, filePath: string): void {
 /** Largest argument blob worth keeping on the DOM node for later re-rendering. */
 const ARGS_STASH_CAP = 20_000;
 
-/**
- * Keep the invocation args on the row. The result render no longer emits a raw
- * JSON block it could read them back out of, and resumed transcripts arrive
- * without them.
- */
+/** Keep the invocation args on the row. */
 function rememberToolArgs(wrap: HTMLElement, argsObj: unknown): void {
   if (argsObj == null) return;
   try {
     const json = JSON.stringify(argsObj);
     if (json && json.length <= ARGS_STASH_CAP) wrap.dataset.toolArgs = json;
   } catch {
-    /* circular or unserializable args: the row still renders without them */
   }
 }
 
@@ -754,7 +732,6 @@ function tryParseArgsFromToolWrap(wrap: HTMLElement): unknown {
     try {
       return JSON.parse(stashed) as unknown;
     } catch {
-      /* fall through to the rendered block */
     }
   }
   const pre = wrap.querySelector('.tool-call-pre--args');
@@ -766,10 +743,7 @@ function tryParseArgsFromToolWrap(wrap: HTMLElement): unknown {
   }
 }
 
-/**
- * Mark a tool-call row complete: swap the spinner for the tool glyph, fill the
- * outcome zone, and build the expanded body.
- */
+/** Mark a tool-call row complete: swap the spinner for the tool glyph, fill the outcome zone, and build the expanded body. */
 export function renderToolResult(
   wrap: HTMLElement,
   result: string,
@@ -797,8 +771,6 @@ export function renderToolResult(
   summary.classList.toggle('tool-call-summary--ok', !failed);
   summary.classList.remove('tool-call-summary--running');
 
-  // Spinner gives way to the tool's own glyph; failure tints it rather than
-  // stacking a second badge on the row.
   statusGlyph.innerHTML = '';
   statusGlyph.classList.toggle('tool-call-status--fail', failed);
   statusGlyph.appendChild(
@@ -849,8 +821,6 @@ export function renderToolResult(
     body.appendChild(mountFriendlyBodyElement(friendlyBody));
   }
 
-  // ask_question folds the chosen options into its own question cards; the flat
-  // answer list is only needed when those cards could not be built.
   const answerList =
     toolName === 'ask_question' && !friendlyBody
       ? buildAnswerList(result, argsForPresentation)
@@ -860,8 +830,6 @@ export function renderToolResult(
     body.appendChild(answerList);
   }
 
-  // With no structured view the raw output *is* the body, so the disclosure below
-  // only needs to carry the input.
   const rawShownInline = !friendlyBody && !answerList;
   if (rawShownInline) {
     body.appendChild(monoBlock(capDisplayText(result), 'tool-call-pre--result'));
@@ -872,7 +840,6 @@ export function renderToolResult(
   if (attachments?.length) {
     for (const att of attachments) {
       if (att.type !== 'image' || !att.url) continue;
-      // img/src cannot send X-Minnow-Token; auth middleware accepts ?token= instead.
       const authenticatedUrl = withSessionToken(att.url);
       const link = document.createElement('a');
       link.className = 'tool-call-screenshot-link';

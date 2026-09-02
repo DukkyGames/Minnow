@@ -1,8 +1,3 @@
-/**
- * Orchestrate board header reasoning controls (brain toggle + effort level).
- * Mirrors composer reasoning UX, scoped to per-board overrides.
- */
-
 import { resolveThinkingMode } from '../agents/resolve-thinking.ts';
 import {
   formatThinkingInheritedLabel,
@@ -53,6 +48,8 @@ let wrapEl: HTMLElement | null = null;
 let toggleBtn: HTMLButtonElement | null = null;
 let selectEl: HTMLSelectElement | null = null;
 let selectWrapEl: HTMLElement | null = null;
+
+// ── Reasoning source ─────────────────────────────────────────────────────────
 
 function effectiveCapabilities(): ReturnType<typeof resolveSendCapabilities> | undefined {
   if (!boardReasoningSource) return undefined;
@@ -115,6 +112,8 @@ function isDropdownReasoningActive(
   return effort !== 'off' && effort !== undefined;
 }
 
+// ── Controls ─────────────────────────────────────────────────────────────────
+
 function persistAndRefresh(patch: BoardReasoningPatch): void {
   if (!boardReasoningSource) return;
   boardReasoningSource.persist(patch);
@@ -136,7 +135,6 @@ function onSelectChange(): void {
 function applyDropdownModeBrainToggle(): void {
   const caps = effectiveCapabilities();
   if (!boardReasoningSource) return;
-  // Always-on models (GLM-5.3) have no Off state for the brain to toggle back from.
   if (modelUsesAlwaysOnReasoning(caps)) return;
   if (boardReasoningSource.getBoard().reasoningEffort === 'off') {
     const level = defaultComposerReasoningLevel(caps);
@@ -232,6 +230,8 @@ function ensureReasoningDom(): void {
   wrapEl.appendChild(selectWrapEl);
 }
 
+// ── Sync ─────────────────────────────────────────────────────────────────────
+
 /** Place the reasoning strip after the model chip, creating the DOM once. */
 export function wireBoardHeaderReasoningSource(
   controls: HTMLElement,
@@ -268,7 +268,6 @@ export function syncBoardHeaderReasoning(): void {
   const dropdownMode = modelUsesComposerReasoningDropdown(caps);
   const toggleMode = modelUsesComposerThinkingToggle(caps);
   const disabled = controlsDisabled();
-  // Always-on models hide the brain but still show Low/High/Max.
   const showWrap = showBrain || dropdownMode;
 
   wrapEl.classList.toggle('hidden', !showWrap);

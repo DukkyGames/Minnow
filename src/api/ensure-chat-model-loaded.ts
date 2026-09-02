@@ -1,8 +1,3 @@
-/**
- * Ensure the chat model is loaded in VRAM before the first completion request
- * (LM Studio / providers with load-unload APIs).
- */
-
 import { modelCache } from '../app-state';
 import { isServerStorageMode } from '../config/storage-mode';
 import { encodeModelSelectKey } from '../lib/model-select-key';
@@ -113,8 +108,6 @@ export async function ensureChatModelLoadedForTurn(
   if (isLibraryModelBinding(pid, mid)) {
     const selectValue = encodeModelSelectKey(pid, mid);
 
-    // Do not early-return on modelCache — it can stay "loaded" after eject.
-    // loadLibraryModelFromPicker checks live serves and no-ops when already running.
     if (isModelLoadUnloadBusy()) {
       await waitForModelLoadUnloadIdle(signal);
     }
@@ -125,7 +118,6 @@ export async function ensureChatModelLoadedForTurn(
     syncModelSelectPicker();
     try {
       await loadLibraryModelFromPicker(mid);
-      // Serve registers mlx-lm-local / llama-cpp-local; drop stale provider list cache.
       invalidateProviderCache();
       await fetchModels();
     } finally {

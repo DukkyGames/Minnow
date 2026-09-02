@@ -13,6 +13,8 @@ import { isOsShellEnabled } from './page-bridge';
 import { getOsView, subscribeInstances } from './instances';
 import { launchApp } from './router';
 
+// ── Session ──────────────────────────────────────────────────────────────────
+
 let gateMounted = false;
 let gateOpen = false;
 /** Keep the gate covering Code until initApp finishes first paint after a cold pick. */
@@ -34,9 +36,7 @@ export function hasWorkspaceGatePassedThisSession(): boolean {
 function markWorkspaceGatePassedThisSession(): void {
   try {
     sessionStorage.setItem(WORKSPACE_GATE_SESSION_KEY, '1');
-  } catch {
-    /* private mode / disabled storage */
-  }
+  } catch {}
 }
 
 function getGateRoot(): HTMLElement | null {
@@ -71,6 +71,8 @@ function setHoldingGateCover(holding: boolean): void {
   document.documentElement.classList.toggle('os-workspace-gate-holding', holding);
   if (holding) setGateOpening(true);
 }
+
+// ── Mount ────────────────────────────────────────────────────────────────────
 
 /** Mount #welcomeView inside #osWorkspaceGate and wire welcome module once. */
 export function mountWorkspaceGateDom(): void {
@@ -145,7 +147,6 @@ export function closeWorkspaceGate(): void {
  */
 export async function onWorkspaceGateChosen(): Promise<void> {
   markWorkspaceGatePassedThisSession();
-  // Cover Code while composer/sidebar/chat finish their first composition.
   setHoldingGateCover(true);
   showGateElement();
   resolveBootGate?.();
@@ -180,7 +181,6 @@ export async function finishWorkspaceGateSwitch(): Promise<void> {
 
 /** Hold opening UI until the workspace PUT finishes. */
 export function markWorkspaceGateOpening(opening: boolean): void {
-  // While holding for app-ready, keep the opening affordance on.
   if (holdGateUntilAppReady && !opening) return;
   if (!gateOpen && opening) return;
   setGateOpening(opening);
@@ -190,7 +190,6 @@ export function markWorkspaceGateOpening(opening: boolean): void {
 export function syncWorkspaceGateFromRoute(): void {
   if (!isOsShellEnabled()) return;
   if (getOsView() !== 'workspaces') {
-    // Do not tear down the cover while Code is still painting after a cold pick.
     if (holdGateUntilAppReady) return;
     if (gateOpen) closeWorkspaceGate();
     return;
@@ -209,6 +208,8 @@ function ensureBootGatePromise(): void {
     resolveBootGate = resolve;
   });
 }
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
 
 /** Whether initApp should block on the workspace gate (cold launch only). */
 export function shouldBlockBootOnWorkspaceGate(): boolean {
@@ -237,7 +238,6 @@ export async function beginWorkspaceGateForBoot(): Promise<{ whenChosen: Promise
   ensureBootGatePromise();
   mountWorkspaceGateDom();
   openWorkspaceGate();
-  // Reveal the loader so the workspace picker is usable.
   markChromeReady();
   return { whenChosen: bootGatePromise ?? Promise.resolve() };
 }
@@ -272,7 +272,5 @@ export function resetWorkspaceGateForTests(): void {
   document.documentElement.classList.remove('os-workspace-gate-holding');
   try {
     sessionStorage.removeItem(WORKSPACE_GATE_SESSION_KEY);
-  } catch {
-    /* ignore */
-  }
+  } catch {}
 }

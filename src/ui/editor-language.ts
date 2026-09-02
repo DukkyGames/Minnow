@@ -1,7 +1,3 @@
-/**
- * Resolve CodeMirror language support from filenames via @codemirror/language-data.
- */
-
 import { LanguageDescription } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
 import type { Extension } from '@codemirror/state';

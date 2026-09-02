@@ -69,6 +69,8 @@ export { isModelLoaded } from './model-loaded-state';
 
 import type { LmModelRecord } from '../types';
 
+// ── Resolve ──────────────────────────────────────────────────────────────────
+
 /** Resolve a cached row for the top-bar value (composite key) or canonical id + chat provider. */
 export function getModelRowForSelectOrCanonicalId(modelIdOrKey: string): LmModelRecord | undefined {
   const trimmed = modelIdOrKey.trim();
@@ -79,18 +81,13 @@ export function getModelRowForSelectOrCanonicalId(modelIdOrKey: string): LmModel
   if (decoded) {
     return modelCache.get(encodeModelSelectKey(decoded.providerId, decoded.modelId));
   }
-  // Scoping by the active chat's provider is a refinement, not a requirement —
-  // callers reach here from paths (outbound payload building, capability reads)
-  // that must not fail just because the session store has not loaded yet.
   try {
     const pid = getActiveChat().providerId?.trim();
     if (pid) {
       const byChat = modelCache.get(encodeModelSelectKey(pid, trimmed));
       if (byChat) return byChat;
     }
-  } catch {
-    // No session state yet — fall through to the canonical-id scan.
-  }
+  } catch {}
   const k = findFirstSelectKeyForCanonicalModelId(modelCache.keys(), trimmed);
   return k ? modelCache.get(k) : undefined;
 }
@@ -106,7 +103,6 @@ export function resolveModelInfo(modelIdOrKey: string, fromResponse?: ModelInfo 
       }
     : {};
   const merged = { ...fromCache, ...(fromResponse || {}) };
-  // Live catalog context window wins over persisted per-chat snapshots (MIN-183).
   if (fromCache.context_length != null) {
     merged.context_length = fromCache.context_length;
   }
@@ -177,6 +173,8 @@ export function syncModelOptionLoadUnloadButtonElement(btn: HTMLButtonElement): 
   btn.disabled = isModelLoadUnloadBusy();
 }
 
+// ── Buttons ──────────────────────────────────────────────────────────────────
+
 /** Update every inline Load/Unload control in open model menus. */
 export function updateModelLoadUnloadButtons(): void {
   for (const btn of document.querySelectorAll<HTMLButtonElement>(
@@ -205,6 +203,8 @@ async function postModelAction(url: string, body: Record<string, string>): Promi
     throw new Error(message);
   }
 }
+
+// ── Load ─────────────────────────────────────────────────────────────────────
 
 /** Load a model via the given provider (v1 REST, proxied or direct). */
 export async function loadModel(modelId: string, providerId: string): Promise<void> {
@@ -391,6 +391,8 @@ export async function toggleSelectedModelLoad(): Promise<void> {
   await toggleModelLoadForSelectValue(sel.value);
 }
 
+// ── Select ───────────────────────────────────────────────────────────────────
+
 /** Build optgroup HTML for all providers that returned at least one model. */
 function buildMultiProviderModelSelectInnerHtml(results: ProviderModelsResult[]): string {
   const chunks: string[] = [];
@@ -422,11 +424,6 @@ export interface PopulateMultiProviderModelSelectOptions {
   signal?: AbortSignal;
 }
 
-/**
- * Load models from every enabled provider into a multi-provider &lt;select&gt;.
- * Populates {@link modelCache} for auxiliary combobox tooltips and load dots.
- * @returns Provider fetch results when models were loaded; `null` when the select was set to an error/empty state.
- */
 export async function populateMultiProviderModelSelect(
   select: HTMLSelectElement,
   options?: PopulateMultiProviderModelSelectOptions,
@@ -488,9 +485,6 @@ export async function populateMultiProviderModelSelect(
     }
     if (libraryMerge) {
       for (const { key, row } of libraryMerge.cacheEntries) {
-        // Stamp catalog caps so Qwen3.8 (and other id-inferred models) get
-        // the composer effort dropdown. Do not force openai-v1 — that would
-        // show Low/Medium/High on every GGUF, including non-reasoning models.
         modelCache.set(key, {
           ...row,
           capabilities: catalogCapabilitiesFromRow(row),
@@ -503,13 +497,9 @@ export async function populateMultiProviderModelSelect(
       try {
         const capsFile = await fetchProviderCapabilities(provider.id, signal);
         mergeCapabilitiesIntoModelCache(capsFile);
-      } catch {
-        /* stale or missing capabilities file is ok */
-      }
+      } catch {}
     }
 
-    // First load / first selection: local weights that are resident, plus
-    // hosted models the user is actually using (never the whole cloud catalog).
     scheduleFirstLoadCapabilityProbes(
       results,
       collectInUseModelBindings(
@@ -543,11 +533,6 @@ export async function populateMultiProviderModelSelect(
   }
 }
 
-/**
- * Models the user is actually using — default picker, persisted default, and
- * every session chat binding. Hosted catalogs look "loaded" for every row;
- * auto-probe only this set so OpenRouter-sized lists are not billed.
- */
 function collectInUseModelBindings(
   extra?: Array<{ providerId?: string; modelId?: string }>,
 ): Array<{ providerId: string; modelId: string }> {
@@ -625,6 +610,8 @@ function pickInitialSelectValue(
   if (loaded) return loaded.key;
   return flat[0].key;
 }
+
+// ── Fetch ────────────────────────────────────────────────────────────────────
 
 /** Load models from every enabled provider and populate the model select. */
 export async function fetchModels(): Promise<void> {
@@ -717,7 +704,6 @@ export async function fetchModels(): Promise<void> {
     syncComposerReasoningEffortFromActiveChat();
     renderSidebar();
     scheduleSaveSessions();
-    // Default may have been chosen after catalog fill — probe that hosted row too.
     scheduleCapabilityProbeForSelectValue(sel.value);
     void import('../ui/context-usage-ring').then((m) => m.refreshContextUsageRing());
     void import('../ui/benchmark/roster-picker.ts').then((m) => m.refreshBenchmarkRosterPicker());

@@ -1,7 +1,3 @@
-/**
- * Pure history truncation helpers (no DOM / session imports — safe for unit tests).
- */
-
 import type {
   AssistantToolCallMessage,
   Message,

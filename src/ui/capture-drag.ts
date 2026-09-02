@@ -1,19 +1,3 @@
-/**
- * Shell-wide drag layer for issue capture.
- *
- * Dragging anything linkable — a file-tree row, an editor selection, a capture
- * chip — should light up the Issues rail tile and the menubar capture button so
- * the drop target is obvious before the pointer gets there.
- *
- * The gotcha this is built around (documented in `file-tree-dnd.ts`): `dragover`
- * cannot call `DataTransfer.getData`, so highlighting can never key off the
- * payload. It keys off a module-level descriptor set on `dragstart` instead.
- * `dragover` only gets to ask "is a capture in flight", and the answer comes
- * from here, not from the event.
- *
- * Phase 2 of `documentation/plans/issues-app-v2.md`.
- */
-
 import {
   CODE_SELECTION_MIME,
   parseCodeSelectionDragData,
@@ -40,7 +24,6 @@ function notify(): void {
     try {
       listener(activeDrag);
     } catch {
-      // A broken highlight must not break the drag.
     }
   }
 }
@@ -107,10 +90,7 @@ function isInternalPlainTextPayload(text: string): boolean {
   return trimmed.startsWith('file:') || trimmed.startsWith('preview:');
 }
 
-/**
- * `text/plain` can mean a real selection or a filename on an OS file drag.
- * Only treat it as capturable when no structured MIME already owns the drag.
- */
+/** `text/plain` can mean a real selection or a filename on an OS file drag. */
 function hasCapturablePlainText(types: readonly string[]): boolean {
   if (!types.includes('text/plain')) return false;
   if (types.includes('Files')) return false;
@@ -121,15 +101,7 @@ function hasCapturablePlainText(types: readonly string[]): boolean {
   return true;
 }
 
-/**
- * Build a capture payload out of a drag that was not started for us.
- *
- * File-tree rows and editor selections already publish structured MIMEs for the
- * composer. Reading them here means Issues becomes a drop target for both
- * without editing either surface.
- *
- * Only safe from `drop` and `dragstart` — `dragover` cannot read the transfer.
- */
+/** Build a capture payload out of a drag that was not started for us. */
 export function capturePayloadFromDataTransfer(
   dataTransfer: DataTransfer | null,
 ): CapturePayload | null {
@@ -229,13 +201,7 @@ export function dataTransferLooksCapturable(dataTransfer: DataTransfer | null): 
   );
 }
 
-/**
- * Bind the document-level listeners once.
- *
- * Bubble-phase `dragstart` so file-tree and editor handlers set MIME types
- * before the descriptor is read; bubble-phase `dragend`/`drop` so it survives
- * until every target has had its turn.
- */
+/** Bind the document-level listeners once. */
 export function initCaptureDragLayer(): void {
   if (layerBound || typeof document === 'undefined') return;
   layerBound = true;

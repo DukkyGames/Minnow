@@ -14,6 +14,8 @@ import type {
 } from './agents/sub-agent-structured-outcome';
 import type { ThinkingResolvedMode, ThinkingTriState } from './agents/thinking-types';
 
+// ── Messages ─────────────────────────────────────────────────────────────────
+
 /** Per-model / per-chat reasoning effort level for header dropdown and send path. */
 export type ReasoningEffortOption = 'off' | 'on' | 'low' | 'medium' | 'high' | 'max';
 
@@ -301,6 +303,8 @@ export type Message =
   | ContextNoticeMessage
   | InjectionNoticeMessage;
 
+// ── API payloads ─────────────────────────────────────────────────────────────
+
 /** Multimodal user/assistant payload part (attachments use in later waves). */
 export interface TextContentPart {
   type: 'text';
@@ -383,6 +387,8 @@ export interface ExpertSelection {
 /** Re-export for chat runtime snapshot typing. */
 export type { ExpertRuntimeSnapshot } from './chat/experts/types';
 
+// ── Terminal agents ──────────────────────────────────────────────────────────
+
 /** One completed terminal run persisted on the chat (Step 10). */
 export interface TerminalRunRecord {
   id: string;
@@ -433,6 +439,8 @@ export interface PersistedSubAgentRun {
   /** Linked board task id (e.g. W1-A). */
   boardTaskId?: string | null;
 }
+
+// ── Boards ───────────────────────────────────────────────────────────────────
 
 /** Sub-agent category for board agent grid styling. */
 export type BoardCategory = 'build' | 'fix' | 'test' | 'research';
@@ -538,6 +546,8 @@ export interface ChatGroup {
   plannerChatId?: string;
 }
 
+// ── Bugs ─────────────────────────────────────────────────────────────────────
+
 /** Bug tracker workflow column (MIN-16). */
 export type BugColumn =
   | 'reported'
@@ -588,6 +598,8 @@ export interface BugBoardState {
   startedAt: number;
   lastUpdatedAt: number;
 }
+
+// ── Issues ───────────────────────────────────────────────────────────────────
 
 /** Issues app card kind (MIN-261). Values come from Settings → Issues taxonomy. */
 export type IssueType = string;
@@ -798,7 +810,6 @@ export interface IssueCard {
   /** Preserved bug severity after migration (shown as a label). */
   severity?: BugSeverity;
 
-  // ── v3 (Issues app v2) ────────────────────────────────────────────────────
   /** Accountable human. Separate from {@link agent} so a run never steals ownership. */
   assignee?: IssueAssignee;
   /** Work agent slot and its live state. */
@@ -900,6 +911,8 @@ export function issuesSchemaRevisionOf(raw: {
   return ISSUES_SCHEMA_VERSION;
 }
 
+// ── Turns ────────────────────────────────────────────────────────────────────
+
 /** Stable id for one execution from a fork point (branch). */
 export type TurnRunId = string;
 
@@ -983,6 +996,8 @@ export interface TurnRunRecord {
   /** Absolute cwd used for snapshots (workspace root tools mutate). */
   snapshotCwd?: string;
 }
+
+// ── Chat ─────────────────────────────────────────────────────────────────────
 
 /** Expert thread or legacy Expert Lab session (hidden from main sidebar). */
 export type ChatKind = 'expert' | 'expert-lab';
@@ -1233,6 +1248,8 @@ export type {
   TokenLedgerTotals,
 } from './usage/types';
 
+// ── Session ──────────────────────────────────────────────────────────────────
+
 export interface SessionState {
   version: SessionSchemaVersion;
   activeId: string | null;
@@ -1270,6 +1287,8 @@ export interface SystemPromptSettings {
   presetId: string;
   text: string;
 }
+
+// ── Completions ──────────────────────────────────────────────────────────────
 
 /** Provenance for a detected model capability (feature #11). */
 export type CapabilitySource = 'catalog' | 'probe' | 'assumed';

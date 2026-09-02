@@ -1,7 +1,3 @@
-/**
- * Composer hint while a /goal loop is active on the active chat.
- */
-
 import { getActiveGoal, isGoalLoopActive } from '../state/sessions';
 import { isGoalEvaluating } from '../chat/goal/evaluating-state';
 import { getActiveChat } from '../state/sessions';

@@ -1,10 +1,3 @@
-/**
- * Headless slice of `src/api/chat.ts` — stream delta / tool-call / stats merge.
- *
- * `src/api/chat.ts` still owns the composer send path (DOM) and keeps its own
- * copies of these helpers. The loop lives only in sub-agent-runner.js.
- */
-
 import { streamDeltaContentToText } from './message-content.js';
 
 /** @param {{ error?: unknown, choices?: Array<{ finish_reason?: string, delta?: { content?: unknown, tool_calls?: unknown[] }, message?: { content?: unknown } }> }} chunk */

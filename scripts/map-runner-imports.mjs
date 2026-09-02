@@ -1,17 +1,4 @@
 #!/usr/bin/env node
-/**
- * P2-A — reproducible import graph of the shared runner.
- *
- * Do not eyeball the closure. Default entry is the extracted loop
- * (`server/runner/sub-agent-runner.js`). Pass `--adapter` to walk renderer
- * RunnerDeps (`src/agents/renderer-runner-deps.ts`) instead of the deleted
- * P2-A adapter (`src/agents/sub-agent-runner.ts`, removed in P8-G).
- *
- * Usage:
- *   node scripts/map-runner-imports.mjs
- *   node scripts/map-runner-imports.mjs --json
- *   node scripts/map-runner-imports.mjs --adapter
- */
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,10 +8,6 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const SHARED_RUNNER_ENTRY = 'server/runner/sub-agent-runner.js';
 export const ADAPTER_ENTRY = 'src/agents/renderer-runner-deps.ts';
 
-/**
- * Import specifiers (resolved posix paths from repo root) that the extract
- * injects rather than moves. Each is a renderer/store/I/O coupling.
- */
 export const INJECT_SEAMS = [
   'src/state/sessions.ts',
   'src/providers/fetch-chat.ts',
@@ -40,23 +23,18 @@ export const INJECT_SEAMS = [
   'src/agents/resolve-sampler.ts',
   'src/agents/resolve-thinking.ts',
   'src/chat/context/apply-policy.ts',
-  // Catalog lookup used only for a context-window number — injected as resolveModelContextLimit.
   'src/lib/context-length.ts',
 ];
 
-/**
- * Mixed files: the runner only uses a headless slice. The walker still records
- * the whole file as a source; the extract pulls the named exports into
- * `server/runner/` and leaves the original as a re-export.
- */
 export const SLICE_SOURCES = ['src/api/chat.ts'];
 
 const BROWSER_RE = /\b(?:document|window|localStorage|sessionStorage|HTMLElement)\b/;
 const BOARD_RE =
   /\b(?:orchestrator|orchestrate-|BoardState|boardId|board_init|board_update_task|board_set_autonomy)\b/;
 
+// ── Parse imports ────────────────────────────────────────────────────────────
+
 /**
- * Strip comments so import regexes do not match quoted paths in prose.
  * @param {string} source
  */
 export function stripComments(source) {
@@ -84,8 +62,6 @@ export function parseImports(source) {
       (clause.startsWith('{') &&
         [...clause.matchAll(/\btype\s+\w+/g)].length > 0 &&
         !/\b(?!type\b)\w+\s*(?:,|})/.test(clause.replace(/\btype\s+/g, '')));
-    // A mixed `{ Foo, type Bar }` is a runtime import. Conservatively treat a
-    // brace list as type-only only when every named binding is `type X`.
     let typeOnly = typeKw || /^type\b/.test(clause);
     if (!typeOnly && clause.startsWith('{')) {
       const inner = clause.slice(1, clause.lastIndexOf('}')).trim();
@@ -110,8 +86,9 @@ export function parseImports(source) {
   return found;
 }
 
+// ── Resolve ──────────────────────────────────────────────────────────────────
+
 /**
- * Resolve a relative/bare specifier from `fromFile` to a repo-relative posix path.
  * @param {string} fromFile
  * @param {string} specifier
  * @returns {string | null}
@@ -132,7 +109,6 @@ export function resolveSpecifier(fromFile, specifier) {
     path.join(raw, 'index.js'),
     path.join(raw, 'index.mjs'),
   ];
-  // Specifier already has an extension (`.ts` / `.js`).
   if (fs.existsSync(raw) && fs.statSync(raw).isFile()) {
     return posixRel(raw);
   }
@@ -155,22 +131,14 @@ function posixRel(abs) {
 function isSeam(rel) {
   if (INJECT_SEAMS.includes(rel)) return true;
   if (SLICE_SOURCES.includes(rel)) return true;
-  // Renderer UI is never part of the runner package.
   if (rel.startsWith('src/ui/') || rel.includes('/ui/')) return true;
   return false;
 }
 
+// ── Map graph ────────────────────────────────────────────────────────────────
+
 /**
- * Walk runtime imports from the entry, stopping at seams.
  * @returns {{
- *   entry: string,
- *   direct: { specifier: string, resolved: string | null, typeOnly: boolean }[],
- *   runtimeClosure: string[],
- *   typeOnly: string[],
- *   seamsHit: string[],
- *   flags: Record<string, { browser: boolean, board: boolean, uiImport: boolean, lines: number }>,
- *   external: string[],
- * }}
  */
 export function mapRunnerImports(entryRel = SHARED_RUNNER_ENTRY) {
   const entryAbs = path.join(ROOT, entryRel);
@@ -181,17 +149,17 @@ export function mapRunnerImports(entryRel = SHARED_RUNNER_ENTRY) {
     resolved: resolveSpecifier(entryAbs, row.specifier),
   }));
 
-  /** @type {Set<string>} */
+/** @type {Set<string>} */
   const runtime = new Set();
-  /** @type {Set<string>} */
+/** @type {Set<string>} */
   const typeOnly = new Set();
-  /** @type {Set<string>} */
+/** @type {Set<string>} */
   const seamsHit = new Set();
-  /** @type {Set<string>} */
+/** @type {Set<string>} */
   const external = new Set();
-  /** @type {string[]} */
+/** @type {string[]} */
   const queue = [posixRel(entryAbs)];
-  /** @type {Set<string>} */
+/** @type {Set<string>} */
   const seen = new Set();
 
   while (queue.length) {
@@ -216,8 +184,6 @@ export function mapRunnerImports(entryRel = SHARED_RUNNER_ENTRY) {
         seamsHit.add(resolved);
         continue;
       }
-      // Existing server JS (sanitize-completion-body, resolve-model-api) sits
-      // outside this package and may re-export src/. List it; do not walk it.
       const entryRelPosix = posixRel(entryAbs);
       if (!resolved.startsWith('server/runner/') && resolved !== entryRelPosix) {
         external.add(resolved);
@@ -232,7 +198,7 @@ export function mapRunnerImports(entryRel = SHARED_RUNNER_ENTRY) {
 
   runtime.delete(posixRel(entryAbs));
 
-  /** @type {Record<string, { browser: boolean, board: boolean, uiImport: boolean, lines: number }>} */
+/** @type {Record<string, { browser: boolean, board: boolean, uiImport: boolean, lines: number }>} */
   const flags = {};
   for (const rel of [...runtime, posixRel(entryAbs), ...seamsHit, ...external]) {
     const abs = path.join(ROOT, rel);
@@ -257,6 +223,8 @@ export function mapRunnerImports(entryRel = SHARED_RUNNER_ENTRY) {
     external: [...external].sort(),
   };
 }
+
+// ── Report ───────────────────────────────────────────────────────────────────
 
 function printReport(map) {
   const directRuntime = map.direct.filter((d) => !d.typeOnly);

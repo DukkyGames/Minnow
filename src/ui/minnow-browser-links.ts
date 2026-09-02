@@ -1,8 +1,3 @@
-/**
- * Route http(s) link clicks into Minnow's in-app browser (preview panel / desktop drawer).
- * MIN-378 — chat bubbles and shared entry for terminal console links (MIN-290).
- */
-
 import { HTTP_URL_RE } from './preview-url';
 
 /** Chat transcript roots that receive delegated link routing. */

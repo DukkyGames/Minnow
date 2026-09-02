@@ -166,6 +166,8 @@ async function withFake(scenario, fn) {
   }
 }
 
+// ── Source contract ──────────────────────────────────────────────────────────
+
 describe('runTurn source contract', () => {
   const source = fs.readFileSync(RUN_TURN_JS, 'utf8');
   const runnerDir = path.join(PROJECT_ROOT, 'server', 'runner');
@@ -187,6 +189,8 @@ describe('runTurn source contract', () => {
     }
   });
 });
+
+// ── Report tool ──────────────────────────────────────────────────────────────
 
 describe('runTurn report tool → verbatim outcome', () => {
   test('pass payload is returned as-is', { timeout: 20_000 }, async () => {
@@ -275,6 +279,8 @@ describe('runTurn report tool → verbatim outcome', () => {
     });
   });
 });
+
+// ── Missing report ───────────────────────────────────────────────────────────
 
 describe('runTurn without a successful report', () => {
   test('prose that looks like a pass is still no_report', { timeout: 20_000 }, async () => {
@@ -395,6 +401,8 @@ describe('runTurn without a successful report', () => {
   });
 });
 
+// ── Timeout and crash ────────────────────────────────────────────────────────
+
 describe('runTurn timeout and crash', () => {
   test('maxTurns exceeded is timeout', { timeout: 20_000 }, async () => {
     await withFake([{ emit: proseSseChunks('still going') }], async (baseUrl) => {
@@ -454,6 +462,8 @@ describe('runTurn timeout and crash', () => {
     assert.equal(result.error, 'provider exploded');
   });
 });
+
+// ── Tools and chatId ─────────────────────────────────────────────────────────
 
 describe('runTurn tools and opaque chatId', () => {
   test('works with a UUID chatId and no board in existence', { timeout: 20_000 }, async () => {
@@ -529,6 +539,8 @@ describe('P5-D the turn reports what it cost (MIN-722)', () => {
   });
 });
 
+// ── Chat-shaped turn ─────────────────────────────────────────────────────────
+
 describe('P6-A chat-shaped turn (MIN-723)', () => {
   const DATETIME_TOOL = {
     type: 'function',
@@ -598,6 +610,8 @@ describe('P6-A chat-shaped turn (MIN-723)', () => {
     });
   });
 });
+
+// ── AskCapability ────────────────────────────────────────────────────────────
 
 describe('P6-B AskCapability (MIN-724)', () => {
   const ASK_ARGS = {
@@ -837,6 +851,8 @@ describe('P6-B AskCapability (MIN-724)', () => {
     );
   });
 });
+
+// ── RunTurn interface ────────────────────────────────────────────────────────
 
 describe('P6-C runTurn interface (MIN-725)', () => {
   const DATETIME_TOOL = {
@@ -1171,6 +1187,8 @@ describe('P6-C runTurn interface (MIN-725)', () => {
   });
 });
 
+// ── Incremental persist ──────────────────────────────────────────────────────
+
 describe('P10-C settled incremental persist (MIN-768)', () => {
   const DATETIME_TOOL = {
     type: 'function',
@@ -1421,6 +1439,8 @@ describe('P10-C settled incremental persist (MIN-768)', () => {
     },
   );
 });
+
+// ── Round boundary ───────────────────────────────────────────────────────────
 
 describe('P10-I onRoundBoundary (MIN-774)', () => {
   const DATETIME_TOOL = {

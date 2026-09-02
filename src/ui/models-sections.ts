@@ -1,7 +1,3 @@
-/**
- * Lazy-render Models app section panels.
- */
-
 import type { ModelsSectionId } from './models-section-ids';
 import { mountDiscoverSection } from './models/discover-panel';
 import { mountLibrarySection } from './models/library-panel';

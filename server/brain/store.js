@@ -44,6 +44,8 @@ export const DEFAULT_BRAIN_STORE_CONFIG = {
   linking: { ...DEFAULT_LINKING_CONFIG },
 };
 
+// ── Config ───────────────────────────────────────────────────────────────────
+
 async function ensurePagesLayout() {
   await fs.mkdir(getBrainPagesDir(), { recursive: true });
 }
@@ -141,6 +143,8 @@ export async function saveBrainConfig(partial) {
   await writeConfigJson('config.json', config);
   return config.brain;
 }
+
+// ── Pages ────────────────────────────────────────────────────────────────────
 
 /**
  * Parse YAML-like frontmatter from a markdown page.
@@ -366,6 +370,8 @@ async function walkMarkdownFiles(dir, baseDir = dir) {
   return files;
 }
 
+// ── Catalog ──────────────────────────────────────────────────────────────────
+
 /** Load catalog.json from disk. */
 export async function loadCatalog() {
   try {
@@ -580,6 +586,8 @@ export async function readPage(relPath) {
   return { meta, body, path: meta.path };
 }
 
+// ── CRUD ─────────────────────────────────────────────────────────────────────
+
 /** Create a new wiki page at relPath. */
 export async function createPage(input) {
   await ensurePagesLayout();
@@ -692,6 +700,8 @@ export async function deletePage(relPath) {
   void syncDeleteEntryVector(existing.meta.id);
   return true;
 }
+
+// ── Layout ───────────────────────────────────────────────────────────────────
 
 /** Ensure brain wiki directories and seed files exist. */
 export async function ensureBrainLayout() {

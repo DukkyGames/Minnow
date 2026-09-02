@@ -110,6 +110,7 @@ export async function ensureHealthyVenv(pythonExe, venvDir, onProgress) {
 
 /**
  * Install a pip package spec into a venv.
+ * Pass spec as one argv entry — shell:true breaks git+ URLs on Windows.
  * @param {string} venvPython
  * @param {string} spec
  * @param {(message: string) => void} [onProgress]
@@ -123,6 +124,5 @@ export async function pipInstall(venvPython, spec, onProgress) {
     ['-m', 'pip', 'install', '--upgrade', '--no-input', 'pip', 'wheel'],
     spawnOpts,
   );
-  // Pass spec as a single argv entry — shell:true breaks git+ URLs on Windows (@).
   await runProcess(venvPython, ['-m', 'pip', 'install', '--no-input', spec], spawnOpts);
 }

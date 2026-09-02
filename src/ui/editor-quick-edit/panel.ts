@@ -1,7 +1,3 @@
-/**
- * Floating Quick Edit panel anchored at the editor selection (Phase 4).
- */
-
 import type { EditorView } from '@codemirror/view';
 import { EditorSelection } from '@codemirror/state';
 import { getLocalServerAvailable } from '../../tools/client';

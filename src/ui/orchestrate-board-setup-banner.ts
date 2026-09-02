@@ -1,10 +1,3 @@
-/**
- * Chat-view banner for leftover V1 board setup (MIN-340).
- *
- * P4-C retired planner-chat setup chrome. Incomplete V1 folders no longer
- * prompt a return-to-setup banner — open Boards instead.
- */
-
 export const BOARD_SETUP_BANNER_ID = 'boardSetupReturnBanner';
 
 /** Remove the leftover setup return banner if it is still in the DOM. */

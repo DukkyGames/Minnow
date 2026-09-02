@@ -1,7 +1,3 @@
-/**
- * Step 05 smoke: sessions API persists modeId per chat.
- * Usage: npx tsx scripts/step-05-smoke.mjs http://localhost:5173
- */
 
 const base = process.argv[2] ?? 'http://localhost:5173';
 

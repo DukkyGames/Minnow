@@ -1,7 +1,3 @@
-/**
- * Renderer-side prep before preview guest screenshot capture (browser_screenshot, design diffs).
- */
-
 export const PREVIEW_GUEST_LOAD_POLL_MS = 50;
 export const PREVIEW_GUEST_LOAD_MAX_WAIT_MS = 3_000;
 

@@ -1,7 +1,3 @@
-/**
- * Composer chip for pinned slash skills (caveman intensity, party mode dismiss).
- */
-
 import { getActiveChat, scheduleSaveSessions, touchChat } from '../state/sessions';
 import { CAVEMAN_SKILL_ID, DEFAULT_CAVEMAN_INTENSITY, isCavemanIntensity } from '../skills/caveman-client';
 import { PARTYMODE_SKILL_ID } from '../skills/partymode-client';
@@ -72,8 +68,6 @@ function ensureStrip(): HTMLDivElement {
   const host = document.getElementById('composerControls');
   const anchor = document.getElementById('workAgentDev');
   if (host) {
-    // The anchor is parked in the compact cog sheet at times, so it is not
-    // always a child of the toolbar — insertBefore would throw NotFoundError.
     if (anchor?.parentNode === host) {
       host.insertBefore(stripEl, anchor);
     } else {

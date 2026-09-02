@@ -26,7 +26,9 @@ export interface RunnerEffector {
     gitInitialized?: Record<string, unknown>;
   }>;
   stop(attemptId: string): Promise<void>;
-  /** Check the model binding (including My Models remap/auto-load), role prompts, and isolated-worktree git init. Throws when something is missing. */
+  /**
+   * Check the model binding (including My Models remap/auto-load), role prompts, and isolated-worktree git init.
+   */
   preflight(): Promise<{ gitInitialized?: Record<string, unknown> } | void>;
   onEnd(
     handler: (end: {
@@ -62,8 +64,7 @@ export interface CreateRunnerEffectorOptions {
   promptVariant?: 'full' | 'lite';
   runTurn?: (options: RunTurnOptions) => Promise<TurnResult>;
   /**
-   * P3-F test seam. When set, Final always uses this instead of instant-pass,
-   * even if `runTurn` is also injected.
+   * test seam.
    */
   runFinalLadder?: (input: {
     cwd: string;
@@ -79,11 +80,6 @@ export interface CreateRunnerEffectorOptions {
   postChatCompletions?: PostChatCompletions;
   /** Cancel persist:false generations not owned by a live attempt. Default false. */
   reapOrphans?: boolean;
-  /**
-   * Allocate an isolated git worktree per builder/tester attempt (MIN-705).
-   * Defaults on when `cwd` is omitted (production). Explicit `cwd` is the
-   * P2-F sandbox seam and leaves isolation off unless this is set true.
-   */
   worktrees?: boolean;
 }
 

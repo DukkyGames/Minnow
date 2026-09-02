@@ -1,7 +1,3 @@
-/**
- * Evaluator prompt for the /goal agentic verifier (tools + strict default NO).
- */
-
 import type { ApiMessage, Chat, ToolCall } from '../../types';
 
 const MAX_TRANSCRIPT_CHARS = 48_000;

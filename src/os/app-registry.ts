@@ -1,5 +1,7 @@
 import type { AppId } from './types';
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
 /** Whether users may turn the app off (optional) or it is always on (core). */
 export type AppAvailability = 'core' | 'optional';
 
@@ -19,6 +21,8 @@ export interface AppDefinition {
   availability: AppAvailability;
   releaseState: AppReleaseState;
 }
+
+// ── Catalog ──────────────────────────────────────────────────────────────────
 
 /** Canonical app list — ported from Minnow prototype `data.jsx`. */
 export const APPS: readonly AppDefinition[] = [
@@ -133,6 +137,8 @@ export const APPS: readonly AppDefinition[] = [
 ] as const;
 
 const APP_IDS = new Set<AppId>(APPS.map((a) => a.id));
+
+// ── Queries ──────────────────────────────────────────────────────────────────
 
 /** Type guard for route segments and registry lookups. */
 export function isAppId(value: string): value is AppId {

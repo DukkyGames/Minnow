@@ -1,7 +1,3 @@
-/**
- * Anchored name popover for git panel branch/worktree create (Electron-safe).
- */
-
 import {
   GIT_REF_FALLBACK_BRANCH,
   GIT_REF_FALLBACK_WORKTREE,
@@ -16,10 +12,7 @@ export interface GitPanelNamePopoverOptions {
   placeholder?: string;
   defaultValue?: string;
   submitLabel?: string;
-  /**
-   * When set, typed text is auto-fixed through this function before submit
-   * (MIN-659). The popover shows the name that will actually be used.
-   */
+  /** When set, typed text is auto-fixed through this function before submit (MIN-659). */
   normalizeName?: (raw: string) => string;
   onSubmit: (name: string) => void | Promise<void>;
 }
@@ -44,6 +37,8 @@ let inputEl: HTMLInputElement | null = null;
 let open = false;
 let outsidePointerHandler: ((e: PointerEvent) => void) | null = null;
 let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
+
+// ── Close ────────────────────────────────────────────────────────────────────
 
 function detachGlobalListeners(): void {
   if (outsidePointerHandler) {
@@ -72,6 +67,8 @@ export function closeGitPanelNamePopover(): void {
 export function isGitPanelNamePopoverOpen(): boolean {
   return open;
 }
+
+// ── Position ─────────────────────────────────────────────────────────────────
 
 function positionPopover(anchor: HTMLElement, popover: HTMLElement): void {
   const rect = anchor.getBoundingClientRect();
@@ -117,10 +114,7 @@ function ensurePopover(): HTMLDivElement {
   return popoverEl;
 }
 
-/**
- * Sync the live "will use" line so the user sees the git name that will be created.
- * Hidden when the typed text already matches the slug.
- */
+/** Sync the live "will use" line so the user sees the git name that will be created. */
 function updateNormalizedPreview(
   input: HTMLInputElement,
   preview: HTMLElement,
@@ -141,10 +135,9 @@ function updateNormalizedPreview(
   return slug;
 }
 
-/**
- * Open a small anchored popover to collect a branch or worktree name.
- * Replaces window.prompt for Electron compatibility.
- */
+// ── Open ─────────────────────────────────────────────────────────────────────
+
+/** Open a small anchored popover to collect a branch or worktree name. */
 export function openGitPanelNamePopover(options: GitPanelNamePopoverOptions): void {
   if (open && anchorEl === options.anchor) {
     closeGitPanelNamePopover();
@@ -245,10 +238,7 @@ export function openGitPanelNamePopover(options: GitPanelNamePopoverOptions): vo
   });
 }
 
-/**
- * Create-branch / create-worktree popover with auto-fixed git names (MIN-659).
- * Defaults to a slug from the chat title or folder path, not an opaque id.
- */
+/** Create-branch / create-worktree popover with auto-fixed git names (MIN-659). */
 export function openGitRefNamePopover(options: GitRefNamePopoverOptions): void {
   const fallback =
     options.kind === 'worktree' ? GIT_REF_FALLBACK_WORKTREE : GIT_REF_FALLBACK_BRANCH;

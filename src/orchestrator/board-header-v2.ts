@@ -1,12 +1,3 @@
-/**
- * V2 Boards header instruments — the Orchestrate model chip + reasoning strip.
- *
- * The live pane `replaceChildren`s on every journal event. These controls are
- * detached before that wipe and re-homed onto the new header so the picker menu
- * is not torn down mid-open, and so we never re-fetch a model catalog (the chip
- * reads the canonical `#modelSelect`).
- */
-
 import type { BoardState } from '../../server/orchestrator/core/types';
 import { decodeModelSelectKey } from '../lib/model-select-key.ts';
 import type { BoardReasoningPatch } from './board-journal-reasoning.ts';
@@ -29,17 +20,13 @@ import {
 } from '../ui/orchestrate-board-reasoning.ts';
 
 export interface V2BoardHeaderCommands {
-  /** Journal `board.model.set`. Empty reasoning omits the field (inherit). */
   setModel: (providerId: string, id: string, reasoning: string) => Promise<void>;
-  /** Shown when reasoning is changed before any model can be resolved. */
   onNeedModel: () => void;
 }
 
-/** Latest fold, so persist closures do not capture a stale paint. */
 let liveState: BoardState | null = null;
 let liveCommands: V2BoardHeaderCommands | null = null;
 
-/** Binding shown in the chip: journal override, else the menubar `#modelSelect`. */
 export function resolveV2BoardModelBinding(state: BoardState | null): {
   providerId: string;
   modelId: string;
@@ -56,7 +43,6 @@ export function resolveV2BoardModelBinding(state: BoardState | null): {
   return { providerId: '', modelId: raw };
 }
 
-/** Pull the chip and reasoning strip out of the header so a pane wipe cannot destroy them. */
 export function detachV2BoardHeaderInstruments(): void {
   const slot = document.querySelector(
     '#orchestratorBoardsRoot .board-header__model-slot',
@@ -66,7 +52,6 @@ export function detachV2BoardHeaderInstruments(): void {
   detachBoardHeaderReasoning();
 }
 
-/** Mount or re-home the Orchestrate instruments onto this paint's header. */
 export function attachV2BoardHeaderInstruments(
   controls: HTMLElement,
   state: BoardState,
@@ -102,7 +87,6 @@ export function attachV2BoardHeaderInstruments(
       void liveCommands?.setModel(providerId, modelId, reasoning);
     },
     onChanged: () => {
-      // The stream paints when the journal lands; do not rewrite the fold here.
     },
   });
   syncBoardModelChipTrigger();
@@ -137,12 +121,10 @@ export function attachV2BoardHeaderInstruments(
       }
     },
     onChanged: () => {
-      // Stream-driven, same as the model chip.
     },
   });
 }
 
-/** Leave Boards — drop the singleton chip so Orchestrate can own it again. */
 export function teardownV2BoardHeaderInstruments(): void {
   liveState = null;
   liveCommands = null;

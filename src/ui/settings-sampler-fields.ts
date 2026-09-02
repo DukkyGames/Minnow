@@ -1,7 +1,3 @@
-/**
- * Shared numeric inputs for sampler preset fields in Settings.
- */
-
 import type { SamplerPreset } from '../agents/sampler-types';
 
 export interface SamplerFieldInputs {

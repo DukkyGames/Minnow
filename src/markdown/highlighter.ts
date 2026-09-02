@@ -97,9 +97,7 @@ export async function highlightCodeElement(block: HTMLElement): Promise<void> {
     try {
       const full = await loadFullHighlightJs();
       full.highlightElement(block);
-    } catch {
-      /* partial fence or unknown grammar */
-    }
+    } catch {}
     return;
   }
   try {
@@ -108,9 +106,7 @@ export async function highlightCodeElement(block: HTMLElement): Promise<void> {
     try {
       const full = await loadFullHighlightJs();
       full.highlightElement(block);
-    } catch {
-      /* partial fence or unknown grammar */
-    }
+    } catch {}
   }
 }
 

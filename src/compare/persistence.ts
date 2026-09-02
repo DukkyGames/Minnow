@@ -51,9 +51,7 @@ export async function listCompareHistory(limit = LIST_CAP): Promise<CompareVote[
         const serverVotes = Array.isArray(data) ? data.filter((v) => v?.revealed) : [];
         return mergeCompareVotes(serverVotes, localVotes);
       }
-    } catch {
-      /* fall through */
-    }
+    } catch {}
   }
   return localVotes;
 }

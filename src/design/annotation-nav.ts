@@ -29,7 +29,6 @@ export function jumpToChatTurn(chatId: string, turnId: string): void {
   };
 
   if (getActiveChat().id !== chatId) {
-    // Await history hydrate so the jump target exists in the DOM after paint.
     void activateChatById(chatId).then(() =>
       import('../ui/messages').then((m) => {
         m.renderChatFromHistory(getActiveChat());
@@ -66,7 +65,6 @@ export async function openAnnotationOnPage(
     await import('../ui/preview-panel');
   await openPreviewPageAndEnableDesignMode(pageUrl);
 
-  // Give the guest a beat to finish navigating before reading its tagged elements.
   await new Promise((resolve) => window.setTimeout(resolve, GUEST_SETTLE_MS));
 
   const [data, candidates] = await Promise.all([

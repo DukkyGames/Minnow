@@ -1,7 +1,3 @@
-/**
- * Optional smoke: spawn_sub_agent via orchestrator module (requires npm start for full stack).
- * Usage: node scripts/sa09-sub-agent-smoke.mjs http://localhost:5173
- */
 
 const base = process.argv[2] ?? 'http://localhost:5173';
 

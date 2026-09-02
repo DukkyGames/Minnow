@@ -1,12 +1,3 @@
-/**
- * Reads the per-boot session token injected into index.html by the server
- * (window.__MINNOW_SESSION_TOKEN__) and appends it to URLs that can't carry
- * a custom header (WebSocket, EventSource, direct navigation).
- *
- * Companion device tokens are mirrored to a first-party cookie so installs that
- * share cookie storage with the pairing browser (common on Android) keep access.
- */
-
 declare global {
   interface Window {
     __MINNOW_SESSION_TOKEN__?: string;
@@ -88,9 +79,7 @@ export function clearDeviceToken(): void {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.removeItem(DEVICE_TOKEN_STORAGE_KEY);
-  } catch {
-    /* Storage may be unavailable in private browsing mode. */
-  }
+  } catch {}
   clearDeviceTokenCookie();
 }
 

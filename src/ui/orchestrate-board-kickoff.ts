@@ -1,9 +1,3 @@
-/**
- * Orchestrate board kickoff leftovers: git preflight (programmatic init, optional
- * /git-setup for GitHub remote). V2 boards parse the plan on POST /api/boards —
- * this path no longer asks a model to initialize the board (MIN-715).
- */
-
 import {
   normalizeOrchestratePlanPath,
   resolveEffectiveOrchestratePlanPath,
@@ -34,20 +28,16 @@ import { setStatus } from './status';
 export const BOARD_ONBOARDING_KICKOFF_MESSAGE =
   'Parse the selected plan and initialize the board with each task\'s build and test spec and category. Do not start any tasks.';
 
-/**
- * Substring present in every board-init kickoff: the pathless constant, path-named
- * builder output, and older transcripts that used the bare constant.
- */
+/** Substring present in every board-init kickoff: the pathless constant, path-named builder output, and older transcripts that used the bare constant. */
 export const BOARD_ONBOARDING_KICKOFF_MARKER =
   "each task's build and test spec and category. Do not start any tasks.";
 
 /** Legacy alias for onboarding kickoff (historical transcripts / init-split detection). */
 export const BOARD_BUILD_KICKOFF_MESSAGE = BOARD_ONBOARDING_KICKOFF_MESSAGE;
 
-/**
- * Build the board-init kickoff user turn. When a plan path is already bound, name it
- * so the model does not invent an ask_question plan picker.
- */
+// ── Kickoff copy ─────────────────────────────────────────────────────────────
+
+/** Build the board-init kickoff user turn. */
 export function buildBoardOnboardingKickoffMessage(planPath?: string | null): string {
   const normalized = normalizeOrchestratePlanPath(planPath ?? '');
   if (!normalized) return BOARD_ONBOARDING_KICKOFF_MESSAGE;
@@ -88,10 +78,9 @@ function kickoffAborted(): boolean {
   return getBoardKickoffAbortSignal()?.aborted ?? false;
 }
 
-/**
- * Init / .gitignore / first commit without the /git-setup LLM skill (MIN-615).
- * Returns false when init fails so kickoff can stop before the leftover send.
- */
+// ── Git setup ────────────────────────────────────────────────────────────────
+
+/** Init / .gitignore / first commit without the /git-setup LLM skill (MIN-615). */
 async function runProgrammaticGitInit(): Promise<boolean> {
   const { refreshBoardOnboardingIfMounted } = await import('./orchestrate-board-onboarding-ui');
   setBoardOnboardingGitSetupActive(true);
@@ -150,10 +139,9 @@ async function ensureToolServerForGitSetup(): Promise<boolean> {
   return serverUp;
 }
 
-/**
- * Git preflight → programmatic init (MIN-615) → optional remote skill → leftover send.
- * Entry points: hub Open board, onboarding Start, plan screen Open board.
- */
+// ── Kickoff ──────────────────────────────────────────────────────────────────
+
+/** Git preflight → programmatic init (MIN-615) → optional remote skill → leftover send. */
 export async function kickoffOrchestrateBoardBuild(): Promise<void> {
   if (setBoardKickoffInProgress(true)) return;
 
@@ -170,7 +158,6 @@ export async function kickoffOrchestrateBoardBuild(): Promise<void> {
 
       if (initAccepted) {
         if (!(await ensureToolServerForGitSetup())) return;
-        // Do not run /git-setup here — the model re-asks via ask_question (MIN-615).
         const inited = await runProgrammaticGitInit();
         if (kickoffAborted()) return;
         if (!inited) return;
@@ -189,8 +176,6 @@ export async function kickoffOrchestrateBoardBuild(): Promise<void> {
       }
     }
 
-    // V2 has no chat/group write-back sync: POST /api/boards reads the plan path
-    // itself and the server owns board state, so resolving is all this needs.
     const planPath = resolveEffectiveOrchestratePlanPath(chat, getBoardGroupForChat(chat));
     sendBoardMessage(buildBoardOnboardingKickoffMessage(planPath));
     setBoardOnboardingAwaitingInit(true);

@@ -1,7 +1,3 @@
-/**
- * Post-process rendered cleanup plan markdown for scannable path + action rows.
- */
-
 import { renderBrainMarkdown } from './wikilink-markdown';
 
 /** Wiki-relative or workspace-scoped markdown paths in plan text. */

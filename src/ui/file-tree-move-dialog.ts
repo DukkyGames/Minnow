@@ -1,8 +1,3 @@
-/**
- * Inline move confirmation in the file sidebar (internal tree DnD).
- * Avoids native dialog / window.confirm so the prompt stays in-app.
- */
-
 import { basename, joinTreePath } from './file-tree-path';
 
 export interface MoveConfirmDialogOptions {
@@ -85,10 +80,7 @@ function hideBanner(): void {
   bannerEl.classList.add('hidden');
 }
 
-/**
- * Ask the user to confirm moving `source` into `destinationDir`.
- * Resolves true when Move is chosen, false on Cancel or Escape.
- */
+/** Ask the user to confirm moving `source` into `destinationDir`. */
 export function showMoveConfirmDialog(
   opts: MoveConfirmDialogOptions,
 ): Promise<boolean> {

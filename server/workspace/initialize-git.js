@@ -40,7 +40,6 @@ async function initRepo(cwd) {
   if (fallback.code !== 0) {
     return { ok: false, error: processError(fallback) };
   }
-  // Point HEAD at main before the first commit so the default branch is not master.
   await git(['symbolic-ref', 'HEAD', 'refs/heads/main'], cwd);
   return { ok: true };
 }

@@ -1,25 +1,12 @@
-/**
- * Persistent IMAP sessions — one long-lived ImapFlow client per account.
- *
- * Before this module every mail operation paid a full TCP + TLS + LOGIN round
- * trip (a 100-message bulk action opened ~100 connections; archive opened 3).
- * `withMailbox` borrows the shared client and holds the imapflow mailbox lock
- * for the duration of the callback, so operations serialize per account without
- * reconnecting. Idle sessions close after IDLE_CLOSE_MS.
- */
-
 import { ImapFlow } from 'imapflow';
 import { getEmailAccount, readAccountPassword } from './accounts.js';
 import { withImapErrors } from './imap-errors.js';
 import { getCachedFolders, setCachedFolders } from './cache.js';
 
-/** Close a session after this long with no borrow. */
 export const IDLE_CLOSE_MS = 5 * 60_000;
 
-/** Cached folder lists older than this are refetched. */
 export const FOLDER_CACHE_TTL_MS = 24 * 60 * 60_000;
 
-/** Reconnect backoff ceiling after consecutive connect failures. */
 const MAX_BACKOFF_MS = 60_000;
 
 /**
@@ -34,7 +21,6 @@ const MAX_BACKOFF_MS = 60_000;
 /** @type {Map<string, ImapSession>} */
 const sessions = new Map();
 
-/** Serializes borrows per account so one client is never used concurrently. */
 /** @type {Map<string, Promise<unknown>>} */
 const queues = new Map();
 
@@ -66,7 +52,6 @@ function scheduleIdleClose(accountId) {
 }
 
 /**
- * Build the shared client for an account (exported for tests/injection).
  * @param {import('./accounts.js').EmailAccount} account
  * @param {string} password
  */
@@ -82,7 +67,6 @@ export function createSessionClient(account, password) {
 }
 
 /**
- * Connect (or reuse) the shared client for an account.
  * @param {string} accountId
  * @returns {Promise<{ client: import('imapflow').ImapFlow, account: import('./accounts.js').EmailAccount }>}
  */
@@ -105,7 +89,6 @@ async function acquireClient(accountId) {
     const password = await readAccountPassword(accountId);
     const client = createSessionClient(account, password);
     client.on('error', () => {
-      /* surfaced by the awaiting operation; keeps the process alive */
     });
     client.on('close', () => {
       if (sessions.get(accountId)?.client === client) {
@@ -124,7 +107,6 @@ async function acquireClient(accountId) {
         try {
           void client.close();
         } catch {
-          /* ignore */
         }
         throw err;
       })
@@ -138,12 +120,9 @@ async function acquireClient(accountId) {
 }
 
 /**
- * Run `fn` against the shared client with `folder` selected and locked.
- * Operations for one account are serialized; a dropped connection is retried once.
- *
  * @template T
  * @param {string} accountId
- * @param {string | null} folder — null selects no mailbox (LIST, STATUS, …)
+ * @param {string | null} folder
  * @param {(client: import('imapflow').ImapFlow, account: import('./accounts.js').EmailAccount) => Promise<T>} fn
  * @returns {Promise<T>}
  */
@@ -192,7 +171,6 @@ async function runBorrow(accountId, folder, fn, retry = true) {
 }
 
 /**
- * Close the shared client for one account.
  * @param {string} accountId
  */
 export async function closeImapSession(accountId) {
@@ -206,23 +184,19 @@ export async function closeImapSession(accountId) {
   try {
     await client.logout();
   } catch {
-    /* ignore */
   }
   try {
     await client.close();
   } catch {
-    /* ignore */
   }
 }
 
-/** Close every open session (shutdown, tests). */
 export async function closeAllImapSessions() {
   await Promise.all([...sessions.keys()].map((accountId) => closeImapSession(accountId)));
   queues.clear();
 }
 
 /**
- * Folder list for an account, served from `meta.folders` when fresh.
  * @param {string} accountId
  * @param {{ force?: boolean }} [options]
  */
@@ -251,19 +225,12 @@ export async function listFoldersCached(accountId, options = {}) {
   return folders;
 }
 
-// ---------------------------------------------------------------------------
 // IDLE watchers
-// ---------------------------------------------------------------------------
 
 /** @type {Map<string, { client: import('imapflow').ImapFlow, stopped: boolean }>} */
 const watchers = new Map();
 
 /**
- * Watch INBOX for new mail with a dedicated IDLE connection.
- *
- * The watcher gets its own client: imapflow holds the socket in IDLE, so
- * sharing it with `withMailbox` would stall every other operation.
- *
  * @param {string} accountId
  * @param {(info: { folder: string, reason: string }) => void | Promise<void>} onChange
  */
@@ -282,7 +249,6 @@ export async function startIdleWatcher(accountId, onChange, folder = 'INBOX') {
   watchers.set(accountId, entry);
 
   client.on('error', () => {
-    /* reconnect handled by the poller fallback */
   });
   client.on('exists', () => {
     if (!entry.stopped) {
@@ -298,7 +264,6 @@ export async function startIdleWatcher(accountId, onChange, folder = 'INBOX') {
   try {
     await client.connect();
     await client.mailboxOpen(folder);
-    // imapflow enters IDLE on its own once a mailbox is open and idle.
     return { started: true, folder };
   } catch (err) {
     watchers.delete(accountId);
@@ -306,13 +271,11 @@ export async function startIdleWatcher(accountId, onChange, folder = 'INBOX') {
     try {
       await client.close();
     } catch {
-      /* ignore */
     }
     throw err;
   }
 }
 
-/** Stop the IDLE watcher for one account. */
 export async function stopIdleWatcher(accountId) {
   const entry = watchers.get(accountId);
   if (!entry) return { stopped: false };
@@ -321,27 +284,22 @@ export async function stopIdleWatcher(accountId) {
   try {
     await entry.client.logout();
   } catch {
-    /* ignore */
   }
   try {
     await entry.client.close();
   } catch {
-    /* ignore */
   }
   return { stopped: true };
 }
 
-/** Stop every IDLE watcher (shutdown, tests). */
 export async function stopAllIdleWatchers() {
   await Promise.all([...watchers.keys()].map((accountId) => stopIdleWatcher(accountId)));
 }
 
-/** Test helper — accounts with an active watcher. */
 export function watchedAccountsForTests() {
   return [...watchers.keys()];
 }
 
-/** Test helper — accounts with an open session. */
 export function openSessionsForTests() {
   return [...sessions.keys()];
 }

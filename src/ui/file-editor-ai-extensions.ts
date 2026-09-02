@@ -1,8 +1,3 @@
-/**
- * @deprecated Editor AI ghost UI moved to `editor-suggestions/`. Re-exports
- * remain for older imports and engine bundle parity.
- */
-
 export {
   editorSuggestionCompartment as editorAiCompletionCompartment,
   editorSuggestionExtensions as editorAiCompletionExtensions,

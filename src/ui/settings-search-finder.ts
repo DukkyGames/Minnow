@@ -1,7 +1,3 @@
-/**
- * Settings header global finder (search, keyboard nav, Cmd/Ctrl+K).
- */
-
 import { buildSettingsSearchIndex } from './settings-search-index';
 import { navigateToSettingsSearchEntry } from './settings-search-navigate';
 import { rankSettingsSearch } from './settings-search-rank';
@@ -11,6 +7,8 @@ let cachedIndex: SettingsSearchEntry[] | null = null;
 let activeResults: SettingsSearchEntry[] = [];
 let highlightedIndex = -1;
 let finderOptions: { onQueryChange?: (query: string) => void } = {};
+
+// ── Queries ──────────────────────────────────────────────────────────────────
 
 function getIndex(): SettingsSearchEntry[] {
   cachedIndex = buildSettingsSearchIndex();
@@ -36,6 +34,8 @@ function getFinderRoot(): HTMLElement | null {
 function isSettingsOpen(): boolean {
   return document.getElementById('settingsView')?.classList.contains('is-open') ?? false;
 }
+
+// ── Results ──────────────────────────────────────────────────────────────────
 
 function closeResults(): void {
   const list = getResultsList();
@@ -117,7 +117,6 @@ async function selectEntry(entry: SettingsSearchEntry): Promise<void> {
   const input = getInput();
   closeResults();
   if (input) {
-    // Programmatic value clears do not fire `input`; reset in-page filter state too.
     input.value = '';
     finderOptions.onQueryChange?.('');
   }
@@ -156,6 +155,8 @@ function focusFinderInput(): void {
   input.focus();
   input.select();
 }
+
+// ── Init ─────────────────────────────────────────────────────────────────────
 
 /** Wire finder input, results list, and settings-scoped keyboard shortcuts. */
 export function initSettingsSearchFinder(options?: {

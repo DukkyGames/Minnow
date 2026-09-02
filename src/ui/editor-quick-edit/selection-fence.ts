@@ -1,7 +1,3 @@
-/**
- * Format editor selection as a fenced code block for the composer (Phase 4).
- */
-
 import { fenceLangFromPath } from '../editor-ai-completion-prompt';
 
 /** Build ```lang path:start-end fenced block for a selection. */

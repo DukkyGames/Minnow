@@ -27,8 +27,6 @@ export function emitEvalSuiteProgress(event: EvalSuiteProgressEvent): void {
   for (const listener of listeners) {
     try {
       listener(event);
-    } catch {
-      /* UI handler errors should not break scheduler */
-    }
+    } catch {}
   }
 }

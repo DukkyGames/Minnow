@@ -41,9 +41,7 @@ async function parseJson<T>(res: Response): Promise<T> {
     try {
       const body = (await res.json()) as { error?: string };
       if (body?.error) detail = body.error;
-    } catch {
-      /* ignore */
-    }
+    } catch {}
     throw new Error(detail || `Request failed (${res.status})`);
   }
   return (await res.json()) as T;
@@ -160,9 +158,7 @@ export function subscribeInstallProgress(
   source.onmessage = (msg) => {
     try {
       onEvent(JSON.parse(msg.data) as VoiceInstallJob);
-    } catch {
-      /* ignore malformed */
-    }
+    } catch {}
   };
   return () => source.close();
 }
@@ -233,9 +229,7 @@ export function subscribeDownloadProgress(
   source.onmessage = (msg) => {
     try {
       onEvent(JSON.parse(msg.data));
-    } catch {
-      /* ignore malformed */
-    }
+    } catch {}
   };
   return () => source.close();
 }

@@ -1,7 +1,3 @@
-/**
- * Uicons glyphs for git source-control toolbar actions (pull, push, fetch, …).
- */
-
 import { createIcon, type IconName } from './icon';
 
 export type GitSourceControlAction =
@@ -54,7 +50,6 @@ export function createGitSourceControlIconImg(
 ): HTMLElement | null {
   const name = gitSourceControlIconName(label);
   if (!name) return null;
-  // 12px matches the compact git-panel action row (11px labels).
   return createIcon(name, { size: 12, className });
 }
 

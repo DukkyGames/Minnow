@@ -26,7 +26,6 @@ function dumpGatewayFailure(sanitizedBody, responseText, status) {
       'utf8',
     );
   } catch {
-    // Best-effort diagnostic only.
   }
 }
 
@@ -103,7 +102,6 @@ export function sanitizeAnthropicGatewayInputSchema(schema) {
   delete record.$ref;
   delete record.$comment;
   delete record.definitions;
-  // Console/Bedrock upstreams reject additionalProperties even when false.
   delete record.additionalProperties;
   delete record.maxItems;
   delete record.minLength;

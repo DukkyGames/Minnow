@@ -1,7 +1,3 @@
-/**
- * Whether an expert can be edited or deleted from Expert Lab.
- */
-
 import type { ExpertRecord } from './types';
 
 /** True when the id exists in the shipped built-in registry. */

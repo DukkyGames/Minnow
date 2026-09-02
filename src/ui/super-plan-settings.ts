@@ -1,7 +1,3 @@
-/**
- * Super Plan pipeline knobs (Settings → Modes → Super Plan).
- */
-
 import {
   loadSuperPlanConfig,
   saveSuperPlanConfig,

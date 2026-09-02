@@ -1,11 +1,3 @@
-/**
- * Forge operations for /api/git — pull requests and CI, via the `gh` CLI.
- *
- * Local-first by design: no tokens are stored in ~/.minnow. Everything runs
- * through the user's own `gh` auth. Non-GitHub remotes are detected and
- * reported honestly rather than surfacing an empty list.
- */
-
 import { runProcess } from '../process-runner.js';
 import { isGitRepository } from '../tools/git-change-stats.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
@@ -13,25 +5,19 @@ import { getWorkspaceRoot } from '../workspace/root.js';
 const GH_TIMEOUT_MS = 45_000;
 const GH_LOG_TIMEOUT_MS = 90_000;
 
-/** forgeStatus is hit on every poll; probing `gh auth` each time is wasteful. */
 const STATUS_TTL_MS = 60_000;
 /** @type {Map<string, { at: number, value: object }>} */
 const statusCache = new Map();
 
-/** Resolve working directory for forge commands. */
 function resolveCwd(cwd) {
   return cwd && String(cwd).trim() ? String(cwd).trim() : getWorkspaceRoot();
 }
 
-/** Run `gh` with paging and colour disabled. Exported for forge-issue-ops.js.
- *  Never rejects — timeout and missing-binary become a non-zero result so a
- *  forge call cannot take down `/api/git` (MIN-660). */
 export async function gh(args, cwd, timeout = GH_TIMEOUT_MS) {
   try {
     return await runProcess('gh', args, {
       cwd,
       timeout,
-      // gh paginates and colorizes when it thinks it owns a terminal.
       env: { GH_PAGER: 'cat', PAGER: 'cat', NO_COLOR: '1', CLICOLOR: '0' },
     });
   } catch (err) {
@@ -45,17 +31,13 @@ export async function gh(args, cwd, timeout = GH_TIMEOUT_MS) {
   }
 }
 
-/** Combined stdout/stderr, trimmed, for error surfaces. */
 export function processError(result, fallback) {
   const text = `${result.stderr ?? ''}\n${result.stdout ?? ''}`.trim();
   if (!text) return fallback;
-  // gh prefixes hard failures with a cross; strip it so the UI can style its own.
   return text.replace(/^[Xx✗]\s+/, '').split('\n').slice(0, 6).join('\n');
 }
 
 /**
- * Classify a git remote URL by hosting provider.
- * Handles ssh (`git@host:owner/repo`), scp-ish, and https forms.
  * @param {string} url
  * @returns {{ host: string, slug: string, hostname: string }}
  */
@@ -95,7 +77,6 @@ export function parseRemoteHost(url) {
   return { host, slug, hostname };
 }
 
-/** Read `origin` (or the first remote) URL without going through git-ops. */
 async function readRemoteUrl(cwd) {
   const origin = await runProcess('git', ['remote', 'get-url', 'origin'], {
     cwd,
@@ -114,10 +95,6 @@ async function readRemoteUrl(cwd) {
   return named.code === 0 ? named.stdout.trim() : '';
 }
 
-/**
- * Probe what the forge layer can actually do here.
- * Never throws — every failure mode becomes a `reason` the UI can render.
- */
 export async function forgeStatus({ cwd, refresh } = {}) {
   const root = resolveCwd(cwd);
 
@@ -218,8 +195,6 @@ async function probeForgeStatus(root) {
   };
 }
 
-/** Gate every forge op behind a usable gh + supported remote. */
-/** Gate every forge call on a GitHub remote plus working `gh` auth. */
 export async function requireForge(cwd) {
   const root = resolveCwd(cwd);
   const status = await forgeStatus({ cwd: root });
@@ -229,7 +204,6 @@ export async function requireForge(cwd) {
   return { ok: true, cwd: root, status };
 }
 
-/** Parse gh --json output; gh emits `[]`/`{}` or nothing. */
 export function parseJson(stdout, fallback) {
   const text = String(stdout ?? '').trim();
   if (!text) return fallback;
@@ -260,7 +234,6 @@ const PR_LIST_FIELDS = [
   'statusCheckRollup',
 ].join(',');
 
-/** Collapse a statusCheckRollup array into one word the UI can colour. */
 export function rollupConclusion(rollup) {
   const list = Array.isArray(rollup) ? rollup : [];
   if (list.length === 0) return 'none';
@@ -269,7 +242,6 @@ export function rollupConclusion(rollup) {
   let failing = false;
 
   for (const check of list) {
-    // CheckRun uses status/conclusion; StatusContext uses state.
     const status = String(check?.status ?? '').toUpperCase();
     const conclusion = String(check?.conclusion ?? check?.state ?? '').toUpperCase();
 
@@ -289,7 +261,6 @@ export function rollupConclusion(rollup) {
   return 'success';
 }
 
-/** Flatten one gh PR record into the shape the client renders. */
 function normalizePr(pr) {
   const rollup = Array.isArray(pr?.statusCheckRollup) ? pr.statusCheckRollup : [];
   return {
@@ -317,7 +288,6 @@ function normalizePr(pr) {
   };
 }
 
-/** List pull requests. `state` is one of open | closed | merged | all. */
 export async function prList({ cwd, state = 'open', limit = 50 } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -346,7 +316,6 @@ const PR_VIEW_FIELDS = [
   'mergeStateStatus',
 ].join(',');
 
-/** Full detail for one pull request, including changed files and reviews. */
 export async function prView({ cwd, number } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -398,7 +367,6 @@ export async function prView({ cwd, number } = {}) {
   };
 }
 
-/** Unified diff for one pull request. */
 export async function prDiff({ cwd, number } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -410,7 +378,6 @@ export async function prDiff({ cwd, number } = {}) {
   return { ok: true, patch: result.stdout };
 }
 
-/** Open a pull request from the current branch. */
 export async function prCreate({ cwd, title, body, base, draft, web } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -438,7 +405,6 @@ export async function prCreate({ cwd, title, body, base, draft, web } = {}) {
 
 const MERGE_FLAG = { merge: '--merge', squash: '--squash', rebase: '--rebase' };
 
-/** Merge a pull request. `method` is merge | squash | rebase. */
 export async function prMerge({ cwd, number, method = 'squash', deleteBranch, auto } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -457,7 +423,6 @@ export async function prMerge({ cwd, number, method = 'squash', deleteBranch, au
   return { ok: true, stdout: result.stdout.trim() };
 }
 
-/** Check out a pull request branch locally. */
 export async function prCheckout({ cwd, number } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -469,7 +434,6 @@ export async function prCheckout({ cwd, number } = {}) {
   return { ok: true, stdout: result.stdout.trim() };
 }
 
-/** Take a pull request out of draft. */
 export async function prReady({ cwd, number } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -481,7 +445,6 @@ export async function prReady({ cwd, number } = {}) {
   return { ok: true };
 }
 
-/** Close a pull request without merging. */
 export async function prClose({ cwd, number, deleteBranch } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -512,10 +475,6 @@ const RUN_LIST_FIELDS = [
   'url',
 ].join(',');
 
-/**
- * A workflow with no `name:` key reports its file path as the name. Show the
- * basename so the list reads as workflow names rather than repeated paths.
- */
 export function displayWorkflowName(workflowName) {
   const raw = String(workflowName ?? '').trim();
   if (!raw.includes('/') && !raw.includes('\\')) return raw;
@@ -542,7 +501,6 @@ function normalizeRun(run) {
   };
 }
 
-/** List recent workflow runs, optionally scoped to one branch. */
 export async function runList({ cwd, branch, limit = 25 } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -553,7 +511,6 @@ export async function runList({ cwd, branch, limit = 25 } = {}) {
 
   const result = await gh(args, gate.cwd);
   if (result.code !== 0) {
-    // A repo with Actions disabled is a normal state, not an error worth shouting about.
     const text = processError(result, 'Could not list workflow runs');
     if (/no workflow|not enabled|disabled/i.test(text)) {
       return { ok: true, runs: [], note: 'No GitHub Actions workflows in this repository.' };
@@ -565,7 +522,6 @@ export async function runList({ cwd, branch, limit = 25 } = {}) {
   return { ok: true, runs: (Array.isArray(raw) ? raw : []).map(normalizeRun) };
 }
 
-/** One workflow run with its jobs and steps. */
 export async function runView({ cwd, id } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -607,7 +563,6 @@ export async function runView({ cwd, id } = {}) {
   };
 }
 
-/** Re-run a workflow run, optionally only its failed jobs. */
 export async function runRerun({ cwd, id, failedOnly } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -622,7 +577,6 @@ export async function runRerun({ cwd, id, failedOnly } = {}) {
   return { ok: true };
 }
 
-/** Cancel an in-progress workflow run. */
 export async function runCancel({ cwd, id } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -634,7 +588,6 @@ export async function runCancel({ cwd, id } = {}) {
   return { ok: true };
 }
 
-/** Tail of a run's log — failed steps only by default, since that is what gets read. */
 export async function runLog({ cwd, id, jobId, failedOnly = true, maxLines = 400 } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -661,7 +614,6 @@ export async function runLog({ cwd, id, jobId, failedOnly = true, maxLines = 400
   };
 }
 
-/** Drop the cached forge probe (workspace switch, `gh auth login` in the terminal). */
 export function invalidateForgeStatusCache(cwd) {
   if (cwd) statusCache.delete(resolveCwd(cwd));
   else statusCache.clear();

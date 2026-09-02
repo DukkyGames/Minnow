@@ -1,7 +1,3 @@
-/**
- * Full settings page with category hash routing (MIN-130).
- */
-
 import '../styles/settings-page.css';
 import '../styles/settings-agent-center.css';
 
@@ -80,6 +76,8 @@ let pendingScrollArea: SettingsSectionId | null = null;
 /** Pending field flash after navigation. */
 let pendingSearchKey: string | null = null;
 
+// ── Queries ──────────────────────────────────────────────────────────────────
+
 function getSettingsRoot(): HTMLElement | null {
   return document.getElementById('settingsView');
 }
@@ -98,6 +96,8 @@ function isSettingsCategoryId(value: string): value is SettingsCategoryId {
   return CATEGORIES.includes(value as SettingsCategoryId);
 }
 
+// ── Hash ─────────────────────────────────────────────────────────────────────
+
 /** Write area hash unless OS-embedded (no hash mutation). */
 function writeSettingsHash(slug: string): void {
   if (isOsEmbedded()) return;
@@ -115,8 +115,6 @@ function syncSettingsOsWindowChrome(): void {
   const root = getSettingsRoot();
   if (!root) return;
   const inWindow = Boolean(root.closest('.mn-os-window-body'));
-  // Only add here — app-host stashWindowContent removes the class on unmount.
-  // toggle(false) during reparent/async open was stripping inset styles mid-flight.
   if (inWindow) {
     root.classList.add(SETTINGS_IN_OS_WINDOW_CLASS);
     const osWindow = root.closest('.mn-os-window');
@@ -187,6 +185,8 @@ function syncAreaVisibility(area: SettingsSectionId): void {
     section.classList.toggle('is-active', section.dataset.area === area);
   });
 }
+
+// ── Area ─────────────────────────────────────────────────────────────────────
 
 /** Activate a settings area (primary navigation). */
 export function setActiveArea(
@@ -417,6 +417,8 @@ function osEmbeddedSettingsLaunchOptions(
   return launchOptions;
 }
 
+// ── Open ─────────────────────────────────────────────────────────────────────
+
 /** Open settings; optional legacy area slug or field search key for deep link. */
 export function openSettings(
   section?: SettingsSectionId,
@@ -424,7 +426,6 @@ export function openSettings(
 ): void {
   if (isOsEmbedded()) {
     const foreground = getForegroundAppId();
-    // App-host calls openSettings after foregrounding Settings — apply section in-place.
     if (foreground !== 'settings') {
       launchApp('settings', osEmbeddedSettingsLaunchOptions(section, options));
       return;
@@ -506,7 +507,6 @@ export function closeSettings(options?: { skipNavigate?: boolean }): void {
   const root = getSettingsRoot();
   const shell = getChatShell();
   if (!root || !shell) return;
-  // Skip desktop fallback when Settings is already closed (duplicate back handlers).
   const wasOpen = root.classList.contains('is-open');
   root.classList.remove('is-open');
   clearSettingsPageFilter();
@@ -537,7 +537,6 @@ function onHashChange(): void {
     if (!getSettingsRoot()?.classList.contains('is-open')) {
       openSettings(route.scrollArea);
     } else if (route.scrollArea) {
-      // Skip when the hash was just written by setActiveArea (avoids double refresh on first open).
       if (route.scrollArea === activeArea && !pendingSearchKey) return;
       setActiveArea(route.scrollArea, { skipHash: true });
     } else {
@@ -555,10 +554,10 @@ function onHashChange(): void {
   }
 }
 
+// ── Init ─────────────────────────────────────────────────────────────────────
+
 /** Wire nav, back button, hash routing, and in-page filter hooks. */
 export function initSettingsPage(): void {
-  // Idempotent: a second bind would stack back handlers that fall through to desktop
-  // after the first handler already restored Code.
   if (pageInitialized) return;
   pageInitialized = true;
 

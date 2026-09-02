@@ -1,7 +1,3 @@
-/**
- * Collapse archived history ranges to zero-cost placeholders in API messages (pure).
- */
-
 import type { ApiMessage } from '../../types';
 import type { ArchiveHistoryRange, ArchivePreResult } from './types';
 import { historyIndexOfApiMessage } from '../api-message-origin';
@@ -35,17 +31,6 @@ function isArchivedPlaceholder(msg: ApiMessage): boolean {
   );
 }
 
-/**
- * Replace API messages for archived history ranges with synthetic system placeholders.
- *
- * Each outbound message carries the history row it was built from
- * (see `api-message-origin.ts`). Rows without one — screenshot follow-ups,
- * synthesized tool results, the ephemeral continue instruction — belong to the
- * message before them and are collapsed or kept alongside it. The earlier
- * `history index i lives at API index systemEnd + i` assumption drifted the moment
- * a UI-only row was skipped or a tool pair was repaired, which slid the collapse
- * window onto live turns.
- */
 export function replaceArchivedRangesWithPlaceholder(
   messages: ApiMessage[],
   ranges: ArchiveHistoryRange[],
@@ -60,8 +45,6 @@ export function replaceArchivedRangesWithPlaceholder(
 
   const systemEnd = countPinnedSystemMessages(messages);
 
-  // Message lists that never went through buildApiMessages (headless senders,
-  // hand-built fixtures) carry no origin tags — walk them positionally as before.
   const hasTags = messages
     .slice(systemEnd)
     .some((message) => historyIndexOfApiMessage(message) !== undefined);
@@ -72,13 +55,11 @@ export function replaceArchivedRangesWithPlaceholder(
   const out: ApiMessage[] = messages.slice(0, systemEnd);
   const emitted = new Set<ArchiveHistoryRange>();
   let archived = 0;
-  // History row the current message hangs off, for rows that carry no tag.
   let carrier: number | undefined;
 
   for (let apiIdx = systemEnd; apiIdx < messages.length; apiIdx += 1) {
     const message = messages[apiIdx];
 
-    // A placeholder from a previous pass stands for a range already collapsed.
     if (isArchivedPlaceholder(message)) {
       out.push(message);
       carrier = undefined;
@@ -91,12 +72,10 @@ export function replaceArchivedRangesWithPlaceholder(
       historyIndex = tagged;
       carrier = tagged;
     } else if (isToolImageFollowUpMessage(message) || message.role === 'tool') {
-      // A screenshot follow-up or a synthesized tool result belongs to the row before it.
       historyIndex = carrier;
     }
 
     if (historyIndex === undefined) {
-      // Nothing to hang off — an ephemeral instruction or folded preamble. Keep it.
       out.push(message);
       carrier = undefined;
       continue;
@@ -117,11 +96,6 @@ export function replaceArchivedRangesWithPlaceholder(
   return { messages: out, archived };
 }
 
-/**
- * Legacy positional walk: history index i sits at API index systemEnd + i, with
- * screenshot follow-ups consuming no history index. Only correct for message lists
- * that no builder tagged — see {@link replaceArchivedRangesWithPlaceholder}.
- */
 function collapseByPosition(
   messages: ApiMessage[],
   ranges: ArchiveHistoryRange[],

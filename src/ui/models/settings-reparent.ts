@@ -1,7 +1,3 @@
-/**
- * Reparent a settings section DOM node into the Models app while active.
- */
-
 import { refreshSettingsSection } from '../settings-sections';
 import { categoryForArea } from '../settings-page-types';
 import type { SettingsSectionId } from '../settings-page-types';

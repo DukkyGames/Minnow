@@ -1,8 +1,3 @@
-/**
- * Throttled aria-live announcements for streaming assistant prose.
- * DOM updates on every token must not spam screen readers; this region updates on a cadence.
- */
-
 const ANNOUNCE_INTERVAL_MS = 3000;
 const COMPLETE_PREFIX = 'Response complete. ';
 
@@ -46,7 +41,6 @@ export function beginStreamAnnouncer(wrap: HTMLElement): void {
 export function announceStreamingProse(markdown: string): void {
   if (!activeWrap) return;
 
-  // Rate-limit BEFORE summarizeProse — summarizing the whole reply every tick was O(n²).
   const now = Date.now();
   const isFirst = lastSnippet.length === 0;
   if (!isFirst && now - lastAnnouncedAt < ANNOUNCE_INTERVAL_MS) return;

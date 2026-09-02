@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Open the system default browser for a URL (platform-specific).
- * Shared by server.js and the Electron launcher fallback path.
- */
 
 import { spawn } from 'node:child_process';
 

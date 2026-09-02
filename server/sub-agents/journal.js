@@ -1,17 +1,3 @@
-/**
- * Sub-agent journal binding (P8-D / MIN-757).
- *
- * Thin wrap of P8-B's generic store onto namespace `'agents'`, so a parent
- * chat's runs live at `~/.minnow/agents/<parentChatId>/journal.jsonl`. The
- * graph fold and event schema are this directory's, not the board ones —
- * dumping sub-agent payloads into board `EVENT_SCHEMAS` would couple two
- * journals that share only an envelope.
- *
- * Snapshots are omitted on purpose: a parent chat's journal is small (one
- * run, a handful of attempts) and P8-F can add memoisation if replay ever
- * shows up in a profile. A snapshot is a cache, never a source.
- */
-
 import { AGENTS_NAMESPACE, derive } from './derive.js';
 import { validateEvent } from './events.js';
 import { createJournalStore } from '../orchestrator/journal-store.js';

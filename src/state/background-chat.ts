@@ -84,8 +84,6 @@ export function ensureBackgroundChat(
   touchChat(chat);
   scheduleSaveSessions();
 
-  // Sidebar only — deliberately no activeId write, no chat repaint, no model
-  // select sync: the user stays exactly where they were.
   if (typeof document !== 'undefined') {
     void import('../ui/sidebar.ts')
       .then((m) => m.renderSidebar())

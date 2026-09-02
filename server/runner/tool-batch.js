@@ -1,11 +1,3 @@
-/**
- * Bounded parallel + sequential execution for one assistant tool_calls batch.
- *
- * Port of `src/tools/execute-tool-batch.ts` + `parse-tool-arguments.ts` +
- * `src/lib/concurrency-pool.ts`. Same abort / onToolDone invariants as the
- * renderer path so a skipped call cannot orphan a `tool_call_id`.
- */
-
 import {
   MAX_PARALLEL_READ_TOOLS,
   partitionToolCalls,
@@ -19,8 +11,6 @@ export const TOOL_ARGUMENTS_EMPTY =
   'Tool arguments were empty. Retry the tool call with a complete JSON object for all required fields.';
 
 /**
- * Parse a tool arguments string into a plain object.
- * Legacy mode returns `{}` on failure; constrained mode surfaces an error message.
  * @param {string} raw
  * @param {{ constrained?: boolean }} [options]
  * @returns {{ args: Record<string, unknown>, parseError?: string }}
@@ -51,8 +41,6 @@ export function parseToolArguments(raw, options = {}) {
 }
 
 /**
- * Run work items with a bounded worker pool. Results preserve input order but
- * only cover items that actually ran (an abort leaves gaps, filled by the batch).
  * @template T
  * @template R
  * @param {{
@@ -105,8 +93,6 @@ async function runSingleToolCall(tc, options) {
     constrained: options.constrained,
   });
 
-  // onToolDone appends the `tool` history row. An aborted call still has to
-  // route through it — otherwise the assistant tool_call is left orphaned.
   if (options.signal?.aborted) {
     const stopped = {
       toolCall: tc,
@@ -134,12 +120,6 @@ async function runSingleToolCall(tc, options) {
 }
 
 /**
- * Execute tool calls with parallel segments for read-only tools and sequential
- * segments for mutating / interactive tools. Outcomes are in original order.
- *
- * Invariant: every call in `toolCalls` produces exactly one `onToolDone`, even
- * when the batch is aborted.
- *
  * @param {{
  *   toolCalls: object[],
  *   constrained?: boolean,
@@ -157,7 +137,6 @@ export async function executeToolCallBatch(options) {
   /** @type {Map<string, object>} */
   const outcomeById = new Map();
 
-  /** Emit a stopped outcome for any call that never ran, in call order. */
   function fillStopped(calls) {
     for (const tc of calls) {
       if (outcomeById.has(tc.id)) {

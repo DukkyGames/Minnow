@@ -1,8 +1,3 @@
-/**
- * Defer programmatic mode switches until the active chat finishes streaming
- * (mirrors pendingSteerMessage — safe for renderChatFromHistory after tool handoff).
- */
-
 import type { ModeId } from './modes/types';
 import type { Chat } from '../types';
 import { isChatStreaming } from './streaming-state';
@@ -24,10 +19,6 @@ export function clearPendingMode(chat: Chat): void {
   scheduleSaveSessions();
 }
 
-/**
- * Apply queued mode after stream end. No-op while the chat is still streaming.
- * Call from runChatTurn finally after setStreaming(false).
- */
 export function flushPendingMode(chat: Chat): SetChatModeResult | null {
   const modeId = chat.pendingModeId;
   if (!modeId) return null;

@@ -1,15 +1,6 @@
-/**
- * One-shot CDP element resolution at a guest (x, y) point.
- *
- * Shared with the Design Mode pick session (`preview-cdp-pick.ts`): both paths fetch the same
- * DOM/CSS payload and adapt it via `adaptCdpRawPick`. The context-menu "Send to chat" path
- * attaches briefly, resolves, then detaches — unlike the persistent pick session.
- */
-
 import type { WebContents } from 'electron';
 import { adaptCdpRawPick, type CdpPickedElement } from './preview-cdp-adapt.js';
 
-/** Minimal shape of the Electron `Debugger` API this module drives. */
 export interface DebuggerLike {
   isAttached(): boolean;
   attach(protocolVersion?: string): void;
@@ -21,10 +12,6 @@ export type ResolveElementAtPointResult =
   | { ok: true; picked: CdpPickedElement }
   | { ok: false; error: string };
 
-/**
- * Fetch DOM/CSS details for a backend node and adapt to the shared pick shape.
- * Caller owns debugger attach/detach and document priming.
- */
 export async function fetchCdpNodeAsPicked(
   dbg: DebuggerLike,
   backendNodeId: number,
@@ -58,7 +45,6 @@ export async function fetchCdpNodeAsPicked(
         .catch(() => ({ computedStyle: [] }))
     : { computedStyle: [] };
 
-  // Stamp data-mn-uid so region-capture / re-query can find the node (best-effort).
   if (nodeId) {
     await dbg
       .sendCommand('DOM.setAttributeValue', {
@@ -67,7 +53,6 @@ export async function fetchCdpNodeAsPicked(
         value: String(uid),
       })
       .catch(() => {
-        /* picking still works without the persisted uid attribute */
       });
   }
 
@@ -87,19 +72,11 @@ export async function fetchCdpNodeAsPicked(
 }
 
 export interface ResolveElementAtPointOptions {
-  /**
-   * When true, refuse to attach/use CDP if a Design Mode pick session already owns the debugger.
-   * Prevents tearing down an armed Select overlay mid-pick.
-   */
   pickSessionActive?: boolean;
-  /** Stable uid stamped onto the node (defaults to 1 for one-shot resolves). */
   uid?: number;
 }
 
-/**
- * Resolve the topmost element under guest CSS coordinates `(x, y)`.
- * Attaches CDP when needed; detaches only when this call performed the attach.
- */
+// Detach only when this call attached; leave DevTools and other owners alone.
 export async function resolveElementAtPoint(
   wc: WebContents,
   x: number,
@@ -130,11 +107,9 @@ export async function resolveElementAtPoint(
     await dbg.sendCommand('CSS.enable');
     await dbg.sendCommand('Runtime.enable');
 
-    // DOM agent needs a document fetch before backendNodeId resolution works.
     try {
       await dbg.sendCommand('DOM.getDocument', { depth: -1, pierce: true });
     } catch {
-      /* guest mid-navigation — getNodeForLocation may still succeed after enable */
     }
 
     const located = await dbg.sendCommand('DOM.getNodeForLocation', {
@@ -157,12 +132,10 @@ export async function resolveElementAtPoint(
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, error: message };
   } finally {
-    // Only detach when we attached — leave DevTools / other owners alone.
     if (attachedByUs && dbg.isAttached()) {
       try {
         dbg.detach();
       } catch {
-        /* already detached */
       }
     }
   }

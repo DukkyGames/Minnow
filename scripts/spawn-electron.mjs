@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Compile (if needed) and launch the Minnow Electron shell against a running dev server.
- * Used by `npm start` (desktop default) and `scripts/electron-dev.mjs`.
- */
 
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -19,7 +15,6 @@ function electronPackageDir() {
   return path.join(repoRoot, 'node_modules', 'electron');
 }
 
-/** Resolve the platform Electron executable (not the .cmd shim). */
 function electronBinaryPath() {
   try {
     return require('electron');
@@ -64,7 +59,6 @@ function electronOutputsExist() {
   return fs.existsSync(mainJsPath()) && fs.existsSync(preloadMjsPath());
 }
 
-/** Source .ts files + tsconfig whose changes must trigger a recompile. */
 function electronSourceFiles() {
   const electronDir = path.join(repoRoot, 'electron');
   try {
@@ -84,17 +78,11 @@ function newestMtimeMs(files) {
       const { mtimeMs } = fs.statSync(file);
       if (mtimeMs > newest) newest = mtimeMs;
     } catch {
-      /* ignore unreadable file */
     }
   }
   return newest;
 }
 
-/**
- * Build is fresh only if the outputs exist AND no electron source file is newer
- * than the compiled output. Mtime check catches edits and newly-added files —
- * an existence-only check silently runs a stale main process (see MIN-262).
- */
 export function isElectronBuildFresh() {
   if (!electronOutputsExist()) return false;
   let outMtime;
@@ -109,7 +97,6 @@ export function isElectronBuildFresh() {
   return newestMtimeMs(electronSourceFiles()) <= outMtime;
 }
 
-/** Compile electron/dist when missing or stale (exported for parallel dev startup). */
 export async function ensureElectronBuild() {
   if (isElectronBuildFresh()) return;
   const reason = electronOutputsExist() ? 'sources changed' : 'first run';

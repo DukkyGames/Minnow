@@ -290,7 +290,6 @@ export async function saveUserRules(settings: UserRulesSettings): Promise<void> 
   bumpPromptConfigEpoch();
 
   const serverUp = await detectConfigServer();
-  // StorageMode is a string; 'localStorage' is truthy and must not trigger a PUT.
   if (!isConfigServerMode(serverUp)) return;
 
   await putRules(normalized);

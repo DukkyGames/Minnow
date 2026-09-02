@@ -214,8 +214,6 @@ export async function runCapabilityProbe(
     return { skipped: true, skipReason: reason, verdict: 'n-a', reason };
   }
 
-  // Every probe gets the baseline prompt; a mode row appends its lite body below it, the
-  // same layering `composeSystemPrompt` gives a chat turn.
   const systemParts: string[] = [CAPABILITY_PROBE_SYSTEM_PROMPT];
   if (probe.modeId) {
     const modePrompt = loadModePromptBody(probe.modeId, 'lite');
@@ -246,8 +244,6 @@ export async function runCapabilityProbe(
       executedResults.push(result.content);
       return result;
     } catch (err) {
-      // `runHeadlessToolBatch` turns this into a tool message for the model; record it
-      // too so a verdict reading `executedResults` sees the failure rather than a gap.
       executedResults.push(`Error: ${err instanceof Error ? err.message : String(err)}`);
       throw err;
     }
@@ -257,9 +253,6 @@ export async function runCapabilityProbe(
   const timeoutMs = ctx.perTestTimeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
 
   const offeredToolNames = tools.map((t) => t.function.name);
-  // Whatever the driver had produced when the clock ran out. Without this a timeout
-  // discards the run and the cell shows `fail` over an empty transcript, hiding both the
-  // work the model did and the reason it was too slow.
   let partial: OneShotResult | undefined;
 
   try {
@@ -299,9 +292,6 @@ export async function runCapabilityProbe(
 
     const out = probeOutputFromOneShot(oneShot, rounds, executedResults, offeredToolNames);
     const judged = probe.verdict(out);
-    // Say when the transcript ends mid-chain. Without this the cell reports "started a
-    // background run but never stopped it" for a model that was cut off on its way to
-    // the stop call, and the transcript just stops with no explanation.
     const cutOff = judged.verdict !== 'pass' && hitRoundCap(rounds, maxRounds);
     const notes: string[] = [];
     if (cutOff) notes.push(`cut off at the ${maxRounds}-round cap`);
@@ -316,7 +306,6 @@ export async function runCapabilityProbe(
     rethrowIfAborted(err, ctx.signal);
     const message = err instanceof Error ? err.message : String(err);
     if (partial) {
-      // Score what the model actually produced, then say why it was cut short.
       const out = probeOutputFromOneShot(partial, rounds, executedResults, offeredToolNames);
       const judged = probe.verdict(out);
       return {

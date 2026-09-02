@@ -1,10 +1,3 @@
-/**
- * Wires Electron preview guest context-menu IPC to the DOM menu + action dispatch.
- *
- * Send to chat reuses the Design Mode Select pipeline: CDP resolve → region capture →
- * elementRef composer chip (no auto-send, no panel switch).
- */
-
 import { addElementRefToComposer } from '../attachments/element-ref';
 import { captureRegion } from '../design/region-capture';
 import type {
@@ -256,10 +249,7 @@ function onContextMenuSelect(
   void dispatchMenuAction(payload, item);
 }
 
-/**
- * Subscribe to preview context-menu renderer actions (Send to chat, Open in new tab).
- * The menu itself is shown in the main process at the click position.
- */
+/** Subscribe to preview context-menu renderer actions (Send to chat, Open in new tab). */
 export function initPreviewContextMenuHandler(): void {
   if (initialized) return;
   initialized = true;

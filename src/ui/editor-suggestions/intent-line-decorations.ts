@@ -1,7 +1,3 @@
-/**
- * Intent line chrome — decorate only the cursor line (visible ranges), not the whole doc.
- */
-
 import { RangeSetBuilder } from '@codemirror/state';
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from '@codemirror/view';
 import { classifyIntentLine, isIntentEligibleLanguage, lineCommentForLanguage } from './intent-heuristic';

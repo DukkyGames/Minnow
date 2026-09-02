@@ -1,8 +1,3 @@
-/**
- * Global default model (#modelSelect) — separate from per-chat model bindings.
- * The menubar chip and header picker edit this; composer triggers edit the active chat.
- */
-
 import {
   applyModelSelectValueToChat,
   decodeModelSelectKey,
@@ -29,14 +24,10 @@ export function persistDefaultModelValue(value: string): void {
     if (trimmed) localStorage.setItem(DEFAULT_MODEL_STORAGE_KEY, trimmed);
     else localStorage.removeItem(DEFAULT_MODEL_STORAGE_KEY);
   } catch {
-    /* private mode / quota */
   }
 }
 
-/**
- * Refresh provider/model on a chat that already has a per-chat binding.
- * Never reads the global #modelSelect default — only the catalog option for this chat.
- */
+/** Refresh provider/model on a chat that already has a per-chat binding. */
 export function syncPerChatModelBindingFromCatalog(chat: ModelSelectChatBinding): void {
   const mid = chat.modelId?.trim();
   if (!mid) return;
@@ -63,10 +54,7 @@ export function resolveDefaultModelSelectValue(optionValues: readonly string[]):
   return '';
 }
 
-/**
- * Effective model for a chat turn: chat binding first, then the global default.
- * Does not mutate chat — callers apply defaults when seeding empty chats.
- */
+/** Effective model for a chat turn: chat binding first, then the global default. */
 export function resolveEffectiveChatModelBinding(
   chat: ModelSelectChatBinding,
 ): { modelId: string; providerId?: string; selectValue: string } {

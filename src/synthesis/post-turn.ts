@@ -21,7 +21,6 @@ export function stripThinkingForExcerpt(text: string): string {
   if (split.thinking.length > 0 && split.reply.trim()) {
     return split.reply.trim();
   }
-  // Fallback for unclosed tags or shapes extractInlineThinkingFromContent does not split.
   let value = raw;
   const patterns = [
     /<think>[\s\S]*?<\/redacted_thinking>\s*/gi,

@@ -99,12 +99,10 @@ fs.accessSync(path.join(root, 'a.txt'));
 fs.accessSync(path.join(root, 'b.txt'));
 `;
 
-  // Plain node scripts, not nested `node --test` (parent runner can swallow that exit).
   const unit =
     variant === 'unit-fail'
       ? `console.error('expected 2 === 3');\nprocess.exit(1);\n`
       : `console.log('unit ok');\n`;
-
 
   await fsp.writeFile(path.join(dir, 'rungs', 'typecheck.mjs'), typecheck, 'utf8');
   await fsp.writeFile(
@@ -258,6 +256,8 @@ async function waitUntil(predicate, timeoutMs, label) {
   assert.fail(`timed out waiting for ${label}`);
 }
 
+// ── P3-F ladder resolution ───────────────────────────────────────────────────
+
 describe('P3-F ladder resolution (no Minnow npm test)', () => {
   test('checklist maps the four rungs', () => {
     const mapped = parseVerificationChecklist(CHECKLIST);
@@ -298,6 +298,8 @@ describe('P3-F ladder resolution (no Minnow npm test)', () => {
   });
 });
 
+// ── P3-F merge-queue ─────────────────────────────────────────────────────────
+
 describe('P3-F merge-queue stays model-free', () => {
   test('merge-queue.js does not import the ladder or a runner', () => {
     const source = fs.readFileSync(MERGE_QUEUE_JS, 'utf8');
@@ -319,6 +321,8 @@ describe('P3-F merge-queue stays model-free', () => {
   });
 });
 
+// ── P3-F scripted effector ───────────────────────────────────────────────────
+
 describe('P3-F scripted effector', () => {
   test('still instant-passes final (Phase 1 stays model-free and git-free)', async () => {
     const effector = createScriptedEffector();
@@ -338,6 +342,8 @@ describe('P3-F scripted effector', () => {
     assert.equal(end.outcome, 'pass');
   });
 });
+
+// ── P3-F fixture ladder ──────────────────────────────────────────────────────
 
 describe('P3-F fixture ladder (real commands, not Minnow)', { concurrency: false }, () => {
   /** @type {string | undefined} */

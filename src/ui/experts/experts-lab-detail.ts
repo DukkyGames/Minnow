@@ -1,11 +1,3 @@
-/**
-
- * Experts' Lab detail pane — tabbed overview, runtime, memory, and chats.
-
- */
-
-
-
 import type { ExpertRuntimeProfile } from '../../chat/experts/types';
 
 import { getBuiltinExpertIds, getExpert, listExperts } from '../../chat/experts/registry';
@@ -71,11 +63,7 @@ import { appConfirm } from '../app-dialog';
 
 import type { ExpertAccent, ExpertMeta } from '../../chat/experts/types';
 
-
-
 export type ExpertsDetailTab = 'overview' | 'runtime' | 'memory' | 'chats';
-
-
 
 export interface ExpertsDetailContext {
 
@@ -111,11 +99,7 @@ export interface ExpertsDetailContext {
 
 }
 
-
-
 type ToolPolicyMode = 'inherit' | 'allowlist' | 'denylist';
-
-
 
 function buildReadonlyField(label: string, value: string): HTMLElement {
 
@@ -143,8 +127,6 @@ function buildReadonlyField(label: string, value: string): HTMLElement {
 
 }
 
-
-
 function buildPromptField(label: string, value: string): HTMLElement {
 
   const field = document.createElement('div');
@@ -171,15 +153,11 @@ function buildPromptField(label: string, value: string): HTMLElement {
 
 }
 
-
-
 function formatConfidence(value: number): string {
 
   return `${Math.round(value * 100)}%`;
 
 }
-
-
 
 function formatMemoryTimestamp(iso: string): string {
 
@@ -196,8 +174,6 @@ function formatMemoryTimestamp(iso: string): string {
   });
 
 }
-
-
 
 function setPanelStatus(mount: HTMLElement, kind: 'ok' | 'err' | 'info', message: string): void {
 
@@ -226,8 +202,6 @@ function setPanelStatus(mount: HTMLElement, kind: 'ok' | 'err' | 'info', message
   status.textContent = message;
 
 }
-
-
 
 function renderUntrustedExcerpt(excerpt: string | undefined): HTMLElement {
 
@@ -261,8 +235,6 @@ function renderUntrustedExcerpt(excerpt: string | undefined): HTMLElement {
 
 }
 
-
-
 function renderDetailTabs(ctx: ExpertsDetailContext, mount: HTMLElement): void {
 
   const tabs = document.createElement('div');
@@ -272,8 +244,6 @@ function renderDetailTabs(ctx: ExpertsDetailContext, mount: HTMLElement): void {
   tabs.setAttribute('role', 'tablist');
 
   tabs.setAttribute('aria-label', 'Expert sections');
-
-
 
   const tabDefs: { id: ExpertsDetailTab; label: string }[] = [
 
@@ -286,8 +256,6 @@ function renderDetailTabs(ctx: ExpertsDetailContext, mount: HTMLElement): void {
     { id: 'chats', label: 'Chats' },
 
   ];
-
-
 
   for (const def of tabDefs) {
 
@@ -323,8 +291,6 @@ function renderDetailTabs(ctx: ExpertsDetailContext, mount: HTMLElement): void {
 
 }
 
-
-
 function renderOverviewPanel(ctx: ExpertsDetailContext, expertId: string): HTMLElement {
 
   const panel = document.createElement('div');
@@ -334,8 +300,6 @@ function renderOverviewPanel(ctx: ExpertsDetailContext, expertId: string): HTMLE
   const expert = getExpert(expertId);
 
   if (!expert) return panel;
-
-
 
   if (expert.meta.tagline?.trim()) {
 
@@ -363,8 +327,6 @@ function renderOverviewPanel(ctx: ExpertsDetailContext, expertId: string): HTMLE
 
 }
 
-
-
 function initialToolPolicyMode(profile: ExpertRuntimeProfile): ToolPolicyMode {
 
   if (profile.toolAllowlist?.length) return 'allowlist';
@@ -374,8 +336,6 @@ function initialToolPolicyMode(profile: ExpertRuntimeProfile): ToolPolicyMode {
   return 'inherit';
 
 }
-
-
 
 function readToolPolicyFromForm(
 
@@ -409,8 +369,6 @@ function readToolPolicyFromForm(
 
 }
 
-
-
 function buildDraftProfile(
 
   expertId: string,
@@ -443,13 +401,9 @@ function buildDraftProfile(
 
   };
 
-
-
   const modeVal = opts.modeSelect.value.trim();
 
   if (modeVal) draft.modeId = normalizeModeId(modeVal);
-
-
 
   if (opts.modelOverride) {
 
@@ -475,15 +429,11 @@ function buildDraftProfile(
 
   }
 
-
-
   const toolPolicy = readToolPolicyFromForm(opts.toolPolicyMode, opts.toolInputs);
 
   if (toolPolicy.toolAllowlist?.length) draft.toolAllowlist = toolPolicy.toolAllowlist;
 
   if (toolPolicy.toolDenylist?.length) draft.toolDenylist = toolPolicy.toolDenylist;
-
-
 
   if (!draft.modeId && current.modeId) delete draft.modeId;
 
@@ -491,15 +441,11 @@ function buildDraftProfile(
 
 }
 
-
-
 function renderEffectiveRuntimeSummary(expertId: string, draft: ExpertRuntimeProfile): HTMLElement {
 
   const box = document.createElement('div');
 
   box.className = 'experts-runtime-summary';
-
-
 
   const active = getActiveChat();
 
@@ -517,8 +463,6 @@ function renderEffectiveRuntimeSummary(expertId: string, draft: ExpertRuntimePro
 
   };
 
-
-
   const config = getExpertsConfigSync();
 
   const mergedProfiles = { ...config.profiles, [expertId]: draft };
@@ -527,8 +471,6 @@ function renderEffectiveRuntimeSummary(expertId: string, draft: ExpertRuntimePro
 
   const seed = resolveExpertChatSeed(expertId, source, { ...config, profiles: mergedProfiles }, validation);
 
-
-
   const title = document.createElement('div');
 
   title.className = 'experts-field-label experts-mono';
@@ -536,8 +478,6 @@ function renderEffectiveRuntimeSummary(expertId: string, draft: ExpertRuntimePro
   title.textContent = 'EFFECTIVE RUNTIME (NEW CHATS)';
 
   box.appendChild(title);
-
-
 
   if ('error' in seed) {
 
@@ -552,8 +492,6 @@ function renderEffectiveRuntimeSummary(expertId: string, draft: ExpertRuntimePro
     return box;
 
   }
-
-
 
   const snap = seed.runtimeSnapshot;
 
@@ -585,8 +523,6 @@ function renderEffectiveRuntimeSummary(expertId: string, draft: ExpertRuntimePro
 
   box.appendChild(list);
 
-
-
   for (const warning of snap.warnings) {
 
     const warn = document.createElement('p');
@@ -599,13 +535,9 @@ function renderEffectiveRuntimeSummary(expertId: string, draft: ExpertRuntimePro
 
   }
 
-
-
   return box;
 
 }
-
-
 
 async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): Promise<HTMLElement> {
 
@@ -615,17 +547,11 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
 
   loadToolConfig();
 
-
-
   const config = getExpertsConfigSync();
 
   const profile = config.profiles[expertId] ?? {};
 
-
-
   panel.appendChild(buildReadonlyField('INHERITED MODEL', ctx.runtimeModelLabel(expertId)));
-
-
 
   const modelOverrideRow = document.createElement('label');
 
@@ -641,15 +567,11 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
 
   panel.appendChild(modelOverrideRow);
 
-
-
   const modelFields = document.createElement('div');
 
   modelFields.className = 'experts-runtime-model-fields';
 
   modelFields.hidden = !modelOverrideCheck.checked;
-
-
 
   const providerRow = document.createElement('div');
 
@@ -666,8 +588,6 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
   providerSelect.className = 'experts-edit-input';
 
   providerRow.append(providerLabel, providerSelect);
-
-
 
   const modelRow = document.createElement('div');
 
@@ -688,8 +608,6 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
   modelFields.append(providerRow, modelRow);
 
   panel.appendChild(modelFields);
-
-
 
   const modeRow = document.createElement('div');
 
@@ -731,8 +649,6 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
 
   panel.appendChild(modeRow);
 
-
-
   const memoryRow = document.createElement('label');
 
   memoryRow.className = 'experts-runtime-toggle';
@@ -746,8 +662,6 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
   memoryRow.append(memoryCheck, ' Expert long-term memory');
 
   panel.appendChild(memoryRow);
-
-
 
   const toolPolicyRow = document.createElement('div');
 
@@ -793,23 +707,17 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
 
   panel.appendChild(toolPolicyRow);
 
-
-
   const toolListMount = document.createElement('div');
 
   toolListMount.className = 'experts-tool-list';
 
   panel.appendChild(toolListMount);
 
-
-
   const toolInputs = new Map<string, HTMLInputElement>();
 
   const summaryMount = document.createElement('div');
 
   panel.appendChild(summaryMount);
-
-
 
   const refreshToolList = (): void => {
 
@@ -820,8 +728,6 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
     const policy = toolPolicySelect.value as ToolPolicyMode;
 
     toolListMount.hidden = policy === 'inherit';
-
-
 
     const modeId = profile.modeId ?? normalizeModeId(getActiveChat().modeId);
 
@@ -837,8 +743,6 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
 
     const denySet = new Set(profile.toolDenylist ?? []);
 
-
-
     if (policy === 'inherit') {
 
       refreshSummary();
@@ -846,8 +750,6 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
       return;
 
     }
-
-
 
     const hint = document.createElement('p');
 
@@ -862,8 +764,6 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
         : 'Checked tools are removed from the mode allowlist.';
 
     toolListMount.appendChild(hint);
-
-
 
     for (const def of defs) {
 
@@ -899,8 +799,6 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
 
   };
 
-
-
   const refreshSummary = (): void => {
 
     summaryMount.replaceChildren();
@@ -927,8 +825,6 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
 
   };
 
-
-
   modelOverrideCheck.addEventListener('change', () => {
 
     modelFields.hidden = !modelOverrideCheck.checked;
@@ -946,8 +842,6 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
   toolPolicySelect.addEventListener('change', refreshToolList);
 
   memoryCheck.addEventListener('change', refreshSummary);
-
-
 
   const initialProvider = profile.providerId ?? '';
 
@@ -973,8 +867,6 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
 
   modelSelect.addEventListener('change', refreshSummary);
 
-
-
   if (profile.providerId && profile.modelId) {
 
     const key = encodeModelSelectKey(profile.providerId, profile.modelId);
@@ -991,11 +883,7 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
 
   }
 
-
-
   refreshToolList();
-
-
 
   const saveBtn = document.createElement('button');
 
@@ -1039,13 +927,9 @@ async function renderRuntimePanel(ctx: ExpertsDetailContext, expertId: string): 
 
   panel.appendChild(saveBtn);
 
-
-
   return panel;
 
 }
-
-
 
 function renderMemoryProposalCard(
 
@@ -1060,8 +944,6 @@ function renderMemoryProposalCard(
   const card = document.createElement('article');
 
   card.className = 'experts-memory-card';
-
-
 
   const head = document.createElement('header');
 
@@ -1081,8 +963,6 @@ function renderMemoryProposalCard(
 
   head.append(title, meta);
 
-
-
   const titleInput = document.createElement('input');
 
   titleInput.type = 'text';
@@ -1092,8 +972,6 @@ function renderMemoryProposalCard(
   titleInput.value = proposal.title;
 
   titleInput.setAttribute('aria-label', 'Proposal title');
-
-
 
   const bodyInput = document.createElement('textarea');
 
@@ -1105,15 +983,11 @@ function renderMemoryProposalCard(
 
   bodyInput.setAttribute('aria-label', 'Proposal body');
 
-
-
   const rationale = document.createElement('p');
 
   rationale.className = 'experts-memory-hint';
 
   rationale.textContent = proposal.rationale || 'No rationale provided.';
-
-
 
   if (proposal.sourceChatId) {
 
@@ -1126,8 +1000,6 @@ function renderMemoryProposalCard(
     card.appendChild(source);
 
   }
-
-
 
   const actions = document.createElement('div');
 
@@ -1148,8 +1020,6 @@ function renderMemoryProposalCard(
   rejectBtn.className = 'experts-btn-ghost';
 
   rejectBtn.textContent = 'Reject';
-
-
 
   acceptBtn.addEventListener('click', () => {
 
@@ -1183,8 +1053,6 @@ function renderMemoryProposalCard(
 
   });
 
-
-
   rejectBtn.addEventListener('click', () => {
 
     void (async () => {
@@ -1206,8 +1074,6 @@ function renderMemoryProposalCard(
     })();
 
   });
-
-
 
   actions.append(acceptBtn, rejectBtn);
 
@@ -1231,8 +1097,6 @@ function renderMemoryProposalCard(
 
 }
 
-
-
 function renderSavedMemoryCard(
 
   entry: ExpertMemoryEntry,
@@ -1246,8 +1110,6 @@ function renderSavedMemoryCard(
   const card = document.createElement('article');
 
   card.className = 'experts-memory-card';
-
-
 
   const head = document.createElement('header');
 
@@ -1267,8 +1129,6 @@ function renderSavedMemoryCard(
 
   head.append(title, updated);
 
-
-
   const body = document.createElement('p');
 
   body.className = 'experts-memory-body-preview';
@@ -1278,8 +1138,6 @@ function renderSavedMemoryCard(
     ? entry.body.slice(0, 280)
 
     : 'No body stored.';
-
-
 
   const deleteBtn = document.createElement('button');
 
@@ -1322,15 +1180,11 @@ function renderSavedMemoryCard(
 
   });
 
-
-
   card.append(head, body, deleteBtn);
 
   return card;
 
 }
-
-
 
 async function renderMemoryPanel(ctx: ExpertsDetailContext, expertId: string): Promise<HTMLElement> {
 
@@ -1338,23 +1192,17 @@ async function renderMemoryPanel(ctx: ExpertsDetailContext, expertId: string): P
 
   panel.className = 'experts-detail-panel-section';
 
-
-
   const setStatus = (kind: 'ok' | 'err' | 'info', message: string): void => {
 
     setPanelStatus(panel, kind, message);
 
   };
 
-
-
   const reload = (): void => {
 
     ctx.onRefresh();
 
   };
-
-
 
   if (!isLocalServerAvailable()) {
 
@@ -1369,8 +1217,6 @@ async function renderMemoryPanel(ctx: ExpertsDetailContext, expertId: string): P
     return panel;
 
   }
-
-
 
   const memoryEnabled = await fetchMemoryEnabled();
 
@@ -1388,8 +1234,6 @@ async function renderMemoryPanel(ctx: ExpertsDetailContext, expertId: string): P
 
   }
 
-
-
   const [pending, saved] = await Promise.all([
 
     fetchMemoryProposals('pending', expertId),
@@ -1397,8 +1241,6 @@ async function renderMemoryPanel(ctx: ExpertsDetailContext, expertId: string): P
     fetchExpertMemories(expertId, true),
 
   ]);
-
-
 
   const pendingSection = document.createElement('section');
 
@@ -1411,8 +1253,6 @@ async function renderMemoryPanel(ctx: ExpertsDetailContext, expertId: string): P
   pendingLabel.textContent = `PENDING (${pending?.length ?? 0})`;
 
   pendingSection.appendChild(pendingLabel);
-
-
 
   if (!pending?.length) {
 
@@ -1436,8 +1276,6 @@ async function renderMemoryPanel(ctx: ExpertsDetailContext, expertId: string): P
 
   panel.appendChild(pendingSection);
 
-
-
   const savedSection = document.createElement('section');
 
   savedSection.className = 'experts-memory-section';
@@ -1453,8 +1291,6 @@ async function renderMemoryPanel(ctx: ExpertsDetailContext, expertId: string): P
   savedLabel.textContent = `SAVED (${saved?.length ?? 0})`;
 
   savedHead.appendChild(savedLabel);
-
-
 
   if (saved?.length) {
 
@@ -1505,8 +1341,6 @@ async function renderMemoryPanel(ctx: ExpertsDetailContext, expertId: string): P
 
   savedSection.appendChild(savedHead);
 
-
-
   if (!saved?.length) {
 
     const empty = document.createElement('p');
@@ -1529,13 +1363,9 @@ async function renderMemoryPanel(ctx: ExpertsDetailContext, expertId: string): P
 
   panel.appendChild(savedSection);
 
-
-
   return panel;
 
 }
-
-
 
 function renderChatsPanel(ctx: ExpertsDetailContext, expertId: string): HTMLElement {
 
@@ -1587,8 +1417,6 @@ function renderChatsPanel(ctx: ExpertsDetailContext, expertId: string): HTMLElem
 
 }
 
-
-
 /** Render the tabbed expert detail column into #expertsDetailMount. */
 
 export function renderExpertDetailTabbed(ctx: ExpertsDetailContext): void {
@@ -1599,15 +1427,11 @@ export function renderExpertDetailTabbed(ctx: ExpertsDetailContext): void {
 
   mount.replaceChildren();
 
-
-
   const expertId = ctx.selectedExpertId;
 
   const expert = getExpert(expertId);
 
   if (!expert) return;
-
-
 
   const builtinIds = getBuiltinExpertIds();
 
@@ -1616,8 +1440,6 @@ export function renderExpertDetailTabbed(ctx: ExpertsDetailContext): void {
   const experts = listExperts();
 
   const index = experts.findIndex((e) => e.meta.id === expertId);
-
-
 
   const head = document.createElement('div');
 
@@ -1655,19 +1477,13 @@ export function renderExpertDetailTabbed(ctx: ExpertsDetailContext): void {
 
   mount.appendChild(head);
 
-
-
   renderDetailTabs(ctx, mount);
-
-
 
   const panelMount = document.createElement('div');
 
   panelMount.className = 'experts-detail-tab-panel';
 
   mount.appendChild(panelMount);
-
-
 
   if (ctx.detailTab === 'overview') {
 
@@ -1687,8 +1503,6 @@ export function renderExpertDetailTabbed(ctx: ExpertsDetailContext): void {
 
   }
 
-
-
   const actions = document.createElement('div');
 
   actions.className = 'experts-detail-actions';
@@ -1704,8 +1518,6 @@ export function renderExpertDetailTabbed(ctx: ExpertsDetailContext): void {
   startBtn.addEventListener('click', ctx.onStartChat);
 
   actions.appendChild(startBtn);
-
-
 
   if (isUserOwnedExpert(expert, builtinIds)) {
 
@@ -1738,5 +1550,4 @@ export function renderExpertDetailTabbed(ctx: ExpertsDetailContext): void {
   mount.appendChild(actions);
 
 }
-
 

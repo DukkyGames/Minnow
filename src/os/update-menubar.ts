@@ -188,7 +188,6 @@ export function initUpdateMenubarPill(slot: HTMLElement): () => void {
         `Downloading update ${status.pendingVersion ?? ''} · ${status.progressPercent ?? 0}%`.trim(),
       );
       if (menuOpen && panel) {
-        // Refresh the open popover's progress line in place.
         const lead = panel.querySelector('.mn-os-update-menu__lead');
         if (lead) {
           lead.textContent = `Downloading ${status.pendingVersion ?? 'new version'} · ${status.progressPercent ?? 0}%`;
@@ -208,14 +207,12 @@ export function initUpdateMenubarPill(slot: HTMLElement): () => void {
         `Restart to update Minnow to version ${status.pendingVersion ?? 'latest'}`,
       );
       if (menuOpen && !wasReady) {
-        // Download finished while the popover was open — rebuild it as "Update ready".
         closeMenu();
         openMenu();
       }
       return;
     }
 
-    // Up to date / checking / error / unsupported: zero menubar noise.
     slot.hidden = true;
     pill.classList.remove('is-ready', 'is-downloading');
     closeMenu();

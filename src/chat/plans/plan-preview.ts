@@ -1,10 +1,3 @@
-/**
- * Parse plan markdown front matter and render a read-only preview panel.
- *
- * Presentation helper (hub / Super Plan / leftover planner chrome). Not a
- * board engine — moved out of `src/chat/orchestrate/` in MIN-714.
- */
-
 import { readWorkspaceTextFile } from '../../attachments/workspace-text-read.ts';
 import { setAssistantBubbleContent } from '../../markdown/renderer.ts';
 
@@ -100,6 +93,8 @@ function parseTodosBlock(lines: string[], startIndex: number): { todos: PlanPrev
   return { todos, next: i };
 }
 
+// ── Parse ────────────────────────────────────────────────────────────────────
+
 /**
  * Parse YAML front matter between `---` fences (name, overview, todos with id/content/status).
  */
@@ -147,10 +142,6 @@ export function splitPlanMarkdown(markdown: string): {
   return { parsed: parsePlanFrontMatter(markdown), bodyMarkdown };
 }
 
-/**
- * Markdown shown in hub / plan-screen previews: plan body after YAML, or a synthesized
- * document when the file only has front matter.
- */
 export function planMarkdownForDisplay(markdown: string): string {
   const trimmed = markdown.trim();
   if (!trimmed) return '';
@@ -180,10 +171,8 @@ export function planMarkdownForDisplay(markdown: string): string {
 /** Placeholder class when a plan file has no readable body (shared with plan screen + hub). */
 export const PLAN_PREVIEW_EMPTY_CLASS = 'orchestrate-plan-screen__preview-empty';
 
-/**
- * Load full plan/build-spec markdown for UI preview (not subject to read_file output cap).
- * `cacheBust` is appended as `?v=` so a stale HTTP 404 cannot stick after the file lands.
- */
+// ── Read ─────────────────────────────────────────────────────────────────────
+
 export async function readPlanArtifactMarkdown(
   path: string,
   options?: { cacheBust?: number },
@@ -196,6 +185,8 @@ export async function readPlanArtifactMarkdown(
     return '';
   }
 }
+
+// ── Mount ────────────────────────────────────────────────────────────────────
 
 /**
  * Paint plan markdown into a scroll host (full GFM body via assistant markdown renderer).

@@ -1,8 +1,3 @@
-/**
- * Accumulated reasoning-active wall time (SSE deltas only), not TTFT.
- * Segments pause between endReasoningPhase and the next reasoning delta (tool loops).
- */
-
 const TICK_MS = 100;
 
 /**

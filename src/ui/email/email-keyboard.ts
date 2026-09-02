@@ -1,12 +1,3 @@
-/**
- * Keyboard model for the mail surface.
- *
- * Single-key, Gmail-compatible bindings — the vocabulary power users already
- * have in their fingers. Shortcuts are suppressed while a text field or the
- * compose editor has focus, so typing "e" in a subject line never archives the
- * thread behind it.
- */
-
 export interface MailShortcutContext {
   next(): void;
   previous(): void;
@@ -47,10 +38,7 @@ export const MAIL_SHORTCUTS: ShortcutDoc[] = [
   { keys: '?', label: 'This list' },
 ];
 
-/**
- * Is the user typing? Shortcuts must not fire into a text field.
- * Exported because the reader pane checks it too.
- */
+/** Is the user typing? */
 export function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   const tag = target.tagName;
@@ -58,16 +46,11 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   return target.isContentEditable;
 }
 
-/**
- * Bind mail shortcuts to a root element.
- * @returns a teardown function
- */
 export function bindMailShortcuts(
   root: HTMLElement,
   context: MailShortcutContext,
 ): () => void {
   const onKeyDown = (event: KeyboardEvent): void => {
-    // Modified keys belong to the browser and to compose's Cmd+Enter.
     if (event.altKey || event.ctrlKey || event.metaKey) return;
     if (isTypingTarget(event.target)) return;
 

@@ -39,6 +39,8 @@ export interface ProviderCapabilitiesFile {
   models: Record<string, ModelCapabilities>;
 }
 
+// ── Cache ────────────────────────────────────────────────────────────────────
+
 const providerCapabilitiesCache = new Map<string, ProviderCapabilitiesFile>();
 
 let lastAppliedCapabilities: ProviderCapabilitiesFile | null = null;
@@ -154,6 +156,8 @@ function reasoningCatalogFromRow(
   };
 }
 
+// ── Catalog ──────────────────────────────────────────────────────────────────
+
 /** True when catalog row indicates multimodal vision (vlm type or LM Studio capabilities.vision). */
 export function catalogRowHasVision(row: LmModelRecord): boolean {
   return row.type === 'vlm' || row.catalogVision === true;
@@ -166,7 +170,6 @@ function resolveCatalogReasoningDefault(
   catalogDefault: ModelCapabilities['reasoningDefault'],
 ): ModelCapabilities['reasoningDefault'] {
   const options = allowed ?? [];
-  // Level defaults (low/medium/high/max) win; off/on are toggle states, not effort.
   if (
     catalogDefault &&
     options.includes(catalogDefault) &&
@@ -191,21 +194,18 @@ export function catalogCapabilitiesFromRow(
   const vision = catalogRowHasVision(row);
   const reasoningCaps = reasoningCatalogFromRow(row);
   let reasoningAllowedOptions = reasoningCaps.reasoningAllowedOptions;
-  // Infer when catalog is empty. Qwen3.8 / GLM-5.3 do not need apiKind (My Models / llama.cpp rows).
   if (!reasoningAllowedOptions || reasoningAllowedOptions.length === 0) {
     const inferred = inferReasoningOptionsFromModelId(row.id, resolvedApi);
     if (inferred.length > 0) {
       reasoningAllowedOptions = inferred;
     }
   }
-  // LM Studio often advertises Qwen3.8 as off/on; still expose Low/Medium/High.
   if (isQwen38ModelId(row.id)) {
     reasoningAllowedOptions = ensureQwen38ReasoningAllowedOptions(
       row.id,
       reasoningAllowedOptions ?? [],
     );
   }
-  // Z.ai GLM-5.3 catalogs may still list off/medium; force Low/High/Max.
   if (isGlm53ModelId(row.id)) {
     reasoningAllowedOptions = ensureGlm53ReasoningAllowedOptions(
       row.id,
@@ -335,6 +335,8 @@ function withFamilyReasoningLevels(
   return withGlm53ReasoningLevels(modelId, withQwen38ReasoningLevels(modelId, caps));
 }
 
+// ── Resolve ──────────────────────────────────────────────────────────────────
+
 /**
  * Resolve send-time capabilities for a provider-bound model row.
  * Re-applies openai-v1 inference when cached caps lack selectable reasoning options.
@@ -349,7 +351,6 @@ export function resolveSendCapabilities(
   if (!pid || !mid) return undefined;
 
   const row = findModelCacheRow(pid, mid);
-  // My Models / llama.cpp may rebind to a label that is no longer in modelCache.
   if (!row) {
     if (isGlm53ModelId(mid)) return glm53AssumedCapabilities();
     return isQwen38ModelId(mid) ? qwen38AssumedCapabilities() : undefined;
@@ -368,8 +369,6 @@ export function resolveSendCapabilities(
   const catalogHasLevels = modelHasReasoningEffortLevels(fromCatalog);
   const cachedAllowed = cached.reasoningAllowedOptions?.length ?? 0;
   const catalogAllowed = fromCatalog.reasoningAllowedOptions?.length ?? 0;
-  // Prefer catalog when it has selectable options the probe/cache lacks, or
-  // when catalog has effort levels and cache only has off/on.
   if ((catalogAllowed >= 2 && cachedAllowed < 2) || (catalogHasLevels && !cachedHasLevels)) {
     return withFamilyReasoningLevels(familyId, {
       ...cached,
@@ -479,6 +478,8 @@ export async function fetchProviderCapabilities(
   const json = (await res.json()) as ProviderCapabilitiesFile;
   return json;
 }
+
+// ── Probe ────────────────────────────────────────────────────────────────────
 
 /** POST capability probe; returns updated file. */
 export async function runCapabilityProbe(
@@ -634,7 +635,6 @@ export async function runCapabilityProbeForProvider(
     if (isManual) {
       probeAbort.abort();
     } else {
-      // First-load probes are queued serially; do not abort a Settings probe.
       return false;
     }
   }

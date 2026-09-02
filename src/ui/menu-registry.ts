@@ -1,22 +1,6 @@
-/**
- * Registry of context-menu contributions.
- *
- * "Create issue" and "Add to issue ▸" need to appear on the file tree, editor
- * selections, commit rows, chat messages, terminal selections, board cards and
- * research rows. Registering them once against a target kind keeps that from
- * becoming an edit to every one of those files — and keeps the ordering
- * consistent, which hand-edited menus never manage.
- *
- * A surface opens a menu with {@link buildMenuItems}; features add rows with
- * {@link registerMenuContributor} at module load.
- */
-
 import { openContextMenu, type ContextMenuHandle, type MenuItem } from './context-menu';
 
-/**
- * What a menu was opened on. `kind` selects the contributors; the rest is the
- * surface's own payload, read by contributors that understand that kind.
- */
+/** What a menu was opened on. */
 export interface MenuTarget {
   kind: string;
   [key: string]: unknown;
@@ -26,10 +10,7 @@ export interface MenuTarget {
 export type MenuContributor = (target: MenuTarget) => MenuItem[] | null;
 
 export interface MenuContributorOptions {
-  /**
-   * Sort weight. Owning-surface actions sit at 0, cross-cutting additions
-   * (Issues capture, Copy path) at 100+, destructive rows last at 900+.
-   */
+  /** Sort weight. */
   order?: number;
   /** Target kinds to match; omit or use `'*'` to match every menu. */
   kinds?: readonly string[];
@@ -56,10 +37,7 @@ export const MENU_ORDER = {
 
 const registrations = new Map<string, Registration>();
 
-/**
- * Register a contributor. Re-registering the same id replaces it, so a module
- * that hot-reloads does not stack duplicate rows.
- */
+/** Register a contributor. */
 export function registerMenuContributor(
   id: string,
   contribute: MenuContributor,
@@ -88,13 +66,7 @@ export function listMenuContributorIds(): string[] {
     .map((entry) => entry.id);
 }
 
-/**
- * Collect rows for a target.
- *
- * Each contributor's block is kept together and separated from the next, so a
- * surface never has to know what else ended up in its menu to keep the grouping
- * readable. `own` rows are the calling surface's items and always come first.
- */
+/** Collect rows for a target. */
 export function buildMenuItems(target: MenuTarget, own: MenuItem[] = []): MenuItem[] {
   const blocks: MenuItem[][] = [];
   if (own.length > 0) blocks.push(own);
@@ -108,7 +80,6 @@ export function buildMenuItems(target: MenuTarget, own: MenuItem[] = []): MenuIt
     try {
       rows = entry.contribute(target);
     } catch {
-      // One broken contributor must not cost the user the whole menu.
       rows = null;
     }
     if (rows && rows.length > 0) blocks.push(rows);

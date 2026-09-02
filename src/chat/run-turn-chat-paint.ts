@@ -1,27 +1,3 @@
-/**
- * P6-A / P7-B / P10-F — map presentation-free `TurnEvent`s onto existing chat DOM helpers.
- *
- * The runner emits cumulative `delta` / `thinking` snapshots (full text so far),
- * not per-token increments. Chat already paints full markdown via
- * `scheduleAssistantBubbleRender`; thinking helpers take deltas, so this file
- * diffs the snapshot against the last *painted* text.
- *
- * P7-B (MIN-729): delta + thinking presentation is coalesced onto one animation
- * frame (or a 0 ms timeout when rAF is missing). Latest snapshot wins so a burst
- * of events is one markdown schedule and one scroll, not N. Discrete tool rows
- * stay immediate — they are not token-grained.
- *
- * P10-F (MIN-771): a tool-bearing `round_end` finalizes the current assistant
- * row and opens a fresh streaming shell so live DOM matches `chat.history`
- * (assistant → tools → assistant). That is what stops thought lumping and the
- * stream-end scroll jump. rAF coalescing is unchanged.
- *
- * P10-H (MIN-773): tool rows reuse `chat-tool-batch` chrome — `parseToolArguments`,
- * full-arity `renderToolResult` (attachments / codeChange), `attachShellKillUi`,
- * `notifyMemorySavedFromTool`, and `resolveLiveToolWrap` so a mid-batch chat
- * switch does not strand the result. Do not fork those helpers here.
- */
-
 import type { TurnEvent } from '../../server/runner/run-turn';
 import {
   cancelAssistantBubbleRenderDebounce,
@@ -59,10 +35,8 @@ import type { CodeChangeStats, ToolImageAttachment } from '../types';
 import { sessionState } from '../state/sessions';
 import { isStreamDomVisible } from './streaming-state';
 
-/**
- * Live thought controller plus the round-close methods P10-F needs.
- * Tests may stub only `appendReasoningDelta`; round-boundary tests stub consume.
- */
+// ── Types ────────────────────────────────────────────────────────────────────
+
 export type ChatTurnThoughtController = Pick<ThoughtBubbleController, 'appendReasoningDelta'> & {
   consumePersistedSegments?: ThoughtBubbleController['consumePersistedSegments'];
   endReasoningPhase?: ThoughtBubbleController['endReasoningPhase'];
@@ -88,25 +62,12 @@ export interface ChatTurnPaintHost {
   thoughtController: ChatTurnThoughtController;
   /** Transcript mount that receives `.tool-call-msg` rows. */
   mount: HTMLElement;
-  /**
-   * Owning chat id for `attachShellKillUi` (run registry + Stop button).
-   * Optional so painter unit tests that only assert rows can omit it.
-   */
   chatId?: string;
-  /**
-   * When false, skip DOM writes so a mid-turn switch cannot paint into the
-   * newly visible transcript. Defaults to `isStreamDomVisible(chatId)` when
-   * `chatId` is set; tests without a chat always paint.
-   */
   isDomVisible?: () => boolean;
   /** First prose token reveals the awaiting bubble. */
   revealProse: () => void;
   /** Optional activity ping (sidebar dots, stream-activity listeners). */
   onActivity?: () => void;
-  /**
-   * Stream follow-scroll. Defaults to `scrollChatIfPinned`.
-   * Live thinking no longer scrolls inside ThoughtBubbleController (MIN-729).
-   */
   scrollTranscript?: () => void;
   /** Override markdown schedule (tests count calls without lexing). */
   scheduleMarkdown?: (
@@ -114,24 +75,12 @@ export interface ChatTurnPaintHost {
     markdown: string,
     streamCursor: HTMLElement,
   ) => void;
-  /**
-   * Queue the next paint. Defaults to `requestAnimationFrame` so many
-   * TurnEvents in one SSE `read()` become one layout. Tests pump ticks.
-   */
   schedulePaintTick?: (cb: () => void) => void;
-  /**
-   * After a coalesced thinking/delta paint. Live stats schedule from here so
-   * a token burst is one snapshot, not N joins of thinking text.
-   */
   onCoalescedPaint?: (snap: ChatTurnPaintSnapshot) => void;
   /** Chat mode for finalized markdown (tool-round close). */
   modeId?: string;
   /** Close the live thinking timer for this round; returns duration ms. */
   finalizeThinkingRound?: () => number;
-  /**
-   * After a tool-bearing round is finalized, open the next streaming shell.
-   * The painter retargets onto the returned handles.
-   */
   beginNextStreamingRow?: () => Partial<ChatTurnPaintHost> | void;
   /** History index / message actions after a round is closed in the DOM. */
   onRoundFinalized?: (info: ChatTurnRoundFinalizedInfo) => void;
@@ -162,10 +111,8 @@ export interface FinalizeThinkingRoundOpts {
   domVisible?: boolean;
 }
 
-/**
- * Close the live thinking stage for one model round (loop.ts `finalizeAndAnchorThinkingRound`).
- * Consumes the controller so the next round cannot lump thoughts onto this toggle.
- */
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 export function finalizeAndAnchorThinkingRound(
   opts: FinalizeThinkingRoundOpts,
 ): { segments: string[]; durationMs: number } {
@@ -189,10 +136,6 @@ export function finalizeAndAnchorThinkingRound(
   return { segments, durationMs };
 }
 
-/**
- * `TurnEvent.thinking` is the full reasoning so far. Thought bubbles append.
- * Prefix-diff when we can; otherwise replace by feeding the new snapshot.
- */
 export function thinkingDeltaFromSnapshot(previous: string, next: string): string {
   if (!next) return '';
   if (!previous) return next;
@@ -200,12 +143,6 @@ export function thinkingDeltaFromSnapshot(previous: string, next: string): strin
   return next;
 }
 
-/**
- * TurnEvent.arguments is `unknown` (string on the wire, object after the
- * inner loop parses). Route strings through `parseToolArguments` so a
- * constrained-decoding miss is `{}` + parseError, not `{ raw: "…" }` which
- * used to render as a fake argument object (P10-H / MIN-773).
- */
 export function parsePaintToolArguments(
   raw: unknown,
   constrained = true,
@@ -250,11 +187,6 @@ function argsRecordFromUnknown(args: unknown): Record<string, unknown> | undefin
   return undefined;
 }
 
-/**
- * Parse-error content from the runner is `TOOL_ARGUMENTS_*` without an
- * `Error:` prefix, so `isToolResultFailure` would paint a success row.
- * `isError` on the event is the signal to force fail chrome.
- */
 function displayToolResultContent(event: {
   content: string;
   isError?: boolean;
@@ -276,14 +208,11 @@ function defaultSchedulePaintTick(cb: () => void): void {
   setTimeout(cb, 0);
 }
 
-/**
- * Drive the existing stream / thinking / tool rows from `onEvent`.
- * Import these helpers — do not fork a second transcript painter.
- */
+// ── Painter ──────────────────────────────────────────────────────────────────
+
 export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEventPainter {
   let lastDelta = '';
   let lastThinking = '';
-  // Prefix-diff thinking against what the DOM has, not the latest queued snapshot.
   let lastPaintedThinking = '';
   let pendingDelta: string | null = null;
   let pendingThinking: string | null = null;
@@ -291,30 +220,21 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
   let toolCallCount = 0;
   let proseRevealed = false;
   const toolWraps = new Map<string, HTMLElement>();
-  // Args keyed the same way as wraps so a result can pass them to
-  // `renderToolResult` / `attachShellKillUi` / the memory toast.
   const argsById = new Map<string, Record<string, unknown>>();
-  // Last tool name from `tool_streaming` — remount re-shows "Calling {tool}…".
   let lastStreamingToolName: string | null = null;
   let toolStart: ToolStartIndicatorHandle | null = null;
 
   const scheduleMarkdown =
     host.scheduleMarkdown ??
     ((bubble: HTMLElement, markdown: string, streamCursor: HTMLElement) => {
-      // Painter already scrolls once per tick; skip the markdown flush's layout.
       scheduleAssistantBubbleRender(bubble, markdown, streamCursor, { pinScroll: false });
     });
   const scrollTranscript = host.scrollTranscript ?? scrollChatIfPinned;
   const schedulePaintTick = host.schedulePaintTick ?? defaultSchedulePaintTick;
 
-  /**
-   * Origin-chat gate: `#chatArea` is shared, so a switch away would otherwise
-   * append A's tools/tokens into B. Tests without `chatId` always paint.
-   */
   const originStreamVisible = (): boolean => {
     if (host.isDomVisible) return host.isDomVisible();
     if (!host.chatId) return true;
-    // Paint tests may set chatId for shell-kill without a session.
     if (!sessionState) return true;
     return isStreamDomVisible(host.chatId);
   };
@@ -323,7 +243,6 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
     toolStart?.dispose();
     toolStart = null;
     if (!lastStreamingToolName || !host.streamStatus) return;
-    // Detached "Calling {tool}…" chrome is fine; do not attach onto B's row.
     if (!originStreamVisible()) return;
     toolStart = attachToolStartIndicator({
       wrap: host.wrap,
@@ -367,9 +286,6 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
       if (visible) scheduleMarkdown(host.bubble, deltaSnap, host.cursor);
     }
 
-    // One forced layout per tick covers thinking-only and prose streams.
-    // P10-I: runChatTurn writes the context-ring overlay from this hook so
-    // in-flight tokens are not counted per delta. Stats still fire when hidden.
     if (visible) scrollTranscript();
     host.onCoalescedPaint?.({ lastDelta, lastThinking, toolCallCount });
   };
@@ -399,7 +315,6 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
     if (next.streamStatus) host.streamStatus = next.streamStatus;
     if (next.chatId !== undefined) host.chatId = next.chatId;
     if (next.isDomVisible) host.isDomVisible = next.isDomVisible;
-    // Never retarget onto B's transcript while A is still the origin.
     if (next.mount && originStreamVisible()) host.mount = next.mount;
     if (next.thoughtController) host.thoughtController = next.thoughtController;
     if (next.revealProse) host.revealProse = next.revealProse;
@@ -414,20 +329,13 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
 
   const retarget = (next: Partial<ChatTurnPaintHost>): void => {
     applyHostPatch(next);
-    // Apply queued snapshots onto the new shell before rebinding chrome.
     flushPaint();
     if (proseRevealed && lastDelta && next.bubble && originStreamVisible()) {
       scheduleMarkdown(next.bubble, lastDelta, next.cursor ?? host.cursor);
     }
-    // Chat switch rebuilds the streaming shell; keep "Calling {tool}…" if args
-    // are still streaming (MIN-2 leftover, now an overlay around runTurn).
     bindToolStartIndicator();
   };
 
-  /**
-   * loop.ts:2707–2745 — freeze this round's bubble, pin its thoughts toggle,
-   * leave tool rows below it, then open a fresh streaming row for the next round.
-   */
   const closeToolBearingRound = (event: Extract<TurnEvent, { type: 'round_end' }>): void => {
     flushPaint();
     const wrap = host.wrap;
@@ -457,7 +365,6 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
       durationMs,
       domVisible: originStreamVisible(),
     });
-    // Settled rows must not keep a live status handle; orphan/anchor already dispose.
     if (wrap.isConnected) host.streamStatus?.dispose();
 
     host.onRoundFinalized?.({
@@ -467,7 +374,6 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
       connected: wrap.isConnected,
     });
 
-    // Reset before retarget so the new shell does not replay this round's prose.
     resetRoundPaintState();
     clearToolStartIndicator();
 
@@ -490,15 +396,11 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
       return;
     }
     if (event.type === 'reasoning_end') {
-      // Flush first so the initial thinking delta can fire onThinkingStart
-      // before endReasoningPhase runs onReasoningEnded (timer + Generating…).
       flushPaint();
       host.thoughtController.endReasoningPhase?.();
       return;
     }
     if (event.type === 'round_start') {
-      // Belt-and-suspenders: a fresh cumulative snapshot must not prefix-diff
-      // against the previous round if that round had no tools (no close).
       if (event.index > 0) {
         lastPaintedThinking = '';
         lastThinking = '';
@@ -510,8 +412,6 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
       if (event.toolCallCount > 0) closeToolBearingRound(event);
       return;
     }
-    // Tool rows are discrete, not token-grained — flush any pending prose first
-    // so thinking/delta already received appear above the Calling… / result row.
     if (event.type === 'tool_streaming') {
       flushPaint();
       lastStreamingToolName = event.name;
@@ -528,8 +428,6 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
       const key = event.id ?? `${event.name}:${toolCallCount}`;
       toolWraps.set(key, wrap);
       argsById.set(key, parsed.args);
-      // Stop is wired on create so a long `execute_command` can be killed
-      // before the result JSON arrives with the run id.
       if (event.id) {
         attachShellKillUi(
           wrap,
@@ -540,7 +438,6 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
           host.chatId,
         );
       }
-      // Same `#chatArea` node is reused after switchChat — skip while hidden.
       if (originStreamVisible()) host.mount.appendChild(wrap);
       return;
     }
@@ -552,8 +449,6 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
       const captured =
         (event.id && toolWraps.get(event.id)) || (key ? toolWraps.get(key) : undefined);
       if (!captured) return;
-      // Re-query live DOM only while the origin chat is visible — otherwise a
-      // matching toolCallId in B's transcript would take the result paint.
       const wrap =
         originStreamVisible() && event.id
           ? resolveLiveToolWrap(event.id, captured)

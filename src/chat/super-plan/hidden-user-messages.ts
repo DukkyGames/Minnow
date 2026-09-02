@@ -1,8 +1,3 @@
-/**
- * Super Plan controller injects stage instructions as user history rows.
- * They must reach the model but should not appear in the chat transcript.
- */
-
 import type { Chat, UserMessage } from '../../types';
 import { isSuperPlanStageId, SUPER_PLAN_STAGE_LABELS, type SuperPlanStageId } from './types.ts';
 
@@ -24,10 +19,6 @@ export function superPlanPipelineUserMessage(
   return { role: 'user', content, superPlanStage: stageId };
 }
 
-/**
- * After a failed Super Plan stage turn, history rollback removes assistant/tool rows.
- * Append a visible notice so "View chat" still shows why the stage stopped.
- */
 export function appendSuperPlanStageFailureNotice(
   chat: Chat,
   stageId: SuperPlanStageId,

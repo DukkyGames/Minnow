@@ -1,7 +1,3 @@
-/**
- * Settings → Issues — taxonomy CRUD for types, statuses, and priorities.
- */
-
 import '../styles/settings-general.css';
 import '../styles/settings-issues.css';
 
@@ -64,6 +60,8 @@ import { setStatus } from './status';
 
 type TaxonomyKind = 'types' | 'statuses' | 'priorities';
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -101,8 +99,9 @@ async function persistTaxonomy(
   }
 }
 
+// ── Table ────────────────────────────────────────────────────────────────────
+
 function countInUse(kind: 'type' | 'status' | 'priority', id: string): number {
-  // Settings can paint before boot finishes loading ~/.minnow/issues (MIN-660).
   if (!isIssuesStoreLoaded()) return 0;
   const issues = getIssuesSnapshot()?.issues ?? [];
   return countIssuesUsingTaxonomyId(kind, id, issues);
@@ -348,6 +347,8 @@ function renderTaxonomyRow(
   return row;
 }
 
+// ── Mutations ────────────────────────────────────────────────────────────────
+
 async function updateItemIcon(
   id: string,
   icon: string,
@@ -484,6 +485,8 @@ async function promptAndAddItem(kind: TaxonomyKind, onChange: () => void): Promi
   if (await persistTaxonomy(next, 'Item added')) onChange();
 }
 
+// ── Panels ───────────────────────────────────────────────────────────────────
+
 function appendIssuesIntro(mount: HTMLElement): void {
   if (!isServerStorageMode()) {
     appendSettingsOfflineHint(
@@ -561,7 +564,6 @@ function renderIssueIdsPanel(mount: HTMLElement, onChange: () => void): void {
 
   const saveBtn = el('button', 'settings-inline-btn', 'Save project key');
   saveBtn.type = 'button';
-  // Project-key writes go through the issues store; disable until it is loaded.
   saveBtn.disabled = !storeReady;
 
   const refreshPreviewFromStore = (): void => {
@@ -694,9 +696,7 @@ export function renderIssuesSettingsSection(mount: HTMLElement): void {
       renderIssuesGithubPanel(content, refresh);
       renderIssuesTaxonomyPanels(content, refresh);
     } catch (err) {
-      // A throw here used to leave Settings (and the rest of the shell) wedged.
       const message = err instanceof Error ? err.message : 'Could not render Issues settings';
-      // Do not paint the boot-race store throw onto the status pill (MIN-660).
       if (/issuesState is not initialized/i.test(message)) return;
       setStatus('err', message);
     }
@@ -711,21 +711,13 @@ export function renderIssuesSettingsSection(mount: HTMLElement): void {
         const { loadIssuesFromStorage } = await import('../state/issues-store');
         await loadIssuesFromStorage();
       } catch {
-        /* First paint already used safe empty defaults. */
       }
       if (mount.isConnected) refresh();
     })();
   }
 }
 
-/**
- * GitHub sync mode (Phase 5).
- *
- * Three modes and a deliberate default of Off. The middle mode exists because
- * "sync everything" is the wrong first step for a solo developer with a public
- * repo and a private scratch list — Link + push pushes only the issues you flag,
- * and Two-way mirror is the explicit opt-in to letting the remote write back.
- */
+/** GitHub sync mode (Phase 5). */
 function renderIssuesGithubPanel(mount: HTMLElement, onChange: () => void): void {
   const body = appendSettingsGroup(
     mount,
@@ -771,7 +763,6 @@ function renderIssuesGithubPanel(mount: HTMLElement, onChange: () => void): void
   const githubImportReady = (): boolean =>
     getIssuesGithubMode() !== 'off' && isIssuesStoreLoaded();
   importBtn.disabled = !githubImportReady();
-  // Always catch: a thrown import used to leave the dialog/shell wedged (MIN-660).
   importBtn.addEventListener('click', () => {
     importBtn.disabled = true;
     void (async () => {
@@ -786,8 +777,6 @@ function renderIssuesGithubPanel(mount: HTMLElement, onChange: () => void): void
           'GitHub',
         );
       } catch (err) {
-        // Last-resort: importGithubIssues is not supposed to throw, but an
-        // unhandled rejection here used to freeze the rest of the shell.
         const message = err instanceof Error ? err.message : String(err);
         await appAlert(userFacingGithubError(message, 'Could not import issues'), 'GitHub');
       } finally {

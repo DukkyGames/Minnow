@@ -1,7 +1,3 @@
-/**
- * Operating mode registry — seven primary modes and prompt path helpers.
- */
-
 import { loadPromptById } from '../prompts/prompt-loader';
 import type { PromptProfile } from '../prompts/types';
 import {

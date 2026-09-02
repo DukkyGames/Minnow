@@ -1,7 +1,3 @@
-/**
- * Empty-state recent-files panel for #fileViewerHost when no viewer tabs are open.
- */
-
 import { createOsIcon } from '../os/icons';
 import { formatRelativeTime } from '../notifications/preview';
 import {
@@ -24,10 +20,7 @@ function parentLabel(path: string): string {
   return parent;
 }
 
-/**
- * Mount the recent-files empty state into the viewer host.
- * Call only when there is no active viewer tab.
- */
+/** Mount the recent-files empty state into the viewer host. */
 export function renderViewerRecentFilesEmptyState(host: HTMLElement): void {
   const workspaceRoot = activeWorkspaceRoot();
   const recent = listRecentViewerFiles(workspaceRoot);

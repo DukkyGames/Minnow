@@ -1,7 +1,3 @@
-/**
- * Live goal-evaluator session state for the parent chat UI (drawer + status row).
- */
-
 import type { ApiMessage } from '../../types';
 
 export type GoalEvalSessionStatus = 'running' | 'completed' | 'failed';
@@ -31,9 +27,7 @@ function emit(session: GoalEvalSession): void {
   for (const fn of listeners) {
     try {
       fn(session);
-    } catch {
-      /* ignore subscriber errors */
-    }
+    } catch {}
   }
 }
 

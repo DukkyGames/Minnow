@@ -11,6 +11,8 @@ import { scheduleContextUsageRefresh } from '../ui/context-usage-ring';
 import type { Attachment } from './types';
 import type { SourceMapping } from '../design/source-map';
 
+// ── Queue ────────────────────────────────────────────────────────────────────
+
 /** Files queued for the next user message. */
 const pendingAttachments: Attachment[] = [];
 
@@ -83,6 +85,8 @@ export function restorePendingAttachments(previous: Attachment[]): void {
   pendingAttachments.unshift(...missing);
   renderAttachPreview();
 }
+
+// ── Add files ────────────────────────────────────────────────────────────────
 
 /**
  * Processes and appends files from the hidden file input.
@@ -289,6 +293,8 @@ const ATTACH_PREVIEW_IDS = [
   'desktopAttachPreview',
   'emailAssistantAttachPreview',
 ] as const;
+
+// ── Preview ──────────────────────────────────────────────────────────────────
 
 /** Renders chips into composer preview strips when markup exists (SA-15). */
 export function renderAttachPreview(): void {

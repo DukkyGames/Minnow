@@ -1,7 +1,3 @@
-/**
- * Persist and restore main BrowserWindow bounds under Electron userData.
- */
-
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { app, type BrowserWindow } from 'electron';
@@ -23,7 +19,6 @@ function getStateFilePath(): string {
   return path.join(app.getPath('userData'), 'minnow-window-state.json');
 }
 
-/** Load last saved bounds or defaults. */
 export async function loadWindowState(): Promise<PersistedWindowState> {
   try {
     const raw = await fs.readFile(getStateFilePath(), 'utf8');
@@ -39,7 +34,6 @@ export async function loadWindowState(): Promise<PersistedWindowState> {
   }
 }
 
-/** Save bounds on resize/move/close. */
 export function trackWindowState(win: BrowserWindow): void {
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
 

@@ -1,36 +1,9 @@
-/**
- * P8-C — `plan(state, caps) -> Desired[]`. Three rules, and nothing else.
- *
- * 1. A non-terminal run with nothing in flight should be running.
- * 2. Respect TWO caps: `globalMaxConcurrent` (default 3) and per-type
- *    `maxConcurrent` (default 2). Caps are arguments — this module never
- *    reads `sub-agents.json`.
- * 3. Never two attempts on one run.
- *
- * There is no `dependsOn`, no wave, no `touches`, no merge queue. Adding any
- * of those here is a copy of the board scheduler, not a derivation.
- *
- * ## Caps gate starting, not continuing
- *
- * Attempts already in flight keep their slot. Lowering a cap mid-run stops
- * nothing that is already running; it stops new work being picked up. The
- * invariant is therefore:
- *
- *   no tick starts work that would push in-flight attempts above the global
- *   cap OR the per-type cap
- *
- * not "at no tick do more than N attempts exist" — that wording is false
- * once a cap can move (P1-F invariant 1).
- */
-
 import { attemptCount, DEFAULT_GLOBAL_MAX_CONCURRENT, DEFAULT_TYPE_MAX_CONCURRENT, isStoppedForScheduling, lastEndedAttempt } from './derive.js';
 import { bundleAbandonmentEvidence } from './evidence.js';
 import { SUB_AGENT_ROLE } from './events.js';
 import { decide } from './policy.js';
 
 /**
- * Shipped defaults, as a fresh object so tests can mutate their own copy.
- *
  * @returns {import('./types').Caps}
  */
 export function defaultCaps() {
@@ -41,12 +14,6 @@ export function defaultCaps() {
 }
 
 /**
- * What should happen to a run that has nothing in flight.
- *
- * The only caller of `decide()`. Returns a `start` the scheduler can act on,
- * an `abandon` the engine must journal, or `none` (pass waits for P8-E;
- * cancel is already terminal in the fold once no attempt is open).
- *
  * @param {import('./types').AgentsState} state
  * @param {string} runId
  * @returns {import('./types').NextAction}
@@ -79,16 +46,10 @@ export function nextAction(state, runId) {
       evidence: bundleAbandonmentEvidence(run, action),
     };
   }
-  // `deliver` and `done`: the fold already treats pass/cancel as terminal
-  // once those events exist. `result.delivered` is appended by delivery.js
-  // after the parent resume is known delivered (P8-E).
   return { kind: 'none' };
 }
 
 /**
- * Runs the policy table has given up on. The engine journals `run.abandoned`
- * for each, carrying the evidence the decision was made on.
- *
  * @param {import('./types').AgentsState} state
  * @returns {Array<{ runId: string, reason: string, evidence: Record<string, unknown> }>}
  */
@@ -129,8 +90,6 @@ export function typeCap(caps, agentType) {
 }
 
 /**
- * Which attempts should be running right now.
- *
  * @param {import('./types').AgentsState} state
  * @param {import('./types').Caps} [caps]
  * @returns {import('./types').Desired[]}
@@ -154,7 +113,6 @@ export function plan(state, caps = defaultCaps()) {
     });
   }
 
-  // Work that already exists keeps its slot, even above either cap.
   /** @type {import('./types').Desired[]} */
   const desired = [...inFlight];
 
@@ -175,7 +133,6 @@ export function plan(state, caps = defaultCaps()) {
     if (occupied.has(id)) continue;
     const run = state.runs.get(id);
     if (!run || isStoppedForScheduling(run)) continue;
-    // Rule 3: never two attempts on one run.
     if (run.attempts.some((a) => !a.ended)) continue;
 
     const next = nextAction(state, id);

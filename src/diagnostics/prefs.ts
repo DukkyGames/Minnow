@@ -24,18 +24,14 @@ function readBool(key: string, fallback: boolean): boolean {
     const raw = localStorage.getItem(key);
     if (raw === '0' || raw === 'false') return false;
     if (raw === '1' || raw === 'true') return true;
-  } catch {
-    /* private mode */
-  }
+  } catch {}
   return fallback;
 }
 
 function writeBool(key: string, value: boolean): void {
   try {
     localStorage.setItem(key, value ? '1' : '0');
-  } catch {
-    /* private mode */
-  }
+  } catch {}
 }
 
 /** Load diagnostics prefs (cached after first read). */

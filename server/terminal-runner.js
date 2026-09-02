@@ -1,7 +1,3 @@
-/**
- * Terminal run registry: spawn commands, SSE stream stdout/stderr, persist history + logs.
- */
-
 import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -37,13 +33,10 @@ import {
 } from './terminal/run-index.js';
 import { getWorkspaceRoot } from './workspace/root.js';
 
-/** Max in-memory bytes per run before UI/log truncation marker. */
 export const MAX_TERMINAL_BUFFER_BYTES = 2 * 1024 * 1024;
 
-/** Max terminal run records stored per chat. */
 const MAX_TERMINAL_HISTORY = 50;
 
-/** Grace period before evicting finished runs from the active map (ms). */
 const RUN_EVICTION_MS = 60_000;
 
 /** @typedef {'user' | 'agent'} TerminalSource */
@@ -82,7 +75,7 @@ const RUN_EVICTION_MS = 60_000;
  * @property {number | null} exitCode
  * @property {boolean} finished
  * @property {string} logPath
- * @property {string} logRelPath path relative to ~/.minnow (honours logSubdir)
+ * @property {string} logRelPath
  * @property {Set<(event: object) => void>} listeners
  * @property {Promise<string>} completion
  * @property {(value: string) => void} resolveCompletion
@@ -91,6 +84,8 @@ const RUN_EVICTION_MS = 60_000;
 
 /** @type {Map<string, RunState>} */
 const activeRuns = new Map();
+
+// ── Log buffer ───────────────────────────────────────────────────────────────
 
 function terminalLogDir() {
   return path.join(getMinnowHome(), 'logs', 'terminal');
@@ -123,7 +118,6 @@ function emit(state, event) {
     try {
       listener(event);
     } catch {
-      /* ignore listener errors */
     }
   }
 }
@@ -139,7 +133,6 @@ async function appendLogFile(logPath, text) {
     await fs.mkdir(path.dirname(logPath), { recursive: true });
     await fs.appendFile(logPath, text, 'utf8');
   }).catch(() => {
-    /* A failed write shouldn't poison the queue for this file. */
   }).finally(() => {
     if (logWriteQueues.get(logPath) === next) {
       logWriteQueues.delete(logPath);
@@ -150,8 +143,6 @@ async function appendLogFile(logPath, text) {
 }
 
 /**
- * Create the log file up front so the logPath handed back by execute_command always
- * resolves, even for a command that never writes a byte. Best-effort.
  * @param {string} logPath
  */
 async function ensureLogFile(logPath) {
@@ -159,12 +150,10 @@ async function ensureLogFile(logPath) {
     await fs.mkdir(path.dirname(logPath), { recursive: true });
     await fs.appendFile(logPath, '', 'utf8');
   } catch {
-    /* the run still proceeds without a log file */
   }
 }
 
 /**
- * Persist one terminal run for a chat (SQLite narrow write; JSON rollback path kept).
  * @param {string} chatId
  * @param {TerminalRunRecord} record
  */
@@ -172,13 +161,11 @@ async function persistTerminalHistory(chatId, record) {
   if (!chatId) return;
 
   try {
-    // Default: indexed append + bounded DELETE in one transaction (sessions-repo).
     if (!useJsonSessionsStore()) {
       appendTerminalRun(chatId, record);
       return;
     }
 
-    // MINNOW_SESSIONS_STORE=json — whole-blob RMW on state.json.
     await updateConfigJson('sessions/state.json', (raw) => {
       const base = raw ?? { version: 3, chats: [] };
       let state;
@@ -205,6 +192,8 @@ async function persistTerminalHistory(chatId, record) {
   }
 }
 
+// ── Create run ───────────────────────────────────────────────────────────────
+
 /**
  * @param {object} params
  * @param {string} params.command
@@ -214,13 +203,13 @@ async function persistTerminalHistory(chatId, record) {
  * @param {TerminalSource} [params.source]
  * @param {string} [params.chatId]
  * @param {string} [params.toolCallId]
- * @param {number} [params.timeoutMs] custom timeout in ms (clamped 1000–600000; default COMMAND_TIMEOUT_MS)
- * @param {Record<string, string>} [params.env] merged over process.env for the child
+ * @param {number} [params.timeoutMs]
+ * @param {Record<string, string>} [params.env]
  * @param {import('./terminal/shell-profiles.js').ShellProfile | null} [params.shellProfile]
- * @param {boolean} [params.sandbox] explicit sandbox override (`false` skips; `true` forces attempt)
- * @param {'off'|'prefer'|'require'} [params.shellSandboxMode] skip config resolve when set
- * @param {boolean} [params.allowUnsandboxed] prefer-mode Ask approval for this call
- * @param {string} [params.worktreeRoot] active board worktree for policy allow rules
+ * @param {boolean} [params.sandbox]
+ * @param {'off'|'prefer'|'require'} [params.shellSandboxMode]
+ * @param {boolean} [params.allowUnsandboxed]
+ * @param {string} [params.worktreeRoot]
  * @returns {Promise<{ runId: string, startedAt: number }>}
  */
 export async function createRun({
@@ -308,8 +297,6 @@ export async function createRun({
         allowUnsandboxed,
       });
 
-      // Order: shell/WSL resolution first, then optional Seatbelt/Landlock argv wrap
-      // (MIN-553). sandbox-exec stays the tracked parent so killProcessTree still works.
       const resolved = resolveOneShotSpawn({
         command,
         args,
@@ -400,8 +387,9 @@ export async function createRun({
   return { runId, startedAt, logPath: relLog };
 }
 
+// ── Background ───────────────────────────────────────────────────────────────
+
 /**
- * Spawn a long-running command (no timeout). Used for dev servers and background tools.
  * @param {object} params
  * @param {string} params.command
  * @param {string[]} [params.args]
@@ -410,10 +398,10 @@ export async function createRun({
  * @param {string} [params.chatId]
  * @param {string} [params.toolCallId]
  * @param {boolean} [params.shell]
- * @param {string} [params.logSubdir] logs subdirectory under ~/.minnow/logs/
- * @param {Record<string, string>} [params.env] merged over process.env for the child
+ * @param {string} [params.logSubdir]
+ * @param {Record<string, string>} [params.env]
  * @param {import('./terminal/shell-profiles.js').ShellProfile | null} [params.shellProfile]
- * @param {boolean} [params.sandbox] explicit sandbox override (`false` skips; `true` forces attempt)
+ * @param {boolean} [params.sandbox]
  * @param {'off'|'prefer'|'require'} [params.shellSandboxMode]
  * @param {boolean} [params.allowUnsandboxed]
  * @param {string} [params.worktreeRoot]
@@ -483,7 +471,6 @@ export async function createBackgroundRun({
     allowUnsandboxed,
   });
 
-  // Same composition order as createRun: resolveOneShotSpawn → applyAgentShellSandbox.
   const resolved = resolveOneShotSpawn({
     command,
     args,
@@ -529,7 +516,6 @@ export async function createBackgroundRun({
     cwd: spawnCwd,
     env: childEnv,
     shell: useShell,
-    // detached on Windows spawns a separate console window; windowsHide cannot hide it.
     detached: process.platform !== 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -538,9 +524,6 @@ export async function createBackgroundRun({
   state.child = child;
   child.unref();
 
-  // Queued synchronously so the start write always lands before finishRun's patch,
-  // and awaited only after the listeners below are attached — a spawn 'error' with
-  // no listener yet would take down the host process.
   const indexed = recordRunStart({
     runId,
     command,
@@ -569,9 +552,6 @@ export async function createBackgroundRun({
     void appendLogFile(logPath, text);
   });
 
-  // Force-killing the process (taskkill /F) tears down these pipes abruptly and
-  // can emit a stream 'error' (EPIPE/ECONNRESET). Without a listener Node rethrows
-  // it as an uncaughtException, which crashes the host process running the API.
   child.stdout?.on('error', () => {});
   child.stderr?.on('error', () => {});
 
@@ -592,6 +572,8 @@ export async function createBackgroundRun({
 
   return { runId, startedAt, logPath: relLog, pid: child.pid ?? null };
 }
+
+// ── Lifecycle ────────────────────────────────────────────────────────────────
 
 /**
  * @param {string} runId
@@ -638,8 +620,6 @@ export async function finishRun(runId) {
     logPath: state.logRelPath ?? relativeLogPath(runId),
   };
 
-  // Durable first: the in-memory state is evicted below, and after that this file
-  // is the only place the exit code and log location still exist.
   await updateRunIndexEntry(runId, {
     finished: true,
     finishedAt,
@@ -667,7 +647,6 @@ export function getRun(runId) {
 }
 
 /**
- * Tests only: run the eviction that normally happens RUN_EVICTION_MS after finish.
  * @param {string} runId
  */
 export function __evictForTests(runId) {
@@ -675,7 +654,6 @@ export function __evictForTests(runId) {
 }
 
 /**
- * Wait until a run completes and return the formatted tool-result string.
  * @param {string} runId
  * @returns {Promise<string>}
  */
@@ -688,7 +666,6 @@ export function waitForRun(runId) {
 }
 
 /**
- * Subscribe to run events (used by SSE handler).
  * @param {string} runId
  * @param {(event: object) => void} listener
  * @returns {() => void}
@@ -738,11 +715,6 @@ export function cancelRun(runId) {
 }
 
 /**
- * Stop an active run by runId (background or foreground agent runs).
- *
- * Runs known only to the on-disk index belong to an earlier server process. Pids
- * are recycled, so killing one on the strength of a stale record could take out an
- * unrelated process — those are reported back with the pid instead.
  * @param {string} runId
  * @returns {Promise<{ ok: boolean, runId: string, alreadyStopped?: boolean, orphaned?: boolean, pid?: number | null, error?: string }>}
  */
@@ -774,7 +746,6 @@ export async function stopActiveRun(runId) {
 }
 
 /**
- * Terminate a run we still hold in memory.
  * @param {RunState} state
  */
 function killLiveRun(state) {
@@ -787,7 +758,6 @@ function killLiveRun(state) {
 }
 
 /**
- * Stop every non-finished agent run tied to a chat (best-effort port cleanup).
  * @param {string} chatId
  * @returns {{ ok: boolean, stopped: number }}
  */
@@ -804,7 +774,6 @@ export function stopActiveRunsForChat(chatId) {
 }
 
 /**
- * Non-finished runs still in the active registry.
  * @param {{ source?: TerminalSource, chatId?: string }} [filter]
  */
 export function listActiveRuns(filter = {}) {
@@ -828,9 +797,6 @@ export function listActiveRuns(filter = {}) {
 }
 
 /**
- * Active runs including ones started by an earlier server process whose detached
- * child is still alive — those are invisible to the in-memory map, which is the
- * "empty run registry" the agent hits after a host restart.
  * @param {{ source?: TerminalSource, chatId?: string }} [filter]
  */
 export async function listKnownActiveRuns(filter = {}) {
@@ -856,7 +822,6 @@ export async function listKnownActiveRuns(filter = {}) {
       startedAt: entry.startedAt,
       source: entry.source,
       ...(entry.chatId ? { chatId: entry.chatId } : {}),
-      // Started before this server process; we can report it but not stop or stream it.
       orphaned: true,
     });
   }
@@ -872,7 +837,6 @@ function formatRunOutputTail(state) {
 }
 
 /**
- * Wait up to maxMs for stdout/stderr from an active run (process may keep running).
  * @param {string} runId
  * @param {number} maxMs
  * @returns {Promise<string>}
@@ -912,7 +876,6 @@ export function waitForRunOutput(runId, maxMs) {
 }
 
 /**
- * Snapshot output + lifecycle fields for read_command_log.
  * @param {string} runId
  * @param {number} [maxBytes]
  */
@@ -925,8 +888,6 @@ export async function readCommandLogSnapshot(runId, maxBytes = 64 * 1024) {
   const memory = state ? formatRunOutputTail(state) : '';
   const output = memory.length >= (fileTail?.length ?? 0) ? memory : (fileTail ?? memory);
 
-  // An unknown runId used to be indistinguishable from a finished one: both
-  // reported finished:true, exitCode:null, output:''. Say which it is.
   if (!state && !indexed) {
     return {
       runId,
@@ -960,7 +921,6 @@ export async function readCommandLogSnapshot(runId, maxBytes = 64 * 1024) {
   };
 }
 
-/** Append one line to ~/.minnow/logs/kill-debug.log synchronously. Never throws. */
 function logKillDebug(entry) {
   try {
     const dir = path.join(getMinnowHome(), 'logs');
@@ -971,7 +931,6 @@ function logKillDebug(entry) {
       'utf8',
     );
   } catch {
-    /* diagnostics are best-effort */
   }
 }
 
@@ -979,10 +938,6 @@ function logKillDebug(entry) {
 let cachedAncestorPids = null;
 
 /**
- * Build the ancestor PID chain of the current process (Windows only).
- * Used to make sure we never taskkill /T a process that we are descended from —
- * doing so would terminate the dev host (server.js) itself. The ancestor chain is
- * fixed for the lifetime of the process, so it is computed once and cached.
  * @returns {Set<number>}
  */
 function selfAncestorPids() {
@@ -1026,20 +981,15 @@ function selfAncestorPids() {
   return ancestors;
 }
 
+// ── Kill tree ────────────────────────────────────────────────────────────────
+
 /**
- * SIGTERM / taskkill the process tree for a spawned child.
- * Also accepts a PID-only `{ pid }` handle (orphan reaper) so ancestor-kill
- * guards still run — callers must not bypass this with a raw taskkill.
  * @param {import('node:child_process').ChildProcess | { pid: number }} child
  */
 export function killProcessTree(child) {
   if (!child?.pid) return;
   const targetPid = child.pid;
 
-  // Guard: a stale/reused pid that resolves to our own process or one of our
-  // ancestors would let `taskkill /T /F` tear down the dev host (server.js) — the
-  // process that exited with code 1 with no handlers running. Refuse those.
-  // PID-only handles (`{ pid }` from the orphan reaper) have no `.kill`.
   const ancestors = selfAncestorPids();
   if (ancestors.has(targetPid)) {
     logKillDebug({
@@ -1051,7 +1001,6 @@ export function killProcessTree(child) {
       if (typeof child.kill === 'function') child.kill('SIGTERM');
       else process.kill(targetPid, 'SIGTERM');
     } catch {
-      /* already gone */
     }
     return;
   }
@@ -1065,14 +1014,11 @@ export function killProcessTree(child) {
         stdio: 'ignore',
         windowsHide: true,
       });
-      // Without an 'error' listener a failed taskkill spawn (e.g. ENOENT) emits an
-      // unhandled 'error' that crashes the host process.
       killer.on('error', () => {
         try {
           if (typeof child.kill === 'function') child.kill('SIGTERM');
           else process.kill(targetPid, 'SIGTERM');
         } catch {
-          /* process already gone */
         }
       });
       killer.unref();
@@ -1081,7 +1027,6 @@ export function killProcessTree(child) {
         if (typeof child.kill === 'function') child.kill('SIGTERM');
         else process.kill(targetPid, 'SIGTERM');
       } catch {
-        /* gone */
       }
     }
     return;
@@ -1093,13 +1038,11 @@ export function killProcessTree(child) {
       if (typeof child.kill === 'function') child.kill('SIGTERM');
       else process.kill(targetPid, 'SIGTERM');
     } catch {
-      /* gone */
     }
   }
 }
 
 /**
- * Wait until a child exits or a deadline passes.
  * @param {import('node:child_process').ChildProcess} child
  * @param {number} timeoutMs
  */
@@ -1124,7 +1067,6 @@ function waitForChildExit(child, timeoutMs) {
 }
 
 /**
- * SIGTERM the process tree, wait, then SIGKILL on POSIX if still alive.
  * @param {import('node:child_process').ChildProcess | { pid: number }} child
  * @param {{ graceMs?: number }} [opts]
  */
@@ -1135,8 +1077,6 @@ export async function killProcessTreeAndWait(child, opts = {}) {
 
   killProcessTree(child);
 
-  // Orphan reaper passes `{ pid }` — no exit events. Still went through
-  // killProcessTree (ancestor guards). Poll liveness instead of sleeping blindly.
   const hasExitEvents = typeof child.on === 'function';
   if (!hasExitEvents) {
     const deadline = Date.now() + graceMs;
@@ -1153,7 +1093,6 @@ export async function killProcessTreeAndWait(child, opts = {}) {
         try {
           process.kill(child.pid, 'SIGKILL');
         } catch {
-          /* already gone */
         }
       }
     }
@@ -1173,7 +1112,6 @@ export async function killProcessTreeAndWait(child, opts = {}) {
         try {
           child.kill('SIGKILL');
         } catch {
-          /* already gone */
         }
       }
     }
@@ -1181,12 +1119,13 @@ export async function killProcessTreeAndWait(child, opts = {}) {
   }
 }
 
+// ── History ──────────────────────────────────────────────────────────────────
+
 /**
  * @param {string} chatId
  * @returns {Promise<TerminalRunRecord[]>}
  */
 export async function getTerminalHistoryForChat(chatId) {
-  // Default: SELECT … WHERE chat_id=? ORDER BY seq (no whole-blob parse).
   if (!useJsonSessionsStore()) {
     return /** @type {TerminalRunRecord[]} */ (readTerminalHistory(chatId));
   }
@@ -1209,8 +1148,6 @@ export async function getTerminalHistoryForChat(chatId) {
  */
 export async function readRunLogTail(runId, maxBytes = 64 * 1024) {
   const state = activeRuns.get(runId);
-  // Once the state is evicted the log location is only known to the index —
-  // guessing logs/terminal/ here silently lost dev-server and model-serve logs.
   const indexed = state ? null : await readRunIndexEntry(runId);
   const logPath =
     state?.logPath ?? indexed?.logPath ?? path.join(terminalLogDir(), `${runId}.log`);
@@ -1240,14 +1177,13 @@ async function readLogTailAt(logPath, maxBytes) {
 }
 
 /**
- * Blocking execute_command via the shared runner (no SSE subscribers required).
  * @param {object} params
  * @param {string} params.command
  * @param {string} params.cwd
  * @param {string} [params.chatId]
  * @param {string} [params.toolCallId]
  * @param {number} [params.timeoutMs]
- * @param {Record<string, string>} [params.env] merged over process.env for the child
+ * @param {Record<string, string>} [params.env]
  * @param {import('./terminal/shell-profiles.js').ShellProfile | null} [params.shellProfile]
  * @param {boolean} [params.allowUnsandboxed]
  * @param {string} [params.worktreeRoot]

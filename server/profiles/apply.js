@@ -204,6 +204,7 @@ async function mergeWorkAgentsFromBundle(bundleAgents, existing) {
 
 /**
  * Apply a validated profile bundle to ~/.minnow.
+ * Drops the sub-agent cache so new type rows apply without a restart.
  * @param {object} bundle
  * @returns {Promise<{ appliedAt: string }>}
  */
@@ -280,8 +281,6 @@ export async function applyProfileBundle(bundle) {
   };
   const { config: subNormalized } = normalizeSubAgentsConfig(subMerged);
   await writeConfigJson('sub-agents.json', subNormalized);
-  // Profile apply writes the same file Settings PUT does — drop the
-  // effector cache so the new type rows are live without a restart.
   resetSubAgentServerConfigCache();
 
   if (bundle.rules && typeof bundle.rules === 'object') {

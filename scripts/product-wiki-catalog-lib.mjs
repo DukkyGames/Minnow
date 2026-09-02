@@ -12,7 +12,6 @@ export { isGitHubWikiPublishPath, isProductWikiPath } from '../src/product-wiki/
 
 const EXCLUDED_SEGMENTS = PRODUCT_WIKI_EXCLUDED_SEGMENTS;
 
-/** Recursively collect Markdown paths in stable lexical order. */
 async function collectMarkdownPaths(root, pathFilter, relativeDirectory = '') {
   const directory = path.join(root, relativeDirectory);
   const rows = await readdir(directory, { withFileTypes: true });
@@ -29,7 +28,6 @@ async function collectMarkdownPaths(root, pathFilter, relativeDirectory = '') {
   return paths;
 }
 
-/** Remove lightweight Markdown syntax for compact catalog summaries. */
 function plainText(markdown) {
   return markdown
     .replace(/^---[\s\S]*?---\s*/u, '')

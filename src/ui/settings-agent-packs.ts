@@ -1,7 +1,3 @@
-/**
- * Agent packs settings: authoring guide, template download, installed pack list.
- */
-
 import '../styles/settings-general.css';
 import '../styles/settings-agent-packs.css';
 import {

@@ -39,9 +39,7 @@ function loadPanelState(): DesktopWorkspacePanelState {
 function persistPanelState(): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(panelState));
-  } catch {
-    /* quota / private mode */
-  }
+  } catch {}
 }
 
 function notifyListeners(): void {

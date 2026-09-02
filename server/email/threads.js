@@ -11,7 +11,6 @@ export function normalizeSubject(subject) {
     return '';
   }
 
-  // Remove repeated Re:/Fwd:/Fw: prefixes (multilingual common forms).
   const prefixRe = /^(?:(?:re|fw|fwd|aw|sv|antw|vs|ref|tr|odp|r|回复|答复|转发)\s*:\s*)+/i;
   let prev = '';
   while (value !== prev) {

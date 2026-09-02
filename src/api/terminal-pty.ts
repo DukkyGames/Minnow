@@ -1,7 +1,3 @@
-/**
- * Interactive PTY session API (requires npm start).
- */
-
 import { withSessionToken } from './session-token.ts';
 
 export interface ShellProfile {

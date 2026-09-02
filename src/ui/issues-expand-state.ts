@@ -1,10 +1,3 @@
-/**
- * Lightweight expand-run flags for the Issues sparkles expander.
- *
- * Kept free of the generations client so Issues page / messages can read
- * busy + overlay state without pulling `/api/generations` into the store chunk.
- */
-
 export const ISSUES_EXPAND_FORM_ID = 'issuesExpandForm';
 export const ISSUES_EXPAND_BACKDROP_ID = 'issuesExpandFormBackdrop';
 

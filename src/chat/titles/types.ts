@@ -1,7 +1,3 @@
-/**
- * Types for programmatic chat title generation (Step 07).
- */
-
 import type { ChatCompletionBody } from '../../api/chat';
 import type { ChatCompletionChunk } from '../../types';
 

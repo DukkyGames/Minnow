@@ -28,6 +28,8 @@ import { isResearchPanelOpen, subscribeResearchPanel } from '../ui/research-pane
 import { launchApp } from './router';
 import type { AppId } from './types';
 
+// ── Tooltip ──────────────────────────────────────────────────────────────────
+
 const TOOLTIP_DELAY_MS = 500;
 const TOOLTIP_GAP_PX = 10;
 const TOOLTIP_EDGE_PAD_PX = 8;
@@ -96,7 +98,6 @@ function positionRailTooltip(anchor: HTMLElement, layer: HTMLDivElement): void {
     return;
   }
 
-  // Clamp vertically so tiles near the viewport edges keep the label on screen.
   const height = layer.offsetHeight;
   const centerY = anchorBox.top + anchorBox.height / 2;
   const minY = TOOLTIP_EDGE_PAD_PX + height / 2;
@@ -106,7 +107,6 @@ function positionRailTooltip(anchor: HTMLElement, layer: HTMLDivElement): void {
   layer.style.left = `${anchorBox.right + TOOLTIP_GAP_PX}px`;
   layer.style.top = `${clampedY}px`;
   layer.style.transform = 'translateY(-50%)';
-  // Arrow tracks the tile, not the clamped box, so it still points at its source.
   layer.style.setProperty('--rail-tooltip-arrow-y', `${centerY - clampedY + height / 2}px`);
 }
 
@@ -158,6 +158,8 @@ function bindRailTooltip(btn: HTMLButtonElement, getText: () => string): void {
   btn.addEventListener('focus', onFocus);
   btn.addEventListener('blur', onBlur);
 }
+
+// ── Buttons ──────────────────────────────────────────────────────────────────
 
 function handleRailClick(appId: AppId): void {
   launchApp(appId);
@@ -242,20 +244,13 @@ function bindIssuesDockBadge(btn: HTMLButtonElement, appLabel: string): () => vo
   badge.hidden = true;
   btn.appendChild(badge);
 
-  // The subscription is established synchronously and the *store* is resolved
-  // lazily inside it. Awaiting the store first looked tidier and was wrong: the
-  // rail rebuilds on the first app-preferences change, so a binding created at
-  // mount is often disposed before its import settles, and the badge that
-  // survives ends up with no listener at all.
   const sync = (): void => {
     let issues: ReturnType<typeof import('../state/issues-store').listIssues> = [];
     try {
       if (issuesStore?.isIssuesStoreLoaded() === true) {
         issues = issuesStore.listIssues();
       }
-    } catch {
-      /* Store not loaded yet in tests or early boot — badge stays hidden. */
-    }
+    } catch {}
     const state = computeIssuesDockBadge(issues);
     const text = issuesDockBadgeText(state);
     badge.hidden = text === '';
@@ -276,7 +271,6 @@ function bindIssuesDockBadge(btn: HTMLButtonElement, appLabel: string): () => vo
       sync();
     })
     .catch(() => {
-      /* No badge is a better failure than no rail. */
     });
 
   return () => {
@@ -298,8 +292,6 @@ function syncRailButtons(tileByAppId: Map<AppId, HTMLButtonElement>): void {
     btn.setAttribute('aria-current', active ? 'page' : hosting ? 'true' : 'false');
     btn.removeAttribute('aria-expanded');
     const label = getAppById(appId)?.name;
-    // Keep a badge's detail ("2 issues to triage") in the accessible name;
-    // this runs on every instance change and would otherwise erase it.
     const badgeLabel = btn.dataset.badgeLabel;
     if (label) btn.setAttribute('aria-label', badgeLabel ? `${label} — ${badgeLabel}` : label);
   }
@@ -310,6 +302,8 @@ function syncRailButtons(tileByAppId: Map<AppId, HTMLButtonElement>): void {
 function syncRailVisibility(root: HTMLElement): void {
   root.hidden = getOsView() === 'workspaces';
 }
+
+// ── Init ─────────────────────────────────────────────────────────────────────
 
 /**
  * Mount the left app rail (`--sidebar-rail`) inside `#osAppRail`.

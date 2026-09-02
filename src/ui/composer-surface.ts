@@ -1,7 +1,3 @@
-/**
- * Resolves the active composer input + send button for Code vs legacy Chat app.
- */
-
 import { getForegroundAppId } from '../os/instances';
 import type { AppId } from '../os/types';
 import { isChatAppForeground } from './chat-mount';
@@ -64,7 +60,6 @@ export function resolveComposerSurface(
 export function clearComposerInput(input: HTMLTextAreaElement | null | undefined): void {
   if (!input) return;
   input.value = '';
-  // Drop inline height so CSS field-sizing / min-height can restore the floor.
   input.style.height = '';
   input.style.overflowY = 'hidden';
   void import('./input').then((m) => m.autoResize(input));

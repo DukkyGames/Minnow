@@ -1,20 +1,9 @@
-/**
- * Per-agent input token budgets and pre-send enforcement (MIN-39).
- * Pure helpers — safe for Node tests (no DOM).
- */
 import type { ApiMessage } from '../../src/types.js';
 import type { ArchiveConfig } from '../../src/chat/archive/types.js';
 /** How to fit outbound messages under a token ceiling. */
 export type ContextEnforcementPolicy = 'summarize' | 'dropMiddle' | 'slide' | 'truncate' | 'archive';
 /** Shipped default when a row omits policy (LLM summarize). */
 export declare const DEFAULT_CONTEXT_ENFORCEMENT_POLICY: ContextEnforcementPolicy;
-/**
- * Headroom left under the model window for the reply itself and for estimator
- * drift. It only works when the estimate is honest: while `estimateTokensFromText`
- * ran at `chars ÷ 4` it undercounted tool-heavy transcripts by 24–33%, so this
- * margin was spent before enforcement ever looked at it and the trigger point
- * sat *above* the hard limit. See the divisor table in token-estimate-core.
- */
 export declare const SAFETY_MARGIN = 0.9;
 /** Prefix injected before compressed prior-turn summaries (LLM or extractive). */
 export declare const SUMMARY_HEADER = "## Prior context (compressed)\n";
@@ -23,7 +12,6 @@ export interface AgentContextBudgetConfig {
     enforcementPolicy: ContextEnforcementPolicy;
     minRecentTurns?: number;
     summaryReserveTokens?: number;
-    /** Tuning when enforcementPolicy is `archive` (MIN-139). */
     archive?: ArchiveConfig;
 }
 export interface ResolvedContextBudget {

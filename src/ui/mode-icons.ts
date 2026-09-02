@@ -1,7 +1,3 @@
-/**
- * Uicons Solid Rounded glyphs for operating modes (General / Build / Plan / …).
- */
-
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import { applyIcon, createIcon, type IconName } from './icon';
 

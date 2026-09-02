@@ -59,8 +59,6 @@ export function resolveRunTargetKey(
   campaign: BenchmarkCampaign,
   run: BenchmarkRun,
 ): string {
-  // Runs recorded by the campaign runner carry their roster row directly; a served
-  // My Models row cannot be recovered from provider/model alone.
   const stamped = run.targetKey?.trim();
   if (stamped) return stamped;
   for (const target of campaign.targets) {

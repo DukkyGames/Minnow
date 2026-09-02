@@ -308,8 +308,6 @@ export function schedulePostTurnSynthesis(input: SynthesisRunInput): void {
           showMemorySavedToast(memorySavedPayloadFromBrainPage(page));
         }
       }
-    } catch {
-      /* synthesis is best-effort */
-    }
+    } catch {}
   })();
 }

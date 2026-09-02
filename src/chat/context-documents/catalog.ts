@@ -1,7 +1,3 @@
-/**
- * Preset workspace context document paths for first-turn injection.
- */
-
 export interface ContextDocumentPreset {
   id: string;
   label: string;

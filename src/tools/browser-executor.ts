@@ -1,17 +1,3 @@
-/**
- * Browser-native tool execution (SA-3).
- * All handlers return human-readable strings; failures use "Error: …" prefixes.
- *
- * web_search: uses Brave when `api_key` is present; without a key, returns a message
- * so the client router (SA-5) can fall back to server `web_search_ddg`.
- *
- * fetch_web_content / rag_web_content: client routes to the server when `npm start`
- * is up (BUG-011); this executor is the browser fallback (CORS-bound).
- *
- * Full browser automation (navigate, snapshot, screenshot) lives in Electron preview tools
- * (`browser_*` via `npm start` / POST /api/tools) — not in this executor.
- */
-
 import {
   fetchUrlText,
   rankWebContentByQuery,
@@ -43,10 +29,8 @@ const SAFE_CALC_CHARS = /^[0-9+\-*/().%\s,]+$/;
 /** Allowed Math.* identifiers inside calculate expressions. */
 const SAFE_MATH_IDENT = /^Math\.(abs|ceil|floor|round|sqrt|pow|min|max|log|exp|sin|cos|tan|PI|E)$/;
 
-/**
- * Routes a tool name to the matching browser handler.
- * Unknown tools return a clear error string (never throw to callers).
- */
+// ── Dispatch ─────────────────────────────────────────────────────────────────
+
 export async function executeBrowserTool(
   name: string,
   args: Record<string, unknown> = {},
@@ -97,10 +81,6 @@ function toolGetDatetime(): string {
   return new Date().toISOString();
 }
 
-/**
- * Evaluates a math expression via `Math` only (whitelist + new Function).
- * Expected: "Error: …" for invalid input; numeric string on success.
- */
 function toolCalculate(args: Record<string, unknown>): string {
   const raw = args.expression;
   if (typeof raw !== 'string' || !raw.trim()) {
@@ -147,6 +127,8 @@ function isSafeCalculateExpression(expression: string): boolean {
 
   return tokens.length > 0;
 }
+
+// ── Search ───────────────────────────────────────────────────────────────────
 
 /**
  * Brave web search when api_key is set; otherwise instructs client to use server DDG.
@@ -262,9 +244,7 @@ async function fetchWikipediaDescriptionsByTitle(titles: string[]): Promise<Map<
         byTitle.set(title, text);
       }
     }
-  } catch {
-    // Opensearch titles/URLs still useful without query snippets.
-  }
+  } catch {}
 
   return byTitle;
 }
@@ -331,6 +311,8 @@ async function toolWikipediaSearch(args: Record<string, unknown>): Promise<strin
   return `Wikipedia results for "${query}":\n\n${blocks.join('\n\n')}`;
 }
 
+// ── Fetch ────────────────────────────────────────────────────────────────────
+
 /** Fetches a URL, strips HTML, caps output at ~8KB. Browser fallback when server is down (CORS). */
 async function toolFetchWebContent(args: Record<string, unknown>): Promise<string> {
   const url = stringArg(args, 'url');
@@ -373,6 +355,8 @@ async function toolRagWebContent(args: Record<string, unknown>): Promise<string>
   const header = `Relevant excerpts from ${url} for "${query}":\n\n`;
   return header + snippets.map((s, i) => `${i + 1}. ${s}`).join('\n\n');
 }
+
+// ── Clipboard ────────────────────────────────────────────────────────────────
 
 /** Reads plain text from the clipboard (permission may be required). */
 async function toolReadClipboard(): Promise<string> {

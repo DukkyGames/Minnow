@@ -1,10 +1,3 @@
-/**
- * Open a workspace file or folder in the OS file explorer (Finder / Explorer / Files).
- *
- * Files: reveal/select the item in its parent folder when the platform supports it.
- * Folders: open that folder itself.
- */
-
 import { exec, spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -13,18 +6,10 @@ import { promisify } from 'node:util';
 const execAsync = promisify(exec);
 
 /**
- * @typedef {{
- *   command: string,
- *   args: string[],
- *   detached?: boolean,
- *   windowsVerbatimArguments?: boolean,
- * }} RevealCommand
+ * @typedef {{ command: string, args: string[], detached?: boolean, windowsVerbatimArguments?: boolean, }} RevealCommand
  */
 
 /**
- * explorer.exe treats `/segment` in arguments as switches. Paths must use `\` and
- * file reveal uses a single `/select,"path"` token (spaces require quoting).
- *
  * @param {string} absolutePath
  * @returns {string}
  */
@@ -37,9 +22,6 @@ export function formatPathForWindowsExplorer(absolutePath) {
 }
 
 /**
- * Build the platform-specific command used to open/reveal a path.
- * Pure helper — easy to unit-test without spawning a real explorer.
- *
  * @param {NodeJS.Platform} platform
  * @param {string} absolutePath
  * @param {boolean} isDirectory
@@ -48,7 +30,6 @@ export function formatPathForWindowsExplorer(absolutePath) {
 export function buildRevealCommand(platform, absolutePath, isDirectory) {
   if (platform === 'win32') {
     const explorerPath = formatPathForWindowsExplorer(absolutePath);
-    // explorer.exe often exits non-zero even on success — spawn detached and ignore exit.
     if (isDirectory) {
       return {
         command: 'explorer.exe',
@@ -71,17 +52,14 @@ export function buildRevealCommand(platform, absolutePath, isDirectory) {
     if (isDirectory) {
       return { command: 'open', args: [resolved] };
     }
-    // Reveal and select the file in Finder.
     return { command: 'open', args: ['-R', resolved] };
   }
 
-  // Linux / other — xdg-open opens a folder; for files open the parent.
   const target = isDirectory ? resolved : path.dirname(resolved);
   return { command: 'xdg-open', args: [target], detached: true };
 }
 
 /**
- * Run explorer via the shell on Windows — more reliable than raw spawn for /select.
  * @param {string} explorerPath
  * @param {boolean} isDirectory
  */
@@ -94,7 +72,6 @@ async function runWindowsExplorerReveal(explorerPath, isDirectory) {
 }
 
 /**
- * Spawn a reveal command. Detached processes resolve once spawned (explorer exit codes are noisy).
  * @param {RevealCommand} cmd
  * @param {{ spawnImpl?: typeof spawn, platform?: NodeJS.Platform, isDirectory?: boolean }} [deps]
  * @returns {Promise<void>}
@@ -120,7 +97,6 @@ export function runRevealCommand(cmd, deps = {}) {
     child.on('error', reject);
     if (cmd.detached) {
       child.unref();
-      // Allow the 'error' event a tick to fire before treating spawn as success.
       setImmediate(resolve);
       return;
     }
@@ -135,7 +111,6 @@ export function runRevealCommand(cmd, deps = {}) {
 }
 
 /**
- * Resolve existence + kind, then open/reveal in the system explorer.
  * @param {string} absolutePath
  * @param {{ platform?: NodeJS.Platform, spawnImpl?: typeof spawn, statImpl?: typeof fs.stat, skipSpawn?: boolean }} [deps]
  * @returns {Promise<{ ok: true, path: string, kind: 'file' | 'dir' }>}

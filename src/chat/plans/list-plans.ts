@@ -1,10 +1,3 @@
-/**
- * Discover markdown plans under documentation/plans/ for the planner picker
- * and the V2 Boards create form.
- *
- * Listing only — not a board engine. Moved out of `src/chat/orchestrate/` in MIN-714.
- */
-
 import { executeTool } from '../../tools/client';
 import { isLocalServerAvailable } from '../../tools/config';
 import { isOrchestratePlanPickerEntry } from './plan-path';

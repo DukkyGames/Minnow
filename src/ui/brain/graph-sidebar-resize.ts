@@ -1,7 +1,3 @@
-/**
- * Drag the graph left rail's right edge to resize width (persisted in localStorage).
- */
-
 const STORAGE_KEY = 'minnow-brain-graph-sidebar-width';
 const DEFAULT_WIDTH = 300;
 const MIN_WIDTH = 200;

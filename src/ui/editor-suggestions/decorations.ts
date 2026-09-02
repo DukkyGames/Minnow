@@ -1,8 +1,3 @@
-/**
- * Decorations for the two suggestion kinds: inline ghost text (completion) and
- * a block proposal rendered under the intent line.
- */
-
 import type { EditorState } from '@codemirror/state';
 import { Decoration, DecorationSet, WidgetType } from '@codemirror/view';
 import type { Suggestion } from './state';
@@ -33,12 +28,7 @@ export class GhostTextWidget extends WidgetType {
   }
 }
 
-/**
- * Block widget under the intent line showing the proposed replacement. A block
- * widget (rather than `Decoration.replace`) keeps the prose visible and
- * editable, and the gutter correctly declines to number lines that do not exist
- * in the document yet.
- */
+/** Block widget under the intent line showing the proposed replacement. */
 export class IntentProposalWidget extends WidgetType {
   constructor(
     readonly proposalText: string,
@@ -63,7 +53,6 @@ export class IntentProposalWidget extends WidgetType {
     for (const line of this.proposalText.split('\n')) {
       const row = document.createElement('div');
       row.className = 'cm-intent-proposal-line';
-      // Zero-width space keeps blank proposal lines from collapsing to 0px.
       row.textContent = line.length > 0 ? line : '​';
       wrap.appendChild(row);
     }

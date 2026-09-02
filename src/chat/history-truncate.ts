@@ -1,7 +1,3 @@
-/**
- * Chat history truncation with atomic assistant + tool_call chains.
- */
-
 import { isChatStreaming } from '../chat/streaming-state';
 import {
   findChatById,
@@ -44,10 +40,6 @@ export {
   sliceHistoryAtTurn,
 };
 
-/**
- * Truncate chat history at a logical turn boundary.
- * Inclusive keeps through the target block; exclusive removes the block and after.
- */
 export function truncateChatHistory(
   chatId: string,
   cutIndex: number,
@@ -64,11 +56,6 @@ export function truncateChatHistory(
     return { ok: false, error: 'not_found' };
   }
 
-  /*
-   * `cutIndex` is absolute into the full transcript. An unhydrated chat holds an
-   * empty placeholder, so slicing it would persist that placeholder as the whole
-   * history. Callers must `await ensureChatHistoryLoaded` first.
-   */
   if (!isChatHistoryLoaded(chat)) {
     return { ok: false, error: 'history_not_loaded' };
   }

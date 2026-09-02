@@ -1,7 +1,3 @@
-/**
- * Generate conventional commit messages from staged diffs via /api/generations.
- */
-
 import {
   cancelGeneration,
   createGeneration,
@@ -82,6 +78,8 @@ export interface GitCommitMessageResult {
   text: string | null;
   error?: string;
 }
+
+// ── Prompt ───────────────────────────────────────────────────────────────────
 
 function buildCommitMessageSystemPrompt(useGitmoji: boolean): string {
   const lines = [
@@ -194,6 +192,8 @@ export function buildGitCommitMessagePrompt(
   ];
 }
 
+// ── Thinking ─────────────────────────────────────────────────────────────────
+
 function looksLikeReasoningLine(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed) return false;
@@ -286,6 +286,8 @@ export function stripReasoningFraming(text: string): string {
   return lines.slice(start, end).join('\n').trim();
 }
 
+// ── Extract ──────────────────────────────────────────────────────────────────
+
 function looksLikeCommitMessageSegment(segment: string): boolean {
   if (looksLikeDiffAnalysisText(segment)) return false;
   const lines = segment.trim().split('\n').filter((line) => line.trim());
@@ -369,10 +371,7 @@ function extractHighConfidenceCommitMessage(stripped: string): string {
   return '';
 }
 
-/**
- * Pull the commit message out of a reasoning chain. Prefer the last conventional
- * commit block; otherwise the last paragraph that looks like a commit message.
- */
+/** Pull the commit message out of a reasoning chain. */
 export function extractCommitMessageFromChain(
   raw: string,
   options?: CommitMessageExtractOptions,
@@ -405,10 +404,7 @@ export function normalizeCommitMessageOutput(raw: string): string {
   return extractCommitMessageFromChain(raw);
 }
 
-/**
- * Resolve display text from content/reasoning channels. Never surfaces a raw
- * reasoning chain — providers often mirror reasoning into `content`.
- */
+/** Resolve display text from content/reasoning channels. */
 export function resolveCommitMessageDisplayText(
   contentText: string,
   reasoningText: string,
@@ -431,7 +427,6 @@ export function resolveCommitMessageDisplayText(
       }
     }
 
-    // Fast path: clean one-shot content with no reasoning markers (final pass only).
     if (
       allowHeuristicFallback &&
       !mirrored &&
@@ -481,6 +476,8 @@ export function sanitizeCommitMessage(raw: string): string {
   return text.trim();
 }
 
+// ── Fetch ────────────────────────────────────────────────────────────────────
+
 function ingestChunk(
   contentAcc: StreamingContentAccumulator,
   reasoningAcc: BenchmarkStreamReasoningAccumulator,
@@ -503,10 +500,7 @@ function createGenerationErrorMessage(err: unknown): string {
   return EDITOR_AI_REQUEST_FAILED_MESSAGE;
 }
 
-/**
- * Git commit messages use the active chat model when editor AI is disabled
- * or configured to follow chat; otherwise the pinned editor model.
- */
+/** Git commit messages use the active chat model when editor AI is disabled or configured to follow chat; otherwise the pinned editor model. */
 export async function resolveGitCommitMessageBinding(
   config: EditorAiCompletionConfig,
 ): Promise<EditorAiBinding> {
@@ -625,7 +619,6 @@ export async function fetchGitCommitMessage(
       () => {
         unsubscribe();
         void cancelGeneration(generationId).catch(() => {
-          /* best-effort */
         });
         finish(null);
       },

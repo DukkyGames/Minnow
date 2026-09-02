@@ -1,7 +1,3 @@
-/**
- * Pure builders: wiki page graph and code call graph data.
- */
-
 import type { BrainCodeSymbolRef } from '../../../brain/types';
 import type { BrainPageMeta } from '../../../brain/types';
 import type { GraphData, GraphEdge, GraphNode } from './types';

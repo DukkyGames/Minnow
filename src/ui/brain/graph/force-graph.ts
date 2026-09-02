@@ -1,15 +1,3 @@
-/**
- * Brain knowledge-graph canvas renderer.
- *
- * A d3-force simulation drawn on a 2D canvas. The drawing model encodes real
- * structure rather than decorating it: node size follows degree, edges are
- * styled by relation kind and carry direction, and emphasis eases between
- * "the whole graph" and "this neighborhood" instead of snapping.
- *
- * Strokes, labels, and callouts are divided by the zoom scale so they hold a
- * constant on-screen weight while the graph itself scales in world space.
- */
-
 import {
   forceCenter,
   forceCollide,
@@ -95,13 +83,7 @@ type SimEdge = SimulationLinkDatum<SimNode> & { kind: GraphEdge['kind']; id: str
 /** Base world-space radius before degree weighting. */
 const KIND_BASE_RADIUS: Record<GraphNodeKind, number> = { page: 5.5, tag: 4, symbol: 6 };
 
-/**
- * Emphasis floor for nodes outside the active neighborhood.
- *
- * Hover is a deliberate "trace this" gesture, so it dims hard. A selection can
- * sit for minutes while the page is read, so it only recedes — the rest of the
- * graph has to stay legible as context.
- */
+/** Emphasis floor for nodes outside the active neighborhood. */
 const DIM_EMPHASIS_HOVER = 0.18;
 const DIM_EMPHASIS_SELECTED = 0.42;
 /** Emphasis floor for node classes muted from the legend. */
@@ -109,13 +91,7 @@ const MUTED_EMPHASIS = 0.08;
 /** A node needs this many edges before it earns a permanent label. */
 const HUB_LABEL_DEGREE = 3;
 
-/**
- * Alpha ramp for the ambient field, as [offset, alpha] pairs.
- *
- * A plain two-stop gradient falls off linearly, and the kink where it hits zero
- * shows up as a visible ring. These stops trace a smooth curve that flattens
- * into the background instead of meeting it at an angle.
- */
+/** Alpha ramp for the ambient field, as [offset, alpha] pairs. */
 /** Field opacity at the centre — depth cue, not a wash. */
 const FIELD_PEAK_ALPHA = 0.085;
 
@@ -139,12 +115,7 @@ interface Rgb {
 /** Swamp accent, used only if a theme colour fails to resolve. */
 const FALLBACK_ACCENT: Rgb = { r: 158, g: 197, b: 167 };
 
-/**
- * Flatten any CSS colour — including the `color-mix` theme tokens — to sRGB
- * channels, by borrowing an element's computed style.
- *
- * Canvas gradients need a real alpha per stop, which a token string can't give.
- */
+/** Flatten any CSS colour — including the `color-mix` theme tokens — to sRGB channels, by borrowing an element's computed style. */
 function resolveRgb(host: HTMLElement, value: string): Rgb {
   const previous = host.style.color;
   host.style.color = '';
@@ -228,11 +199,9 @@ export function createForceGraph(
   let selectedId: string | null = null;
   let hoverId: string | null = null;
   let highlightIds: Set<string> | null = null;
-  // When set, the highlight is sticky (double-click "focus subtree") rather than transient.
   let focusId: string | null = null;
   let mutedKinds = new Set<GraphEmphasisKey>();
   let insets: ViewportInsets = { top: 0, right: 0, bottom: 0, left: 0 };
-  // Signals that the next simulation end should auto-fit the viewport.
   let pendingFit = false;
   let rafId = 0;
   let destroyed = false;
@@ -274,7 +243,6 @@ export function createForceGraph(
 
   const pickNode = (clientX: number, clientY: number): SimNode | null => {
     const { x, y } = screenToGraph(clientX, clientY);
-    // Keep the hit target at least a finger wide on screen regardless of zoom.
     const slop = 5 / transform.k;
     let best: SimNode | null = null;
     let bestDist = Infinity;
@@ -325,10 +293,6 @@ export function createForceGraph(
     ctx.closePath();
   };
 
-  /**
-   * Place the hover callout in screen space: prefer below the node, fall back to
-   * the other three sides, then clamp into the viewport.
-   */
   const placeCallout = (
     sx: number,
     sy: number,
@@ -376,8 +340,6 @@ export function createForceGraph(
 
   /** Ease emphasis and entrance one frame forward. */
   const advanceAnimation = (): void => {
-    // Resolved once per frame: neighbor lookup is O(edges) and would otherwise
-    // run per node.
     const hovering = Boolean(hoverId);
     const active = hoverId ? computeNeighborSet(hoverId) : highlightIds;
     const dimFloor = hovering || focusId ? DIM_EMPHASIS_HOVER : DIM_EMPHASIS_SELECTED;
@@ -400,7 +362,6 @@ export function createForceGraph(
     ctx.fillStyle = theme.stageBg;
     ctx.fillRect(0, 0, w, h);
 
-    // Reaches past the far corner, so the ramp never terminates on screen.
     const radius = Math.hypot(w, h) * 0.85;
     const field = ctx.createRadialGradient(w / 2, h * 0.45, 0, w / 2, h * 0.45, radius);
     for (const [offset, alpha] of FIELD_STOPS) {
@@ -411,7 +372,6 @@ export function createForceGraph(
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
 
-    // Lattice fades out when zoomed far out, where it would turn into noise.
     const latticeAlpha = Math.min(0.5, Math.max(0, (transform.k - 0.3) * 0.5));
     if (latticeAlpha <= 0.01) return;
     const spacing = 56;
@@ -459,7 +419,6 @@ export function createForceGraph(
         drawArrowhead(t, cx, cy, stroke, emphasis, px, highlighted);
       }
 
-      // A travelling pulse on the lit neighborhood shows which way relations point.
       if (highlighted && !reducedMotion) {
         const progress = ((now / 2200) + edge.seed) % 1;
         const inv = 1 - progress;
@@ -518,12 +477,10 @@ export function createForceGraph(
       const hovered = node.id === hoverId;
       const color = nodeColor(node);
 
-      // Hubs and the active node carry a soft halo — depth without a HUD glow.
       if (active || hovered || node.degree >= HUB_LABEL_DEGREE) {
         ctx.save();
         ctx.globalAlpha = (active ? 0.5 : hovered ? 0.34 : 0.18) * emphasis;
         ctx.shadowColor = active ? theme.glow : color;
-        // shadowBlur ignores the canvas transform, so it is a screen-space constant.
         ctx.shadowBlur = active ? 22 : 12;
         ctx.fillStyle = color;
         ctx.beginPath();
@@ -539,7 +496,6 @@ export function createForceGraph(
       ctx.fillStyle = color;
       ctx.fill();
 
-      // Hubs read as rings so weight is legible even where nodes overlap.
       if (node.degree >= HUB_LABEL_DEGREE && r > 6) {
         ctx.beginPath();
         ctx.arc(node.x, node.y, r * 0.42, 0, Math.PI * 2);
@@ -558,7 +514,6 @@ export function createForceGraph(
       ctx.restore();
 
       if (active) {
-        // Breathing ring: keeps the selection findable after the graph settles.
         const phase = reducedMotion ? 0 : (Math.sin(now / 620) + 1) / 2;
         ctx.save();
         ctx.globalAlpha = 0.75 - phase * 0.35;
@@ -581,10 +536,7 @@ export function createForceGraph(
     }
   };
 
-  /**
-   * Persistent labels for well-connected nodes, dropped where they would collide.
-   * Drawn in screen space so type stays crisp and constant-size at any zoom.
-   */
+  /** Persistent labels for well-connected nodes, dropped where they would collide. */
   const drawHubLabels = (w: number, h: number): void => {
     if (transform.k < 0.4) return;
     const skipId = hoverId ?? selectedId;
@@ -599,7 +551,6 @@ export function createForceGraph(
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     for (const node of ranked) {
-      // Below the hub threshold, labels only appear once the user has zoomed in.
       if (node.degree < HUB_LABEL_DEGREE && transform.k < 1.2) continue;
       const sx = transform.applyX(node.x!);
       const sy = transform.applyY(node.y!);
@@ -619,7 +570,6 @@ export function createForceGraph(
       ctx.globalAlpha = Math.min(1, node.emphasis) * (node.degree >= HUB_LABEL_DEGREE ? 0.95 : 0.7);
       ctx.lineWidth = 3;
       ctx.strokeStyle = theme.stageBg;
-      // Halo the text so it stays readable over edges.
       ctx.strokeText(text, sx, top);
       ctx.fillStyle = node.degree >= HUB_LABEL_DEGREE ? theme.label : theme.labelMuted;
       ctx.fillText(text, sx, top);
@@ -719,7 +669,6 @@ export function createForceGraph(
     rafId = requestAnimationFrame(tickLoop);
   };
 
-  // Compute bounding box and fit the viewport to a subset of nodes (or all when ids omitted).
   const fitToNodes = (ids?: Set<string>): void => {
     const target = ids ? nodes.filter((n) => ids.has(n.id)) : nodes;
     if (!target.length) {
@@ -741,7 +690,6 @@ export function createForceGraph(
     if (!isFinite(minX)) return;
     const rect = canvas.getBoundingClientRect();
     const pad = 40;
-    // Fit into the clear area between the floating panels, then centre on it.
     const availW = Math.max(120, rect.width - insets.left - insets.right - pad * 2);
     const availH = Math.max(120, rect.height - insets.top - insets.bottom - pad * 2);
     const centerX = insets.left + pad + availW / 2;
@@ -755,13 +703,11 @@ export function createForceGraph(
     select(canvas).call(zoomBehavior.transform, transform);
   };
 
-  // Pan to a specific node while preserving the current zoom level.
   const centerOnNode = (id: string): void => {
     const node = nodeById.get(id);
     if (!node || node.x == null || node.y == null) return;
     const rect = canvas.getBoundingClientRect();
     const k = transform.k;
-    // Centre on the clear canvas, not the panel-covered geometric middle.
     const tx = insets.left + (rect.width - insets.left - insets.right) / 2 - node.x * k;
     const ty = insets.top + (rect.height - insets.top - insets.bottom) / 2 - node.y * k;
     transform = zoomIdentity.translate(tx, ty).scale(k);
@@ -783,12 +729,10 @@ export function createForceGraph(
             const s = l.source as SimNode;
             const t = l.target as SimNode;
             const base = l.kind === 'tag' ? 52 : l.kind === 'calls' ? 84 : 72;
-            // Give hubs elbow room so their spokes stay individually readable.
             return base + (s.radius + t.radius) * 1.4;
           })
           .strength((l) => (l.kind === 'tag' ? 0.35 : l.kind === 'similar' ? 0.4 : 0.6)),
       )
-      // Well-connected nodes push harder, which opens up clusters instead of clumping them.
       .force('charge', forceManyBody<SimNode>().strength((d) => -150 - d.degree * 14))
       .force('center', forceCenter(cx, cy))
       .force('collide', forceCollide<SimNode>().radius((d) => d.radius + 14))
@@ -797,13 +741,11 @@ export function createForceGraph(
 
     if (reducedMotion) {
       simulation.tick(160);
-      // For reduced motion, nodes are positioned synchronously — fit immediately.
       if (pendingFit) {
         pendingFit = false;
         fitToNodes();
       }
     } else {
-      // Fit the viewport once the simulation has fully cooled.
       simulation.on('end', () => {
         if (pendingFit) {
           pendingFit = false;
@@ -871,7 +813,6 @@ export function createForceGraph(
       return;
     }
     lastClick = node ? { id: node.id, at: now } : { id: '', at: 0 };
-    // Background click clears persistent focus.
     if (!node) focusId = null;
     selectedId = node?.id ?? null;
     highlightIds = selectedId ? computeNeighborSet(selectedId) : null;
@@ -906,7 +847,6 @@ export function createForceGraph(
     attributeFilter: ['data-theme', 'class'],
   });
 
-  // Observe canvas layout changes and redraw without restarting the simulation.
   const scheduleCanvasResize = scheduleAnimationFrame(() => {
     resizeCanvas();
     draw(performance.now());
@@ -914,7 +854,6 @@ export function createForceGraph(
   const resizeObserver = new ResizeObserver(scheduleCanvasResize);
   resizeObserver.observe(canvas);
 
-  // Clear focus when Escape is pressed anywhere in the document.
   const handleKeydown = (ev: KeyboardEvent): void => {
     if (ev.key === 'Escape') {
       focusId = null;
@@ -938,7 +877,6 @@ export function createForceGraph(
         return {
           ...n,
           degree,
-          // sqrt keeps hubs prominent without letting one node swallow the canvas.
           radius: KIND_BASE_RADIUS[n.kind] + Math.min(9, Math.sqrt(degree) * 2.4),
           emphasis: reducedMotion ? 1 : 0,
           appear: reducedMotion ? 1 : 0,
@@ -955,7 +893,6 @@ export function createForceGraph(
     },
     selectNode(id) {
       selectedId = id;
-      // Navigating to a node clears any persistent focus highlight.
       focusId = null;
       highlightIds = id ? computeNeighborSet(id) : null;
     },

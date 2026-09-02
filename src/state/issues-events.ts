@@ -19,9 +19,7 @@ export function emitIssuesChange(): void {
   for (const fn of listeners) {
     try {
       fn();
-    } catch {
-      /* ignore subscriber errors */
-    }
+    } catch {}
   }
 }
 

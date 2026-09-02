@@ -1,7 +1,3 @@
-/**
- * Capability matrix — campaign history (capability-matrix kind only).
- */
-
 import type { BenchmarkCampaignSummary } from '../../benchmark/campaign-types.ts';
 import { listCampaignSummaries } from '../../benchmark/campaign-persistence.ts';
 

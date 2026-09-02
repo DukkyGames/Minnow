@@ -1,7 +1,3 @@
-/**
- * SA-16 automated smoke checks (Node). Run while `npm start` is up.
- * Usage: node scripts/sa16-smoke.mjs [baseUrl]
- */
 
 const BASE = process.argv[2] ?? 'http://localhost:5176';
 
@@ -18,7 +14,6 @@ async function postTool(name, args) {
 async function main() {
   const results = {};
 
-  // Ping
   try {
     const ping = await fetch(`${BASE}/api/tools/ping`);
     const json = await ping.json();
@@ -27,7 +22,6 @@ async function main() {
     results.ping = false;
   }
 
-  // Server tools
   const read = await postTool('read_file', { path: 'package.json' });
   results.read_file =
     read.ok && String(read.body.result ?? '').includes('"name": "minnow"');
@@ -36,7 +30,6 @@ async function main() {
   results.git_status =
     git.ok && String(git.body.result ?? '').includes('git status');
 
-  // Browser tools (dynamic import)
   try {
     const { executeBrowserTool } = await import(
       '../src/tools/browser-executor.ts'
@@ -52,7 +45,6 @@ async function main() {
     console.error('browser tools:', err);
   }
 
-  // Attachment helpers
   try {
     const { buildHistoryUserContent } = await import('../src/chat/build-api-messages.ts');
     const { processFile } = await import('../src/attachments/reader.ts');
@@ -96,7 +88,6 @@ async function main() {
       type: 'text/plain',
     });
     const textAtt = await processFile(smallTs);
-    // FileReader exists only in the browser; Node smoke still validates extension routing.
     results.process_ts_file =
       typeof FileReader !== 'undefined'
         ? textAtt.kind === 'text' && Boolean(textAtt.text)
@@ -110,7 +101,6 @@ async function main() {
     results.process_ts_file = false;
   }
 
-  // Server-unavailable path for server tools
   try {
     const { executeTool } = await import('../src/tools/client.ts');
     const { setLocalServerAvailable } = await import('../src/tools/config.ts');

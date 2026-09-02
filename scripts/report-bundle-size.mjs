@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-/**
- * Report production bundle sizes from dist/assets for CI and local perf budgets.
- * Usage: node scripts/report-bundle-size.mjs [--json] [--check]
- *
- * `--check` enforces budgets.json (same rules as check-performance-budgets.mjs).
- */
 
 import {
   analyzeDistAssets,

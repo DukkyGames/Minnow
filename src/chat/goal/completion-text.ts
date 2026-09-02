@@ -1,8 +1,3 @@
-/**
- * Extract evaluator completion text from non-streaming goal-eval responses.
- * Thinking models often leave `content` empty and write the verdict to reasoning channels.
- */
-
 import { extractAssistantCompletionText } from '../../api/chat';
 import { extractInlineThinkingFromContent } from '../../api/inline-thinking';
 import { extractReasoningMessage } from '../../api/reasoning';

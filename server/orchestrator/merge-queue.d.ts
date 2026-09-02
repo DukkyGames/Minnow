@@ -52,7 +52,6 @@ export function recoverHalfAppliedMerge(input: {
 
 /**
  * Rebase the owning task onto integration, then merge.
- * Returns an AttemptEnd the engine journals as merge.succeeded / merge.conflicted.
  */
 export function runMerge(input: {
   boardId: string;

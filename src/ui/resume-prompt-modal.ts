@@ -1,9 +1,3 @@
-/**
- * Boot prompt shown when Minnow reopens with work that would otherwise auto-restart.
- * Built on the shared app-dialog confirm so it inherits the focus trap, Escape
- * handling, dialog queue, and Electron chrome-popover registration.
- */
-
 import { appConfirm } from './app-dialog';
 
 /** One line in the prompt: what would restart, and why it is pending. */
@@ -38,10 +32,7 @@ function buildItemList(items: readonly ResumePromptItem[]): HTMLElement {
   return list;
 }
 
-/**
- * Ask whether to restart the listed work. Escape / dismiss resolves `decline`,
- * so anything short of an explicit Resume leaves the work stopped.
- */
+/** Ask whether to restart the listed work. */
 export function showResumePromptModal(
   items: readonly ResumePromptItem[],
 ): Promise<ResumePromptChoice> {

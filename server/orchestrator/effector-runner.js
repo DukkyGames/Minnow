@@ -1,22 +1,4 @@
-/**
- * P2-F — the runner effector.
- *
- * Same `inspect` / `start` / `stop` / `onEnd` contract as the scripted
- * effector (`effector-scripted.js`). The engine does not change: it still
- * journals `task.attempt.started` off `start()` resolving, and it still
- * requires the attempt to stay in `inspect()` until the `onEnd` handler
- * has resolved (see `engine.js` lines 99–120).
- *
- * Builder and Tester run through `runTurn`. Merge is the P3-C queue
- * (`merge-queue.js`) when worktrees are isolated. Final is the P3-F
- * static ladder in the integration worktree (`final-test.js`), unless
- * tests inject `runTurn` or `runFinalLadder`, or an explicit `cwd`
- * sandbox is in play (P2-G / scripted stay instant-pass).
- *
- * P3-A: builder/tester attempts run in an isolated worktree allocated
- * here and recorded only on `task.attempt.started`. The runner still
- * receives `cwd` as an argument and does not know what a board is.
- */
+/** Runner effector: start real builder and tester attempts. */
 
 import { randomUUID } from 'node:crypto';
 
@@ -60,23 +42,16 @@ import {
 } from './worktree-lifecycle.js';
 import { getWorktreeSlotPath } from '../worktree/paths.js';
 
+// ── Orphans ──────────────────────────────────────────────────────────────────
+
 /**
  * Attempt ids currently visible to some runner effector's `inspect()`.
- *
- * Used to decide which persist:false generations are orphans on boot.
- * Module-scoped so two boards in one process do not cancel each other.
- *
  * @type {Set<string>}
  */
 const liveAttemptIds = new Set();
 
 /**
  * Cancel persist:false generations that no live attempt still owns.
- *
- * A previous process has an empty store, so this is a no-op on a real
- * restart. In-process restart tests leave streaming gens behind; this is
- * what reaps them. User-facing chat uses `persist: true` and is left alone.
- *
  * @returns {number} how many generations were cancelled
  */
 export function cancelOrphanedRunnerGenerations() {
@@ -86,8 +61,6 @@ export function cancelOrphanedRunnerGenerations() {
     if (state.persist !== false) continue;
     const owner = typeof state.chatId === 'string' ? state.chatId : '';
     if (owner && liveAttemptIds.has(owner)) continue;
-    // Untagged persist:false streams (P2-C does not yet pass chatId) are
-    // orphans iff nothing this process still inspects.
     if (!owner && liveAttemptIds.size > 0) continue;
     cancelGeneration(state);
     n += 1;
@@ -95,11 +68,10 @@ export function cancelOrphanedRunnerGenerations() {
   return n;
 }
 
+// ── Runner deps ──────────────────────────────────────────────────────────────
+
 /**
- * Server-side `RunnerDeps` for in-process completions. Sampler / thinking /
- * context policy are no-ops: the attempt's `TurnModel` already carries what
- * `runTurn` forwards, and a missing capability probe must not block a turn.
- *
+ * Server-side `RunnerDeps` for in-process completions.
  * @param {import('../runner/adapters').PostChatCompletions} postChatCompletions
  * @returns {import('../runner/adapters').RunnerDeps}
  */
@@ -136,15 +108,10 @@ function createServerRunnerDeps(postChatCompletions) {
   };
 }
 
+// ── Tool defs ────────────────────────────────────────────────────────────────
+
 /**
- * OpenAI function stubs for a role's tool subset. Full parameter schemas live
- * in the renderer catalog (`src/tools/definitions.ts`); the server must not
- * import that TS module. Names are what the allow-list and dispatch key on.
- *
- * P5-B: the ids come from `headlessToolIdsForRole`, which is where "browser
- * tools are Final-Tester-only" is decided. Browser tools carry real schemas
- * because they have no renderer catalog entry to fall back on.
- *
+ * OpenAI function stubs for a role's tool subset.
  * @param {string} role
  * @returns {import('../runner/run-turn').TurnToolDefinition[]}
  */
@@ -162,13 +129,10 @@ function headlessToolDefs(role) {
   );
 }
 
+// ── Attempt map ──────────────────────────────────────────────────────────────
+
 /**
  * Map a `TurnResult` object onto the engine's `AttemptEnd`.
- *
- * Core `AttemptResult` is the outcome *string*. `needs` / `blockers` /
- * `evidence` / `testOutput` go on `evidence` so P2-E seeds can quote them
- * on the next attempt (`repair` reads `needs`, `fix` reads `testOutput`).
- *
  * @param {string} attemptId
  * @param {import('./core/types').Desired} desired
  * @param {import('../runner/run-turn').TurnResult} result
@@ -182,7 +146,6 @@ function toAttemptEnd(attemptId, desired, result) {
   }
   if (result.outcome === 'fail' && Array.isArray(result.blockers)) {
     evidence.blockers = result.blockers;
-    // Tester fail surfaces testOutput as the first blocker (report-tool.js).
     if (desired.role === 'tester' && result.blockers[0]) {
       evidence.testOutput = result.blockers[0];
     }
@@ -207,10 +170,6 @@ function toAttemptEnd(attemptId, desired, result) {
     end.summary = result.error;
   }
   if (Object.keys(evidence).length > 0) end.evidence = evidence;
-  // What this attempt cost. Carried on every outcome, including `crashed` and
-  // `timeout` — an attempt that burned tokens and produced nothing is the one
-  // most worth costing. P5-D sums these across a run; without them "what did
-  // the run cost in tokens" has no answer.
   if (result.usage && typeof result.usage === 'object') {
     const usage = {};
     for (const [key, value] of Object.entries(result.usage)) {
@@ -232,8 +191,6 @@ function errorMessage(err) {
 
 /**
  * Last committed assistant prose on a memory transcript.
- * Tool-call-only rows are skipped — those are not a dumped report.
- *
  * @param {unknown} messages
  * @returns {string}
  */
@@ -256,9 +213,6 @@ function lastAssistantProse(messages) {
 
 /**
  * Map a sub-agent findings dump onto a board TurnResult.
- * Blocker findings are fail (tester/final) or blocked (builder); warn is fail;
- * info-only or empty findings is pass so a clean dump is not abandoned.
- *
  * @param {{ summary: string, findings?: Array<{ title?: string, detail?: string, severity?: string, paths?: string[] }>, artifacts?: Array<{ ref?: string }> }} structured
  * @param {'builder' | 'tester' | 'final'} role
  * @returns {import('../runner/run-turn').TurnResult}
@@ -300,11 +254,7 @@ function turnResultFromFindingsDump(structured, role) {
 }
 
 /**
- * Boards require `report_outcome`. The inner loop used to ask for sub-agent
- * JSON instead, so agents dump `{ summary, findings, artifacts }` and
- * `runTurn` returns `no_report`. Accept that blob here (effector, not runner)
- * the same way sub-agents degrade prose — only when it parses.
- *
+ * Boards require `report_outcome`.
  * @param {import('../runner/run-turn').TurnResult} result
  * @param {unknown} messages
  * @param {'builder' | 'tester' | 'final'} role
@@ -321,6 +271,8 @@ export function recoverBoardReportIfDumped(result, messages, role) {
   if (!structured) return result;
   return { ...result, ...turnResultFromFindingsDump(structured, role) };
 }
+
+// ── Effector ─────────────────────────────────────────────────────────────────
 
 /**
  * Create the production effector for one board.
@@ -347,15 +299,11 @@ export function createRunnerEffector(options = {}) {
   const runTurnFn = options.runTurn ?? defaultRunTurn;
   const limits = attemptLimits(options.limits);
   const promptVariant = options.promptVariant === 'lite' ? 'lite' : 'full';
-  // An explicit `cwd` is the P2-F test seam (sandbox / tmp). Production
-  // (`createRunnerEffector({ boardId })`) allocates a worktree per attempt.
   const isolateWorktrees = options.worktrees ?? !(typeof options.cwd === 'string' && options.cwd.trim());
   const fallbackCwd = typeof options.cwd === 'string' && options.cwd.trim()
     ? options.cwd.trim()
     : getWorkspaceRoot();
   const ladderFn = typeof options.runFinalLadder === 'function' ? options.runFinalLadder : runFinalLadder;
-  // Tests inject `runTurn` to fake builders. That is the "fake path" that
-  // must not suddenly exec tsc against a throwaway repo at final.
   const usingFakeTurn = typeof options.runTurn === 'function';
   const deps = options.deps ?? createServerRunnerDeps(
     options.postChatCompletions ?? postChatCompletionsInProcess,
@@ -396,9 +344,7 @@ export function createRunnerEffector(options = {}) {
   }
 
   /**
-   * Keep the attempt in `inspect()` until every onEnd handler has settled.
-   * Dropping it first is the contract violation `engine.js` warns about.
-   *
+ * Keep the attempt in `inspect()` until every onEnd handler has settled.
    * @param {LiveAttempt} entry
    * @param {import('./engine.js').AttemptEnd} end
    */
@@ -413,10 +359,7 @@ export function createRunnerEffector(options = {}) {
   }
 
   /**
-   * Merge-without-worktrees (P2-G / explicit cwd) and Final under a fake
-   * `runTurn` / scripted path. Instant pass so those boards close without git
-   * or a typechecker.
-   *
+ * Merge-without-worktrees ( / explicit cwd) and Final under a fake `runTurn` / scripted path.
    * @param {import('./core/types').Desired} desired
    * @returns {Promise<{ attemptId: string }>}
    */
@@ -448,16 +391,12 @@ export function createRunnerEffector(options = {}) {
     if (desired.role === 'merge') end.sha = 'workspace-head';
     if (desired.role === 'final') end.runInstructions = '';
 
-    // Next microtask: `start()` must resolve (and the engine journal the
-    // side effect it can journal) before the end arrives.
     void Promise.resolve().then(() => deliverEnd(entry, end));
     return { attemptId };
   }
 
   /**
-   * P3-F: run the fixed ladder in the integration worktree. Mechanical —
-   * no model. Stays in `inspect()` until the AttemptEnd is delivered.
-   *
+   * Run the fixed ladder in the integration worktree.
    * @param {import('./core/types').Desired} desired
    * @returns {Promise<{ attemptId: string, worktree?: string }>}
    */
@@ -496,8 +435,6 @@ export function createRunnerEffector(options = {}) {
         });
         end = finalAttemptEnd(attemptId, result);
       } catch (err) {
-        // A throw must not take the engine down. Journal the failure with
-        // a cwd the human can still open; do not reopen tasks from here.
         end = {
           attemptId,
           taskId: null,
@@ -523,9 +460,7 @@ export function createRunnerEffector(options = {}) {
   }
 
   /**
-   * P3-C: rebase-then-merge in the task worktree. Stays in `inspect()` until
-   * the AttemptEnd is delivered, same contract as a builder turn.
-   *
+   * Rebase-then-merge in the task worktree.
    * @param {import('./core/types').Desired} desired
    * @returns {Promise<{ attemptId: string }>}
    */
@@ -566,8 +501,6 @@ export function createRunnerEffector(options = {}) {
           state,
         });
       } catch (err) {
-        // A throw must not take the engine down. Conflict the owner so
-        // policy retries with a rebase seed rather than stalling the queue.
         end = {
           attemptId,
           taskId: desired.taskId,
@@ -577,11 +510,6 @@ export function createRunnerEffector(options = {}) {
           summary: errorMessage(err),
         };
       }
-      // The tester kept this tree so rebase could see the committed work.
-      // Success is on integration — release. A conflict must not: policy
-      // retries the owning builder with a rebase seed in the same worktree
-      // (MIN-707). P3-B abort left the tree at shaBefore, so the unique
-      // commits are still checked out here for the owner to resolve.
       if (boardId && mergeSlotId && end.outcome === 'pass') {
         const released = await releaseWorktree({
           boardId,
@@ -599,10 +527,7 @@ export function createRunnerEffector(options = {}) {
   }
 
   /**
-   * Commit on pass (an uncommitted tree cannot merge) then release unless the
-   * next start will reuse this path. Dirty removals travel on `end.discarded`
-   * so the engine can journal them rather than dropping the work.
-   *
+ * Commit on pass (an uncommitted tree cannot merge) then release unless the next start will reuse this path.
    * @param {LiveAttempt} entry
    * @param {import('./core/types').Desired} desired
    * @param {import('../runner/run-turn').TurnResult} result
@@ -662,26 +587,6 @@ export function createRunnerEffector(options = {}) {
     },
 
     /**
-     * P9-A — everything an attempt needs that is not per-task.
-     *
-     * The engine calls this from `POST /start` *before* it answers, so a board
-     * with no model bound is refused at the button with the binding error's own
-     * wording. Without it, `resolveAttemptModel` throwing presented as "Start
-     * does nothing": the board read `running`, every tick retried, and the only
-     * evidence was a server log.
-     *
-     * Deliberately the same calls `start()` makes, in the same order, so this
-     * cannot pass while `start()` fails on the thing it claims to have checked.
-     * Per-task work (the seed) is not checked here — it needs a task.
-     *
-     * Isolated-worktree boards also run MIN-615 git init here so a non-git
-     * workspace fails on the Start button (400) instead of after parse.
-     * Explicit `cwd` sandboxes stay git-free.
-     *
-     * My Models picker ids (`minnow-library` + `gguf:`/`mlx:`) are remapped
-     * (and auto-loaded) here so a missing serve is a 400 on Start, not an
-     * ENOENT after `task.attempt.started`. Remapped ids are not journaled.
-     *
      * @returns {Promise<{ gitInitialized?: Record<string, unknown> } | void>}
      */
     async preflight() {
@@ -711,8 +616,6 @@ export function createRunnerEffector(options = {}) {
         return startEngineDriven(desired);
       }
       if (desired.role === 'merge') {
-        // Real merge when this board owns worktrees. Explicit `cwd` sandboxes
-        // (P2-G, P2-F) have nothing to rebase — keep the instant pass.
         if (isolateWorktrees && boardId) return startMerge(desired);
         return startEngineDriven(desired);
       }
@@ -723,23 +626,14 @@ export function createRunnerEffector(options = {}) {
         throw new Error(`runner effector: ${desired.role} requires a taskId`);
       }
 
-      // Prep *before* the attempt is live. A throw here rejects `start()` and
-      // the engine journals nothing — there is no process yet.
       const state = await currentState();
       const seed = buildSeed(desired.seedKind ?? 'initial', {
         state,
         taskId: desired.taskId,
       });
-      // P9-C: the board's own binding wins over Settings, and an explicit
-      // option (tests) wins over both. My Models picker ids stay on the
-      // journal; remap (and auto-load) only for this attempt's completions.
       const model = await resolveLibraryAttemptBinding(
         await resolveAttemptModel(options.model ?? state.model),
       );
-      // P9-C: the board's reasoning control, the other half of binding a model
-      // — a thinking model bound with thinking off is a different model in every
-      // way that matters. Carried on the `TurnModel`, which is where `runTurn`
-      // already looks before it falls back to the deps.
       const reasoning = options.model ? null : state.model?.reasoning ?? null;
       const thinkingOn =
         reasoning === 'on' ||
@@ -805,8 +699,6 @@ export function createRunnerEffector(options = {}) {
         desired,
       };
 
-      // The process exists. Only now is `start()` allowed to resolve — that
-      // resolution licenses `task.attempt.started`.
       running.set(attemptId, entry);
       liveAttemptIds.add(attemptId);
       startLog.push({
@@ -837,17 +729,10 @@ export function createRunnerEffector(options = {}) {
             reportToolName: REPORT_TOOL_NAME,
             parseReport: parseReportFor(desired.role),
             systemPrompt: prompt,
-            // Do not run the sub-agent JSON-only finalization. That prompt
-            // forbids tools and asks for summary/findings/artifacts, which
-            // this binding cannot accept as a report.
             finalizeStructuredOutcome: false,
-            // Unattended: no human. Fabricated ask_question must fail immediately.
             ask: null,
             onEvent: (event) => {
               if (!boardId) return;
-              // High-frequency types (stream_meta, phase, delta, …) would
-              // flood live SSE across concurrent attempts. The recorder
-              // also drops them — one predicate, both sinks (P10-B).
               if (!isHighFrequencyTurnEvent(event?.type)) {
                 emitLive({
                   boardId,
@@ -857,10 +742,6 @@ export function createRunnerEffector(options = {}) {
                   event,
                 });
               }
-              // P9-D. Beside the journal, never on it: the live bus is
-              // ephemeral and a finished attempt's `summary` is one line, so
-              // without this there is no way to read what an agent actually
-              // did — the first thing anyone asks when a task fails.
               recordTranscriptEvent({
                 boardId,
                 attemptId,
@@ -873,7 +754,6 @@ export function createRunnerEffector(options = {}) {
             },
           });
         } catch (err) {
-          // An uncaught throw must become `crashed`, never take the engine down.
           result = { outcome: 'crashed', error: errorMessage(err) };
         }
         if (entry.stopped) return;
@@ -910,10 +790,6 @@ export function createRunnerEffector(options = {}) {
     async stop(attemptId) {
       const entry = running.get(attemptId);
       if (!entry) return;
-      // Abort first so P2-C cancels the generation and P2-D cancels in-flight
-      // tools. Then drop from inspect without delivering onEnd — the engine
-      // asked us to stop because the work is no longer desired, not because
-      // it finished. Same as the scripted effector.
       entry.stopped = true;
       entry.controller.abort();
       running.delete(attemptId);
@@ -928,18 +804,13 @@ export function createRunnerEffector(options = {}) {
       listeners.push(handler);
     },
 
-    // ---- test affordances -------------------------------------------------
 
-    /** Every attempt ever started, in order. */
     get started() {
       return startLog;
     },
 
     /**
-     * Drop every attempt from `inspect()` without aborting and without
-     * `onEnd` — the crash / display-sleep analogue. Generations may keep
-     * streaming; {@link cancelOrphanedRunnerGenerations} reaps them.
-     *
+     * Drop every attempt from inspect without aborting and without onEnd.
      * @returns {void}
      */
     vanishAll() {

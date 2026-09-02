@@ -1,7 +1,3 @@
-/**
- * Helpers for the Brain wiki page tree.
- */
-
 import type { BrainPageMeta, BrainTreeNode } from '../../brain/types';
 
 /** Whether a page path is under workspaces/<key>/archive/. */

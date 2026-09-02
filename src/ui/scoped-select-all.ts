@@ -1,9 +1,3 @@
-/**
- * MIN-451: Scope Ctrl/Cmd+A to the focused workspace panel (chat, editor, preview)
- * instead of selecting the entire Minnow shell.
- */
-
-/** Scrollable panels where select-all should stay local. */
 export const SELECTION_SCOPE_SELECTOR = [
   '#chatArea',
   '#chatAppArea',

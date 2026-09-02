@@ -1,15 +1,3 @@
-/**
- * Issue capture, wired into everything.
- *
- * Two jobs. First, translate a context-menu target into a {@link CapturePayload}
- * — surfaces say what they have (`{ kind: 'commit', hash, subject }`) and never
- * learn the issue schema. Second, register "Create issue…" and "Add to issue ▸"
- * once against the menu registry so those rows appear on every surface that
- * opens a registered menu, instead of being pasted into thirteen call sites.
- *
- * Phase 2 of `documentation/plans/issues-app-v2.md`.
- */
-
 import { MENU_ORDER, registerMenuContributor, type MenuTarget } from './menu-registry';
 import type { MenuItem } from './context-menu';
 import {
@@ -35,12 +23,7 @@ import { capturePayloadFromDataTransfer } from './capture-drag';
 import { getWorkspacePath } from '../state/workspace';
 import { showToast } from './toast';
 
-/**
- * Target kinds surfaces pass to the menu registry.
- *
- * Kept as one list because the value is that every surface uses the same word
- * for the same thing; a surface inventing `'gitCommit'` gets no capture rows.
- */
+/** Target kinds surfaces pass to the menu registry. */
 export const CAPTURE_MENU_KINDS = {
   file: 'file',
   editorSelection: 'editor-selection',
@@ -75,13 +58,7 @@ function basename(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-/**
- * Turn a menu target into something fileable.
- *
- * Returns null when the target carries nothing worth attaching — the menu rows
- * are then suppressed rather than offering a capture that would file an empty
- * issue.
- */
+/** Turn a menu target into something fileable. */
 export function capturePayloadFromMenuTarget(target: MenuTarget): CapturePayload | null {
   const payload = emptyCapturePayload();
   payload.workspacePath = getWorkspacePath();
@@ -262,8 +239,6 @@ export async function attachCaptureToIssue(
     store.appendIssueLinks(issueId, { chatId });
   }
 
-  // Text-only captures (terminal output, a chat message) have no link to write.
-  // Appending them to the description is the only way they survive.
   const body = captureDescriptionSeed(payload);
   if (body && links.codeRefs.length === 0 && links.gitLinks.length === 0) {
     const next = updated.description ? `${updated.description}\n\n${body}` : body;
@@ -276,10 +251,7 @@ export async function attachCaptureToIssue(
   return true;
 }
 
-/**
- * The registry rows. Resolved lazily inside the submenu so the recent-issue
- * list is current at open time rather than at registration time.
- */
+/** The registry rows. */
 function captureMenuItems(target: MenuTarget): MenuItem[] | null {
   const payload = capturePayloadFromMenuTarget(target);
   if (!payload) return null;
@@ -304,7 +276,6 @@ function captureMenuItems(target: MenuTarget): MenuItem[] | null {
 }
 
 function buildAddToItems(payload: CapturePayload): MenuItem[] {
-  // Synchronous read: the store is already loaded whenever a menu can be open.
   const store = issuesStoreSync();
   if (!store) {
     return [{ kind: 'action', id: 'issue-capture-none', label: 'Issues not loaded', disabled: true, onSelect: () => {} }];
@@ -338,15 +309,7 @@ function buildAddToItems(payload: CapturePayload): MenuItem[] {
   }));
 }
 
-/**
- * The store module, once it has been loaded by anything else.
- *
- * Menus must build synchronously, and the store is an ES module with top-level
- * state rather than a promise — so this caches the namespace the first time an
- * async path resolves it and returns null until then. In practice the Issues
- * app, the tools layer, or the notification producers have all loaded it long
- * before a user right-clicks.
- */
+/** The store module, once it has been loaded by anything else. */
 type IssuesStoreModule = typeof import('../state/issues-store');
 let storeModule: IssuesStoreModule | null = null;
 
@@ -368,14 +331,7 @@ export function initIssueCaptureMenus(): () => void {
   });
 }
 
-/**
- * Adapter for surfaces that still render their own menu.
- *
- * The file tree and file viewer share a bespoke `{ label, action }` renderer.
- * Rather than rewrite those surfaces in this phase, they splice the registry's
- * flat rows in with one call. Submenus collapse to a single "Add to issue…"
- * row that opens the popover pre-targeted, because that renderer has no nesting.
- */
+/** Adapter for surfaces that still render their own menu. */
 export function legacyCaptureMenuItems(
   target: MenuTarget,
 ): Array<{ label: string; action: () => void }> {
@@ -393,14 +349,6 @@ export function legacyCaptureMenuItems(
   ];
 }
 
-/**
- * Open quick capture with whatever the shell was showing.
- *
- * Ambient context resolves in two waves: the synchronous half (file, selection,
- * chat) is on screen in the same frame, and branch/HEAD are merged in when git
- * answers. Waiting for git before painting would make the fastest path in the
- * app feel like the slowest.
- */
 export function openQuickCapture(options?: {
   anchor?: HTMLElement | null;
   restoreFocus?: HTMLElement | null;

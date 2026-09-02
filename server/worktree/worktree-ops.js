@@ -1,16 +1,3 @@
-/**
- * Git worktree operations for board task isolation (MIN-275).
- * All git runs against the active Code workspace repo; worktrees and the board
- * integration branch are created off to the side under ~/.minnow/worktrees.
- *
- * Merges run INSIDE the integration worktree so the user's main working tree and
- * checked-out branch are never touched.
- *
- * Rebase (MIN-706 / P3-B) runs INSIDE the task worktree onto the integration tip.
- * A conflict is a typed result, not an exception: abort, then hand the worktree
- * back clean. Rebase and merge share one in-process mutex keyed by boardId.
- */
-
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { runProcess } from '../process-runner.js';
@@ -36,17 +23,9 @@ async function git(args, cwd = getWorkspaceRoot()) {
 const ok = (r) => r.code === 0;
 const out = (r) => `${r.stdout ?? ''}\n${r.stderr ?? ''}`.trim();
 
-/** Human-readable summary of the dep failures in an `ensureDependencyDirs` result. */
 const depFailureOutput = (deps) => deps.failed.map((f) => f.reason).join('; ');
 
 /**
- * Seed known dependency dirs into a task/wave worktree.
- *
- * Prefer the integration tree (it may hold post-merge installs). If that source
- * is unusable, fall back to the main workspace — a broken integration
- * `node_modules` must not stall the next task. Fail closed only when the
- * *target* still has a broken link after both attempts (the ELOOP class).
- *
  * @param {string} wtPath
  * @param {string} intPath
  * @returns {Promise<{ ok: true, deps: { ok: boolean, linked: string[], repaired: string[], failed: Array<{ dir: string, reason: string }> } } | { ok: false, error: 'deps', deps: object, output: string }>}
@@ -56,9 +35,6 @@ async function seedTaskWorktreeDeps(wtPath, intPath) {
   const preferred = (await pathExists(intPath)) ? intPath : workspace;
   let deps = await ensureDependencyDirs(preferred, wtPath);
   if (!deps.ok && preferred !== workspace) {
-    // Integration source did not resolve. The main workspace is what
-    // ensureIntegration seeds from — retry so a stale integration link is not
-    // a board-wide allocate failure.
     deps = await ensureDependencyDirs(workspace, wtPath);
   }
   if (await hasBrokenDepDir(wtPath)) {
@@ -86,7 +62,6 @@ async function branchExists(branch) {
   return r.code === 0;
 }
 
-/** Resolve a git ref to a full commit SHA (null when missing). */
 async function resolveRef(ref, cwd = getWorkspaceRoot()) {
   const r = await git(['rev-parse', '--verify', ref], cwd);
   if (!ok(r)) return null;
@@ -95,28 +70,15 @@ async function resolveRef(ref, cwd = getWorkspaceRoot()) {
 }
 
 /**
- * One promise chain per board for ops that mutate the integration lineage
- * (merge into integration, rebase a task onto it, abort, restore).
- *
- * `mergeInProgress` is only a MERGE_HEAD probe — it is not a mutex. Two
- * concurrent rebase+merge calls against one board would otherwise race:
- * rebase rewriting a branch merge is reading, or merge advancing the tip
- * rebase is onto-ing. Same shape as journal.js `serialise`.
- *
  * @type {Map<string, Promise<unknown>>}
  */
 const integrationOpChains = new Map();
 
-/** Currently executing locked-op count per board (0 or 1 when the chain holds). */
 const activeIntegrationOps = new Map();
 
-/** Peak overlapping locked ops observed per board — 1 means they serialised. */
 const peakIntegrationOps = new Map();
 
 /**
- * Run `task` after every integration op already queued for this board.
- * A rejection must not break the chain, or one failed merge wedges the board.
- *
  * @template T
  * @param {string} boardId
  * @param {() => Promise<T>} task
@@ -145,28 +107,21 @@ function withBoardIntegrationLock(boardId, task) {
   return next;
 }
 
-/** Test seam: peak overlapping rebase/merge ops for one board (1 = serialised). */
 export function peakBoardIntegrationLockDepth(boardId) {
   return peakIntegrationOps.get(boardId || '') ?? 0;
 }
 
-/** Test seam: clear the mutex between fixtures. */
 export function resetBoardIntegrationLock() {
   integrationOpChains.clear();
   activeIntegrationOps.clear();
   peakIntegrationOps.clear();
 }
 
-/** True while a locked merge/rebase/abort/restore is executing for this board. */
 function isBoardIntegrationLocked(boardId) {
   return (activeIntegrationOps.get(boardId || '') ?? 0) > 0;
 }
 
 /**
- * Absolute path git would use for a named git-dir file (worktree-aware).
- * Linked worktrees store rebase state under `.git/worktrees/<id>/`, not the
- * checkout root, so callers must not look at `<wt>/.git/rebase-merge` directly.
- *
  * @param {string} wtPath
  * @param {string} name
  * @returns {Promise<string | null>}
@@ -178,7 +133,6 @@ async function gitDirPath(wtPath, name) {
   return path.isAbsolute(p) ? p : path.resolve(wtPath, p);
 }
 
-/** True when `rebase-merge` or `rebase-apply` exists for this worktree. */
 async function rebaseStateExists(wtPath) {
   const mergePath = await gitDirPath(wtPath, 'rebase-merge');
   const applyPath = await gitDirPath(wtPath, 'rebase-apply');
@@ -189,10 +143,6 @@ async function rebaseStateExists(wtPath) {
 }
 
 /**
- * Abort an in-progress rebase and verify the state dirs are gone.
- * `git rebase --abort`'s exit code is not trusted; we check the files.
- * `shaBefore` is the pre-rebase HEAD used if abort leaves the tree dirty.
- *
  * @param {string} wtPath
  * @param {string | null} shaBefore
  */
@@ -201,7 +151,6 @@ async function abortRebaseAndVerify(wtPath, shaBefore) {
   await git(['rebase', '--abort'], wtPath);
   if (!(await rebaseStateExists(wtPath))) return;
 
-  // --abort did not clear state. --quit drops the rebase files; then restore tip.
   await git(['rebase', '--quit'], wtPath);
   if (shaBefore) {
     await git(['reset', '--hard', shaBefore], wtPath);
@@ -209,7 +158,6 @@ async function abortRebaseAndVerify(wtPath, shaBefore) {
   await git(['clean', '-fd'], wtPath);
   if (!(await rebaseStateExists(wtPath))) return;
 
-  // Last resort: remove leftover dirs so an agent never inherits a half-rebase.
   const mergePath = await gitDirPath(wtPath, 'rebase-merge');
   const applyPath = await gitDirPath(wtPath, 'rebase-apply');
   if (mergePath && (await pathExists(mergePath))) {
@@ -220,7 +168,6 @@ async function abortRebaseAndVerify(wtPath, shaBefore) {
   }
 }
 
-/** Split `git diff --name-only` stdout into path strings. */
 function parseNameOnly(stdout) {
   return `${stdout ?? ''}`
     .split(/\r?\n/)
@@ -229,8 +176,6 @@ function parseNameOnly(stdout) {
 }
 
 /**
- * Ensure the board integration branch exists (off `baseRef`, default HEAD) and has a
- * dedicated worktree to merge into. Idempotent.
  * @param {{ boardId: string, branch: string, baseRef?: string }} input
  */
 export async function ensureIntegration({ boardId, branch, baseRef }) {
@@ -241,8 +186,6 @@ export async function ensureIntegration({ boardId, branch, baseRef }) {
   }
   const intPath = getWorktreeSlotPath(boardId, 'integration');
   if (await pathExists(intPath)) {
-    // Re-validate on reuse: task worktrees chain their dep links off integration, so a
-    // broken link here breaks every task in the wave.
     const deps = await ensureDependencyDirs(getWorkspaceRoot(), intPath);
     return { ok: true, path: intPath, branch, created: false, deps };
   }
@@ -253,10 +196,6 @@ export async function ensureIntegration({ boardId, branch, baseRef }) {
   return { ok: true, path: intPath, branch, created: true, deps };
 }
 
-/**
- * Merge `baseRef` (normally the board integration branch) into an existing worktree.
- * No-op when the task branch already contains the integration tip.
- */
 async function mergeBaseIntoWorktree(wtPath, baseRef) {
   const m = await git(['merge', baseRef, '--no-edit'], wtPath);
   if (ok(m)) return { ok: true, output: out(m) };
@@ -265,11 +204,6 @@ async function mergeBaseIntoWorktree(wtPath, baseRef) {
 }
 
 /**
- * Create (or attach) a task/wave worktree on its branch, based off `baseRef`
- * (normally the integration branch). When the slot already exists, merges the
- * current integration tip in so later / sequential tasks see prior task work.
- *
- * Branch names are owned by worktree-isolation.ts — do not slugify here (MIN-659).
  * @param {{ boardId: string, slotId: string, branch: string, baseRef?: string }} input
  */
 export async function createWorktree({ boardId, slotId, branch, baseRef }) {
@@ -282,12 +216,9 @@ export async function createWorktree({ boardId, slotId, branch, baseRef }) {
     await fs.access(wtPath);
     exists = true;
   } catch {
-    /* create below */
   }
 
   if (exists) {
-    // Heal first: a reused slot may carry a dangling/looping dep link from an earlier
-    // pass, and nothing else in the board flow ever re-validates it.
     const seeded = await seedTaskWorktreeDeps(wtPath, intPath);
     if (!seeded.ok) {
       return {
@@ -365,10 +296,6 @@ export async function createWorktree({ boardId, slotId, branch, baseRef }) {
 }
 
 /**
- * Merge a task/wave branch into the board integration branch, running the merge
- * inside the integration worktree. On conflict, leaves the merge in progress
- * (MERGE_HEAD + conflict stages) so a fixer can resolve and `git commit --no-edit`
- * to record a true two-parent merge.
  * @param {{ boardId: string, fromBranch: string, message?: string }} input
  */
 export async function mergeIntoIntegration(input) {
@@ -404,9 +331,6 @@ async function mergeIntoIntegrationUnlocked({ boardId, fromBranch, message }) {
 }
 
 /**
- * True when a merge is actively in progress in the integration worktree
- * (MERGE_HEAD is set) or a locked rebase/merge is executing for this board.
- * Returns { ok: true, inProgress: boolean }.
  * @param {{ boardId: string }} input
  */
 export async function mergeInProgress({ boardId }) {
@@ -421,13 +345,6 @@ export async function mergeInProgress({ boardId }) {
 }
 
 /**
- * Resolve a ref inside the board integration worktree (MIN-707).
- *
- * The merge queue snapshots HEAD before merging (`beforeSha`) so a failed
- * verify can `restoreIntegration`, and reads HEAD afterwards for the
- * `merge.succeeded` sha. `MERGE_HEAD` / `ORIG_HEAD` are the restart-recovery
- * probes: a half-applied merge is never left sitting.
- *
  * @param {{ boardId: string, ref?: string }} input
  * @returns {Promise<string | null>}
  */
@@ -443,15 +360,6 @@ export async function readIntegrationRef({ boardId, ref = 'HEAD' }) {
 }
 
 /**
- * Rebase a task/wave worktree onto the current board integration tip (MIN-706).
- *
- * A conflict is a normal outcome, not an exception: `{ ok: false, conflicts }`
- * after aborting so the worktree is the pre-rebase tree, agent-usable.
- * Already-up-to-date and empty (nothing to replay) return `{ ok: true, sha }`
- * with the unchanged SHA and do not start a rebase.
- *
- * Serialised with `mergeIntoIntegration` via the board-keyed mutex.
- *
  * @param {{ boardId: string, slotId: string }} input
  * @returns {Promise<{ ok: true, sha: string } | { ok: false, conflicts: string[], error?: string }>}
  */
@@ -479,9 +387,6 @@ async function rebaseOntoIntegrationUnlocked({ boardId, slotId }) {
   if (!shaBefore) return { ok: false, error: 'could not resolve worktree HEAD', conflicts: [] };
   if (!intSha) return { ok: false, error: 'could not resolve integration HEAD', conflicts: [] };
 
-  // Unique commits on the task branch vs the integration tip. Zero means there
-  // is nothing to replay — empty branch or already merged — so do not start a
-  // rebase (git can report a spurious conflict on an empty replay).
   const unique = await git(['rev-list', '--count', `${intSha}..HEAD`], wtPath);
   const uniqueCount = Number.parseInt(`${unique.stdout ?? ''}`.trim(), 10) || 0;
   if (uniqueCount === 0) {
@@ -494,7 +399,6 @@ async function rebaseOntoIntegrationUnlocked({ boardId, slotId }) {
     return { ok: true, sha: shaAfter };
   }
 
-  // Capture conflicted paths BEFORE abort — abort clears the unmerged index.
   const diff = await git(['diff', '--name-only', '--diff-filter=U'], wtPath);
   const conflicts = parseNameOnly(diff.stdout);
 
@@ -511,7 +415,6 @@ async function rebaseOntoIntegrationUnlocked({ boardId, slotId }) {
 }
 
 /**
- * Stage all changes and commit in a task/wave worktree. No empty commits.
  * @param {{ boardId: string, slotId: string, message?: string }} input
  */
 export async function commitWorktree({ boardId, slotId, message }) {
@@ -534,7 +437,6 @@ export async function commitWorktree({ boardId, slotId, message }) {
 }
 
 /**
- * Report uncommitted changes in a task/wave worktree (porcelain status).
  * @param {{ boardId: string, slotId: string }} input
  */
 export async function checkWorktreeDirty({ boardId, slotId }) {
@@ -553,7 +455,6 @@ export async function checkWorktreeDirty({ boardId, slotId }) {
 }
 
 /**
- * True when `fromBranch` is already merged into the integration branch tip.
  * @param {{ boardId: string, fromBranch: string }} input
  */
 export async function checkMerged({ boardId, fromBranch }) {
@@ -570,8 +471,6 @@ export async function checkMerged({ boardId, fromBranch }) {
 }
 
 /**
- * Reset the integration worktree to a known-good tip: abort any in-progress merge,
- * hard-reset to `sha`, and remove untracked files. Used when a merge fixer fails.
  * @param {{ boardId: string, sha: string }} input
  */
 export async function restoreIntegration(input) {
@@ -599,7 +498,6 @@ async function restoreIntegrationUnlocked({ boardId, sha }) {
 }
 
 /**
- * Structural checks after an integration merge (no build/typecheck).
  * @param {{ boardId: string, fromBranch: string }} input
  */
 export async function verifyIntegrationMerge({ boardId, fromBranch }) {
@@ -643,7 +541,6 @@ export async function verifyIntegrationMerge({ boardId, fromBranch }) {
 }
 
 /**
- * Abort an in-progress merge inside the integration worktree (best-effort).
  * @param {{ boardId: string }} input
  */
 export async function abortMerge(input) {
@@ -663,8 +560,6 @@ async function abortMergeUnlocked({ boardId }) {
 }
 
 /**
- * Remove a single worktree slot (force) and prune. Refuses paths outside the
- * worktrees root.
  * @param {{ boardId: string, slotId: string }} input
  */
 export async function removeWorktree({ boardId, slotId }) {
@@ -674,14 +569,10 @@ export async function removeWorktree({ boardId, slotId }) {
   }
   const r = await git(['worktree', 'remove', '--force', wtPath]);
   await git(['worktree', 'prune']);
-  // Windows: a lingering handle can leave the dir; best-effort rm.
   try {
     await fs.rm(wtPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   } catch {
-    /* the lstat below is the authority, not the rm */
   }
-  // Report the truth: a surviving dir is an orphan slot that a later createWorktree
-  // would silently reuse, dep links and all.
   if (await pathExists(wtPath)) {
     return {
       ok: false,
@@ -694,7 +585,6 @@ export async function removeWorktree({ boardId, slotId }) {
 }
 
 /**
- * Remove all worktrees for a board (on completion / delete) and the board dir.
  * @param {{ boardId: string, includeIntegration?: boolean }} input
  */
 export async function cleanupBoardWorktrees({ boardId, includeIntegration = false }) {
@@ -712,7 +602,6 @@ export async function cleanupBoardWorktrees({ boardId, includeIntegration = fals
   let keptIntegration = false;
   const failedSlots = [];
   for (const slot of slots) {
-    // Keep integration until the user lands work in the workspace (MIN-208 finish dashboard).
     if (!includeIntegration && slot === 'integration') {
       keptIntegration = true;
       continue;
@@ -732,15 +621,12 @@ export async function cleanupBoardWorktrees({ boardId, includeIntegration = fals
     try {
       await fs.rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     } catch {
-      /* best-effort */
     }
   }
   return { ok: true, removed, keptIntegration, failedSlots };
 }
 
 /**
- * Diff stats for the integration worktree vs its base ref (`git diff --numstat`).
- * Also reports whether `origin` and `gh` are available for push/PR actions.
  * @param {{ boardId: string, baseRef?: string }} input
  */
 export async function integrationStats({ boardId, baseRef }) {
@@ -776,10 +662,6 @@ export async function integrationStats({ boardId, baseRef }) {
   };
 }
 
-/**
- * Capability probe for the workspace checkout: whether `origin` and the `gh` CLI
- * are usable for push / PR actions.
- */
 async function workspaceGitCapabilities(workspace) {
   const remote = await git(['remote', 'get-url', 'origin'], workspace);
   const hasRemote = ok(remote) && Boolean(`${remote.stdout ?? ''}`.trim());
@@ -793,11 +675,6 @@ async function workspaceGitCapabilities(workspace) {
   return { hasRemote, hasGh };
 }
 
-/**
- * Diff stats for the *uncommitted* workspace checkout — the isolation-off case,
- * where agents wrote straight into the user's tree and there is no branch to land.
- * Untracked files never appear in `git diff`, so they are counted from status.
- */
 async function workspaceDirtyStats() {
   const workspace = getWorkspaceRoot();
   const diff = await git(['diff', '--numstat', 'HEAD'], workspace);
@@ -827,11 +704,6 @@ async function workspaceDirtyStats() {
 }
 
 /**
- * Diff stats for landing board work: integration branch vs the workspace checkout
- * (`git diff --numstat HEAD...<branch>` when not yet merged).
- *
- * With no branch it falls back to the uncommitted workspace diff instead of
- * erroring — a board run with isolation off has no branch but still has work.
  * @param {{ branch?: string }} input
  */
 export async function workspaceLandingStats({ branch } = {}) {
@@ -869,7 +741,6 @@ export async function workspaceLandingStats({ branch } = {}) {
 }
 
 /**
- * Merge the board integration branch into the user's workspace checkout (current branch).
  * @param {{ branch: string, message?: string }} input
  */
 export async function mergeIntegrationIntoWorkspace({ branch, message }) {
@@ -910,7 +781,6 @@ export async function mergeIntegrationIntoWorkspace({ branch, message }) {
 }
 
 /**
- * Open a GitHub PR for the workspace's current branch via `gh pr create`.
  * @param {{ title?: string, body?: string }} input
  */
 export async function openWorkspacePr({ title, body }) {
@@ -946,7 +816,6 @@ export async function openWorkspacePr({ title, body }) {
 }
 
 /**
- * Stage and commit all changes in the board integration worktree (no empty commits).
  * @param {{ boardId: string, message?: string }} input
  */
 export async function commitIntegration({ boardId, message }) {
@@ -954,7 +823,6 @@ export async function commitIntegration({ boardId, message }) {
 }
 
 /**
- * Push the integration branch to `origin` (soft-fails when no remote).
  * @param {{ boardId: string, branch: string }} input
  */
 export async function pushIntegration({ boardId, branch }) {
@@ -981,7 +849,6 @@ export async function pushIntegration({ boardId, branch }) {
 }
 
 /**
- * Open a GitHub PR for the integration branch via `gh pr create` (soft-fails when gh is absent).
  * @param {{ boardId: string, branch: string, title?: string, body?: string }} input
  */
 export async function openPr({ boardId, branch, title, body }) {
@@ -1018,15 +885,12 @@ export async function openPr({ boardId, branch, title, body }) {
   return { ok: true, url: urlMatch?.[0], output: text };
 }
 
-/** Raw `git worktree list --porcelain` for the active repo. */
 export async function listWorktrees() {
   const r = await git(['worktree', 'list', '--porcelain']);
   return { ok: ok(r), output: out(r) };
 }
 
 /**
- * Create (or attach) a managed per-chat worktree under ~/.minnow/worktrees/.../chat/<chatId>.
- * Idempotent when the slot already exists on the expected branch.
  * @param {{ chatId: string, branch: string, baseRef?: string }} input
  */
 export async function createChatWorktree({ chatId, branch, baseRef }) {
@@ -1047,7 +911,6 @@ export async function createChatWorktree({ chatId, branch, baseRef }) {
     await fs.access(wtPath);
     exists = true;
   } catch {
-    /* create below */
   }
 
   if (exists) {
@@ -1076,7 +939,6 @@ export async function createChatWorktree({ chatId, branch, baseRef }) {
 }
 
 /**
- * Remove a managed per-chat worktree slot (MIN-276 chat delete / detach).
  * @param {{ chatId: string }} input
  */
 export async function removeChatWorktree({ chatId }) {
@@ -1097,14 +959,12 @@ export async function removeChatWorktree({ chatId }) {
   try {
     await fs.rm(wtPath, { recursive: true, force: true });
   } catch {
-    /* best-effort — Windows may keep a handle */
   }
   invalidateRegisteredWorktreeCache();
   return { ok: true, path: wtPath, removed: true, output: out(r) };
 }
 
 /**
- * After a merge into integration, install deps when the merge diff touched manifests/lockfiles.
  * @param {{ boardId: string, sinceSha?: string }} input
  */
 export async function refreshIntegrationDeps({ boardId, sinceSha }) {

@@ -68,6 +68,7 @@ function createFixtureClient() {
 /**
  * Cache namespaced id → the server's own tool name, so dispatch never has to
  * guess it back out of the lossy encoding.
+ * Hyphen and underscore names collide; the first listing wins.
  * @param {string} serverId
  * @param {Array<{ name: string }>} tools
  */
@@ -75,7 +76,6 @@ function rememberTools(serverId, tools) {
   const map = new Map();
   for (const tool of tools ?? []) {
     const key = toNamespacedName(serverId, tool.name);
-    // `get-docs` and `get_docs` encode to the same id; the first listing wins.
     if (!map.has(key)) map.set(key, tool.name);
   }
   toolMaps.set(serverId, map);
@@ -213,6 +213,7 @@ export async function listServers() {
  * Connect every enabled server and collect its live tool listing.
  * Servers that fail to start are returned with `error` set rather than dropped,
  * so callers can tell "no tools" apart from "never connected".
+ * Refresh the dispatch map — the live listing can differ from connect time.
  */
 async function collectEnabledServerTools() {
   const index = await loadIndex();
@@ -227,7 +228,6 @@ async function collectEnabledServerTools() {
       const client = await connectServer(serverId, config);
       const listed = await client.listTools();
       entry.tools = listed.tools ?? [];
-      // Re-listing can differ from connect time; keep the dispatch map current.
       rememberTools(serverId, entry.tools);
     } catch (err) {
       entry.error = err instanceof Error ? err.message : String(err);

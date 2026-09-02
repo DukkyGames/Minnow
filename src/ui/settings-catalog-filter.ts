@@ -1,7 +1,3 @@
-/**
- * Filters the static settings catalog for release gates and dev-only sections.
- */
-
 import { isDeveloperReleased, isAppId } from '../os/app-registry';
 import type { AppId } from '../os/types';
 import { isBoardTestingSettingsVisible } from '../config/dev-surfaces';

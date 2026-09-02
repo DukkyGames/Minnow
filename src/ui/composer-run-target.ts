@@ -1,8 +1,3 @@
-/**
- * Composer run-target + branch dropdowns (MIN-276).
- * Sits beside the mode selector; persists per chat on worktreeRoot / gitBranch.
- */
-
 import { isActiveChatStreaming } from '../chat/streaming-state.ts';
 import {
   branchesLockedToOtherWorktrees,
@@ -51,6 +46,8 @@ let branchOpen = false;
 let outsideHandler: ((e: PointerEvent) => void) | null = null;
 let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
 let busy = false;
+
+// ── Menus ────────────────────────────────────────────────────────────────────
 
 function controlsDisabled(): boolean {
   return isActiveChatStreaming() || isComposerRecoveryBlocked() || busy;
@@ -131,6 +128,8 @@ function attachGlobalListeners(): void {
   };
   document.addEventListener('keydown', escapeHandler, true);
 }
+
+// ── Controls ─────────────────────────────────────────────────────────────────
 
 function createMenuButton(
   id: string,
@@ -264,8 +263,6 @@ function ensureControls(): HTMLDivElement {
   const host = document.getElementById('composerControls');
   const anchor = document.getElementById('composerThinkingWrap');
   if (host) {
-    // The anchor is parked in the compact cog sheet at times, so it is not
-    // always a child of the toolbar — insertBefore would throw NotFoundError.
     if (anchor?.parentNode === host) {
       host.insertBefore(wrapEl, anchor);
     } else {
@@ -278,13 +275,14 @@ function ensureControls(): HTMLDivElement {
   return wrapEl;
 }
 
+// ── Apply ────────────────────────────────────────────────────────────────────
+
 async function refreshGitPanelFromComposer(): Promise<void> {
   try {
     const mod = await import('./git-panel.ts');
     mod.clearPanelCwdUserOverride();
     mod.syncPanelFromActiveChat({ forceFileTree: true });
   } catch {
-    /* optional */
   }
 }
 
@@ -332,7 +330,6 @@ async function applyNewWorktree(branchName: string): Promise<void> {
 async function applyAttachWorktree(path: string, branch?: string): Promise<void> {
   const chat = getActiveChat();
   const repoRoot = composerGitRepoRoot();
-  // Principal/workspace path → Local, never re-attach the Code folder as a worktree (MIN-780).
   if (repoRoot && worktreePathsEqual(path, repoRoot)) {
     await applyLocalTarget();
     return;
@@ -406,16 +403,12 @@ async function rebuildRunTargetMenu(): Promise<void> {
   const inWorktree = isChatWorktreeMode(chat);
 
   const runOn = menuSection('Run on');
-  // This PC = Code workspace with no chat.worktreeRoot. Enabled whenever we are
-  // attached to an isolated worktree so the user can return to Local.
   const localItem = menuItem('This PC', () => applyLocalTarget(), {
     icon: 'local',
     disabled: !inWorktree,
   });
   runOn.appendChild(localItem);
 
-  // When the Code workspace is a linked worktree, surface the git principal
-  // under Run on so it is never buried (or grayed) inside Worktree… (MIN-780).
   if (
     principal?.path &&
     repoRoot &&
@@ -424,7 +417,6 @@ async function rebuildRunTargetMenu(): Promise<void> {
     const principalLabel = principal.branch?.trim()
       ? `${principal.branch} (main worktree)`
       : 'Main worktree';
-    // Never disable — grayed “main” rows were the MIN-780 composer symptom.
     runOn.appendChild(
       menuItem(
         principalLabel,
@@ -549,6 +541,8 @@ function updateButtonLabels(chat: Chat): void {
   );
   refreshModeSelectorLayout();
 }
+
+// ── Sync ─────────────────────────────────────────────────────────────────────
 
 /** Disable controls while streaming or busy. */
 export function refreshComposerRunTargetDisabled(): void {

@@ -13,10 +13,6 @@ const MAX_PROSE_QUESTION_RETRIES = 1;
 const PROSE_QUESTION_RETRY_INSTRUCTION = "Your previous reply is already in the chat. You presented multiple-choice options in plain text. Do not repeat that list in prose. Call the ask_question tool now with a questions array (each item: id, prompt, options as {id, label} objects). Wait for the user to answer before continuing.";
 const SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION = "You must use the available tools to complete the task. Do not answer with prose only \u2014 call the appropriate tool(s) now, then summarize after you have tool results.";
 /**
- * Board turns skip sub-agent JSON finalization. This extra user row asks for
- * the report tool instead of "respond with only JSON and do not call tools",
- * which otherwise mints a findings blob that `runTurn` must ignore as no_report.
- *
  * @param {string} toolName
  * @returns {string}
  */

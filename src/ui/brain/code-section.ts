@@ -69,6 +69,8 @@ function formatStatusLine(status: BrainCodeStatus): string {
   return `${status.repo} · ${status.symbolCount} symbols · ${status.fileCount} files · last indexed ${when}`;
 }
 
+// ── Repo map ─────────────────────────────────────────────────────────────────
+
 /** Render repo map entries into the map panel (clickable symbols). */
 function renderRepoMapPanel(map: BrainCodeRepoMap): void {
   const mapEl = document.getElementById('brainCodeMap');
@@ -209,7 +211,6 @@ async function refreshCodeStatus(): Promise<void> {
     return;
   }
 
-  // An empty index with a failed run behind it should say why, not just read "0 symbols".
   const run = status.lastRun;
   if (run && !run.running && status.symbolCount === 0) {
     const outcome = describeReindexRun(run, status.repo);
@@ -263,6 +264,8 @@ function renderEdgeList(
   section.append(list);
   mount.append(section);
 }
+
+// ── Symbols ──────────────────────────────────────────────────────────────────
 
 /** Show definition + call graph for one symbol. */
 async function selectSymbol(symbolId: string): Promise<void> {
@@ -363,11 +366,9 @@ async function renderCallGraph(
         if (node?.symbolId) void selectSymbol(node.symbolId);
       },
     });
-    // Resize is handled internally by the engine's ResizeObserver — no window listener needed.
   }
 
   codeGraphApi.setData(data.nodes, data.edges);
-  // Auto-fit is driven by the engine's pendingFit / simulation 'end' handler — no RAF needed.
 
   const inspector = document.getElementById('brainInspector');
   if (inspector) {
@@ -379,6 +380,8 @@ async function renderCallGraph(
     );
   }
 }
+
+// ── Explain ──────────────────────────────────────────────────────────────────
 
 /** Show the default Explain panel empty state. */
 function showExplainEmpty(message: string, options?: { icon?: 'search' | 'offline' }): void {
@@ -457,6 +460,8 @@ function renderExplainPageItem(page: BrainCodeExplainPage): HTMLLIElement {
   li.append(path);
   return li;
 }
+
+// ── Search ───────────────────────────────────────────────────────────────────
 
 /** Mark the active row in the search results list. */
 function highlightSearchResult(symbolId: string): void {
@@ -546,6 +551,8 @@ async function runSymbolSearch(query: string): Promise<void> {
   }
 }
 
+// ── Reindex ──────────────────────────────────────────────────────────────────
+
 /** Give up waiting on a reindex job after this long (the job itself keeps running). */
 const REINDEX_WAIT_TIMEOUT_MS = 45 * 60 * 1000;
 
@@ -585,7 +592,6 @@ function describeReindexRun(run: BrainCodeIndexRun, repo: string): { kind: 'ok' 
   if (run.usageAugmentError) parts.push(`usage scan skipped (${run.usageAugmentError})`);
   if (run.scaffold?.created) parts.push(`created ${run.scaffold.path}`);
 
-  // Nothing indexed and everything failed is a failure, however cleanly it exited.
   const kind = indexed === 0 && failed > 0 ? 'err' : 'ok';
   return { kind, text: parts.join(' · ') };
 }

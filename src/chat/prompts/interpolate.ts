@@ -1,7 +1,3 @@
-/**
- * Replace {{token}} placeholders in composed prompt bodies.
- */
-
 import type { InterpolationVars } from './types';
 
 const TOKEN_RE = /\{\{([a-z_]+)\}\}/g;

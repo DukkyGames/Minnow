@@ -1,16 +1,3 @@
-/**
- * Windowed list rendering.
- *
- * The message list used to build every row on every action; at 200 rows that is
- * already a visible hitch, and the conversation list is meant to hold
- * thousands. Only the rows inside the viewport (plus an overscan margin) exist
- * in the DOM; spacers above and below keep the scrollbar honest.
- *
- * Rows are assumed to be a uniform height, which they are — the row style fixes
- * it. That keeps the maths exact and avoids a measurement pass.
- */
-
-/** Rows rendered beyond each edge of the viewport, to cover fast scrolling. */
 export const OVERSCAN_ROWS = 10;
 
 /** Viewport snapshot after a scroll paint — used for infinite load and trim. */
@@ -24,10 +11,7 @@ export interface VirtualListHandle<T> {
   root: HTMLElement;
   /** Replace the contents and jump back to the top (a new folder or query). */
   setItems(items: T[]): void;
-  /**
-   * Swap the items without moving the viewport — for an optimistic edit, where
-   * scrolling back to the top would throw away the user's place.
-   */
+  /** Swap the items without moving the viewport — for an optimistic edit, where scrolling back to the top would throw away the user's place. */
   updateItems(items: T[]): void;
   /** Repaint in place, keeping scroll position (after a flag change, say). */
   refresh(): void;
@@ -36,10 +20,7 @@ export interface VirtualListHandle<T> {
   destroy(): void;
 }
 
-/**
- * Compute the slice to render for a scroll position.
- * Exported for tests: the arithmetic is where an off-by-one hides.
- */
+/** Compute the slice to render for a scroll position. */
 export function computeWindow(options: {
   scrollTop: number;
   viewportHeight: number;
@@ -68,17 +49,7 @@ export function computeWindow(options: {
   };
 }
 
-/**
- * Whether the viewport is close enough to the bottom of the *loaded* rows to
- * ask for the next page.
- *
- * Exported for tests. With a sliding window the list reserves the full
- * `totalCount * rowHeight` height, but only the loaded slice renders — the
- * region below the loaded edge is blank until fetched. Infinite load must key
- * off that loaded edge, not the total reserved height; otherwise it only fires
- * once the user has already scrolled deep into the blank space, and pages that
- * fill from the top never reach where the viewport actually is.
- */
+/** Whether the viewport is close enough to the bottom of the *loaded* rows to ask for the next page. */
 export function isNearLoadedBottom(options: {
   scrollTop: number;
   viewportHeight: number;
@@ -103,10 +74,7 @@ export function createVirtualList<T>(options: {
   ariaLabel?: string;
   /** Rendered instead of rows when the list is empty. */
   renderEmpty?: () => HTMLElement;
-  /**
-   * When set, this element scrolls instead of the list root. The list stays in
-   * document flow and only windowed rows are mounted (inbox stream pattern).
-   */
+  /** When set, this element scrolls instead of the list root. */
   scrollRoot?: HTMLElement;
   /** List top offset inside `scrollRoot` (px); remeasure when head content reflows. */
   listOffset?: () => number;
@@ -160,8 +128,6 @@ export function createVirtualList<T>(options: {
     if (globalCount <= 0) {
       padTop.style.height = '0px';
       padBottom.style.height = '0px';
-      // Drop the list role while empty: a role="list" may only contain list
-      // items, and the empty state is a plain block.
       body.removeAttribute('role');
       body.removeAttribute('aria-label');
       body.replaceChildren(options.renderEmpty?.() ?? document.createDocumentFragment());

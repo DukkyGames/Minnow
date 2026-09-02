@@ -1,7 +1,3 @@
-/**
- * Composer Brain notes (memory retrieve) injection toggle — tri-state like code map.
- */
-
 import { nextThinkingTriStateOnClick } from './composer-thinking';
 import {
   fetchMemoryInjectionEnabled,

@@ -1,7 +1,3 @@
-/**
- * LSP → SQLite indexer for the Brain code graph.
- */
-
 import { createHash } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -39,7 +35,6 @@ const execFileAsync = promisify(execFile);
 
 const rgExecutable = getRipgrepPath();
 
-/** LSP SymbolKind → short string for storage. */
 const KIND_NAMES = {
   1: 'file',
   2: 'module',
@@ -60,6 +55,8 @@ const KIND_NAMES = {
   23: 'struct',
 };
 
+// ── Symbols ──────────────────────────────────────────────────────────────────
+
 /**
  * @param {number | string | undefined} kind
  */
@@ -70,7 +67,6 @@ export function symbolKindName(kind) {
 }
 
 /**
- * Stable symbol id: "<repo>:<qualified.name>" (never line numbers).
  * @param {string} repo
  * @param {string} qualifiedName
  */
@@ -79,7 +75,6 @@ export function buildSymbolId(repo, qualifiedName) {
 }
 
 /**
- * Elide a long signature for repo-map display.
  * @param {string} name
  * @param {string} kind
  * @param {string} [detail]
@@ -91,8 +86,7 @@ export function elideSignature(name, kind, detail) {
 }
 
 /**
- * sha256 of the source lines covering a symbol span.
- * @param {string[]} lines — 0-based file lines
+ * @param {string[]} lines
  * @param {{ start: { line: number }, end: { line: number } }} range
  */
 export function hashSymbolSpan(lines, range) {
@@ -103,7 +97,6 @@ export function hashSymbolSpan(lines, range) {
 }
 
 /**
- * Flatten hierarchical document symbols into rows with qualified names.
  * @param {Array<Record<string, unknown>>} symbols
  * @param {string} repo
  * @param {string} file
@@ -147,8 +140,6 @@ export function flattenDocumentSymbols(symbols, repo, file, lines, prefix = '') 
 }
 
 /**
- * Normalize a ripgrep file path to a workspace-relative posix path.
- * Handles absolute paths and duplicated root prefixes on Windows.
  * @param {string} root
  * @param {string} relOrAbs
  */
@@ -185,7 +176,6 @@ export function normalizeIndexableRelPath(root, relOrAbs) {
 }
 
 /**
- * List indexable files via ripgrep (respects .gitignore).
  * @param {string} root
  * @param {string[]} includeGlobs
  * @param {string[]} excludeGlobs
@@ -208,7 +198,6 @@ export async function listIndexableFiles(root, includeGlobs, excludeGlobs) {
     });
     stdout = result.stdout ?? '';
   } catch (err) {
-    // Ripgrep exits 1 when no files match the include globs — treat as empty.
     const code = err && typeof err === 'object' ? err.code : undefined;
     if (code === 1) {
       return [];
@@ -226,7 +215,6 @@ export async function listIndexableFiles(root, includeGlobs, excludeGlobs) {
 }
 
 /**
- * Resolve a call-hierarchy item to a symbol id in the current file index.
  * @param {Map<string, { id: string, line_start: number, line_end: number }>} byFileLine
  * @param {string} repo
  * @param {{ name?: string, path?: string, range?: { start?: { line?: number } } }} item
@@ -242,8 +230,9 @@ function resolveCallItemToSymbolId(byFileLine, repo, item) {
   return buildSymbolId(repo, name);
 }
 
+// ── Index file ───────────────────────────────────────────────────────────────
+
 /**
- * Index one file: symbols, call edges, file hash.
  * @param {import('better-sqlite3').Database} db
  * @param {string} repo
  * @param {string} relFile
@@ -324,23 +313,15 @@ export async function indexSingleFile(db, repo, relFile, absFile, globalByFileLi
   return { file: relFile, symbols: flat.length, edges: edgeCount };
 }
 
-/** Max symbols to grep for usage_count augmentation per full reindex pass. */
 const USAGE_AUGMENT_MAX_SYMBOLS = 50_000;
 
-/**
- * Cap on identifier occurrences read from the usage scan. The scan streams, so this is a
- * runaway guard (generated/vendored trees), not a buffer limit.
- */
 const USAGE_SCAN_MAX_MATCHES = 5_000_000;
 
-/** Max per-file index errors echoed back to callers (full list stays in file_hashes). */
 const MAX_REPORTED_INDEX_ERRORS = 50;
 
-/** Max distinct error messages grouped into the summary. */
 const MAX_ERROR_SUMMARY_GROUPS = 8;
 
 /**
- * Run async work over items with bounded concurrency.
  * @template T
  * @param {T[]} items
  * @param {number} concurrency
@@ -360,7 +341,6 @@ export async function runBoundedPool(items, concurrency, fn, shouldContinue = ()
 }
 
 /**
- * Augment usage_count via one ripgrep --json pass (full reindex only).
  * @param {import('better-sqlite3').Database} db
  * @param {string} repo
  * @param {ReturnType<typeof getWorkspaceRoot>} root
@@ -385,9 +365,6 @@ async function augmentUsageCounts(db, repo, root) {
   }
   if (idsByName.size === 0) return;
 
-  // Stream `rg --only-matching` (one bare identifier per line) instead of buffering
-  // `rg --json`: on a mid-size repo the JSON form blows any fixed execFile maxBuffer in
-  // well under a second, which used to abort the whole reindex before PageRank ran.
   const args = [
     '--only-matching',
     '--no-filename',
@@ -427,7 +404,6 @@ async function augmentUsageCounts(db, repo, root) {
       if (capped) return;
       residual += chunk;
       const lines = residual.split(/\r?\n/);
-      // Last element is an incomplete line (or '') — carry it to the next chunk.
       residual = lines.pop() ?? '';
       for (const line of lines) tally(line);
       matches += lines.length;
@@ -437,7 +413,6 @@ async function augmentUsageCounts(db, repo, root) {
         child.kill();
       }
     });
-    // Ripgrep exits 1 with no matches and is killed once capped — neither is an error here.
     child.on('close', () => {
       if (!capped && residual) tally(residual);
       settle();
@@ -459,7 +434,6 @@ async function augmentUsageCounts(db, repo, root) {
 }
 
 /**
- * Recompute PageRank after indexing.
  * @param {import('better-sqlite3').Database} db
  * @param {Set<string>} [focusFiles]
  */
@@ -473,8 +447,9 @@ export function recomputePageRank(db, focusFiles = new Set()) {
   return writePageRanks(db, ranks);
 }
 
+// ── Reindex ──────────────────────────────────────────────────────────────────
+
 /**
- * Full-repo or incremental reindex.
  * @param {{ files?: string[], focusFiles?: string[], codeConfig?: ReturnType<typeof normalizeBrainCodeConfig> }} [opts]
  */
 export async function reindexCode(opts = {}) {
@@ -512,7 +487,6 @@ export async function reindexCode(opts = {}) {
       }
       filesToProcess.push({ relFile, absFile });
     } catch {
-      /* unreadable — handled in main loop */
       filesToProcess.push({ relFile, absFile: path.join(root, relFile) });
     }
   }
@@ -562,8 +536,6 @@ export async function reindexCode(opts = {}) {
     }
   }
 
-  // usage_count is a ranking hint. A failure here must never cost the caller PageRank or
-  // the whole index pass, so it is reported rather than thrown.
   let usageAugmentError = null;
   if (!isIncremental) {
     try {
@@ -581,8 +553,6 @@ export async function reindexCode(opts = {}) {
     phase: 'idle',
   });
 
-  // Symbol ids are qualified names, so same-named symbols in different files collapse.
-  // Report what the index actually holds rather than the sum of per-file counts.
   const symbolCount =
     db.prepare('SELECT COUNT(*) AS n FROM symbols WHERE repo = ?').get(repo)?.n ?? 0;
 
@@ -598,8 +568,6 @@ export async function reindexCode(opts = {}) {
 }
 
 /**
- * Replace a file's own path (and basename) inside its error message, so messages that
- * differ only by which file failed collapse into one group.
  * @param {string} message
  * @param {string} file
  */
@@ -608,15 +576,12 @@ function redactFilePath(message, file) {
   const variants = new Set([file, file.replace(/\//g, '\\'), file.split('/').pop() ?? '']);
   let out = message;
   for (const variant of variants) {
-    // Literal replace — file paths contain regex metacharacters.
     if (variant) out = out.split(variant).join('…');
   }
   return out.trim();
 }
 
 /**
- * Roll per-file results into the counts and grouped errors callers report to users.
- * Kept separate from `results` so the child-process IPC payload stays a fixed size.
  * @param {Array<{ file: string, symbols: number, edges: number, error?: string }>} results
  */
 export function summarizeIndexResults(results) {
@@ -624,7 +589,6 @@ export function summarizeIndexResults(results) {
   /** @type {Map<string, { count: number, sample: string }>} */
   const groups = new Map();
   for (const row of failed) {
-    // Group by message shape so "No LSP server configured for <path>" collapses to one row.
     const key = redactFilePath(String(row.error), String(row.file ?? ''));
     const hit = groups.get(key);
     if (hit) hit.count += 1;

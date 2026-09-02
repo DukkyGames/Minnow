@@ -1,7 +1,3 @@
-/**
- * Capability matrix — download .xlsx via SheetJS (client).
- */
-
 import * as XLSX from 'xlsx';
 import { buildCapabilityMatrixWorkbook } from '../../benchmark/capabilities/xlsx-workbook.ts';
 import type { CapabilityMatrixRosterEntry } from '../../benchmark/capabilities/roster-store.ts';

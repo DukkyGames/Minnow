@@ -1,7 +1,3 @@
-/**
- * In-chat context window usage ring (MIN-13) — composer stack indicator.
- */
-
 import { getContextInFlightOverlay } from '../chat/context-in-flight';
 import {
   estimateAttachmentTokens,
@@ -223,9 +219,6 @@ export function initContextUsageRing(): void {
     { inputId: 'chatAppInput' },
     { inputId: 'desktopInput' },
   ]) {
-    // Do not re-estimate history on composer input. After a pause that work
-    // froze glyph paint (especially backspace). Record typing so stream/tool
-    // refreshes wait until the composer is quiet.
     document.getElementById(inputId)?.addEventListener('input', () => {
       lastComposerInputAt = Date.now();
       if (debounceTimer) {

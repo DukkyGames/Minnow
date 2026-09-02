@@ -47,8 +47,6 @@ function stubCapabilitySideEffectTool(
     };
   }
 
-  // Chain probes (snapshot → click, list mail → open thread) need ids to act on; the
-  // generic ok-stub left them nothing to reference and they stalled after one round.
   const payload = capabilityStubPayload(name, args);
   if (payload !== null) {
     return {
@@ -100,8 +98,6 @@ export function createCapabilityExecuteToolFn(
 ) => ReturnType<typeof executeBenchmarkTool> {
   const perRunStubs = new Set(opts.stubToolIds ?? []);
   return (name, args, context) => {
-    // Trap tools stay stubbed even with side effects allowed: the row measures whether
-    // the model reaches for a tool its mode denies, never the write itself.
     if (perRunStubs.has(name)) {
       return Promise.resolve(stubCapabilitySideEffectTool(name, args));
     }

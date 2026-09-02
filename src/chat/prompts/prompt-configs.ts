@@ -1,7 +1,3 @@
-/**
- * Client API for ~/.minnow/prompt-configs (npm start) with in-memory fallback.
- */
-
 import { bumpPromptConfigEpoch } from '../outbound-estimate-epochs';
 import type { PromptConfig, PromptConfigListItem } from './types';
 

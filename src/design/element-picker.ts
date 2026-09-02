@@ -34,6 +34,8 @@ export interface PickedElement {
   computedStyles: Record<string, string>;
 }
 
+// ── Style props ──────────────────────────────────────────────────────────────
+
 /**
  * Computed-style properties captured per pick as `[outputKey, cssProperty]`. Kept curated (not
  * the whole `getComputedStyle` dump) so the chat block stays readable and bounded. Mirrored into
@@ -89,6 +91,8 @@ export interface ElementPicker {
   isEnabled(): boolean;
   destroy(): void;
 }
+
+// ── Guest scripts ────────────────────────────────────────────────────────────
 
 export const PICKER_STYLE_ID = 'mn-design-picker-style';
 export const PICKER_STATE_KEY = '__mnDesignPicker';
@@ -378,6 +382,8 @@ export const PICKER_DISABLE_SCRIPT = `(() => {
 /** Exported alias for unit tests (enable script). */
 export const PICKER_CAPTURE_SCRIPT = PICKER_ENABLE_SCRIPT;
 
+// ── Selectors ────────────────────────────────────────────────────────────────
+
 /** True when a CSS class name is stable enough for selector building. */
 export function isStablePickerClass(className: string): boolean {
   if (!className) return false;
@@ -576,6 +582,8 @@ export interface ParsedRgbColor {
   a: number;
 }
 
+// ── Contrast ─────────────────────────────────────────────────────────────────
+
 /**
  * Parse a computed-style color string (`rgb(...)`, `rgba(...)`, or `#hex`) into channels.
  * Returns null for `transparent`/unparseable values — the caller treats that as "can't compute
@@ -705,14 +713,13 @@ export function isCrossOriginPreview(): boolean {
   return isCrossOriginPreviewForInstance(WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID);
 }
 
+// ── Picker factory ───────────────────────────────────────────────────────────
+
 /** Detect Electron execJs vs iframe guest access. */
 export function createPickerTransport(
   designInstanceId: string = WORKSPACE_PREVIEW_DESIGN_INSTANCE_ID,
 ): PickerTransport {
   const preview = window.minnow?.preview;
-  // In Electron Design Mode the visible guest is a same-origin iframe and the native
-  // WebContentsView is hidden. execJs targets that hidden native view, so it would enable and
-  // poll the picker on a guest the user can't click. Read the iframe directly instead.
   if (
     preview &&
     typeof preview.execJs === 'function' &&
@@ -848,9 +855,7 @@ export function createElementPicker(options: ElementPickerOptions): ElementPicke
       const raw = await transport.eval(PICKER_POLL_SCRIPT);
       const picked = normalizePickedElement(raw);
       if (picked) await Promise.resolve(onPick(picked));
-    } catch {
-      /* guest may be mid-navigation */
-    }
+    } catch {}
   }
 
   function startPoll(): void {
@@ -867,10 +872,6 @@ export function createElementPicker(options: ElementPickerOptions): ElementPicke
     if (!doc) return;
 
     iframeClickHandler = (ev: MouseEvent) => {
-      // The target belongs to the guest iframe's realm, so a parent-realm
-      // `instanceof Element` check is always false (each same-origin frame has
-      // its own Element constructor). Duck-type on nodeType instead, which is
-      // realm-independent.
       const target = ev.target as Element | null;
       if (!target || target.nodeType !== 1) return;
       ev.preventDefault();
@@ -921,7 +922,6 @@ export function createElementPicker(options: ElementPickerOptions): ElementPicke
         onError?.('cross-origin preview: element picker disabled, use region draw');
         return;
       }
-      // Same-origin guest may still be loading — refreshGuestBinding retries on iframe load.
       if (!transport.canReadGuest()) {
         return;
       }
@@ -945,9 +945,7 @@ export function createElementPicker(options: ElementPickerOptions): ElementPicke
       detachIframeDirectClick();
       try {
         await transport.eval(PICKER_DISABLE_SCRIPT);
-      } catch {
-        /* guest may be gone */
-      }
+      } catch {}
       enabled = false;
     },
 
@@ -1008,9 +1006,7 @@ export function createCdpElementPicker(
       unsubscribeError = null;
       try {
         await window.minnow?.preview?.cdpPicker.disable();
-      } catch {
-        /* guest may be gone */
-      }
+      } catch {}
       enabled = false;
     },
 

@@ -54,6 +54,8 @@ export interface GitOpResult {
   url?: string;
 }
 
+// ── Transport ────────────────────────────────────────────────────────────────
+
 async function postGit(
   op: string,
   args: Record<string, unknown> = {},
@@ -72,13 +74,13 @@ async function postGit(
     }
     return (await res.json()) as GitOpResult;
   } catch (err) {
-    // Network failure → server is unreachable; close the stale-true window so subsequent
-    // calls short-circuit on the isLocalServerAvailable() guard instead of keep fetching.
     setLocalServerAvailable(false);
     reportBackgroundError('git-op', err);
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+// ── Working tree ─────────────────────────────────────────────────────────────
 
 export function gitStatus(cwd?: string): Promise<GitOpResult> {
   return postGit('status', cwd ? { cwd } : {});
@@ -148,6 +150,8 @@ export function gitLog(input?: {
 }): Promise<GitOpResult> {
   return postGit('log', input ?? {});
 }
+
+// ── Branches ─────────────────────────────────────────────────────────────────
 
 export function gitBranches(cwd?: string): Promise<GitOpResult> {
   return postGit('branches', cwd ? { cwd } : {});
@@ -230,6 +234,8 @@ export function gitRebase(input: {
 }): Promise<GitOpResult> {
   return postGit('rebase', input);
 }
+
+// ── Stash ────────────────────────────────────────────────────────────────────
 
 export function gitStashList(cwd?: string): Promise<GitOpResult> {
   return postGit('stashList', cwd ? { cwd } : {});

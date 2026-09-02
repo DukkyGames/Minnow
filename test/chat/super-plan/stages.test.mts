@@ -162,6 +162,8 @@ function pushRunCoveringTail(chat: ReturnType<typeof makeSuperPlanChat>, startIn
   ];
 }
 
+// ── planInvolvesUi heuristic ─────────────────────────────────────────────────
+
 describe('planInvolvesUi heuristic', () => {
   test('returns false for backend-only text', () => {
     assert.equal(
@@ -190,6 +192,8 @@ describe('planInvolvesUi heuristic', () => {
   });
 });
 
+// ── shouldRunImpeccableStage ─────────────────────────────────────────────────
+
 describe('shouldRunImpeccableStage', () => {
   test('mirrors planInvolvesUi on context fields', () => {
     assert.equal(
@@ -206,6 +210,8 @@ describe('shouldRunImpeccableStage', () => {
     );
   });
 });
+
+// ── buildPlanReviewerTask ────────────────────────────────────────────────────
 
 describe('buildPlanReviewerTask', () => {
   test('pass 1 task includes draft plan and spec', () => {
@@ -237,6 +243,8 @@ describe('buildPlanReviewerTask', () => {
     assert.deepEqual([...SUPER_PLAN_REVIEW_PASSES], [1, 2]);
   });
 });
+
+// ── assertPlanReviewerAggregate ──────────────────────────────────────────────
 
 describe('assertPlanReviewerAggregate (Fix 2: timeout aggregate mapping)', () => {
   test('maps a cancelled aggregate with error "timeout" to the friendly timeout message', () => {
@@ -293,6 +301,8 @@ describe('assertPlanReviewerAggregate (Fix 2: timeout aggregate mapping)', () =>
   });
 });
 
+// ── runReviewStage pause ─────────────────────────────────────────────────────
+
 describe('runReviewStage pause handling (Fix 3)', () => {
   test('returns paused instead of the aggregate outcome when paused while awaiting the reviewer', async () => {
     resetSuperPlanConfigCache();
@@ -324,6 +334,8 @@ describe('runReviewStage pause handling (Fix 3)', () => {
     );
   });
 });
+
+// ── finalizeStreamStage draft ────────────────────────────────────────────────
 
 describe("finalizeStreamStage draft (Fix 7: scoped to this run's own turn)", () => {
   test("errors when no save happened in the newest run's window, even though an older draft file exists", async () => {
@@ -369,6 +381,8 @@ describe("finalizeStreamStage draft (Fix 7: scoped to this run's own turn)", () 
     assert.deepEqual(outcome, { kind: 'done', artifactPath: planPath });
   });
 });
+
+// ── finalizeStreamStage spec_confirm ─────────────────────────────────────────
 
 describe('finalizeStreamStage spec_confirm (Fix 8: near-miss filename adoption)', () => {
   test('adopts a near-miss spec filename saved this turn into state.specPath', async () => {

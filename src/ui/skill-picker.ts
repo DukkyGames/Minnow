@@ -1,8 +1,3 @@
-/**
- * Slash-command picker anchored above the active composer textarea.
- * Lists SKILL.md skills and built-in slash commands (e.g. /goal).
- */
-
 import { isUserPromptLocked } from './user-prompt-lock';
 import { listSlashPickerRows, type SlashPickerRow } from '../chat/slash-commands/picker-catalog';
 import { getSkillCatalog } from '../skills/client';
@@ -637,7 +632,6 @@ export function initComposerSlashPicker(composerInput: HTMLTextAreaElement): voi
     if (storedSkill && !new RegExp(`(?:^|\\s)/${storedSkill}(?:\\s|$)`).test(composerInput.value)) {
       pickerApplied.delete(composerInput);
     }
-    // Skip picker work until a slash token is in play so ordinary typing stays cheap.
     if (!open) {
       const pos = composerInput.selectionStart ?? composerInput.value.length;
       const before = composerInput.value.slice(0, pos);
@@ -645,9 +639,6 @@ export function initComposerSlashPicker(composerInput: HTMLTextAreaElement): voi
     }
     detectSlashContext();
   });
-
-  // Keydown is handled by each composer's outer handler (handleKey / chat-app / concierge)
-  // so ArrowDown/Up are not processed twice when the slash picker is open.
 
   composerInput.addEventListener('blur', () => {
     window.setTimeout(() => closePicker(), 150);

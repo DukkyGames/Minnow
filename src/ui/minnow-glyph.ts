@@ -1,7 +1,3 @@
-/**
- * Inline Minnow fish glyph (white via currentColor on accent backgrounds).
- */
-
 const BODY =
   'M 16 50 C 26 36, 44 32, 56 42 L 69 50 L 56 58 C 44 68, 26 64, 16 50 Z';
 const TAIL = 'M 69 50 L 84 40 L 81 50 L 84 60 Z';

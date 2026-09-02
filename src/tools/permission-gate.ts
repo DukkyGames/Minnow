@@ -1,7 +1,3 @@
-/**
- * Blocks tool execution until the user approves (modal), when policy requires it.
- */
-
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
 import { findChatById, isGoalLoopActive } from '../state/sessions';
 import {
@@ -32,11 +28,8 @@ import {
 
 export type { ToolApprovalContext };
 
-/**
- * V1 leftover boards used to skip permission prompts when they were AFK.
- * That distinction is gone (MIN-718): leftover Running is not a prompt policy.
- * Kept as a named no-op so existing call sites stay compile-clean.
- */
+// ── AFK ──────────────────────────────────────────────────────────────────────
+
 export function blockAfkInteractionAttempt(
   _context: ToolApprovalContext,
   _kind: 'question' | 'approval' | 'confirmation' | 'mode_switch' | 'other',
@@ -94,6 +87,8 @@ function companionRequiresApproval(toolId: string): boolean {
   );
 }
 
+// ── Path ─────────────────────────────────────────────────────────────────────
+
 /** Matches server `resolveSafePath` rejection copy (`server/runtime/path-access.js`). */
 export function outsideWorkspaceBlockMessage(userPath: string): string {
   return `Error: Path "${userPath}" resolves outside the workspace directory. Enable full disk access in Settings → General → Filesystem access (dangerous) to allow paths outside the workspace.`;
@@ -112,6 +107,8 @@ function isPathInAllowedRoots(
   }
   return false;
 }
+
+// ── Approval ─────────────────────────────────────────────────────────────────
 
 /** Result of the pre-execution gate: proceed or return this tool message instead. */
 export async function maybeBlockToolForUserApproval(
@@ -150,8 +147,6 @@ export async function maybeBlockToolForUserApproval(
       : [];
 
   const needsPathAck = pathsOutsideWorkspace.length > 0;
-  // A device must approve each mutating call in the browser that initiated it,
-  // even when the host's shared tool setting is Full.
   const needsCompanionAck = companionRequiresApproval(permissionToolId);
   const needsPermissionAck = perm === 'ask' || needsCompanionAck;
 
@@ -165,7 +160,6 @@ export async function maybeBlockToolForUserApproval(
     );
     if (afkBlocked) return afkBlocked;
 
-    // Server rejects out-of-workspace paths unless full filesystem access is on — do not modal.
     if (needsPathAck) {
       return { content: outsideWorkspaceBlockMessage(pathsOutsideWorkspace[0]!) };
     }
@@ -181,7 +175,6 @@ export async function maybeBlockToolForUserApproval(
 
     if (!goalAutoApproved) {
       if (typeof document === 'undefined') {
-        // Headless: cannot show Ask strip — still run sandbox escalation below for shell tools.
       } else {
         const summary = describeToolInvocation(execName, args);
         const workspace: ToolApprovalRequest['workspace'] = workspaceRoot
@@ -215,7 +208,6 @@ export async function maybeBlockToolForUserApproval(
     }
   }
 
-  // MIN-553 Phase 3: prefer → Ask to run unsandboxed; require → clear error (AFK fail-closed).
   if (SHELL_SANDBOX_TOOL_IDS.has(permissionToolId)) {
     const sandboxGate = await maybeEscalateShellSandbox(
       permissionToolId,
@@ -229,10 +221,6 @@ export async function maybeBlockToolForUserApproval(
   return null;
 }
 
-/**
- * When shell sandbox mode is on but the OS backend is unavailable:
- * require → error; prefer → Ask strip (Allow once / Always allow / Cancel).
- */
 async function maybeEscalateShellSandbox(
   permissionToolId: string,
   args: Record<string, unknown>,
@@ -260,7 +248,6 @@ async function maybeEscalateShellSandbox(
     };
   }
 
-  // prefer — already always-allowed?
   if (getToolSecurityMetaCached().allowUnsandboxedShell || args.allow_unsandboxed === true) {
     args.allow_unsandboxed = true;
     return null;
@@ -329,6 +316,5 @@ export function toolInvocationWouldPrompt(
         )
       : [];
   const needsPermissionAck = perm === 'ask';
-  // Out-of-workspace paths are blocked before the modal when FS access is workspace-only.
   return needsPermissionAck && pathsOutsideWorkspace.length === 0;
 }

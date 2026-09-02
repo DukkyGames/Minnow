@@ -33,6 +33,8 @@ export interface ComposeSelectionAiOptions {
   ) => Promise<string>;
 }
 
+// ── DOM helpers ──────────────────────────────────────────────────────────────
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -185,6 +187,8 @@ function positionSelectionBubble(
   bubble.style.top = `${top}px`;
 }
 
+// ── Selection bubble ─────────────────────────────────────────────────────────
+
 /** Compact toolbar for improving highlighted compose text. */
 function attachSelectionAiBubble(
   editor: HTMLElement,
@@ -334,6 +338,8 @@ function attachSelectionAiBubble(
   });
 }
 
+// ── Editor ───────────────────────────────────────────────────────────────────
+
 export function createComposeBodyEditor(
   aiOptions?: ComposeSelectionAiOptions,
 ): ComposeBodyEditor {
@@ -379,7 +385,6 @@ export function createComposeBodyEditor(
       try {
         document.execCommand(command);
       } catch {
-        /* execCommand may fail on unsupported commands; ignore. */
       }
       syncToolbarState(editor, buttons);
     });

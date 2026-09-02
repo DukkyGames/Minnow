@@ -1,7 +1,3 @@
-/**
- * Capability matrix — parse uploaded .xlsx and merge manual verdicts.
- */
-
 import * as XLSX from 'xlsx';
 import {
   importManualVerdicts,

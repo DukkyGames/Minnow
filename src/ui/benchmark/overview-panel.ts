@@ -1,7 +1,3 @@
-/**
- * Benchmark Overview tab: multi-model comparison grid (Minnow bench-grid).
- */
-
 import { pickCampaignInsight } from '../../benchmark/aggregates.ts';
 import type { ModelAggregate, ModelScoreIndexRow } from '../../benchmark/campaign-types.ts';
 import { fetchModelScoreIndex } from '../../benchmark/campaign-persistence.ts';

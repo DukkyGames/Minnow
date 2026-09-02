@@ -1,14 +1,3 @@
-/**
- * P10-E (MIN-770) — persist a stopped/failed assistant partial on abort or error.
- *
- * Stop is not an exception on the product path: `runTurn` returns
- * `{ outcome: 'crashed', error: 'aborted' }` and the post-await success path
- * would otherwise paint without a `stopped: true` row. These helpers are the
- * caller overlay that mints that row (and the failed sibling) from live
- * streamed text/thinking. They use the existing orphaned helpers rather than
- * a second transcript writer.
- */
-
 import { takeChatStopReason } from '../app-state';
 import {
   GENERATION_LOST_ON_RESTART_MESSAGE,
@@ -98,6 +87,8 @@ export interface SettleFailedResult {
   preservedTurnOutput: boolean;
 }
 
+// ── Predicates ───────────────────────────────────────────────────────────────
+
 /** User Stop / abort: `runTurn` maps this to a returned crashed outcome, not a throw. */
 export function isAbortError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
@@ -105,13 +96,6 @@ export function isAbortError(err: unknown): boolean {
   return name === 'AbortError';
 }
 
-/**
- * True when this `TurnResult` is a user/system Stop.
- *
- * The real Stop path is a *returned* `{ outcome: 'crashed', error: 'aborted' }`
- * (`run-turn.js`). A thrown AbortError is the fallback if a caller still throws.
- * `signal.aborted` covers Stop that raced a different inner error.
- */
 export function isAbortedTurnResult(
   result: TurnResult,
   signal?: AbortSignal | null,
@@ -156,10 +140,6 @@ function thinkingFromController(
   return thoughtController?.getSegmentsNormalized() ?? [];
 }
 
-/**
- * Append a stopped/failed assistant row through the decorating store when we
- * have one so `touchChat` / `noteRunOutputIndex` stay on the P10-D path.
- */
 function appendInterruptedAssistantRow(
   chat: Chat,
   store: InterruptedTurnStore | undefined,
@@ -179,10 +159,8 @@ function appendInterruptedAssistantRow(
   recordAssistantReplyOnChat(chat);
 }
 
-/**
- * Persist a user-stopped partial. Null-equivalent (nothing streamed) is a no-op
- * so an empty Stop does not mint a stray assistant bubble.
- */
+// ── Persist ──────────────────────────────────────────────────────────────────
+
 export function persistStoppedTurnPartial(params: {
   chat: Chat;
   store?: InterruptedTurnStore;
@@ -204,10 +182,6 @@ export function persistStoppedTurnPartial(params: {
   return true;
 }
 
-/**
- * Persist a failed-turn partial *before* history triage so `turnProducedOutput`
- * takes the preserve branch and the error bubble lands under the partial (MIN-666).
- */
 export function persistFailedTurnPartial(params: {
   chat: Chat;
   store?: InterruptedTurnStore;
@@ -227,8 +201,6 @@ export function persistFailedTurnPartial(params: {
 }
 
 function tearDownLiveStreamChrome(chrome: InterruptedTurnChrome): void {
-  // P10-F may not have created a live timer; abort the store tracker if it exists
-  // so an open thinking interval cannot leak a setInterval into tests.
   chrome.store?.abortThinking?.();
   chrome.streamStatus?.setThinkingElapsed(null);
   cancelAssistantBubbleRenderDebounce(chrome.bubble);
@@ -237,10 +209,8 @@ function tearDownLiveStreamChrome(chrome: InterruptedTurnChrome): void {
   }
 }
 
-/**
- * User Stop: keep the live partial, mark it stopped, record `ChatStopReason`.
- * Quit Minnow (`system`) leaves `currentGenerationId` so boot resume can still prompt.
- */
+// ── Settle ───────────────────────────────────────────────────────────────────
+
 export function settleStoppedTurn(chrome: InterruptedTurnChrome): SettleStoppedResult {
   const { chat } = chrome;
   clearPendingSteer(chat);
@@ -252,8 +222,6 @@ export function settleStoppedTurn(chrome: InterruptedTurnChrome): SettleStoppedR
   tearDownLiveStreamChrome(chrome);
   chrome.thoughtController?.abort();
 
-  // Keep the generation id on a system Stop (Quit Minnow) so the resume
-  // gate still has a marker. User/timeout Stop must drop it or reload resumes.
   if (stopReason !== 'system') {
     chat.currentGenerationId = undefined;
   }
@@ -327,7 +295,6 @@ export function settleFailedTurn(
   const failedForkIndex =
     failedRun?.forkHistoryIndex ?? resolveForkHistoryIndex(chat, chrome.pushUser);
 
-  // Persist first so triage sees the partial and Continue can resume from it.
   persistFailedTurnPartial({
     chat,
     store: chrome.store,
@@ -341,7 +308,6 @@ export function settleFailedTurn(
   let preservedTurnOutput = false;
 
   if (generationLost) {
-    // Nothing streamed here — slicing can only destroy rows this turn never wrote.
     preservedTurnOutput = true;
     if (repairSessionHistoryTail(chat)) {
       recordChatMessage(chat);
@@ -402,7 +368,6 @@ export function settleFailedTurn(
   void Promise.resolve()
     .then(() => reportBackgroundError('chat-turn-failed', err))
     .catch(() => {
-      /* logger must never fail the turn */
     });
 
   if (isStreamDomVisible(chat.id)) {
@@ -410,9 +375,6 @@ export function settleFailedTurn(
     const bubble = chrome.bubble;
     if (!rolledBack) {
       if (preservedTurnOutput) {
-        // History rebuild already chipped the failed partial (`msg--failed`).
-        // The error copy is a live row under it, not a second history message,
-        // so a reload keeps the partial and drops only this notice.
         const { bubble: errorBubble } = appendBubble('assistant', '', {
           historyIndex: chat.history.length,
           turnKind: 'assistant',

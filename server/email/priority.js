@@ -53,11 +53,9 @@ export function computePriorityScore(input = {}) {
     (URGENCY_WEIGHTS[urgency] ?? URGENCY_WEIGHTS.normal) +
     (CATEGORY_WEIGHTS[category] ?? CATEGORY_WEIGHTS.fyi);
 
-  // Sender affinity: people the user actually writes back to matter more.
   const repliedCount = Math.max(0, Number(input.repliedCount) || 0);
   score += Math.min(15, repliedCount * 3);
 
-  // A concrete deadline raises priority; an imminent (or passed) one more so.
   const deadline = String(input.deadline ?? '').trim();
   if (deadline) {
     const nowMs = Number.isFinite(input.nowMs) ? Number(input.nowMs) : Date.now();
@@ -68,7 +66,6 @@ export function computePriorityScore(input = {}) {
     }
   }
 
-  // User override wins over everything the model inferred.
   const override = String(input.override ?? '');
   if (override === 'high') {
     score = Math.max(score, 85);

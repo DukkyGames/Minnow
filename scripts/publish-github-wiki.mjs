@@ -11,7 +11,6 @@ import {
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repositoryBlobBase = 'https://github.com/HenriGrimm/Minnow/blob/main/';
 
-/** Parse the optional staging output directory. */
 function readOutputArgument() {
   const index = process.argv.indexOf('--output');
   if (index < 0) return path.join(os.tmpdir(), 'minnow-wiki-staging');
@@ -20,14 +19,12 @@ function readOutputArgument() {
   return path.resolve(requested);
 }
 
-/** Publish the full developer documentation corpus (not limited to the in-app catalog). */
 function shouldPublish(sourcePath) {
   if (!sourcePath.startsWith('documentation/')) return false;
   const relative = sourcePath.slice('documentation/'.length);
   return isGitHubWikiPublishPath(relative);
 }
 
-/** Convert a canonical source path to a stable flat GitHub Wiki filename. */
 function wikiFilename(sourcePath) {
   if (sourcePath === 'documentation/README.md') return '_Home.md';
   if (sourcePath === 'documentation/ROADMAP.md') return 'Roadmap.md';
@@ -42,7 +39,6 @@ function wikiFilename(sourcePath) {
   return `${words.join('-') || 'Documentation'}.md`;
 }
 
-/** Resolve one Markdown target to a repository-root path. */
 function resolveSourceLink(sourcePath, href) {
   if (/^(https?:|mailto:|#)/iu.test(href)) return null;
   const [target, anchor = ''] = href.split('#', 2);
@@ -50,7 +46,6 @@ function resolveSourceLink(sourcePath, href) {
   return { path: resolved, anchor: anchor ? `#${anchor}` : '' };
 }
 
-/** Rewrite links for GitHub Wiki's flat generated namespace. */
 function rewriteLinks(markdown, sourcePath, filenameBySource) {
   return markdown.replace(/(!?\[[^\]]*\])\(([^)\s]+)(?:\s+"[^"]*")?\)/gu, (match, label, href) => {
     const resolved = resolveSourceLink(sourcePath, href);
@@ -63,7 +58,6 @@ function rewriteLinks(markdown, sourcePath, filenameBySource) {
   });
 }
 
-/** Clear generated staging files while preserving a cloned wiki's .git directory. */
 async function clearOutputDirectory(outputDirectory) {
   await mkdir(outputDirectory, { recursive: true });
   const rows = await readdir(outputDirectory, { withFileTypes: true });
@@ -73,7 +67,6 @@ async function clearOutputDirectory(outputDirectory) {
   }
 }
 
-/** Generate navigation from catalog section order. */
 function buildSidebar(entries, filenameBySource) {
   const sections = new Map();
   for (const entry of entries) {
@@ -97,7 +90,6 @@ function buildSidebar(entries, filenameBySource) {
   return `${lines.join('\n')}\n`;
 }
 
-/** Stage the generated GitHub Wiki mirror. */
 async function main() {
   const outputDirectory = readOutputArgument();
   const documentationRoot = path.join(repositoryRoot, 'documentation');

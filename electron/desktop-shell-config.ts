@@ -1,7 +1,3 @@
-/**
- * Read/write desktop shell preferences from ~/.minnow/config.json.
- */
-
 import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -14,10 +10,8 @@ import {
 
 const CONFIG_FILE = 'config.json';
 
-/** Default when config is missing or invalid. */
 export const DEFAULT_CLOSE_TO_TRAY = true;
 
-/** Default when config is missing or invalid — matches Electron's stock behavior. */
 export const DEFAULT_HARDWARE_ACCELERATION = true;
 
 export { DEFAULT_SHELL_ZOOM_PERCENT };
@@ -55,7 +49,6 @@ async function resolveConfigPath(): Promise<string> {
   return path.join(getMinnowHome(), CONFIG_FILE);
 }
 
-/** Load shell zoom percent from disk without starting the HTTP server. */
 export async function readShellZoomPercent(): Promise<number> {
   try {
     const configPath = await resolveConfigPath();
@@ -67,7 +60,6 @@ export async function readShellZoomPercent(): Promise<number> {
   }
 }
 
-/** Persist shell zoom via the config store merge helper (validates shape). */
 export async function writeShellZoomPercent(percent: number): Promise<number> {
   const next = clampShellZoomPercent(percent);
   const { readConfigJson, writeConfigJson } = await importServerModule<{
@@ -89,7 +81,6 @@ export async function writeShellZoomPercent(percent: number): Promise<number> {
   return next;
 }
 
-/** Load close-to-tray from disk without starting the HTTP server. */
 export async function readCloseToTrayPreference(): Promise<boolean> {
   try {
     const configPath = await resolveConfigPath();
@@ -101,7 +92,6 @@ export async function readCloseToTrayPreference(): Promise<boolean> {
   }
 }
 
-/** Persist close-to-tray via the config store merge helper (validates shape). */
 export async function writeCloseToTrayPreference(enabled: boolean): Promise<boolean> {
   const { readConfigJson, writeConfigJson } = await importServerModule<{
     readConfigJson: (rel: string) => Promise<Record<string, unknown> | null>;
@@ -122,10 +112,7 @@ export async function writeCloseToTrayPreference(enabled: boolean): Promise<bool
   return enabled;
 }
 
-/**
- * Resolve ~/.minnow synchronously, mirroring server/config/home.js without its
- * legacy ~/.speedchat rename side effect — this path is read-only.
- */
+// Read-only home lookup; skip the ~/.speedchat rename from server/config/home.js.
 function resolveMinnowHomeSync(): string {
   const override =
     (typeof process.env.MINNOW_HOME === 'string' && process.env.MINNOW_HOME.trim()) ||
@@ -139,12 +126,7 @@ function resolveMinnowHomeSync(): string {
   return home;
 }
 
-/**
- * Read hardware acceleration synchronously, before Electron's `ready` event.
- * `app.disableHardwareAcceleration()` is a silent no-op once the app is ready, so
- * this cannot go through the async `resolveConfigPath()` used by its siblings.
- * Any failure returns true, i.e. Electron's default behavior.
- */
+// Must run before Electron ready; disableHardwareAcceleration is a no-op after that.
 export function readHardwareAccelerationSync(): boolean {
   try {
     const configPath = path.join(resolveMinnowHomeSync(), CONFIG_FILE);
@@ -155,7 +137,6 @@ export function readHardwareAccelerationSync(): boolean {
   }
 }
 
-/** Load hardware acceleration from disk without starting the HTTP server. */
 export async function readHardwareAccelerationPreference(): Promise<boolean> {
   try {
     const configPath = await resolveConfigPath();
@@ -167,7 +148,6 @@ export async function readHardwareAccelerationPreference(): Promise<boolean> {
   }
 }
 
-/** Persist hardware acceleration via the config store merge helper (validates shape). */
 export async function writeHardwareAccelerationPreference(enabled: boolean): Promise<boolean> {
   const { readConfigJson, writeConfigJson } = await importServerModule<{
     readConfigJson: (rel: string) => Promise<Record<string, unknown> | null>;

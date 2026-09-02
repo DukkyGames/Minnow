@@ -1,17 +1,3 @@
-/**
- * Paste intelligence for the issue editor.
- *
- * Classification is deliberately synchronous: `preventDefault` has to be called
- * during the paste event, so the decision cannot wait on an upload or a `gh`
- * call. `classifyPaste` reads the clipboard and returns a plan; `applyPaste`
- * carries it out afterwards.
- *
- * Everything it produces is markdown in the supported subset. Nothing here
- * writes HTML into the document.
- *
- * Phase 3 of `documentation/plans/issues-app-v2.md`.
- */
-
 import { parseIssueCodeRefPaste } from '../state/issue-code-ref-parse';
 
 /** What a paste should become. `passthrough` lets the browser do its thing. */
@@ -26,10 +12,6 @@ export type PastePlan =
 const GITHUB_URL_RE =
   /^https?:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/(issues|pull)\/(\d+)(?:[/#?].*)?$/i;
 
-/**
- * A stack-trace-ish line: a path with a line number, in the shapes Node,
- * TypeScript and browsers actually emit.
- */
 const TRACE_PATH_RE =
   /(?:at\s+.*?\(|at\s+|^\s*|[\s(])((?:[A-Za-z]:)?[\w./\\-]+\.[A-Za-z]{1,5}):(\d+)(?::(\d+))?/gm;
 
@@ -53,7 +35,6 @@ export function extractTracePaths(text: string): string[] {
   for (const match of text.matchAll(TRACE_PATH_RE)) {
     const path = match[1].replace(/\\/g, '/');
     const line = match[2];
-    // Node's internal frames are never useful as code refs.
     if (path.startsWith('node:') || path.includes('node_modules/')) continue;
     const key = `${path}:${line}`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -81,7 +62,6 @@ export function classifyPaste(dataTransfer: DataTransfer | null): PastePlan {
       };
     }
 
-    // `path:12-34` — the half-built parser from MIN-261 finally has a caller.
     if (/^[\w./\\-]+\.[A-Za-z0-9]+(?::\d+(?:-\d+)?)?$/.test(single)) {
       const parsed = parseIssueCodeRefPaste(single);
       if (parsed.ok && parsed.ref.startLine) {
@@ -111,10 +91,7 @@ function fence(text: string): string {
   return `${marker}\n${text.replace(/\s+$/, '')}\n${marker}\n`;
 }
 
-/**
- * Carry out a plan. Returns false when nothing was inserted, so the caller can
- * fall back to the browser's own paste.
- */
+/** Carry out a plan. */
 export async function applyPaste(plan: PastePlan, ctx: PasteContext): Promise<boolean> {
   switch (plan.kind) {
     case 'github':
@@ -184,10 +161,7 @@ export async function applyPaste(plan: PastePlan, ctx: PasteContext): Promise<bo
   }
 }
 
-/**
- * Editor entry point: classify synchronously, prevent the default when there is
- * something to do, then apply.
- */
+/** Editor entry point: classify synchronously, prevent the default when there is something to do, then apply. */
 export function transformPaste(event: ClipboardEvent, ctx: PasteContext): boolean {
   const plan = classifyPaste(event.clipboardData);
   if (plan.kind === 'passthrough') return false;

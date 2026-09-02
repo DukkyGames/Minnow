@@ -1,8 +1,3 @@
-/**
- * Reject fenced implementation code blocks in Super Plan markdown saves.
- * Allows inline code, bash/sh in Test steps, and YAML front-matter.
- */
-
 const FRONT_MATTER_RE = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/;
 
 /** Shell languages allowed anywhere (especially Test steps). */
@@ -18,8 +13,6 @@ const ALLOWED_FENCE_LANGS = new Set([
   'cmd',
   'console',
   'terminal',
-  // Documentation/data languages: not implementation code, allowed anywhere
-  // a plan needs to show structured examples (front-matter, diagrams, diffs).
   'json',
   'jsonc',
   'yaml',
@@ -85,10 +78,6 @@ function isInTestSection(body: string, blockStart: number): boolean {
   return buildHeading < testHeading;
 }
 
-/**
- * Returns an error message when plan markdown contains disallowed fenced code,
- * or null when the content passes the no-code-snippet rule.
- */
 export function validatePlanSaveNoCodeSnippets(content: string): string | null {
   const trimmed = content.trim();
   if (!trimmed) return null;

@@ -1,8 +1,3 @@
-/**
- * Parse persisted user message content (text, file blocks, image placeholders).
- * Format matches {@link buildHistoryUserContent} in `src/chat/build-api-messages.ts`.
- */
-
 /** One inlined text/PDF attachment from history. */
 export interface HistoryFilePart {
   name: string;
@@ -100,10 +95,6 @@ function stripAttachmentMarkers(content: string): string {
   return withoutImages.replace(/\n{3,}/g, '\n\n').trim();
 }
 
-/**
- * Split persisted user `content` into display text and attachment parts.
- * Skill tags are left in `text` for callers that strip them separately.
- */
 export function parseHistoryUserContent(content: string): ParsedHistoryUserMessage {
   const files: HistoryFilePart[] = [];
   const images: HistoryImagePart[] = [];
@@ -149,9 +140,6 @@ export function parseHistoryUserContent(content: string): ParsedHistoryUserMessa
         ? Number(contrastRaw)
         : null;
     const imageName = match[12] ?? null;
-    // The body carries rich PATH/ATTRIBUTES/COMPUTED STYLES/POSITION sections (for the model)
-    // ahead of the HTML, which always comes last after a `HTML` marker. Recover just the markup
-    // for the transcript chip. Older blocks are the bare HTML with no marker — take them whole.
     const body = match[13] ?? '';
     const htmlMarker = body.lastIndexOf('\nHTML\n');
     const outerHtmlPreview = htmlMarker === -1 ? body : body.slice(htmlMarker + '\nHTML\n'.length);

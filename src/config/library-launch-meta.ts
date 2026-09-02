@@ -165,7 +165,6 @@ export async function saveLibraryLaunchSettings(payload: {
     writeLocal(data);
     return data;
   } catch {
-    // Tool server down — localStorage still has the slider values for this browser.
     return optimistic;
   }
 }

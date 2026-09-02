@@ -156,9 +156,7 @@ export class AudioPlaybackQueue {
     for (const source of this.scheduledSources) {
       try {
         source.stop();
-      } catch {
-        /* already stopped */
-      }
+      } catch {}
       source.disconnect();
     }
     this.scheduledSources = [];
@@ -207,9 +205,7 @@ export class AudioPlaybackQueue {
     if (typeof sinkable.setSinkId !== 'function') return;
     try {
       await sinkable.setSinkId(this.outputDeviceId);
-    } catch {
-      /* ignore sink routing errors */
-    }
+    } catch {}
   }
 
   private scheduleBuffer(ctx: AudioContext, samples: Float32Array): void {

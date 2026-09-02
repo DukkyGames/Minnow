@@ -199,9 +199,7 @@ export function createAnnotationOverlay(
     }
     try {
       svg.releasePointerCapture(ev.pointerId);
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   }
 
   svg.addEventListener('pointerdown', onPointerDown);
@@ -351,7 +349,6 @@ export function createAnnotationOverlay(
     },
 
     mapGuestRect(guestRect, _guestDevicePixelRatio): OverlayMarker['rect'] {
-      // Overlay placement is CSS-px identity; DPR only matters for raster capture, not overlay scale.
       void _guestDevicePixelRatio;
       const scale = hostContentScale();
       if (!Number.isFinite(scale) || scale === 0 || scale === 1) {
@@ -392,8 +389,6 @@ export function createAnnotationOverlay(
 
         appendShapeGeometry(shapeGroup, shape);
 
-        // Chat-linked shape (MIN-368): small clickable glyph badge at the shape's top-right so
-        // "page → transcript" navigation has a click target without disturbing the shape itself.
         if (shape.links?.length && onLinkClick) {
           const bounds = boundingRectOfShape(shape);
           const badge = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -487,9 +482,7 @@ export function createAnnotationOverlay(
         if (XmlSerializerCtor) {
           return new XmlSerializerCtor().serializeToString(svg);
         }
-      } catch {
-        /* fall through to outerHTML */
-      }
+      } catch {}
       return (svg as unknown as { outerHTML?: string }).outerHTML ?? '';
     },
 

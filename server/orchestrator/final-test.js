@@ -1,36 +1,4 @@
-/**
- * P3-F — Final Tester static ladder (MIN-710).
- * P5-C — plus the browser rung (MIN-721).
- *
- * After the last merge, typecheck → lint → unit → build against the
- * **integration worktree**, and then — only if all four are green — start the
- * app and verify it in a real browser. Each rung gates the next. The first
- * failure stops the ladder and becomes `final.test.ended` with `runInstructions`
- * that are the failing command plus that cwd — not a narrative, and not
- * a guess at which task broke the build.
- *
- * The static rungs prove the code compiles; only the browser rung proves the
- * feature works. The gate between them is not an optimisation: a browser
- * launched against a build that does not compile produces failures that
- * describe the wrong thing, and costs minutes per run to say nothing.
- *
- * The browser rung has a third status the static rungs do not: `blocked`. A
- * missing browser, a driver crash, a dev server that will not start, or a plan
- * with no browser-observable Accept criterion all mean *the check could not
- * run*, which is a different fact from *the app is broken*. Blocked never fails
- * the run; it is journalled as `evidence.browser.status = 'blocked'` with a
- * reason. See `browser-rung.js` for why that distinction is load-bearing.
- *
- * This module is mechanical. It does not call a model, and it must not
- * live in `merge-queue.js`. The Final Tester *agent* (prompt under
- * `prompts/final/`) is allowed to interpret the same rungs via
- * `execute_command`; tests drive this function with no LLM.
- *
- * Minnow's own `npm test` is a bad default target (known-failing suites,
- * fixture rewrite). Callers in unit tests MUST point `cwd` at a fixture
- * repo with a green baseline, or supply `documentation/plans/final-test-baseline.json`
- * so a recorded non-zero unit exit is not treated as a new regression.
- */
+/** Final Tester static ladder, then the browser rung. */
 
 import { exec } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -93,10 +61,7 @@ const DEFAULT_RUNG_TIMEOUT_MS = 120_000;
  */
 
 /**
- * `runInstructions` is command + cwd, two labelled lines, so a human (or a
- * test) can exec the same command in the same directory and get the same
- * failure. Not a story about which task to reopen.
- *
+ * `runInstructions` is command + cwd, two labelled lines, so a human (or a test) can exec the same command in the same directory and get the.
  * @param {{ command: string, cwd: string }} input
  * @returns {string}
  */
@@ -107,11 +72,7 @@ export function formatRunInstructions(input) {
 }
 
 /**
- * Inverse of {@link formatRunInstructions}, and of the browser rung's longer
- * form. `command` + `cwd` keep their P3-F meaning whichever rung produced the
- * instructions, so every existing caller reads a browser failure unchanged;
- * `url` and `steps` are present only for the browser rung.
- *
+ * Inverse of {@link formatRunInstructions}, and of the browser rung's longer form.
  * @param {string} text
  * @returns {{ command: string, cwd: string, url?: string, steps?: string[] } | null}
  */
@@ -162,9 +123,7 @@ export function classifyLadderCommand(command) {
 }
 
 /**
- * Pull `## Verification Checklist` commands out of a plan. Later `##` ends
- * the section. Only backtick-quoted tokens are treated as commands.
- *
+ * Pull `## Verification Checklist` commands out of a plan.
  * @param {string} markdown
  * @returns {Partial<Record<LadderRungId, string>>}
  */
@@ -183,7 +142,6 @@ export function parseVerificationChecklist(markdown) {
   while (match) {
     const command = match[1].trim();
     const id = classifyLadderCommand(command);
-    // First mapping wins so a later "passes" prose tick does not overwrite.
     if (id && mapped[id] == null) mapped[id] = command;
     match = BACKTICK_CMD.exec(body);
   }
@@ -219,11 +177,7 @@ export function formatLadderPromptBlock(rungs) {
 }
 
 /**
- * Resolve named rungs in gate order. Plan checklist overrides, then
- * package.json scripts, then repo defaults. Lint with no script and no
- * checklist entry is skipped so a repo that never had a linter does not
- * false-fail after typecheck.
- *
+ * Resolve named rungs in gate order.
  * @param {{
  *   planMarkdown?: string | null,
  *   packageJson?: unknown,
@@ -256,11 +210,7 @@ export function resolveLadderRungs(input = {}) {
 }
 
 /**
- * A non-zero exit is a regression unless a recorded baseline says this rung
- * already failed this way. Exit 0 is never a regression. A different non-zero
- * than `expectedExitCode`, or output that misses every `failingPatterns`
- * entry when patterns are listed, is a new failure.
- *
+ * A non-zero exit is a regression unless a recorded baseline says this rung already failed this way.
  * @param {LadderRungId} rungId
  * @param {{ exitCode: number, output: string }} actual
  * @param {FinalTestBaseline | null | undefined} baseline
@@ -327,7 +277,6 @@ export async function loadPlanMarkdown(cwd, planPath) {
     try {
       return await fs.readFile(file, 'utf8');
     } catch {
-      // try the next candidate
     }
   }
   return '';
@@ -373,13 +322,6 @@ export async function execLadderCommand(command, opts) {
 
 /**
  * The browser rung, under a whole-rung ceiling.
- *
- * The ceiling is here rather than inside the rung because the engine's
- * contract is with *this* function: a browser that wedges past every internal
- * deadline must still return a `blocked` verdict rather than holding an
- * attempt open forever. A timed-out rung is `blocked`, not `fail` — a stuck
- * driver says nothing about the app.
- *
  * @param {{
  *   cwd: string,
  *   planMarkdown: string,
@@ -498,8 +440,6 @@ export async function runFinalLadder(input) {
       id: rung.id,
       command: rung.command,
       exitCode: actual.exitCode,
-      // Per-rung outcome, so a reader of `final.test.ended` never has to infer
-      // one rung's verdict from another rung's exit code.
       outcome: actual.exitCode === 0 || matchedBaseline ? 'pass' : 'fail',
       ...(matchedBaseline ? { matchedBaseline: true } : {}),
     });
@@ -517,8 +457,6 @@ export async function runFinalLadder(input) {
           output: actual.output,
           cwd,
           rungs: rungResults,
-          // The gate. A build that does not compile never reaches a browser,
-          // so there is no browser verdict to report — not even a blocked one.
           browser: null,
         },
       };
@@ -532,11 +470,6 @@ export async function runFinalLadder(input) {
   });
   const staticSummary = `Final ladder passed ${ran.join(', ')}.`;
 
-  // ---------------------------------------------------------- rung 5: browser
-  //
-  // Reached only from here: every static rung above is green. `browser: false`
-  // opts out entirely (P2-G sandboxes, scripted effectors, and the unit tests
-  // that are only exercising the static ladder).
   if (input.browser === false) {
     return {
       outcome: 'pass',
@@ -565,7 +498,6 @@ export async function runFinalLadder(input) {
     port: browser.port,
     assertions: browser.assertions,
     notObservable: browser.notObservable,
-    // Report evidence for a human. Never an assertion — see browser-rung.js.
     screenshots: browser.screenshots,
   };
 
@@ -594,10 +526,6 @@ export async function runFinalLadder(input) {
   }
 
   if (browser.status === 'blocked') {
-    // Not a failure and not a pass of the browser rung: the check did not run.
-    // `ran` deliberately does not gain `browser` — nothing ran — and the run's
-    // outcome stays the static ladder's, so a machine with no Chromium reports
-    // exactly what it verified and nothing more.
     rungResults.push({
       id: 'browser',
       command: browser.appCommand ?? '(not started)',

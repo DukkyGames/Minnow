@@ -1,7 +1,3 @@
-/**
- * Settings → Notifications: bell alerts, per-group toggles, and sounds.
- */
-
 import {
   loadNotificationPrefs,
   saveNotificationPref,

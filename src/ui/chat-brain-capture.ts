@@ -1,7 +1,3 @@
-/**
- * Shared UI action for manual "Add to Brain" capture from chat or research.
- */
-
 import { captureChatToBrain, captureResearchToBrain } from '../brain/capture-client';
 import { isChatStreaming } from '../chat/streaming-state';
 import { pushNotification } from '../notifications/push';

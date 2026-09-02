@@ -31,8 +31,6 @@ export function rankBetween(
   const before = typeof prev === 'string' ? prev : '';
   const after = typeof next === 'string' ? next : '';
   if (before && after && before >= after) {
-    // Callers can pass a stale pair after a concurrent move; land after prev
-    // rather than throwing in a drag handler.
     return rankBetween(before, null);
   }
 
@@ -45,7 +43,6 @@ export function rankBetween(
       out.push(DIGITS[Math.floor((prevIdx + nextIdx) / 2)]);
       return out.join('');
     }
-    // No gap at this position — copy the tighter bound and go one digit deeper.
     out.push(DIGITS[Math.max(prevIdx, 0)]);
     i += 1;
     if (i > 64) {

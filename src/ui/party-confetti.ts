@@ -1,7 +1,3 @@
-/**
- * Viewport confetti burst for /partymode — particles rain from the top of the screen.
- */
-
 const PARTY_COLORS = [
   '#ff6b6b',
   '#ffd93d',
@@ -101,7 +97,6 @@ export function burstPartyConfetti(): void {
       p.rotation += p.spin;
       p.vx *= 0.99;
 
-      // Fade out in the last quarter of the animation.
       const fadeStart = DURATION_MS * 0.72;
       const alpha =
         elapsed > fadeStart

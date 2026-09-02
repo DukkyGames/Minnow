@@ -1,7 +1,3 @@
-/**
- * Experts settings panel helpers.
- */
-
 import { syncExpertRegistryFromServer } from '../chat/experts/registry';
 import { loadExpertsConfig, saveExpertsConfig } from '../config/experts-config';
 import { isDeveloperReleased } from '../os/app-registry';
@@ -27,7 +23,6 @@ export async function refreshExpertsEnabledState(): Promise<void> {
       const hub = await import('./experts/experts-hub');
       hub.renderGallery();
     } catch {
-      /* Experts hub not loaded yet */
     }
   } else {
     empty.classList.remove('hidden');

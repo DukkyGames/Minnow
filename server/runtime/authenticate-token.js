@@ -13,7 +13,6 @@ export function authenticateMinnowToken(token) {
   try {
     return authenticateDeviceToken(token);
   } catch {
-    // A missing, corrupt, or unreadable device store fails closed.
     return null;
   }
 }

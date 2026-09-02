@@ -61,6 +61,8 @@ export interface TaskItem {
   text: string;
 }
 
+// ── Patterns ─────────────────────────────────────────────────────────────────
+
 const HEADING_RE = /^ {0,3}(#{1,6})\s+(.*)$/;
 const FENCE_RE = /^ {0,3}(`{3,}|~{3,})\s*([^`\n]*)$/;
 const BULLET_RE = /^ {0,3}([-*+])\s+/;
@@ -133,6 +135,8 @@ function emit(
   };
 }
 
+// ── Parse ────────────────────────────────────────────────────────────────────
+
 /**
  * Split a markdown document into blocks.
  *
@@ -146,7 +150,6 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
   const cursor: Cursor = { lines, offsets: lineOffsets(text, lines), index: 0 };
   const blocks: MarkdownBlock[] = [];
 
-  // YAML front matter is a whole-document concern and never editable.
   if (lines[0]?.trim() === '---') {
     const close = lines.findIndex((line, i) => i > 0 && line.trim() === '---');
     if (close > 0) {
@@ -184,8 +187,6 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
       continue;
     }
     if (INDENTED_CODE_RE.test(line)) {
-      // Indented code is ambiguous with list continuation and lossy to
-      // re-serialize; it stays raw rather than being reflowed.
       blocks.push(readUntilBlank(cursor, 'raw', 'indented code'));
       continue;
     }
@@ -237,9 +238,6 @@ function readFence(cursor: Cursor, marker: string, info: string): MarkdownBlock 
   const unterminated = cursor.index >= cursor.lines.length;
   if (!unterminated) cursor.index += 1;
 
-  // An unclosed fence means the rest of the document is inside it; treating
-  // that as editable code would let a save close it and change everything
-  // below. Raw is the honest answer.
   if (unterminated) {
     return emit(cursor, from, cursor.index, 'raw', { rawReason: 'unclosed code fence' });
   }
@@ -265,7 +263,6 @@ function readList(cursor: Cursor): MarkdownBlock {
   while (cursor.index < cursor.lines.length) {
     const line = cursor.lines[cursor.index];
     if (!line.trim()) {
-      // A blank line only ends the list if the next line is not a continuation.
       const next = cursor.lines[cursor.index + 1] ?? '';
       if (!isListLine(next) && !isListContinuation(next)) break;
       cursor.index += 1;
@@ -277,8 +274,6 @@ function readList(cursor: Cursor): MarkdownBlock {
     cursor.index += 1;
   }
 
-  // Nesting is where list re-serialization loses information (marker style,
-  // indent width, lazy continuation). One level is editable; deeper is raw.
   if (sawNested) {
     return emit(cursor, from, cursor.index, 'raw', { rawReason: 'nested list' });
   }
@@ -307,8 +302,6 @@ function readParagraph(cursor: Cursor): MarkdownBlock {
   while (cursor.index < cursor.lines.length) {
     const line = cursor.lines[cursor.index];
     if (!line.trim()) break;
-    // A paragraph ends where any other construct begins (lazy continuation is
-    // not honoured: splitting early keeps the following block editable).
     if (cursor.index > from) {
       if (
         HEADING_RE.test(line) ||
@@ -325,6 +318,8 @@ function readParagraph(cursor: Cursor): MarkdownBlock {
   }
   return emit(cursor, from, cursor.index, 'paragraph');
 }
+
+// ── Serialize ────────────────────────────────────────────────────────────────
 
 /**
  * Reassemble a document from blocks.

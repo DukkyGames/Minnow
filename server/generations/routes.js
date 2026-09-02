@@ -1,5 +1,6 @@
 ﻿/**
  * HTTP middleware for /api/generations (backend-owned LLM streams).
+ * A client disconnect tears down this SSE socket only — it must not cancel upstream.
  */
 
 import { validateProviderId } from '../providers/validate.js';
@@ -140,7 +141,6 @@ export async function handleGenerationsRequest(req, res, pathname) {
 
       addSubscriber(state, res);
 
-      // Client disconnect must not cancel upstream — tear down this SSE socket only.
       const onClientDisconnect = () => {
         removeSubscriber(state, res);
         if (!res.writableEnded && !res.destroyed) {

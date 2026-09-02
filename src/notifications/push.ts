@@ -35,9 +35,7 @@ function notifyNew(record: NotificationRecord): void {
   for (const fn of newListeners) {
     try {
       fn(record);
-    } catch {
-      /* ignore subscriber errors */
-    }
+    } catch {}
   }
 }
 
@@ -67,7 +65,6 @@ export function pushNotification(input: PushNotificationInput): NotificationReco
 
   appendNotification(record);
 
-  // Legacy dock / instance badge until fully migrated.
   const legacyMsg = input.preview.trim() || input.title;
   noteAgentMessage(input.appId, legacyMsg);
 
@@ -77,9 +74,6 @@ export function pushNotification(input: PushNotificationInput): NotificationReco
     playNotificationSound(input.kind);
   }
 
-  // Prefs already gated this above, so a desktop toast inherits the same mute
-  // and per-group switches as the bell rather than becoming a second channel
-  // the user has to turn off separately.
   if (input.os) {
     notifyOs({
       title: record.title,

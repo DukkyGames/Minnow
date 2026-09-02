@@ -19,6 +19,7 @@ export async function getModelsConfig() {
 
 /**
  * Persist models settings into config.json (merge into existing models object).
+ * Changing modelDirs also drops the 30s library scan cache.
  * @param {Record<string, unknown>} patch
  */
 export async function patchModelsConfig(patch) {
@@ -30,7 +31,6 @@ export async function patchModelsConfig(patch) {
       : {};
   config.models = { ...prev, ...patch };
   await writeConfigJson('config.json', config);
-  // Extra folders just changed — drop the 30s library scan TTL.
   if (Object.prototype.hasOwnProperty.call(patch, 'modelDirs')) {
     const { invalidateCachedModelsCache } = await import('./cached.js');
     invalidateCachedModelsCache();

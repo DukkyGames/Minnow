@@ -1,7 +1,3 @@
-/**
- * Settings → Appearance: palette family picker, mode pills, follow-system toggle.
- */
-
 import {
   getFollowSystem,
   getMode,

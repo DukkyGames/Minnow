@@ -14,6 +14,8 @@ import { formatRunDuration } from './run-summary';
 import { iconHtml } from '../ui/icon';
 import type { ResearchLibraryItem } from './types';
 
+// ── Titles ───────────────────────────────────────────────────────────────────
+
 /** Prefer persisted report title over the original research query. */
 export function researchDisplayTitle(
   item: Pick<ResearchLibraryItem, 'title' | 'query'>,
@@ -86,6 +88,8 @@ const GROUP_ORDER = [
   'Earlier',
   'Undated',
 ];
+
+// ── Merge ────────────────────────────────────────────────────────────────────
 
 /** Merge in-flight runs ahead of the persisted list, newest first, no duplicates. */
 export function mergeResearchRuns(
@@ -175,6 +179,8 @@ function positionRowMenu(menu: HTMLElement, position: RowMenuPosition): void {
   menu.style.left = `${Math.max(8, left)}px`;
 }
 
+// ── Rows ─────────────────────────────────────────────────────────────────────
+
 function buildRow(
   item: ResearchLibraryItem,
   activeId: string | null | undefined,
@@ -230,7 +236,6 @@ function buildRow(
     }
   });
 
-  // The row is a <button>; the menu control sits beside it, never nested inside.
   const wrap = document.createElement('div');
   wrap.className = 'rs-row-wrap';
   wrap.append(row, menuBtn);
@@ -317,6 +322,8 @@ function bindMenuDismiss(): void {
   });
 }
 
+// ── Render ───────────────────────────────────────────────────────────────────
+
 /** Fetch and paint the rail. Returns the merged runs for caller-side lookup. */
 export async function renderResearchRail(
   options: ResearchRailOptions,
@@ -347,7 +354,6 @@ export async function renderResearchRail(
     loadError = err instanceof Error ? err.message : 'Could not load saved runs';
   }
 
-  // Archived view lists only archived work; live runs are never archived.
   const term = search?.trim().toLowerCase() ?? '';
   const live = archived
     ? []

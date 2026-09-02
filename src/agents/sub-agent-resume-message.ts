@@ -1,11 +1,3 @@
-/**
- * Parent resume copy when sub-agents complete or need a long-running check-in.
- *
- * This is general (non-board) parent delivery. It used to live under
- * `src/chat/orchestrate/` next to V1 board lifecycle glue; MIN-714 deleted that
- * path, so the helper moved here beside the completion-push that calls it.
- */
-
 import {
   buildAggregateResult,
   formatAggregateResult,
@@ -14,7 +6,6 @@ import type { SubAgentRun } from './types';
 
 export type SubAgentParentDeliveryKind = 'completion' | 'check_in_nudge';
 
-/** Build a user-role message that resumes the parent after sub-agent events. */
 export function buildSubAgentParentResumeMessage(
   kind: SubAgentParentDeliveryKind,
   runs: SubAgentRun[],

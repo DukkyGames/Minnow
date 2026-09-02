@@ -1,11 +1,3 @@
-/**
- * SQLite sessions store (~/.minnow/sessions/sessions.db).
- * Modelled on server/email/store.js (WAL + cached handle + meta helpers).
- *
- * Phase A.1: DB is created and JSON-imported on first open; nothing product-facing
- * reads it yet (HTTP still uses state.json until A.2).
- */
-
 import fs from 'node:fs';
 import Database from 'better-sqlite3';
 import { getMinnowHome } from './home.js';
@@ -33,12 +25,10 @@ export {
   SESSIONS_DB_SCHEMA_VERSION,
 };
 
-/** Cache key includes MINNOW_HOME so parallel tests never share a handle. */
 function sessionsDbCacheKey() {
   return `${getMinnowHome()}\0sessions`;
 }
 
-/** Open a raw connection and apply schema PRAGMAs + DDL. */
 function openSessionsDatabase() {
   fs.mkdirSync(sessionsRootDir(), { recursive: true });
   const db = new Database(sessionsDbPath());
@@ -50,8 +40,7 @@ function openSessionsDatabase() {
 }
 
 /**
- * Rename sessions.db (+ wal/shm) aside so a fresh file can be created.
- * @returns {string} Timestamp suffix used on the quarantine files.
+ * @returns {string}
  */
 function quarantineCorruptSessionsDb() {
   const ts = Date.now();
@@ -62,11 +51,9 @@ function quarantineCorruptSessionsDb() {
     try {
       fs.renameSync(filePath, `${filePath}.corrupt-${ts}`);
     } catch {
-      // Best-effort: if rename fails, delete so open can proceed.
       try {
         fs.rmSync(filePath, { force: true });
       } catch {
-        /* ignore */
       }
     }
   }
@@ -74,8 +61,6 @@ function quarantineCorruptSessionsDb() {
 }
 
 /**
- * Open (or reuse) the sessions store. Always runs JSON→SQLite import after schema
- * so callers can never observe an un-imported handle.
  * @returns {import('better-sqlite3').Database}
  */
 export function getSessionsDb() {
@@ -87,19 +72,16 @@ export function getSessionsDb() {
 
   let db = openSessionsDatabase();
 
-  // Integrity probe on first open of this process handle.
   const quickCheck = db.pragma('quick_check', { simple: true });
   if (quickCheck !== 'ok') {
     db.close();
     const ts = quarantineCorruptSessionsDb();
     db = openSessionsDatabase();
-    // Surface for GET /api/config/status in a later phase.
     writeSessionMeta(db, 'dbCorruptRecoveredAt', new Date().toISOString());
     writeSessionMeta(db, 'dbCorruptQuickCheck', String(quickCheck));
     writeSessionMeta(db, 'dbCorruptQuarantineTs', ts);
     importJsonSessionsIfNeeded(db, { recovery: true });
   } else {
-    // Impossible to obtain a handle that skipped import.
     importJsonSessionsIfNeeded(db);
   }
 
@@ -107,23 +89,19 @@ export function getSessionsDb() {
   return db;
 }
 
-/** Close the cached sessions DB handle (tests, shutdown). Flushes JSON mirror first. */
 export function closeSessionsDb() {
   const cacheKey = sessionsDbCacheKey();
   const db = dbByCacheKey.get(cacheKey);
   if (!db) return false;
-  // Flush rotating state.json.backup while the handle is still open.
   try {
     flushSessionsJsonMirror();
   } catch {
-    /* best-effort */
   }
   db.close();
   dbByCacheKey.delete(cacheKey);
   return true;
 }
 
-/** Close and delete sessions.db (+ wal/shm). */
 export function deleteSessionsDb() {
   closeSessionsDb();
   const base = sessionsDbPath();
@@ -138,7 +116,6 @@ export function deleteSessionsDb() {
   return removed;
 }
 
-/** Test helper — count of open sessions DB handles. */
 export function openSessionsDbCountForTests() {
   return dbByCacheKey.size;
 }

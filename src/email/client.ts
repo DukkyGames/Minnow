@@ -267,6 +267,8 @@ async function parseJson<T>(res: Response): Promise<T> {
   return payload;
 }
 
+// ── Accounts ─────────────────────────────────────────────────────────────────
+
 export async function fetchEmailAccounts(): Promise<EmailAccount[]> {
   const res = await fetch('/api/email/accounts');
   const data = await parseJson<{ accounts: EmailAccount[] }>(res);
@@ -332,6 +334,8 @@ export async function syncEmailFolder(
   });
   return parseJson(res);
 }
+
+// ── Messages ─────────────────────────────────────────────────────────────────
 
 export async function fetchEmailMessages(
   accountId: string,
@@ -470,6 +474,8 @@ export async function hydrateThreadBodies(
   return messages.map((message) => byId.get(message.id) ?? message);
 }
 
+// ── Compose ──────────────────────────────────────────────────────────────────
+
 export async function triageEmailMessage(
   accountId: string,
   messageId: string,
@@ -575,6 +581,8 @@ export async function cancelOutboxSend(id: string): Promise<{ entry: OutboxEntry
   return parseJson(res);
 }
 
+// ── Images ───────────────────────────────────────────────────────────────────
+
 /**
  * Reduce a From header to a bare, comparable address.
  * Mirrors `normalizeSender` in `server/email/image-allowlist.js`.
@@ -638,16 +646,6 @@ export async function updateEmailPreferences(
   };
 }
 
-// ---------------------------------------------------------------------------
-// Attachments
-// ---------------------------------------------------------------------------
-
-/**
- * Path of the attachment route for a part.
- *
- * `selector` is either a part index or `cid:<content-id>`; the latter is how the
- * body iframe resolves inline images.
- */
 export function emailAttachmentPath(
   accountId: string,
   messageKey: string,
@@ -661,13 +659,6 @@ export function emailAttachmentPath(
   )}?${query.toString()}`;
 }
 
-/**
- * Download one attachment's bytes.
- *
- * Deliberately a `fetch` rather than an `<a href>`: the session token rides on a
- * header added by the fetch interceptor, and a plain navigation would not carry
- * it (nor should the token end up in a URL the browser keeps in history).
- */
 export async function downloadEmailAttachment(
   accountId: string,
   messageKey: string,
@@ -679,9 +670,7 @@ export async function downloadEmailAttachment(
     try {
       const payload = (await res.json()) as { error?: string };
       if (payload.error) message = payload.error;
-    } catch {
-      /* a non-JSON error body is fine; the status text stands */
-    }
+    } catch {}
     throw new Error(message || 'Attachment download failed');
   }
 
@@ -699,7 +688,5 @@ export function saveBlobAs(blob: Blob, filename: string): void {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  // Revoking immediately can race the download in some engines; one tick is
-  // enough for the click to have been dispatched.
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }

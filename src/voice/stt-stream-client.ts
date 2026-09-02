@@ -125,7 +125,6 @@ export class SttStreamClient {
           this.handleServerEvent(parsed, resolve, reject);
           return;
         }
-        /* Binary from server is not expected in v1 */
       };
 
       ws.onerror = () => {
@@ -160,9 +159,7 @@ export class SttStreamClient {
     if (this.ws) {
       try {
         this.ws.close();
-      } catch {
-        /* ignore */
-      }
+      } catch {}
       this.ws = null;
     }
     this.clearFinalHandlers();
@@ -239,7 +236,6 @@ export class SttStreamClient {
     this.audioContext = new AudioContext({ sampleRate: STT_SAMPLE_RATE });
     this.source = this.audioContext.createMediaStreamSource(this.mediaStream);
 
-    // ScriptProcessor fallback — widely supported; buffer 4096 frames at 16 kHz.
     this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
     this.processor.onaudioprocess = (event) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;

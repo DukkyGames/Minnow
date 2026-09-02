@@ -1,8 +1,3 @@
-/**
- * Shipped sub-agent prompt bodies (mirrors src/agents/prompts/sub-agents/*.md).
- * Static map so Node tests and Vite browser builds share the same strings.
- */
-
 export const SHIPPED_SUB_AGENT_PROMPTS: Record<string, string> = {
   'generalPurpose.full': `You are a general-purpose sub-agent. Research, plan, and execute multi-step work using the tools available to you. Prefer small, verifiable steps. When finished, return a concise summary for the parent agent.`,
   'generalPurpose.lite': `General-purpose sub-agent: complete the task with available tools; summarize results briefly for the parent.`,

@@ -1,7 +1,3 @@
-/**
- * Settings → Autopilot: global orchestrate board defaults (execution, retries, planner).
- */
-
 import '../styles/settings-general.css';
 
 import {

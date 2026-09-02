@@ -1,19 +1,4 @@
-/**
- * P2-E — the structured report tool (MIN-702).
- *
- * V1 inferred why an agent stopped by scraping the transcript. The replacement
- * is not a better classifier. It is asking the agent,
- * and rejecting a malformed answer at the tool boundary so it can retry inside
- * the same turn.
- *
- * A rejected report is **not** `no_report`. `no_report` means the tool was never
- * called at all. That distinction is what lets the policy table's continue-seed
- * row stay about vanished agents rather than about JSON typos.
- *
- * Lives here, not in `server/runner/`, because the schemas are role-specific
- * (Builder has `blocked`; Tester does not) and the runner must not know what a
- * role is. Pass the tool + `parseReport` into `runTurn({ tools, parseReport })`.
- */
+/** Structured report tool for builder and tester. */
 
 /** Same name `runTurn` injects by default. Not a role name. */
 export const REPORT_TOOL_NAME = 'report_outcome';
@@ -99,10 +84,6 @@ function requireNonEmptySummary(value) {
 
 /**
  * Builder schema: `{ outcome, summary, evidence[], blockers[], needs[] }`.
- *
- * Every field is required on every outcome so the agent cannot "forget"
- * `needs` on a blocked report and still look successful. Empty arrays are fine.
- *
  * @param {unknown} raw
  * @returns {import('./report-tool').ParseReportResult}
  */
@@ -148,10 +129,6 @@ export function parseBuilderReport(raw) {
 
 /**
  * Tester schema: `{ outcome, summary, evidence[], testOutput }`.
- *
- * Tester has no `blocked`. An environment that cannot run tests is a Builder
- * `repair` problem; the Tester's job is to pass or fail the build in front of it.
- *
  * @param {unknown} raw
  * @returns {import('./report-tool').ParseReportResult}
  */
@@ -194,9 +171,6 @@ export function parseTesterReport(raw) {
       result: { outcome: 'pass', summary: summary.value, evidence: evidence.value },
     };
   }
-  // TurnResult.fail carries `blockers`. The tester's `testOutput` is the
-  // evidence a fix-seeded builder needs; surface it as the blocker list so
-  // `runTurn` can return the PRD object union without a role-shaped field.
   const testOutput = obj.value.testOutput;
   const blockers = testOutput ? [testOutput, ...evidence.value] : evidence.value;
   return {

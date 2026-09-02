@@ -39,6 +39,7 @@ async function probeHttp(url) {
 }
 
 /**
+ * mlxLm.available is true when this machine could run MLX at all (installed or not).
  * @returns {Promise<{ llamaCpp: { available: boolean, path: string | null, bundled: boolean, installable: boolean }, mlxLm: { available: boolean, installed: boolean, installable: boolean, running: boolean, port: number | null }, ollama: { available: boolean, path: string | null, serving: boolean }, lmStudio: { available: boolean, baseUrl: string | null } }>}
  */
 export async function detectRuntimes() {
@@ -56,8 +57,6 @@ export async function detectRuntimes() {
 
   return {
     mlxLm: {
-      // "available" means this machine could run MLX at all, installed or not —
-      // the Load button drives the install prompt from there.
       available: mlxSupported,
       installed: mlxStatus.installed === true,
       installable: mlxSupported,

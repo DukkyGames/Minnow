@@ -27,11 +27,11 @@ async function readErrorMessage(res: Response): Promise<string> {
   try {
     const parsed = JSON.parse(text) as { error?: string };
     if (parsed?.error) return String(parsed.error);
-  } catch {
-    /* plain text */
-  }
+  } catch {}
   return text || res.statusText || `HTTP ${res.status}`;
 }
+
+// ── Fetch ────────────────────────────────────────────────────────────────────
 
 /** POST /api/research/start */
 export async function startResearch(
@@ -113,8 +113,6 @@ export function normalizeResearchActivityLog(
 
 /** URL for the visual HTML report (open in preview or new tab). */
 export function researchReportUrl(researchId: string): string {
-  // Opened via direct navigation (window.open/openExternal), not fetch — the
-  // token must ride the query string since no header can be attached.
   const base = withSessionToken(`/api/research/report/${encodeURIComponent(researchId)}`);
   const themeQs = buildResearchReportThemeSearchParams().toString();
   const sep = base.includes('?') ? '&' : '?';
@@ -127,6 +125,8 @@ export interface FetchResearchLibraryOptions {
   archived?: boolean;
   limit?: number;
 }
+
+// ── Library ──────────────────────────────────────────────────────────────────
 
 /** GET /api/research/library */
 export async function fetchResearchLibrary(
@@ -185,6 +185,8 @@ function normalizeLibraryItem(row: Record<string, unknown>): import('./types').R
   };
 }
 
+// ── Mutate ───────────────────────────────────────────────────────────────────
+
 /** POST /api/research/cancel/:id */
 export async function cancelResearch(researchId: string): Promise<void> {
   const res = await fetch(`/api/research/cancel/${encodeURIComponent(researchId)}`, {
@@ -232,6 +234,8 @@ export interface SubscribeToResearchStreamOptions {
   onEnd?: (event?: ResearchStreamEndEvent) => void;
   onTransportError?: (err: unknown) => void;
 }
+
+// ── Stream ───────────────────────────────────────────────────────────────────
 
 function parseResearchDataLine(dataLine: string): ResearchProgress | ResearchStreamEndEvent | null {
   try {

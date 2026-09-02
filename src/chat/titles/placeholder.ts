@@ -1,7 +1,3 @@
-/**
- * Placeholder sidebar name checks (Step 07).
- */
-
 import { PLACEHOLDER_CHAT_NAME } from '../../constants';
 
 /** True when the chat still uses the default untitled name (case-insensitive). */

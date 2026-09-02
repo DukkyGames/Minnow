@@ -1,7 +1,3 @@
-/**
- * Collect filesystem path arguments from tool calls for workspace boundary checks.
- */
-
 import { normalizePathForComparison } from './workspace-path-guard.ts';
 
 /** Argument keys that hold user-supplied paths per tool (aligned with server.js resolveSafePath usage). */

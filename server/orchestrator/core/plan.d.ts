@@ -2,15 +2,11 @@ import type { BoardState, Desired, Evidence, NextAction } from './types';
 
 /**
  * What should happen to a task that has nothing in flight.
- * The only call site of `decide()` in the engine.
  */
 export function nextAction(state: BoardState, taskId: string): NextAction;
 
 /**
  * What a hand-started task should begin, if anything.
- *
- * Outside the concurrency cap (rule 4) and nothing else: dependencies, one
- * attempt per task, and `touches` exclusion still apply.
  */
 export function manualStart(
   state: BoardState,
@@ -23,7 +19,6 @@ export function pendingEnqueues(state: BoardState): string[];
 
 /**
  * Tasks that can never run because something upstream was abandoned or skipped.
- * The engine journals `task.skipped` for each. `blockedBy` is the abandoned root.
  */
 export function pendingSkips(state: BoardState): Array<{ taskId: string; blockedBy: string }>;
 
@@ -35,13 +30,11 @@ export function isRunComplete(state: BoardState): boolean;
 
 /**
  * Task ids a rerun should reopen, in declared (wave, then insertion) order.
- * Closes over skipped dependents of the requested set.
  */
 export function reopenTargets(state: BoardState, requested?: readonly string[]): string[];
 
 /**
- * Synthetic integration-fix task derived from the current (or previous) failed
- * final test. Idempotent in shape: same state, same record.
+ * Synthetic integration-fix task derived from the current (or previous) failed final test.
  */
 export function buildIntegrationFixTask(state: BoardState): {
   task: import('./types').PlanTask;
@@ -54,8 +47,7 @@ export function pendingAbandonments(
 ): Array<{ taskId: string; reason: string; evidence: Evidence }>;
 
 /**
- * Which attempts should be running right now. Pure, total, and deterministic in
- * output order — replay depends on the order, not just the set.
+ * Which attempts should be running right now.
  */
 export function plan(state: BoardState): Desired[];
 
@@ -63,14 +55,12 @@ export function plan(state: BoardState): Desired[];
 export function orderedTaskIds(state: BoardState): string[];
 
 /**
- * Do two declared footprints overlap? Pure glob-set intersection over
- * patterns. Frozen file expansion is {@link footprintsClash}.
+ * Do two declared footprints overlap?
  */
 export function touchesOverlap(a: readonly string[], b: readonly string[]): boolean;
 
 /**
- * Scheduling clash: declared glob overlap, or intersection of journaled
- * expanded file sets. Empty / missing expansion adds no extra clash.
+ * Scheduling clash: declared glob overlap, or intersection of journaled expanded file sets.
  */
 export function footprintsClash(
   a: { touches?: readonly string[] | null; touchesExpanded?: readonly string[] | null },

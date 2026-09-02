@@ -1,7 +1,3 @@
-/**
- * Editor AI provider/model binding — no CodeMirror dependency (boot-graph split).
- */
-
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
 import { decodeModelSelectKey } from '../lib/model-select-key';
 import {
@@ -14,11 +10,7 @@ import { getActiveChat } from '../state/sessions';
 export interface EditorAiBinding {
   providerId: string;
   modelId: string;
-  /**
-   * Set when the binding cannot be sent as-is (My Models row with no serve).
-   * `validateEditorAiBinding` surfaces it; editor AI never auto-loads a model —
-   * a keystroke must not trigger a multi-minute weight load.
-   */
+  /** Set when the binding cannot be sent as-is (My Models row with no serve). */
   error?: string;
 }
 
@@ -83,11 +75,7 @@ export function preflightEditorAiBinding(binding: EditorAiBinding): string | nul
   return EDITOR_AI_NO_MODEL_MESSAGE;
 }
 
-/**
- * Remap a My Models row onto its running serve.
- * `minnow-library` is a synthetic picker id with no registry row, so sending it
- * unmapped lets `resolveProvider` fall through to an unrelated provider.
- */
+/** Remap a My Models row onto its running serve. */
 async function applyLibraryBinding(binding: EditorAiBinding): Promise<EditorAiBinding> {
   if (!binding.modelId.trim()) return binding;
   const resolved = await resolveLibraryRequestBinding(
@@ -108,12 +96,10 @@ export async function resolveEditorAiBinding(
   const overrideProvider = config.providerId.trim();
   const overrideModel = config.modelId.trim();
 
-  // Pinned provider + model (Settings → Editor → Pin).
   if (!config.useChatModel) {
     return applyLibraryBinding({ providerId: overrideProvider, modelId: overrideModel });
   }
 
-  // Follow active chat / top-bar model picker (live DOM read on each request).
   const raw = getActiveModelIdFromDom();
   const parsed = decodeModelSelectKey(raw);
   const modelId =

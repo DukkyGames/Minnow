@@ -20,6 +20,8 @@ import {
   type IssuesListSort,
 } from '../ui/issues-list-sort';
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
 export type IssuesGroupBy = 'status' | 'priority' | 'assignee' | 'label' | 'project';
 
 export const ISSUES_GROUP_BY_OPTIONS: ReadonlyArray<{ id: IssuesGroupBy; label: string }> = [
@@ -51,6 +53,8 @@ function assigneeGroupLabel(issue: IssueCard): string {
   if (issue.assignee.id === LOCAL_ASSIGNEE_ID) return issue.assignee.label?.trim() || 'Me';
   return issue.assignee.label?.trim() || issue.assignee.id;
 }
+
+// ── Sort ─────────────────────────────────────────────────────────────────────
 
 /**
  * Sort inside a group: rank first, then the session column sort.
@@ -92,6 +96,8 @@ function pushGroup(
   group.issues.push(issue);
 }
 
+// ── Group ────────────────────────────────────────────────────────────────────
+
 /** Bucket visible issues. Empty groups are omitted. */
 export function groupIssuesForList(
   issues: readonly IssueCard[],
@@ -107,7 +113,6 @@ export function groupIssuesForList(
 
   if (groupBy === 'status') {
     for (const status of sortedStatuses(taxonomy)) {
-      // Pre-register so workflow order survives even when we skip empties later.
       groups.set(`status:${status.id}`, {
         id: `status:${status.id}`,
         label: status.label,
@@ -146,7 +151,6 @@ export function groupIssuesForList(
     for (const issue of issues) {
       pushGroup(groups, order, assigneeGroupId(issue), assigneeGroupLabel(issue), issue);
     }
-    // Me first, then named people, Unassigned last.
     order.sort((a, b) => {
       if (a === `assignee:${LOCAL_ASSIGNEE_ID}`) return -1;
       if (b === `assignee:${LOCAL_ASSIGNEE_ID}`) return 1;
@@ -160,8 +164,6 @@ export function groupIssuesForList(
         pushGroup(groups, order, NO_LABEL_GROUP, 'No label', issue);
         continue;
       }
-      // One row per issue: first label. Duplicating across every label would
-      // break selection identity and the keyboard cursor.
       const label = issue.labels[0];
       pushGroup(groups, order, `label:${label.toLowerCase()}`, label, issue);
     }
@@ -221,8 +223,6 @@ export function buildGroupedIssueRows(
     allIssues: readonly IssueCard[];
   },
 ): Array<IssueListGroup & { rows: NestedIssueRow[] }> {
-  // Nest against the full visible set first so a child whose parent is also
-  // visible travels with that parent instead of occupying its own group slot.
   const nested = nestSubIssues(issues, options.allIssues, options.taxonomy);
   const nestedById = new Map(nested.map((row) => [row.issue.id, row]));
   const groups = groupIssuesForList(

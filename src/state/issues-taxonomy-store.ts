@@ -87,9 +87,7 @@ export async function saveIssuesTaxonomyNow(): Promise<void> {
   }
   try {
     localStorage.setItem(TAXONOMY_STORAGE_KEY, JSON.stringify(taxonomyState));
-  } catch {
-    /* ignore quota */
-  }
+  } catch {}
 }
 
 /** Replace taxonomy after validation (blocks in-use deletes). */

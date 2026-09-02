@@ -1,7 +1,3 @@
-/**
- * Editor Quick Edit — Mod-K inline AI edit with diff preview (Phase 4).
- */
-
 export type { QuickEditSelectionRange, QuickEditSession } from './types';
 export {
   formatSelectionFence,

@@ -1,8 +1,4 @@
-/**
- * P5-C — Browser rung of the Final Tester ladder (MIN-721).
- *
- * `blocked` is a first-class status here and is never folded into `fail`.
- */
+/** Browser rung of the Final Tester ladder. */
 
 export const BROWSER_UNAVAILABLE_PREFIX: string;
 export const BROWSER_BLOCKED_PREFIX: string;
@@ -38,8 +34,7 @@ export const DEFAULT_RUNG_TIMEOUT_MS: number;
 export const DEFAULT_PORT_RELEASE_TIMEOUT_MS: number;
 
 /**
- * Wait until nothing is listening on `port`. Resolves `true` when the port came
- * free, `false` on the deadline.
+ * Wait until nothing is listening on `port`.
  */
 export function waitForPortFree(
   port: number,

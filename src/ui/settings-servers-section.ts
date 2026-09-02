@@ -1,7 +1,3 @@
-/**
- * Settings → Servers — managed local servers (SearXNG install, lifecycle, logs).
- */
-
 import '../styles/settings-general.css';
 import '../styles/settings-servers.css';
 
@@ -38,6 +34,8 @@ import { createSettingsSwitch } from './settings-switch';
 import { setStatus } from './status';
 import { appConfirm } from './app-dialog';
 import { isLocalServerAvailable } from '../tools/config';
+
+// ── Status ───────────────────────────────────────────────────────────────────
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -117,6 +115,8 @@ async function pollInstallJob(
   return 'timeout';
 }
 
+// ── Rows ─────────────────────────────────────────────────────────────────────
+
 /** llama.cpp row — runtime install + active model serves (no port/auto-start). */
 function createLlamaCppServerRow(
   server: ManagedServerSummary,
@@ -154,7 +154,6 @@ function createLlamaCppServerRow(
   runtimeInfo.dataset.llamaRuntimeInfo = server.id;
   body.append(runtimeInfo);
 
-  // Upgrade is opt-in: never force a download on model load; this hint + button is the offer.
   const upgradeHint = el('p', 'settings-mcp-hint settings-mcp-hint--upgrade hidden');
   upgradeHint.dataset.llamaUpgradeHint = server.id;
   upgradeHint.setAttribute('role', 'status');
@@ -191,7 +190,6 @@ function createLlamaCppServerRow(
         ? `${runtime.variant ?? 'cpu'} · ${runtime.version} · ${runtime.path}`
         : `Recommended variant: ${runtime.preferredVariant}`;
 
-      // Relabel Reinstall as Upgrade when the managed tree is behind the pin.
       if (runtime.upgradeAvailable) {
         const installedTag = runtime.installedVersion ?? runtime.version;
         const pinnedTag = runtime.pinnedVersion;
@@ -257,7 +255,6 @@ function createLlamaCppServerRow(
       try {
         await installLlamaRuntime({
           variant: variantSelect.value || undefined,
-          // Upgrade uses the existing reinstall path so the pin replaces the old tree.
           reinstall: upgrading || server.installed,
         });
         setStatus('ok', upgrading ? 'llama.cpp runtime upgraded' : 'llama.cpp runtime installed');
@@ -354,8 +351,6 @@ function createServerRow(
   /** Shown under the toolbar when this host cannot install the runtime. */
   let installUnavailableHint: HTMLParagraphElement | null = null;
   if (!server.installed) {
-    // installable === false means this host cannot run the runtime (MLX on Windows/Linux).
-    // Hide Install rather than leaving a working button that would fail at provision.
     if (server.installable === false) {
       if (server.reason) {
         installUnavailableHint = el('p', 'settings-mcp-hint', server.reason);
@@ -617,6 +612,8 @@ function appendServersStats(
   group.insertBefore(stats, group.firstChild);
   return stats;
 }
+
+// ── Render ───────────────────────────────────────────────────────────────────
 
 /** Render Settings → Servers into the section mount. */
 export async function renderServersSettingsSection(mount: HTMLElement): Promise<void> {

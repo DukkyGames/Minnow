@@ -1,7 +1,3 @@
-/**
- * Drag workspace file-tree paths into the xterm terminal (insert path at the prompt).
- */
-
 import { hasWorkspaceFileDrag } from '../attachments/external-file-drop';
 import { WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
 import { insertTextAtTerminalInput } from './terminal-xterm';

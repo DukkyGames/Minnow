@@ -1,10 +1,3 @@
-/**
- * Composer thinking toggle — bulb icon (on / off) with inherit default + user override.
- * For level-based models, the bulb sits beside the effort dropdown: off hides the dropdown
- * and sets reasoningEffort to `off`; on restores a default level. Off/on-only models use
- * the bulb tri-state toggle only (no Off/On select).
- */
-
 import { resolveThinkingMode, resolveThinkingBudgetTokens } from '../agents/resolve-thinking';
 import {
   formatThinkingInheritedLabel,
@@ -41,6 +34,8 @@ import { isComposerRecoveryBlocked } from './composer-send';
 
 let rootEl: HTMLElement | null = null;
 let toggleBtn: HTMLButtonElement | null = null;
+
+// ── State ────────────────────────────────────────────────────────────────────
 
 /** Next tri-state after a composer click: inherit → opposite of resolved → toggle → inherit. */
 export function nextThinkingTriStateOnClick(
@@ -104,7 +99,6 @@ function applyChatThinkingMode(mode: ThinkingTriState): void {
 function applyDropdownModeBrainToggle(): void {
   const chat = getActiveChat();
   const caps = effectiveCapabilities();
-  // GLM-5.3 cannot disable thinking — the brain is hidden, but do not persist Off.
   if (modelUsesAlwaysOnReasoning(caps)) return;
   if (chat.reasoningEffort === 'off') {
     const level = defaultComposerReasoningLevel(caps);
@@ -117,6 +111,8 @@ function applyDropdownModeBrainToggle(): void {
   scheduleSaveSessions();
   syncComposerReasoningEffortFromActiveChat();
 }
+
+// ── Toggle ───────────────────────────────────────────────────────────────────
 
 function onToggleClick(): void {
   if (toggleBtn?.disabled) return;
@@ -157,6 +153,8 @@ export function initThinkingControl(): void {
   void ensureSessionsReady().then(() => syncThinkingControlFromActiveChat());
 }
 
+// ── Sync ─────────────────────────────────────────────────────────────────────
+
 /** Sync reasoning toggle from active chat, inheritance, and model capabilities. */
 export function syncThinkingControlFromActiveChat(): void {
   if (!sessionState) return;
@@ -165,7 +163,6 @@ export function syncThinkingControlFromActiveChat(): void {
   const dropdownMode = modelUsesComposerReasoningDropdown(caps);
   const toggleMode = modelUsesComposerThinkingToggle(caps);
   const showBrain = modelShowsComposerBrainToggle(caps);
-  // Always-on models hide the brain but still need the wrap for Low/High/Max.
   const showWrap = showBrain || dropdownMode;
 
   if (thinkingWrap) {

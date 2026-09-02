@@ -1,7 +1,3 @@
-/**
- * Merge agent pack manifests into work agent definitions (client + shared logic).
- */
-
 import type { ContextEnforcementPolicy } from '../chat/context-budget';
 import { DEFAULT_CONTEXT_ENFORCEMENT_POLICY } from '../chat/context-budget';
 import type {
@@ -12,16 +8,12 @@ import type {
 } from './pack-types';
 import type { WorkAgentDefinition } from './work-agent-types';
 
-/** Pack folder / manifest id: lowercase alphanumeric with hyphens. */
 export const PACK_ID_RE = /^[a-z][a-z0-9-]{0,63}$/;
 
-/** Short agent key inside a pack manifest. */
 export const PACK_AGENT_KEY_RE = /^[a-z][a-z0-9-]{0,31}$/;
 
-/** Namespaced work agent id: packId.agentKey */
 export const PACK_WORK_AGENT_ID_RE = /^[a-z][a-z0-9-]{0,31}\.[a-z][a-z0-9-]{0,31}$/;
 
-/** Built-in or pack work agent id. */
 export const WORK_AGENT_ID_RE =
   /^[a-z][a-z0-9-]{0,63}$|^[a-z][a-z0-9-]{0,31}\.[a-z][a-z0-9-]{0,31}$/;
 
@@ -57,9 +49,6 @@ function maxInputTokensFromStrategy(strategy: PackContextStrategy | undefined): 
   return Math.floor(n);
 }
 
-/**
- * Normalize one manifest agent entry to WorkAgentDefinition + pack source metadata.
- */
 export function normalizePackAgentEntry(
   manifest: AgentPackManifest,
   entry: PackAgentEntry,
@@ -124,9 +113,6 @@ export function normalizePackAgentEntry(
   return { agent, source };
 }
 
-/**
- * Expand a validated manifest into work agent rows (skips invalid entries with errors).
- */
 export function agentsFromPackManifest(
   manifest: AgentPackManifest,
   packRoot: string,
@@ -155,9 +141,6 @@ export function agentsFromPackManifest(
   return { agents, sources, errors };
 }
 
-/**
- * Merge pack agents after built-ins; user overrides applied later by registry.
- */
 export function mergePackAgentsIntoMap(
   builtinMap: Map<string, WorkAgentDefinition>,
   packAgents: WorkAgentDefinition[],

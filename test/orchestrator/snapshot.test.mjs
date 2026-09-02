@@ -1,11 +1,3 @@
-/**
- * P0-G — snapshot format and memoised fold.
- *
- * The central property is equivalence: `deriveFrom(snapshot, journal)` must
- * equal `derive(journal)` at *every* snapshot boundary, not one. Everything else
- * here is a corruption mode that must fall back to a correct full fold rather
- * than repair anything.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { derive } from '../../server/orchestrator/core/derive.js';
@@ -24,11 +16,6 @@ import {
   stateToJSON,
 } from '../../server/orchestrator/core/snapshot.js';
 
-// ---------------------------------------------------------------------------
-// A long, structurally varied journal
-// ---------------------------------------------------------------------------
-
-/** Deterministic PRNG so a failure reproduces from its seed. */
 function rng(seed) {
   let a = seed >>> 0;
   return () => {
@@ -41,7 +28,6 @@ function rng(seed) {
 
 const OUTCOMES = ['pass', 'fail', 'blocked', 'no_report', 'crashed', 'timeout'];
 
-/** Roughly `target` events across a 40-task board. */
 function longJournal(target = 5000, seed = 7) {
   const r = rng(seed);
   const pick = (xs) => xs[Math.floor(r() * xs.length)];
@@ -103,13 +89,12 @@ function longJournal(target = 5000, seed = 7) {
 
 const JOURNAL = longJournal();
 
-/** A snapshot taken at `throughSeq`, built the way P1-A will build it. */
 function snapshotAt(throughSeq, journal = JOURNAL) {
   const head = journal.filter((e) => e.seq <= throughSeq);
   return makeSnapshot('big', derive(head), throughSeq);
 }
 
-// ---------------------------------------------------------------------------
+// ── Equivalence ──────────────────────────────────────────────────────────────
 
 describe('snapshot — the equivalence property', () => {
   it('resumes to the same state at every 200-event boundary', () => {
@@ -125,7 +110,6 @@ describe('snapshot — the equivalence property', () => {
   });
 
   it('resumes correctly from every single-event boundary in the first 300', () => {
-    // Boundaries are where off-by-ones live, so sweep them densely too.
     const full = derive(JOURNAL.slice(0, 300));
     const head = JOURNAL.slice(0, 300);
     for (let through = 0; through <= 300; through += 1) {
@@ -147,8 +131,6 @@ describe('snapshot — the equivalence property', () => {
   });
 
   it('folds only the tail', () => {
-    // Proven without instrumentation: events at or below throughSeq are ignored
-    // even when they would change the state if folded again.
     const through = 1000;
     const snapshot = snapshotAt(through);
     const contradicted = JOURNAL.map((e) =>
@@ -158,7 +140,7 @@ describe('snapshot — the equivalence property', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Cache ────────────────────────────────────────────────────────────────────
 
 describe('snapshot — a cache, never a source', () => {
   it('is snapshot format version 3', () => {
@@ -198,15 +180,10 @@ describe('snapshot — a cache, never a source', () => {
   });
 
   it('refuses to resume across a journal that is not cleanly sequenced', () => {
-    // Resuming partitions the journal on `seq`. An event without one cannot be
-    // placed on either side of the anchor: the tail drops it while a full fold
-    // keeps it. That produced a board that silently differed from
-    // derive(journal) — here a lost `board.started`, leaving a board that never
-    // ticks again while the snapshot reported itself perfectly usable.
     const tasks = [{ id: 'A', title: 'A', wave: 1, dependsOn: [], touches: ['src/a/**'] }];
     const base = [
       { ...makeEvent('board.created', { boardId: 'b', planPath: 'p', tasks, waves: [] }), seq: 1, ts: 1 },
-      makeEvent('board.started', { concurrency: 3 }), // no seq
+      makeEvent('board.started', { concurrency: 3 }),
       { ...makeEvent('task.attempt.started', { taskId: 'A', attemptId: 'a1', role: 'builder' }), seq: 2, ts: 2 },
     ];
     const snapshot = makeSnapshot('b', derive(base.slice(0, 1)), 1);
@@ -227,7 +204,6 @@ describe('snapshot — a cache, never a source', () => {
   it('ignores a version-skewed snapshot rather than migrating it', () => {
     const skewed = { ...snapshotAt(1000), v: 99 };
     assert.equal(isSnapshotUsable(skewed, JOURNAL), false);
-    // The proof it was not migrated: the result is byte-identical to the full fold.
     assert.equal(hashState(deriveFrom(skewed, JOURNAL)), hashState(derive(JOURNAL)));
   });
 
@@ -242,8 +218,6 @@ describe('snapshot — a cache, never a source', () => {
   });
 
   it('exposes no repair path', async () => {
-    // Structural: the module's whole answer to a bad snapshot is "fold it all
-    // again". If a future edit adds a second answer, this fails.
     const module = await import('../../server/orchestrator/core/snapshot.js');
     for (const name of Object.keys(module)) {
       assert.doesNotMatch(
@@ -255,7 +229,7 @@ describe('snapshot — a cache, never a source', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Hash state ───────────────────────────────────────────────────────────────
 
 describe('hashState — stable and order-independent', () => {
   it('is stable across repeated calls', () => {
@@ -315,7 +289,7 @@ describe('hashState — stable and order-independent', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Canonical form ───────────────────────────────────────────────────────────
 
 describe('canonical form round-trips', () => {
   it('restores a state exactly', () => {
@@ -352,7 +326,7 @@ describe('canonical form round-trips', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Cadence ──────────────────────────────────────────────────────────────────
 
 describe('snapshot cadence', () => {
   it('is due every SNAPSHOT_INTERVAL events', () => {
@@ -366,10 +340,9 @@ describe('snapshot cadence', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Memoised fold ────────────────────────────────────────────────────────────
 
 describe('the memoised fold is actually faster', () => {
-  /** Best of several runs, after a warm-up, so this is not measuring JIT. */
   function time(fn) {
     for (let i = 0; i < 3; i += 1) fn();
     let best = Infinity;
@@ -386,10 +359,6 @@ describe('the memoised fold is actually faster', () => {
     const through = JOURNAL[JOURNAL.length - 1].seq - SNAPSHOT_INTERVAL;
     const snapshot = snapshotAt(through);
 
-    // What a board load actually costs: reading JSONL off disk and parsing it,
-    // then folding. Measuring the fold alone understates the snapshot badly —
-    // parsing is the dominant term, and skipping it is most of what a snapshot
-    // buys. The lines are pre-rendered so neither path pays for serialisation.
     const lines = JOURNAL.map((e) => JSON.stringify(e));
     const tailLines = JOURNAL.filter((e) => e.seq > through).map((e) => JSON.stringify(e));
     const snapshotText = JSON.stringify(snapshot);
@@ -401,20 +370,6 @@ describe('the memoised fold is actually faster', () => {
       return deriveFrom(restored, tail);
     });
 
-    // The bar is 1.4x, not the 10x the "skip 4,800 of 5,000 events" framing
-    // suggests, and the gap is worth understanding rather than tuning away.
-    //
-    // Board state grows with the journal: every attempt is retained, because
-    // attempt counts are derived rather than stored. So the snapshot is about
-    // the same size as the journal it replaces (390 KB here), and reading plus
-    // verifying it is the same order of work as reading plus folding the
-    // journal. Measured on this fixture: full 4.1 ms, memoised 2.5 ms.
-    //
-    // The consequence for P1-A is that a snapshot is worth having but is not a
-    // large win, and no snapshot interval changes that — the verify cost is
-    // O(state), not O(interval). The large win for the reconcile loop is not
-    // snapshots at all: it is keeping the derived state in memory and calling
-    // `foldInto` on each new event instead of re-folding on every tick.
     assert.ok(
       memoised < full / 1.4,
       `memoised ${memoised.toFixed(2)}ms vs full ${full.toFixed(2)}ms — no material speedup`,
@@ -422,7 +377,6 @@ describe('the memoised fold is actually faster', () => {
   });
 
   it('is faster still when the caller passes only the tail', () => {
-    // The fast path P1-A uses: the head is never read, let alone parsed.
     const through = JOURNAL[JOURNAL.length - 1].seq - SNAPSHOT_INTERVAL;
     const snapshot = snapshotAt(through);
     const tail = JOURNAL.filter((e) => e.seq > through);

@@ -1,8 +1,3 @@
-/**
- * Read/write JSON config files under ~/.minnow with atomic writes.
- * Sessions resource uses SQLite (sessions-repo) unless MINNOW_SESSIONS_STORE=json.
- */
-
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -52,12 +47,10 @@ import {
 } from './sessions-repo.js';
 import { sessionsJsonPath } from './sessions-paths.js';
 
-/** Best-effort chmod for secret-bearing files on Unix. */
 async function chmodSecretFile(filePath) {
   try {
     await fs.chmod(filePath, 0o600);
   } catch {
-    /* ignore */
   }
 }
 
@@ -66,7 +59,6 @@ async function chmodSecretFile(filePath) {
  * @returns {Promise<boolean>}
  */
 export async function configFileExists(relativeKey) {
-  // Sessions JSON key is no longer on the allowlist — resolve via sessions-paths.
   if (relativeKey === 'sessions/state.json') {
     try {
       await fs.access(sessionsJsonPath());
@@ -84,17 +76,11 @@ export async function configFileExists(relativeKey) {
   }
 }
 
-/**
- * JSON blobs with many concurrent writers must be read/written under one queue per file.
- * config.json: dev-server + workspace settings.
- * sessions/state.json mutex removed in A.2 (SQLite locking); kept only for JSON rollback.
- */
 const SERIALIZED_CONFIG_KEYS = new Set(['config.json']);
 
 /** @type {Map<string, Promise<void>>} */
 const configJsonQueues = new Map();
 
-/** Separate mutex for MINNOW_SESSIONS_STORE=json rollback path. */
 /** @type {Promise<void>} */
 let sessionsJsonQueue = Promise.resolve();
 
@@ -144,7 +130,6 @@ function withSessionsJsonLock(fn) {
 }
 
 /**
- * Windows (and occasionally Unix AV/indexers) can briefly lock the destination during rename.
  * @param {string} src
  * @param {string} dest
  */
@@ -168,13 +153,11 @@ async function renameConfigAtomic(src, dest) {
 }
 
 /**
- * Kept reachable for JSON-mode sessions rollback and generic config reads.
  * @param {string} relativeKey
  * @returns {Promise<unknown>}
  */
 async function readConfigJsonUnlocked(relativeKey) {
   await ensureMinnowLayout();
-  // Sessions bypass the allowlist (removed in A.2).
   if (relativeKey === 'sessions/state.json') {
     try {
       const raw = await fs.readFile(sessionsJsonPath(), 'utf8');
@@ -213,7 +196,6 @@ export async function readConfigJson(relativeKey) {
 }
 
 /**
- * Atomic write: temp file in same directory then rename.
  * @param {string} relativeKey
  * @param {unknown} data
  */
@@ -247,19 +229,9 @@ export async function writeConfigJson(relativeKey, data) {
   return withConfigJsonLock(relativeKey, () => writeConfigJsonUnlocked(relativeKey, data));
 }
 
-/** How many pre-migration copies of issues/state.json to keep on disk. */
 const ISSUES_BACKUP_KEEP = 5;
 
 /**
- * Copy issues/state.json aside before a write that changes its schema revision.
- *
- * The whole Issues epic hangs off this file, and the one prior attempt at a
- * schema move (MIN-354 v1) lost data. A migration that goes wrong is survivable
- * as long as the previous bytes still exist; the cost here is one file copy on
- * the single write per install where the revision actually changes.
- *
- * Never throws: a backup that cannot be written must not block the user's save.
- *
  * @param {string} relativeKey
  * @param {number} nextVersion
  */
@@ -284,12 +256,10 @@ async function backupIssuesStateOnSchemaChange(relativeKey, nextVersion) {
       await fs.rm(path.join(dir, stale), { force: true });
     }
   } catch {
-    /* best effort — a failed backup must not fail the save */
   }
 }
 
 /**
- * Read-modify-write under the per-file queue (required for config.json, JSON sessions rollback).
  * @template T
  * @param {string} relativeKey
  * @param {(current: unknown) => T | Promise<T>} mutator
@@ -423,7 +393,6 @@ export async function readResource(resource) {
     return data ?? { version: 1, bugs: [] };
   }
   if (resource === 'issues') {
-    // null when file missing — client migrates from bugs on first load.
     return readConfigJson(key);
   }
   if (resource === 'issues-taxonomy') {
@@ -516,9 +485,6 @@ export async function writeResource(resource, body) {
   if (resource === 'sub-agents') {
     const { config } = normalizeSubAgentsConfig(body);
     await writeConfigJson(key, config);
-    // Same pattern as browser config a few lines above: Settings writes
-    // ~/.minnow/sub-agents.json, then drop the process cache so the next
-    // spawn reads the new type row without an app restart.
     const { resetSubAgentServerConfigCache } = await import('../sub-agents/config.js');
     resetSubAgentServerConfigCache();
     return config;
@@ -555,14 +521,6 @@ export async function writeResource(resource, body) {
 }
 
 /**
- * JSON-store twin of the SQLite history-key rule.
- *
- * `validateSessionState` turns every history-omitting wire chat into `history: []`,
- * so writing the validated blob straight to disk would erase the transcripts of
- * every chat the client had not lazily hydrated. Carry the stored messages across
- * instead, keep chats the payload never mentioned, and refuse to create a chat
- * from a write that cannot describe its own history.
- *
  * @param {string} key
  * @param {Record<string, any>} validated
  * @param {unknown[] | undefined} rawChats
@@ -612,7 +570,6 @@ async function mergeJsonSessionHistories(key, validated, rawChats, options = {})
     chats.push({ ...chat, history: Array.isArray(prior.history) ? prior.history : [] });
   }
 
-  // Deletion is explicit, never inferred from absence (see writeWholeSessionState).
   if (!options.pruneMissingChats) {
     for (const chat of storedChats) {
       const id = typeof chat?.id === 'string' ? chat.id : '';
@@ -624,9 +581,6 @@ async function mergeJsonSessionHistories(key, validated, rawChats, options = {})
 }
 
 /**
- * Apply a partial sessions delta (PATCH /api/config/sessions).
- * SQLite path uses {@link patchSessionState}; JSON fallback does in-memory splice.
- *
  * @param {string} resource
  * @param {unknown} body
  * @returns {Promise<{ ok: true, applied: Record<string, unknown> }>}
@@ -647,8 +601,6 @@ export async function patchResource(resource, body) {
 }
 
 /**
- * JSON-store fallback for PATCH — read whole blob, apply delta, rewrite.
- * Same semantics as {@link patchSessionState} (absent keys unchanged; explicit deletes).
  * @param {unknown} delta
  */
 async function patchJsonSessionState(delta) {
@@ -718,12 +670,10 @@ async function patchJsonSessionState(delta) {
       if (!raw || typeof raw !== 'object') continue;
       const chat = normalizeChatRow(raw);
       migrateChatRowV5ToV6(chat);
-      // Preserve server-owned terminalHistory when the client omits/replaces it.
       const existing = chats.find((c) => c.id === chat.id);
       if (existing?.terminalHistory?.length && !chat.terminalHistory?.length) {
         chat.terminalHistory = existing.terminalHistory;
       } else if (existing?.terminalHistory?.length) {
-        // Client may send terminalHistory; ignore it (server-owned).
         chat.terminalHistory = existing.terminalHistory;
       } else {
         delete chat.terminalHistory;

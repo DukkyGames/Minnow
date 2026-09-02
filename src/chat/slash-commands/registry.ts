@@ -1,8 +1,3 @@
-/**
- * Built-in slash commands that are not SKILL.md skills (stateful / UI commands).
- * Shown alongside skills in the composer slash picker.
- */
-
 export interface SlashCommandListItem {
   /** Stable picker id (may differ from the first token, e.g. goal-clear). */
   id: string;

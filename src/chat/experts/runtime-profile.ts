@@ -1,7 +1,3 @@
-/**
- * Expert runtime profile normalization and chat seed resolution.
- */
-
 import { normalizeModeId, type ModeId } from '../modes/types';
 import type {
   ExpertRuntimeProfile,
@@ -151,10 +147,6 @@ export function resolveExpertToolNames(
   };
 }
 
-/**
- * Merge source-chat settings with per-expert profile overrides.
- * Pure — callers supply validation context from live catalog state.
- */
 export function resolveExpertChatSeed(
   expertId: string,
   source: ExpertChatSeedSource,

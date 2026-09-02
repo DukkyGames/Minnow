@@ -1,13 +1,3 @@
-/**
- * Shared PR review panel for Source Control and Issues.
- *
- * Own chrome (`.pr-review-*`) so it can sit in either design system without
- * borrowing `.scc-*` or `.issues-*`. Severity is never colour-only.
- *
- * IMPECCABLE_PREFLIGHT: context=pass product=pass command_reference=pass
- * shape=pass image_gate=skipped:in-place panel on existing chrome mutation=open
- */
-
 import '../styles/pr-review.css';
 
 import { getSubAgentRun } from '../agents/orchestrator.ts';
@@ -48,10 +38,7 @@ const VERDICT_LABEL: Record<PrReviewVerdict, string> = {
 
 const hostDisposers = new WeakMap<HTMLElement, () => void>();
 
-/**
- * Derive the work-agent verdict from finding severities.
- * Any blocker → REQUEST_CHANGES; warn only → NEEDS_DISCUSSION; neither → APPROVE.
- */
+/** Derive the work-agent verdict from finding severities. */
 export function derivePrReviewVerdict(findings: readonly SubAgentFinding[]): PrReviewVerdict {
   let hasWarn = false;
   for (const finding of findings) {
@@ -205,8 +192,6 @@ function findingRow(finding: SubAgentFinding, severity: string): HTMLElement {
       chip.textContent = path;
       chip.title = `Open ${path}`;
       chip.addEventListener('click', () => {
-        // Dynamic: a static edge would pull CodeMirror into the boot bundle
-        // (test/boot/eager-graph.test.mts). Nothing here needs it until a click.
         void import('./file-viewer.ts').then((m) => m.openFileInViewer(path));
       });
       paths.appendChild(chip);

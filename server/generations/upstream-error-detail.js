@@ -7,6 +7,7 @@ export const UPSTREAM_ERROR_DETAIL_MAX = 2000;
 
 /**
  * Extract a human-readable message from common provider JSON error shapes.
+ * OpenCode Zen may return chat.completion with an empty assistant for upstream failures.
  * @param {unknown} data
  * @returns {string | null}
  */
@@ -49,7 +50,6 @@ function extractJsonErrorMessage(data) {
     if (parts.length > 0) return parts.join('; ');
   }
 
-  // OpenCode Zen may surface upstream failures as chat.completion with an empty assistant.
   if (record.object === 'chat.completion' && Array.isArray(record.choices)) {
     const choice = record.choices[0];
     const message = choice?.message;

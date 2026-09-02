@@ -1,15 +1,3 @@
-/**
- * Hands the editor and chat accessors to capture at boot.
- *
- * `issue-capture-context.ts` deliberately imports neither the editor nor the
- * session store: it runs from the menubar, which mounts long before Code opens,
- * and a static import there would pull CodeMirror into the shell's first paint.
- * This file is the one place that knows about both sides, and it is loaded on
- * the boot path where those modules are already resolved.
- *
- * Phase 2 of `documentation/plans/issues-app-v2.md`.
- */
-
 import {
   registerCaptureChatAccessor,
   registerCaptureEditorAccessors,
@@ -26,8 +14,6 @@ export function wireCaptureAccessors(): void {
   registerCaptureEditorAccessors({
     getActiveViewerTabPath: () => {
       try {
-        // Resolved through the module cache; the shell has already loaded it by
-        // the time a capture can be opened over an editor.
         return viewerTabStore?.getActiveViewerTabPath() ?? null;
       } catch {
         return null;

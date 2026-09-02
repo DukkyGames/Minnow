@@ -1,19 +1,3 @@
-/**
- * Issues detail slide-over / deep-link panel (MIN-261).
- * Phase 2: detail + Expand with agent.
- * Phase 3: Investigate / Plan / Debug / Board workflow toolbar.
- * Phase 4: Git menu — branch, commits, PR via gh, GitHub URL chips.
- * Flat chrome; --mn-* tokens only.
- *
- * Peek is a description-first document: sticky identity + dispatch, then the
- * body, then compact add-rows for empty secondary sections. Sparkles Expand
- * (MIN-635) rewrites title + description into a review overlay; triage
- * Expand with agent still researches via issue-writer.
- *
- * IMPECCABLE_PREFLIGHT: context=pass product=pass command_reference=not_required
- * shape=pass image_gate=skipped:harness lacks native image generation mutation=open
- */
-
 import { setAssistantBubbleContent } from '../markdown/renderer';
 import {
   appendIssueLinks,
@@ -119,12 +103,13 @@ subscribePrReviews(() => {
   if (selectedIssueId) refreshIssueDetailIfOpen();
 });
 
+// ── Host ─────────────────────────────────────────────────────────────────────
+
 function showIssuesToast(message: string, kind: 'success' | 'error' = 'success'): void {
   void import('./toast').then((m) => m.showToast(message, kind));
 }
 
 function ensureDetailHost(): HTMLElement | null {
-  // Mount beside the list/board inside .issues-body so the slide-over shares that row.
   const body = document.querySelector('#issuesView .issues-body');
   if (!body) return null;
   let host = document.getElementById('issuesDetailHost');
@@ -144,11 +129,7 @@ export function getSelectedIssueId(): string | undefined {
   return selectedIssueId;
 }
 
-/**
- * True when focus is inside peek chrome that a remount would wipe.
- * Store subscriptions refresh the panel on every patch; skip that while the
- * title, description, labels, or an add-row field is being typed.
- */
+/** True when focus is inside peek chrome that a remount would wipe. */
 export function isIssuesDetailEditing(): boolean {
   if (isIssueExpandOverlayOpen()) return true;
   const active = document.activeElement;
@@ -174,7 +155,6 @@ export function isIssueExpanding(issueId: string): boolean {
 function syncDetailLayoutClass(open: boolean): void {
   const root = document.getElementById('issuesView');
   root?.classList.toggle('has-detail', open);
-  // @container rules match descendants of .issues-page, not the page itself.
   root?.querySelector('.issues-shell')?.classList.toggle('is-detail', open);
 }
 
@@ -226,6 +206,8 @@ export function refreshIssueDetailIfOpen(): void {
   openIssueDetail(selectedIssueId);
 }
 
+// ── Refs ─────────────────────────────────────────────────────────────────────
+
 /** Capture a short snippet for a code ref via read_file_range when possible. */
 async function captureSnippetForRef(ref: IssueCodeRef): Promise<string | undefined> {
   if (ref.snippet?.trim()) return ref.snippet;
@@ -241,7 +223,6 @@ async function captureSnippetForRef(ref: IssueCodeRef): Promise<string | undefin
       })
     ).content;
     if (typeof raw !== 'string' || raw.startsWith('Error:')) return undefined;
-    // Strip "N: " line prefixes from tool output when present.
     const body = raw
       .split('\n')
       .map((line) => line.replace(/^\s*\d+:\s?/, ''))
@@ -291,6 +272,8 @@ function removePlanFromIssue(issueId: string, planPath: string): void {
   scheduleSaveIssues();
   refreshIssueDetailIfOpen();
 }
+
+// ── Chrome ───────────────────────────────────────────────────────────────────
 
 function formatTs(ts: number): string {
   try {
@@ -344,11 +327,7 @@ function detailIconButton(label: string, iconName: 'close' | 'more'): HTMLButton
   return btn;
 }
 
-/**
- * Make a list-style chip a keyboard-openable property control.
- * Peek uses the same menu primitive as the row so type/status/priority do not
- * invent a second select vocabulary.
- */
+/** Make a list-style chip a keyboard-openable property control. */
 function bindPropertyChip(
   chip: HTMLElement,
   ariaLabel: string,
@@ -359,7 +338,6 @@ function bindPropertyChip(
   chip.setAttribute('tabindex', '0');
   chip.setAttribute('aria-haspopup', 'menu');
   chip.setAttribute('aria-label', ariaLabel);
-  // Chevron signals the shared context menu — same affordance as workflow split buttons.
   chip.appendChild(
     createIcon('chevronDown', { size: 10, className: 'issues-detail__prop-chevron' }),
   );
@@ -431,19 +409,10 @@ function buildAddRow(
   return addRow;
 }
 
-/**
- * Description: the WYSIWYG editor over canonical markdown.
- *
- * Always live rather than click-to-edit. The Phase 1 surface swapped a rendered
- * preview for a raw textarea on click, which meant every edit started by
- * looking at markdown source — the opposite of what the editor is for. The
- * editor renders and edits in the same place, and writes markdown on commit.
- *
- * Mentions written in the body become real links (`issueRefs`, `codeRefs`) so
- * `#KEY-12` and `@src/foo.ts:12` are data, not text.
- */
+// ── Description ──────────────────────────────────────────────────────────────
+
+/** Description: the WYSIWYG editor over canonical markdown. */
 function buildDescriptionSection(issue: IssueCard): HTMLElement {
-  // No "Description" heading — the editor *is* the page.
   const descSection = section(null, { untitled: true, variant: 'document' });
   const host = document.createElement('div');
   host.className = 'issues-detail__desc-wrap';
@@ -467,13 +436,7 @@ function buildDescriptionSection(issue: IssueCard): HTMLElement {
   return descSection.section;
 }
 
-/**
- * Turn `#KEY-12` and `@path:12-34` in the body into real links.
- *
- * Append-only, and it never removes a link when a mention is deleted: a link
- * may also have been added by capture, an agent, or the Git section, and this
- * has no way to tell which. Removing a link stays an explicit action.
- */
+/** Turn `#KEY-12` and `@path:12-34` in the body into real links. */
 function syncDescriptionRefs(issueId: string, markdown: string): void {
   const refs = collectInlineRefs(markdown);
   if (refs.issueIds.length === 0 && refs.codeRefs.length === 0) return;
@@ -532,7 +495,6 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   closeBtn.classList.add('issues-detail__close');
   closeBtn.addEventListener('click', () => {
     closeIssueDetail();
-    // Embedded Code host keeps `#/app/code/...` — do not jump to fullscreen Issues.
     void import('./issues-page').then((m) => m.setIssuesRouteHash('#/app/issues'));
   });
 
@@ -615,8 +577,6 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
 
   scroll.appendChild(buildDescriptionSection(issue));
 
-  // Secondary blocks: filled sections get a heading; empty ones collapse to
-  // one add-row so the description stays the page.
   const planPath = inferIssuePlanPath(issue);
   scroll.appendChild(buildCodeLinksSection(issue, planPath));
 
@@ -655,6 +615,8 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   bindIssueDropTarget(panel, issue.id, () => refreshIssueDetailIfOpen());
   host.appendChild(panel);
 }
+
+// ── Links ────────────────────────────────────────────────────────────────────
 
 function buildCodeAddRow(issueId: string): HTMLElement {
   const pasteInput = document.createElement('input');
@@ -855,6 +817,8 @@ function buildIssueReviewSection(issue: IssueCard): HTMLElement | null {
   return reviewSection.section;
 }
 
+// ── Git ──────────────────────────────────────────────────────────────────────
+
 /** Restrained Git menu + linked chips + commit grep list for the detail panel. */
 function buildGitSection(issue: IssueCard): HTMLElement {
   const gitLinks = issue.gitLinks ?? [];
@@ -877,7 +841,6 @@ function buildGitSection(issue: IssueCard): HTMLElement {
     errEl.hidden = true;
   }
 
-  // Action row (Create branch / Create PR / paste helpers)
   const menu = document.createElement('div');
   menu.className = 'issues-detail__git-menu';
   menu.setAttribute('role', 'toolbar');
@@ -897,7 +860,7 @@ function buildGitSection(issue: IssueCard): HTMLElement {
   prBtn.type = 'button';
   prBtn.className = 'issues-btn';
   prBtn.disabled = busy;
-  prBtn.hidden = true; // shown after gh detect
+  prBtn.hidden = true;
   prBtn.textContent = busy ? 'Working…' : 'Create PR';
   prBtn.title = 'Open a pull request with gh from the issue branch';
   prBtn.addEventListener('click', () => {
@@ -935,7 +898,6 @@ function buildGitSection(issue: IssueCard): HTMLElement {
     body.appendChild(chipList);
   }
 
-  // Commits subsection
   const commitsHead = document.createElement('h4');
   commitsHead.className = 'issues-detail__git-subhead';
   commitsHead.textContent = 'Commits';
@@ -1005,8 +967,6 @@ function buildGitSection(issue: IssueCard): HTMLElement {
     if (next) shaInput.focus();
   });
 
-  // gh detect and commit grep need the tool server. Skip the round-trip when
-  // it is down rather than leaving Create PR and Commits in a loading void.
   if (!isLocalServerAvailable()) {
     return gitSection.section;
   }
@@ -1148,7 +1108,6 @@ function applyGitActionResult(
   result: { ok: boolean; message?: string; error?: string },
   fallbackOk: string,
 ): void {
-  // Prefer explicit ok===false — discriminant narrowing is unreliable with strict:false.
   if (result.ok === false) {
     gitErrorByIssueId.set(issueId, result.error || 'Git action failed');
     return;
@@ -1215,6 +1174,8 @@ async function runGitAction(
     refreshIssueDetailIfOpen();
   }
 }
+
+// ── Workflow ─────────────────────────────────────────────────────────────────
 
 /** Build the restrained workflow toolbar for the detail panel. */
 function buildWorkflowToolbar(issue: IssueCard): HTMLElement {

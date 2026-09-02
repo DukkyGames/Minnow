@@ -32,8 +32,6 @@ const TOOL_SOURCE_RESOLVERS = {
         : 'document';
     return `document:${name}`;
   },
-  // P5-B: a page the Final Tester drives is external content in the same sense
-  // a fetched URL is — it can carry text aimed at the agent reading it.
   browser_drive_read_page: (args) => `browser:${String(args?.mode ?? 'a11y').trim() || 'a11y'}`,
   browser_drive_read_console: () => 'browser:console',
   browser_drive_read_network: () => 'browser:network',

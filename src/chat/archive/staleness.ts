@@ -1,7 +1,3 @@
-/**
- * Detect which chat history turns are stale enough to archive (pure, MIN-139).
- */
-
 import { estimateTokensFromText } from '../prompts/token-estimate-core';
 import type { Message } from '../../types';
 import type { ArchiveConfig } from './types';
@@ -98,11 +94,6 @@ export function groupStaleTurnsIntoRanges(
   return ranges;
 }
 
-/**
- * Return history ranges that should be archived.
- * Stale when older than stalenessTurns from the latest user turn, or when
- * pressureThreshold is met (optional contextLimit + estimated fill).
- */
 export function detectStaleTurnRanges(
   history: Message[],
   config: ArchiveConfig,

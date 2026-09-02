@@ -1,7 +1,3 @@
-/**
- * Composer message queue UI — collapsible strip above the input while streaming (MIN-200).
- */
-
 import {
   getPendingMessageQueue,
   getPendingMessageQueueCount,
@@ -34,6 +30,8 @@ interface QueueMountTarget {
   host: HTMLElement;
   before: ChildNode | null;
 }
+
+// ── Mount ────────────────────────────────────────────────────────────────────
 
 /** Resolve where the queue strip should mount for the active composer surface. */
 export function resolveComposerQueueMount(
@@ -78,6 +76,8 @@ function ensureQueueRoot(): HTMLElement {
   mountQueueRoot(root);
   return root;
 }
+
+// ── Items ────────────────────────────────────────────────────────────────────
 
 function iconButton(
   className: string,
@@ -162,17 +162,14 @@ function renderQueueItem(item: { id: string; text: string }): HTMLElement {
   return row;
 }
 
-/**
- * Bind after modules finish evaluating. Registering at import time raced a
- * circular import (this file ↔ message-queue via sessions) and hit TDZ.
- * Re-bind on every sync so a test (or other caller) that cleared the listener
- * cannot leave the transcript stuck after the next queue mutation.
- */
+/** Bind after modules finish evaluating. */
 function bindQueueChangedListener(): void {
   setPendingMessageQueueChangedListener(() => {
     syncComposerMessageQueue();
   });
 }
+
+// ── Sync ─────────────────────────────────────────────────────────────────────
 
 /** Show or hide the queued follow-up strip for the active streaming chat. */
 export function syncComposerMessageQueue(): void {

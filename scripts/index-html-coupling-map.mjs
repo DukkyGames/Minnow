@@ -1,12 +1,4 @@
 #!/usr/bin/env node
-/**
- * MIN-387: Inventory `id=` hooks in index.html and grep src/ for DOM references.
- *
- * Usage:
- *   node scripts/index-html-coupling-map.mjs
- *   node scripts/index-html-coupling-map.mjs --json
- *   node scripts/index-html-coupling-map.mjs --dead-only
- */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
@@ -21,7 +13,6 @@ const args = process.argv.slice(2);
 const asJson = args.includes('--json');
 const deadOnly = args.includes('--dead-only');
 
-/** Collect every `id="…"` value from index.html (order preserved, deduped). */
 function extractIndexIds(html) {
   const ids = [];
   const seen = new Set();
@@ -37,13 +28,11 @@ function extractIndexIds(html) {
   return ids;
 }
 
-/** Count inline `on*=…` handlers still present in index.html. */
 function countInlineHandlers(html) {
   const re = /\bon[a-z]+="[^"]*"/gi;
   return (html.match(re) ?? []).length;
 }
 
-/** Walk src/ and return concatenated source text keyed by relative path. */
 function readSrcFiles(dir = SRC_DIR, base = SRC_DIR) {
   const files = [];
   for (const entry of readdirSync(dir)) {
@@ -60,7 +49,6 @@ function readSrcFiles(dir = SRC_DIR, base = SRC_DIR) {
   return files;
 }
 
-/** Return src files whose text references the given element id. */
 function findIdReferences(id, srcFiles) {
   const patterns = [
     new RegExp(`getElementById\\(['"]${escapeRegExp(id)}['"]\\)`),

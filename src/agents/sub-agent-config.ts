@@ -1,7 +1,3 @@
-/**
- * Load and merge sub-agent configuration (defaults + ~/.minnow/sub-agents.json).
- */
-
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
 import { DEFAULT_CONTEXT_ENFORCEMENT_POLICY, type ContextEnforcementPolicy } from '../chat/context-budget';
 import { DEFAULT_SUB_AGENT_SUMMARY_SCHEMA } from './sub-agent-structured-outcome';
@@ -12,14 +8,12 @@ import type { SubAgentTypeConfig, SubAgentsFile } from './types';
 
 const SUB_AGENTS_STORAGE_KEY = 'minnow.subAgents';
 
-/** Shipped default provider before inherit fix — migrate to empty when model is also unset. */
 export const LEGACY_SUB_AGENT_DEFAULT_PROVIDER = 'lm-studio-local';
 
 let runtimeUserOverrides: Partial<SubAgentsFile> | null = null;
 let cachedMerged: SubAgentsFile | null = null;
 let cachedUserOverrides: Partial<SubAgentsFile> | null | undefined;
 
-/** Coerce check-in nudge interval: 0 = disabled, else [10s, 30m]. */
 export function clampSubAgentCheckInNudgeMs(value: unknown, fallback = 120_000): number {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -37,7 +31,6 @@ function cloneTypeConfig(raw: SubAgentTypeConfig): SubAgentTypeConfig {
   };
 }
 
-/** Deep-merge type maps: user overrides win per field. */
 export function mergeSubAgentConfig(
   defaults: SubAgentsFile,
   user: Partial<SubAgentsFile> | null | undefined,
@@ -128,7 +121,6 @@ export function mergeSubAgentConfig(
   return merged;
 }
 
-/** Coerce legacy lm-studio-local + empty model rows to inherit parent/global provider. */
 export function migrateLegacySubAgentProviderId(
   providerId: string | undefined,
   modelId: string | undefined,
@@ -155,7 +147,6 @@ function writeLocalSubAgents(data: Partial<SubAgentsFile>): void {
   localStorage.setItem(SUB_AGENTS_STORAGE_KEY, JSON.stringify(data));
 }
 
-/** Fetch user overrides from the config API when npm start is up. */
 export async function fetchSubAgentConfigFromServer(): Promise<Partial<SubAgentsFile> | null> {
   await detectConfigServer();
   if (!isServerStorageMode()) return null;
@@ -169,7 +160,6 @@ export async function fetchSubAgentConfigFromServer(): Promise<Partial<SubAgents
   }
 }
 
-/** Persist user overrides to server or localStorage mirror. */
 export async function saveSubAgentConfigToServer(
   overrides: Partial<SubAgentsFile>,
 ): Promise<boolean> {
@@ -194,26 +184,22 @@ export async function saveSubAgentConfigToServer(
   return true;
 }
 
-/** Set in-memory user overrides (tests). */
 export function setRuntimeSubAgentOverrides(overrides: Partial<SubAgentsFile> | null): void {
   runtimeUserOverrides = overrides;
   cachedMerged = null;
   cachedUserOverrides = undefined;
 }
 
-/** Reset config cache (tests). */
 export function resetSubAgentConfigCache(): void {
   cachedMerged = null;
   runtimeUserOverrides = null;
   cachedUserOverrides = undefined;
 }
 
-/** Raw user overrides from the last load (for inherit vs explicit policy). */
 export function getSubAgentUserOverridesSync(): Partial<SubAgentsFile> | null {
   return cachedUserOverrides ?? runtimeUserOverrides;
 }
 
-/** Global context policy from the merged sub-agents config (sync). */
 export function getGlobalContextEnforcementPolicySync(): ContextEnforcementPolicy {
   if (cachedMerged?.defaultContextEnforcementPolicy) {
     return cachedMerged.defaultContextEnforcementPolicy;
@@ -226,9 +212,6 @@ export function getGlobalContextEnforcementPolicySync(): ContextEnforcementPolic
   );
 }
 
-/**
- * Load merged sub-agent config: shipped defaults ← file/API ← runtime cache.
- */
 export async function loadSubAgentConfig(): Promise<SubAgentsFile> {
   if (cachedMerged) return cachedMerged;
 
@@ -245,7 +228,6 @@ export async function loadSubAgentConfig(): Promise<SubAgentsFile> {
   return cachedMerged;
 }
 
-/** Lookup a type config; null when unknown. */
 export async function getSubAgentTypeConfig(
   typeId: string,
 ): Promise<SubAgentTypeConfig | null> {

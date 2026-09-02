@@ -16,7 +16,6 @@ export function parseIssueCodeRefPaste(raw: string): ParseIssueCodeRefPasteResul
   const trimmed = raw.trim().replace(/\\/g, '/');
   if (!trimmed) return { ok: false, error: 'Empty code link' };
 
-  // Match trailing :start or :start-end (avoid matching drive letters like C:).
   const rangeMatch = /^(.*):(\d+)(?:-(\d+))?$/.exec(trimmed);
   if (!rangeMatch) {
     return { ok: true, ref: { path: trimmed } };
@@ -24,7 +23,6 @@ export function parseIssueCodeRefPaste(raw: string): ParseIssueCodeRefPasteResul
 
   const path = rangeMatch[1]?.trim() ?? '';
   if (!path || /^[A-Za-z]$/.test(path)) {
-    // Reject bare drive-letter parses like "C:12".
     return { ok: true, ref: { path: trimmed } };
   }
 

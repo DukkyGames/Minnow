@@ -1,29 +1,3 @@
-/**
- * P8-F — `/api/agents/*`. The sub-agent engine's only public surface.
- *
- * Commands in by POST, events out by SSE. This is what makes "the renderer
- * is a view" enforceable: there is no mutation verb the renderer can reach
- * that is not a command the engine chose to expose. Spawn and cancel are
- * POSTs; everything else is a read.
- *
- * | Method | Path                              | Purpose                              |
- * | ------ | --------------------------------- | ------------------------------------ |
- * | POST   | `/api/agents`                     | spawn                                |
- * | GET    | `/api/agents?parentChatId=`       | derived state for one chat           |
- * | GET    | `/api/agents/:runId`              | one run                              |
- * | GET    | `/api/agents/:runId/events`       | SSE: journal frames + live + error   |
- * | GET    | `/api/agents/:runId/journal`      | raw parent journal (debug)           |
- * | GET    | `/api/agents/:runId/transcript`   | lossy attempt transcript (P9-D)      |
- * | POST   | `/api/agents/:runId/cancel`       | cancel                               |
- *
- * Live tokens ride `event: live` (opaque key, P8-B) and are never journaled.
- * Failures after 200 go out as `event: error` — a counter, not a toast per tick.
- *
- * P9-A at this boundary: POST spawn resolves the model binding and the
- * effector's preconditions *before* it answers. An unresolvable model is a
- * 400 at the spawn site, not a silent tick loop.
- */
-
 import { randomUUID } from 'node:crypto';
 
 import { AGENTS_NAMESPACE, isTerminal, lastEndedAttempt, stateToJSON } from './derive.js';
@@ -116,8 +90,6 @@ export async function getAgentsEngine(parentChatId) {
   });
   if (!deliveryWired.has(parentChatId)) {
     deliveryWired.add(parentChatId);
-    // A terminal append is what makes a run pending. Tick delivery then,
-    // not on a timer — the fold is the queue.
     engine.subscribe((event) => {
       const type = event?.type;
       if (type === 'attempt.ended' || type === 'run.abandoned' || type === 'run.cancelled') {
@@ -180,8 +152,6 @@ export function statusFromPhase(run) {
   if (run.phase === 'passed') return 'completed';
   if (run.phase === 'cancelled') return 'cancelled';
   if (run.phase === 'abandoned') return 'failed';
-  // Cancelling is still in flight for the product status enum; the card
-  // maps fold phase onto livePhase `stopping` (P10-L).
   if (run.phase === 'running' || run.phase === 'cancelling') return 'running';
   return 'queued';
 }
@@ -205,10 +175,6 @@ async function findRun(runId) {
   }
   return null;
 }
-
-// ---------------------------------------------------------------------------
-// Routes
-// ---------------------------------------------------------------------------
 
 /**
  * @type {Array<{ method: string, pattern: RegExp, name: string }>}
@@ -256,7 +222,6 @@ export async function handleAgentsRequest(req, res, pathname) {
       try {
         res.write(`event: error\ndata: ${JSON.stringify({ error: message })}\n\n`);
       } catch {
-        // The socket is gone.
       }
       res.end();
       return true;
@@ -363,10 +328,6 @@ async function dispatch(route, req, res) {
       }
       const engine = await getAgentsEngine(found.parentChatId);
       await engine.append([makeEvent('run.cancelled', { runId, reason: 'user' })]);
-      // Tick 1: plan() drops the run from desired → effector.stop.
-      // Tick 2: reapVanished journals attempt.ended → phase cancelled.
-      // Two ticks so GET/POST settle to cancelled instead of leaving the
-      // HTTP client on cancelling (SSE still sees the window).
       await engine.tick();
       await engine.tick();
       const after = /** @type {import('./types').AgentsState} */ (engine.getState());
@@ -385,10 +346,6 @@ async function dispatch(route, req, res) {
 }
 
 /**
- * P9-A at spawn: preflight *before* answering. A missing model used to
- * present as a silent tick loop. Failures after 200 still go out as
- * `event: error` frames (a counter, not one toast per tick).
- *
  * @param {import('node:http').IncomingMessage} req
  * @param {import('node:http').ServerResponse} res
  * @returns {Promise<void>}
@@ -443,8 +400,6 @@ async function spawnRun(req, res) {
 
   const engine = await getAgentsEngine(parentChatId);
 
-  // Validate at the command boundary — P9-A. Do not append run.requested
-  // until the effector can actually start work.
   try {
     await engine.preflight();
   } catch (err) {
@@ -552,17 +507,7 @@ async function readRunTranscript(req, res, runId) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// SSE
-// ---------------------------------------------------------------------------
-
 /**
- * Stream one run's events.
- *
- * Snapshot + journal frames carry `seq`. Live tokens and start-failures do
- * not — a reconnect must not treat a token as a journal id, and must not
- * replay a completed run's tokens (there are none on the journal).
- *
  * @param {import('node:http').IncomingMessage} req
  * @param {import('node:http').ServerResponse} res
  * @param {string} runId
@@ -625,11 +570,6 @@ async function streamEvents(req, res, runId) {
     if (!send('event', event, seq)) cleanup();
   };
   const unsubscribe = engine.subscribe(deliver);
-  // P10-M / MIN-778: the live bus is parent-scoped (P8-B); this stream is
-  // per-run. Drop siblings here so their token traffic never leaves the
-  // server. Type filter is at emit: disk still uses isHighFrequencyTurnEvent
-  // (phase dropped); sub-agent live uses shouldEmitSubAgentLiveTurnEvent
-  // (phase forwarded, P10-L). This filter is identity, not type.
   const unsubscribeLive = subscribeLive(parentChatId, (payload) => {
     if (payload.taskId !== runId) return;
     if (!send('live', payload)) cleanup();
@@ -687,8 +627,6 @@ async function streamEvents(req, res, runId) {
     });
   }
 
-  // A newly connected view can take pending completions. Tick after
-  // subscribeDeliver so productionDeliver sees a listener.
   void getProductionDelivery().tick(parentChatId);
 
   const heartbeat = setInterval(() => {
@@ -711,7 +649,6 @@ async function streamEvents(req, res, runId) {
     try {
       res.end();
     } catch {
-      // Already gone.
     }
   }
 

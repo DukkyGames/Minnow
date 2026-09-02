@@ -1,8 +1,3 @@
-/**
- * Models section ids — side-effect free so the OS router can import them
- * without pulling in the app's CSS or panel modules.
- */
-
 export type ModelsSectionId =
   | 'installed'
   | 'recommend'

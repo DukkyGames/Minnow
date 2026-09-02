@@ -1,7 +1,3 @@
-/**
- * Composer workspace context documents injection toggle — tri-state like code map.
- */
-
 import { nextThinkingTriStateOnClick } from './composer-thinking';
 import {
   fetchContextDocumentsInjectionDefault,

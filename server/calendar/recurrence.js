@@ -65,7 +65,6 @@ export function expandEventsInRange(events, rangeStart, rangeEnd) {
         output.push(cloneOccurrence(event, date));
       }
     } catch {
-      // Fall back to the master event when RRULE parsing fails.
       output.push(event);
     }
   }

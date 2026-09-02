@@ -1,12 +1,3 @@
-/**
- * Inspector launch-draft helpers.
- *
- * Empty draft → Load sends `{}` and the server planner owns ctx / ngl / cache.
- * First touch of context, GPU layers, or KV cache copies the displayed plan and
- * sets `fit_mode: 'manual'`. Pass-through fields (batch, parallel, extra_args, env)
- * can exist without leaving auto.
- */
-
 import type { LlamaServeSettings } from '../../models/api-client';
 import { specNeedsDraftModel } from '../../models/spec-decode.mjs';
 import {
@@ -24,10 +15,6 @@ const LADDER_MAX = CONTEXT_LADDER[CONTEXT_LADDER.length - 1];
 /** Inspector slider floor. Same as the planner's lowest rung. */
 export const CONTEXT_SLIDER_MIN = CONTEXT_LADDER[0];
 
-/**
- * Manual context slider step in tokens. Auto-planning still snaps to CONTEXT_LADDER;
- * the Load-tab range uses 1k so a 262k ceiling is pointer-fine instead of 13 jumps.
- */
 export const CONTEXT_SLIDER_STEP = 1024;
 
 /** Values the Load tab shows before the user overrides them. */
@@ -43,21 +30,13 @@ export interface DisplayedLaunch {
   plan: LlamaLaunchPlan;
 }
 
-/**
- * Slider ceiling: trained context when the header has it, else the last ladder rung,
- * never above 262144.
- */
+/** Slider ceiling: trained context when the header has it, else the last ladder rung, never above 262144. */
 export function contextSliderMax(trainCtx?: number | null): number {
   const trained = Number(trainCtx) > 0 ? Math.trunc(Number(trainCtx)) : LADDER_MAX;
   return Math.min(trained, LADDER_MAX);
 }
 
-/**
- * Snap a per-slot context onto the inspector slider grid.
- * Floors to CONTEXT_SLIDER_STEP, never below the floor, never above `maxTokens`.
- * The slider max itself is always legal so a non-aligned trainCtx (e.g. 10000) can
- * still be chosen at the far right.
- */
+/** Snap a per-slot context onto the inspector slider grid. */
 export function snapCtxPerSlot(tokens: number, maxTokens: number): number {
   const max = Math.max(1, Math.trunc(Number(maxTokens) || 0));
   const min = Math.min(CONTEXT_SLIDER_MIN, max);
@@ -69,10 +48,7 @@ export function snapCtxPerSlot(tokens: number, maxTokens: number): number {
   return Math.min(max, Math.max(min, stepped));
 }
 
-/**
- * Payload for `loadModel`. Empty / auto drafts omit ctx / ngl / cache so the server
- * cannot mistake a 125k/999 materialization for a user choice.
- */
+/** Payload for `loadModel`. */
 export function settingsForDraft(draft: LlamaServeSettings | undefined): LlamaServeSettings {
   if (!draft) return {};
   if (draft.fit_mode !== 'manual') {
@@ -100,8 +76,6 @@ export function settingsForDraft(draft: LlamaServeSettings | undefined): LlamaSe
     if (draft.reasoning_budget_message) {
       out.reasoning_budget_message = draft.reasoning_budget_message;
     }
-    // Speculative decoding does not touch the fit planner's ctx / ngl / cache choices,
-    // so it rides along in auto.
     if (draft.spec_type && draft.spec_type !== 'none') {
       out.spec_type = draft.spec_type;
       if (draft.spec_draft_model) out.spec_draft_model = draft.spec_draft_model;
@@ -125,10 +99,7 @@ function passThroughFrom(draft: LlamaServeSettings | undefined): LlamaServeSetti
   );
 }
 
-/**
- * Copy the currently displayed (planned) values and mark the draft manual.
- * Subsequent touches mutate the existing manual draft.
- */
+/** Copy the currently displayed (planned) values and mark the draft manual. */
 export function ensureManualDraft(
   draft: LlamaServeSettings | undefined,
   displayed: DisplayedLaunch,
@@ -170,11 +141,7 @@ export function applyGpuLayersTouch(
   return next;
 }
 
-/**
- * Restore GPU Auto: drop `n_gpu_layers` so llama.cpp `--fit` owns the split.
- * Custom context / KV stay manual. If those still match the plan (the first GPU
- * tick copies them), fall back to planner auto and keep pass-through fields.
- */
+/** Restore GPU Auto: drop `n_gpu_layers` so llama.cpp `--fit` owns the split. */
 export function applyGpuLayersAuto(
   draft: LlamaServeSettings | undefined,
   displayed: DisplayedLaunch,
@@ -190,7 +157,6 @@ export function applyGpuLayersAuto(
   const cacheMatchesPlan = !next.cache_type || next.cache_type === displayed.plan.cache_type;
   if (ctxMatchesPlan && cacheMatchesPlan) {
     const restored = passThroughFrom({ ...next, fit_mode: 'auto' });
-    // ensureManualDraft always copies parallel; 1 is the default, not an override.
     if (restored.parallel === 1) delete restored.parallel;
     return restored;
   }
@@ -208,13 +174,7 @@ export function applyCacheTypeTouch(
   return next;
 }
 
-/**
- * Pinning K or V independently is a cache-type choice, so it leaves auto the same way
- * the shared KV select does. The planner's degrade ladder only knows one symmetric
- * type; letting a pinned f16 K ride along under auto would silently blow the budget it
- * planned against. Manual mode instead surfaces the over-budget warning.
- * `undefined` clears the pin and falls back to the shared type.
- */
+/** Pinning K or V independently is a cache-type choice, so it leaves auto the same way the shared KV select does. */
 export function applyCacheTypeSideTouch(
   draft: LlamaServeSettings | undefined,
   displayed: DisplayedLaunch,
@@ -228,10 +188,7 @@ export function applyCacheTypeSideTouch(
   return next;
 }
 
-/**
- * Parallel / batch / extra_args do not leave auto. When already manual, keep per-slot
- * context and rescale total `-c`.
- */
+/** Parallel / batch / extra_args do not leave auto. */
 export function applyPassThroughTouch(
   draft: LlamaServeSettings | undefined,
   displayed: DisplayedLaunch,
@@ -251,16 +208,7 @@ export function applyPassThroughTouch(
   return { ...passThroughFrom(draft), ...patch };
 }
 
-/**
- * Why this draft cannot be launched, or `null` when it can.
- *
- * `draft-simple` / `draft-eagle3` without a draft model do not fail cleanly — verified
- * on b9628, llama-server registers the implementation and then segfaults with nothing
- * in the log. Blocking here turns a crash-and-diagnose round trip into a sentence.
- *
- * `mtpCapable` is `null` while the GGUF header is still loading; an unknown header
- * never blocks, because guessing wrong would lock a user out of a working mode.
- */
+/** Why this draft cannot be launched, or `null` when it can. */
 export function launchValidationError(
   draft: LlamaServeSettings | undefined,
   mtpCapable: boolean | null = null,
@@ -283,13 +231,7 @@ export function isManualDraft(draft: LlamaServeSettings | undefined): boolean {
   return draft?.fit_mode === 'manual';
 }
 
-/**
- * Client-side plan for slider starting positions. Same function the server runs.
- *
- * `variant` should be the installed llama.cpp id (`cuda-12.4`, …) when
- * `fetchLlamaRuntime()` has returned — that decides `--flash-attn on` vs `auto`.
- * `hardware.backend` is the fallback before that GET lands (probe, not install).
- */
+/** Client-side plan for slider starting positions. */
 export function inspectorLaunchPlan(input: {
   gguf: GgufGeometryFacts | null;
   arch?: string | null;

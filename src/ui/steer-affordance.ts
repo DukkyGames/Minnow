@@ -1,4 +1,3 @@
-/** Steer-injected user row label (live stream or history reload). */
 export function markMessageSteered(wrap: HTMLElement): void {
   wrap.classList.add('msg--steered');
   if (wrap.querySelector('.msg-steer-chip')) return;

@@ -1,7 +1,3 @@
-/**
- * Render wiki markdown with path-based wikilink navigation for the Brain viewer.
- */
-
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { highlightCodeElement } from '../../markdown/highlighter';
@@ -16,7 +12,6 @@ function ensureMarked(): void {
       marked.use({ gfm: true, breaks: false });
     }
   } catch {
-    /* defaults are acceptable */
   }
 }
 
@@ -29,10 +24,7 @@ export function rewriteBrainWikilinks(markdown: string): string {
   });
 }
 
-/**
- * Render markdown into a container and wire wikilink clicks.
- * @param onNavigate Called with a relative page path (with or without .md).
- */
+/** Render markdown into a container and wire wikilink clicks. */
 export function renderBrainMarkdown(
   container: HTMLElement,
   markdown: string,

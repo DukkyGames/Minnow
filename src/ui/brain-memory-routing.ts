@@ -1,7 +1,3 @@
-/**
- * Route legacy Settings memory deep-links to Brain app sections.
- */
-
 export type BrainMemoryRouteSection = 'memories' | 'settings';
 
 /** Map settings memory slug or catalog key to a Brain section. */

@@ -1,7 +1,3 @@
-/**
- * Settings panel for reviewing pending memory and skill synthesis proposals.
- */
-
 import { wrapUntrusted } from '../lib/untrusted.mjs';
 import {
   acceptMemoryProposal,

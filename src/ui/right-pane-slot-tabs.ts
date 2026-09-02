@@ -1,12 +1,3 @@
-/**
- * Per-slot tab lists when the right pane split is active (editor group parity).
- *
- * Ownership rule: while the split is enabled every open viewer path and preview id
- * belongs to **exactly one** slot. These lists are the source of truth for what each
- * pane renders; `rightPaneSplit.primary` / `.secondary` are derived from them and must
- * never be written directly.
- */
-
 import {
   EMPTY_SLOT_PANE_TABS,
   getFilePanelState,
@@ -39,12 +30,7 @@ function cloneSlotTabs(tabs: SlotPaneTabs): SlotPaneTabs {
   };
 }
 
-/**
- * Bookkeeping predicate: persisted split flag only.
- *
- * List mutations use this (not the layout predicate) so slot ownership is never
- * silently dropped while the viewport is mobile or the desktop drawer is hosting.
- */
+/** Bookkeeping predicate: persisted split flag only. */
 function splitStateEnabled(): boolean {
   return getFilePanelState().rightPaneSplit.enabled;
 }
@@ -80,10 +66,7 @@ function resolveSurface(tabs: SlotPaneTabs): SlotPaneTabs['surface'] {
   return hasViewer ? 'viewer' : 'preview';
 }
 
-/**
- * Write both slot tab lists plus their derived content in one patch.
- * Single write keeps `primary`/`secondary` from ever disagreeing with the lists.
- */
+/** Write both slot tab lists plus their derived content in one patch. */
 function commitSlotTabs(next: { primary: SlotPaneTabs; secondary: SlotPaneTabs }): void {
   const split = getFilePanelState().rightPaneSplit;
   const primaryTabs: SlotPaneTabs = { ...next.primary, surface: resolveSurface(next.primary) };
@@ -132,10 +115,7 @@ export function slotOwningPreviewId(id: string): PaneSlotId | null {
   return null;
 }
 
-/**
- * Slot a viewer path should act in: the slot that already owns it, else the focused one.
- * Re-opening a file that lives in the other pane reveals it there instead of duplicating.
- */
+/** Slot a viewer path should act in: the slot that already owns it, else the focused one. */
 export function targetSlotForViewerPath(path: string): PaneSlotId {
   if (!isRightPaneSplitLayoutEnabled()) return 'primary';
   return slotOwningViewerPath(path) ?? getFocusedPaneSlot();
@@ -177,10 +157,7 @@ export function activePreviewIdForSlot(slot: PaneSlotId): string | null {
   return getSlotPaneTabs(slot).activePreviewId;
 }
 
-/**
- * Single active tab for the unified strip: at most one of viewer or preview is highlighted.
- * Stored actives for both kinds can remain set while only one surface is shown.
- */
+/** Single active tab for the unified strip: at most one of viewer or preview is highlighted. */
 export function unifiedStripActiveTabForSlot(slot: PaneSlotId): {
   viewerPath: string | null;
   previewId: string | null;
@@ -237,11 +214,7 @@ export function setSlotActivePreviewId(slot: PaneSlotId, id: string): void {
   commitSlotTabs(slots);
 }
 
-/**
- * Record an opened/activated viewer tab against a slot and return the slot used.
- * A path already owned by another slot is moved, never duplicated — two CodeMirror
- * views over one tab model would fight over the dirty flag and cached buffer.
- */
+/** Record an opened/activated viewer tab against a slot and return the slot used. */
 export function registerViewerTabOpened(path: string, slot?: PaneSlotId): PaneSlotId {
   if (!splitStateEnabled()) return 'primary';
   const owner = slotOwningViewerPath(path);
@@ -337,10 +310,7 @@ export function unregisterPreviewTab(id: string): void {
   if (changed) commitSlotTabs(slots);
 }
 
-/**
- * Drop slot entries for tabs that are no longer open, and adopt tabs that belong to
- * no slot (restored prefs, tabs opened while the split was off) into the primary.
- */
+/** Drop slot entries for tabs that are no longer open, and adopt tabs that belong to no slot (restored prefs, tabs opened while the split was off) into the primary. */
 export function reconcileSlotTabsWithStores(): void {
   if (!splitStateEnabled()) return;
   const openPaths = new Set(listViewerTabs().map((t) => t.path));
@@ -458,10 +428,7 @@ export function bootstrapSlotTabsOnSplitEnable(): void {
   });
 }
 
-/**
- * Fold the secondary slot's tabs back into the primary when the split closes.
- * Closing a group must not orphan its tabs — they stay open in the surviving group.
- */
+/** Fold the secondary slot's tabs back into the primary when the split closes. */
 export function mergeSecondarySlotTabsIntoPrimary(): SlotPaneTabs {
   const slots = readSlots();
   const { primary, secondary } = slots;

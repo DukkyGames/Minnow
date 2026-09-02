@@ -1,7 +1,3 @@
-/**
- * Settings → General: filesystem access scope for file and git tools.
- */
-
 import { detectConfigServer } from '../config/storage-mode';
 import {
   loadToolSecurityMeta,

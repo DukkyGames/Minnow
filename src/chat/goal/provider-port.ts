@@ -1,7 +1,3 @@
-/**
- * Production GoalEvalProviderPort — non-streaming POST via generations shim.
- */
-
 import { completeNonStreamingViaGenerations } from '../../providers/fetch-chat';
 import { getActiveProvider } from '../../providers/store';
 import type { ChatCompletionBody } from '../../api/chat';

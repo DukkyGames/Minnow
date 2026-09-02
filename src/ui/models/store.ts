@@ -1,11 +1,3 @@
-/**
- * Models workbench store — one source of truth for the library, running serves,
- * downloads, and the inspector selection.
- *
- * My Models, Local Server, and the inspector all render from this, so loading a
- * model in one surface is visible in the others without a refetch.
- */
-
 import { selectProviderModel } from '../../api/models';
 import {
   isLibraryModelProviderId,
@@ -48,11 +40,7 @@ import type { HardwareSnapshot } from '../../models/types';
 export interface LoadProgress {
   serveId: string;
   modelId: string | null;
-  /**
-   * 0–100, monotonic. Null only for the sub-second window before the first tick,
-   * when there is genuinely nothing to draw. llama.cpp prints no percentage of its
-   * own, so this is modelled — see `src/models/load-progress.mjs`.
-   */
+  /** 0–100, monotonic. */
   percent: number | null;
   phase: string;
   /** Stable phase id (`weights`, `context`, …) for anything that must not match on prose. */
@@ -68,10 +56,7 @@ export interface LoadProgress {
 export interface ModelsState {
   library: LibraryModel[];
   serves: ServeRecord[];
-  /**
-   * Live `/slots` telemetry by serve id. Reflects every client hitting the runtime,
-   * not just Minnow's own chat — that is the whole point of polling it server-side.
-   */
+  /** Live `/slots` telemetry by serve id. */
   activity: Map<string, ServeActivity>;
   downloads: DownloadJob[];
   runtimes: RuntimeDetection | null;
@@ -109,11 +94,7 @@ const loadLastElapsedMs = new Map<string, number>();
 const LOAD_TICK_MS = 250;
 /** @type {number | null} handle for the in-flight-load ticker. */
 let loadTicker: number | null = null;
-/**
- * Rolling bytes-per-ms for the installed llama.cpp variant, from the runtime status.
- * Fetched once; it only changes after a load completes, and a stale value costs an ETA
- * that is slightly off, not a wrong bar.
- */
+/** Rolling bytes-per-ms for the installed llama.cpp variant, from the runtime status. */
 let variantLoadRate = 0;
 let variantLoadRateFetched = false;
 const downloadUnsubs = new Map<string, () => void>();
@@ -185,10 +166,6 @@ export function selectModel(id: string | null): void {
   emit();
 }
 
-/**
- * Library row for a serve: exact path, then the load's model id.
- * Name matching is how JIT path mismatch used to no-op the card click — skip it.
- */
 export function libraryModelForServe(serve: ServeRecord): LibraryModel | undefined {
   if (serve.modelPath) {
     const want = normalizeServePath(serve.modelPath);
@@ -218,8 +195,6 @@ export function selectServe(serveId: string): void {
   state.selectedServeId = serveId;
   const serve = state.serves.find((s) => s.id === serveId);
   const model = serve ? libraryModelForServe(serve) : undefined;
-  // Clear the library selection when this serve has no row (JIT path mismatch)
-  // so render() opens the serve-only inspector instead of the previous model.
   state.selectedId = model?.id ?? null;
   emit();
 }
@@ -248,10 +223,7 @@ export function runningServes(): ServeRecord[] {
   return state.serves.filter((s) => isLiveServeStatus(s.status));
 }
 
-/**
- * Models header copy while a local serve is starting.
- * Empty percent stays "Loading" so we never print a stuck 0%.
- */
+/** Models header copy while a local serve is starting. */
 export function formatModelsHeaderLoadingLabel(loads: LoadProgress[] = state.loads): string {
   const live = loads.filter((l) => !l.error);
   for (const load of live) {
@@ -261,10 +233,7 @@ export function formatModelsHeaderLoadingLabel(loads: LoadProgress[] = state.loa
   return 'Loading';
 }
 
-/**
- * Switch to Local Server when the user is already in Models. JIT load from
- * Code must not yank them out of the chat.
- */
+/** Switch to Local Server when the user is already in Models. */
 function revealLocalServerIfModelsActive(): void {
   void import('../../os/instances').then(({ getForegroundAppId }) => {
     if (getForegroundAppId() !== 'models') return;
@@ -279,10 +248,7 @@ export function attentionServes(): ServeRecord[] {
   );
 }
 
-/**
- * Refresh library, serves, downloads, and runtimes.
- * Concurrent callers share one in-flight pass.
- */
+/** Refresh library, serves, downloads, and runtimes. */
 export function refreshModels(options?: { hardware?: boolean; fresh?: boolean }): Promise<void> {
   if (refreshInFlight && !options?.fresh) return refreshInFlight;
 
@@ -310,7 +276,6 @@ export function refreshModels(options?: { hardware?: boolean; fresh?: boolean })
         const selected = state.library.find((m) => m.id === state.selectedId);
         if (!selected || !selected.servable) state.selectedId = null;
       }
-      // Resume tracking work that was still in flight when the app reopened.
       for (const serve of serves) {
         if (serve.status === 'starting' && !logUnsubs.has(serve.id)) {
           trackLoad(serve, null);
@@ -338,7 +303,6 @@ export function refreshModels(options?: { hardware?: boolean; fresh?: boolean })
         emit();
       })
       .catch(() => {
-        /* hardware panel degrades to unknown */
       });
   }
 
@@ -350,7 +314,6 @@ export async function refreshHardware(): Promise<void> {
   try {
     state.hardware = await fetchHardware({ fresh: true });
   } catch {
-    /* keep the previous snapshot */
   }
   emit();
 }
@@ -395,8 +358,6 @@ function ensureServeListWatch(): void {
   if (!serveActivityUnsub) {
     serveActivityUnsub = subscribeServeActivityFeed((activity) => {
       state.activity.set(activity.serveId, activity);
-      // A busy slot ticks every ~400 ms per serve. Coalesce into one frame so
-      // telemetry cannot thrash the whole models page.
       scheduleActivityEmit();
     });
   }
@@ -405,24 +366,18 @@ function ensureServeListWatch(): void {
       void listModelServes()
         .then(applyServes)
         .catch(() => {
-          /* SSE is the live path; this is only a reconciling fallback */
         });
     }, SERVE_RECONCILE_MS);
   }
 }
 
-/**
- * When an async load leaves `starting`, bind the picker (running) or surface
- * the error/crash on the load card. Driven by SSE, not a 1s poll.
- */
+/** When an async load leaves `starting`, bind the picker (running) or surface the error/crash on the load card. */
 async function settleTrackedLoad(next: ServeRecord): Promise<void> {
   const load = state.loads.find((l) => l.serveId === next.id);
   if (!load || next.status === 'starting') return;
 
   if (next.status === 'running') {
     const modelId = load.modelId;
-    // Paint 100 on this tick so the last modelled frame is not ~35% when
-    // /health wins the race against the log follow.
     const logText = loadLogText.get(next.id) ?? '';
     const elapsedMs = Date.now() - load.startedAt;
     const done = computeLoadProgress({
@@ -464,10 +419,7 @@ async function settleTrackedLoad(next: ServeRecord): Promise<void> {
   }
 }
 
-/**
- * Follow an async serve start: stream the log for progress, and let serve SSE
- * (plus a 15s fallback poll) tell us when the row leaves `starting`.
- */
+/** Follow an async serve start: stream the log for progress, and let serve SSE (plus a 15s fallback poll) tell us when the row leaves `starting`. */
 function trackLoad(serve: ServeRecord, modelId: string | null): void {
   const mlx = serve.runtime === 'mlx-lm';
   if (!state.loads.some((l) => l.serveId === serve.id)) {
@@ -488,7 +440,6 @@ function trackLoad(serve: ServeRecord, modelId: string | null): void {
     logUnsubs.set(
       serve.id,
       subscribeServeLog(serve.id, (event) => {
-        // Tail then deltas. Replacing here drops phase markers and freezes the bar.
         loadLogText.set(serve.id, foldServeLogEvent(loadLogText.get(serve.id) ?? '', event));
         recomputeLoad(serve.id);
       }),
@@ -500,10 +451,6 @@ function trackLoad(serve: ServeRecord, modelId: string | null): void {
   emit();
 }
 
-/**
- * Recompute one load's bar from its log tail and the elapsed clock.
- * Cheap and idempotent — the ticker and the log stream both call it.
- */
 function recomputeLoad(serveId: string): void {
   const entry = state.loads.find((l) => l.serveId === serveId);
   if (!entry || entry.error) return;
@@ -529,10 +476,6 @@ function recomputeLoad(serveId: string): void {
   });
 }
 
-/**
- * Library row for the load bar: launch id, serve.libraryId, then a slash/case
- * normalised path so `E:\Models\...` still finds the GGUF size.
- */
 function libraryRowForLoad(serve: ServeRecord, modelId: string | null): LibraryModel | undefined {
   const id = modelId?.trim() || serve.libraryId?.trim() || '';
   if (id) {
@@ -544,20 +487,13 @@ function libraryRowForLoad(serve: ServeRecord, modelId: string | null): LibraryM
   return state.library.find((m) => m.path && normalizeServePath(m.path) === want);
 }
 
-/**
- * Weights size for the time model. The library row is authoritative; a serve resumed
- * after a restart has no model id, and then we still match on libraryId / path so a
- * 13 GiB extra-folder GGUF is not timed against a 25s clock (35% at Ready).
- */
+/** Weights size for the time model. */
 function weightsBytesForLoad(serve: ServeRecord, modelId: string | null): number | null {
   const row = libraryRowForLoad(serve, modelId);
   return row && row.sizeBytes > 0 ? row.sizeBytes : null;
 }
 
-/**
- * Fetch the installed runtime's rolling load rate once. Failure is silent: the bar
- * falls back to stepping between phase floors, which is the pre-prior behaviour.
- */
+/** Fetch the installed runtime's rolling load rate once. */
 function ensureVariantLoadRate(): void {
   if (variantLoadRate > 0 || variantLoadRateFetched) return;
   variantLoadRateFetched = true;
@@ -566,7 +502,6 @@ function ensureVariantLoadRate(): void {
       variantLoadRate = Number(status.loadRateBytesPerMs) || 0;
     })
     .catch(() => {
-      /* no prior; phase floors still move the bar */
     });
 }
 
@@ -582,10 +517,7 @@ function bytesPerMsForLoad(modelId: string | null, serve?: ServeRecord | null): 
   });
 }
 
-/**
- * ~250 ms redraw while any load is in flight. The server panel otherwise only
- * re-renders on its 5 s elapsed clock, which is far too coarse for a bar.
- */
+/** ~250 ms redraw while any load is in flight. */
 function ensureLoadTicker(): void {
   ensureVariantLoadRate();
   if (loadTicker != null) return;
@@ -605,10 +537,7 @@ export async function dismissLoad(serveId: string): Promise<void> {
   await unloadServe(serveId);
 }
 
-/**
- * Start a model. Resolves as soon as the process spawns; readiness arrives
- * through the tracked load.
- */
+/** Start a model. */
 export async function loadModel(
   model: LibraryModel,
   settings?: LlamaServeSettings,
@@ -641,10 +570,6 @@ export async function loadModel(
     const serve = await startModelServe({
       modelPath: model.path,
       runtime: 'mlx-lm',
-      // This becomes mlx_lm.server's `model` key, so it has to be the directory,
-      // not the repo id: Minnow keeps MLX repos under ~/.minnow/models/artifacts,
-      // which is not an HF cache layout, and a repo id would send the server to
-      // the Hub instead of the copy already on disk.
       modelLabel: model.path,
       libraryId: model.id,
       quant: model.quant || undefined,
@@ -681,8 +606,6 @@ export async function loadModel(
     weightsGb: model.sizeBytes / 1024 ** 3,
     hardware: (state.hardware as unknown as Record<string, unknown>) ?? undefined,
     llama: settings,
-    // Lets startServe merge models.launch.byLibraryId between llama-cpp.json
-    // defaults and this body, so picker / CLI loads reuse the last fit_mode.
     libraryId: model.id,
     async: true,
   });
@@ -712,19 +635,14 @@ export async function unloadServe(serveId: string): Promise<void> {
   const index = state.serves.findIndex((s) => s.id === next.id);
   if (index >= 0) state.serves[index] = next;
   emit();
-  // Picker cache must not stay 'loaded' after eject — refresh so chat ensure sees unload.
   try {
     const { fetchModels } = await import('../../api/models');
     await fetchModels();
   } catch {
-    // non-fatal: serve already stopped
   }
 }
 
-/**
- * Reload weights after a crash or failed load. Prefers the matching library row
- * so launch prefs apply; falls back to the serve's last path/settings.
- */
+/** Reload weights after a crash or failed load. */
 export async function retryServe(serve: ServeRecord): Promise<ServeRecord> {
   const model = state.library.find((m) => m.path === serve.modelPath);
   if (model) return loadModel(model, settingsForServeRetry(serve));
@@ -787,7 +705,6 @@ function trackDownload(job: DownloadJob): void {
       if (event.status === 'completed') {
         downloadUnsubs.get(job.id)?.();
         downloadUnsubs.delete(job.id);
-        // New weights on disk — rescan so My Models picks them up.
         void refreshModels({ fresh: true, hardware: false });
         emitNow();
         return;

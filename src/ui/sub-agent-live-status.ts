@@ -1,7 +1,3 @@
-/**
- * Shared live status labels for sub-agent cards and drawer (mirrors main-chat phases).
- */
-
 import type { SubAgentLivePhase } from '../agents/types';
 import type { SubAgentRun } from '../agents/types';
 import type { PersistedSubAgentRun } from '../types';
@@ -31,7 +27,6 @@ export function subAgentLiveBadgeLabel(
   if (run.status === 'queued') return 'Queued';
   const active = run as SubAgentRun;
   if (active.startError) return `Retrying (${active.startError.consecutive})`;
-  // Cancelling outranks the last tool name so Stop is visible promptly (P10-L).
   if (active.livePhase === 'stopping') return 'Stopping';
   const tool = active.liveCurrentToolName?.trim();
   if (tool) return 'Calling tool';

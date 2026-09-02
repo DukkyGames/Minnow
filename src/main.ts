@@ -1,7 +1,3 @@
-/**
- * Minnow Vite entry: styles, highlight.js theme, shell handlers, init, service worker.
- */
-
 import './styles/fonts.css';
 import './styles/font-presets.css';
 import './styles/tokens.css';
@@ -12,8 +8,6 @@ import './styles/motion.css';
 import './styles/topbar.css';
 import './styles/model-select.css';
 import './styles/shell-keyboard-help.css';
-// Palette and context menu load lazily; their CSS must not, or the first open
-// paints unstyled (same failure the settings page hit with a lazy stylesheet).
 import './styles/command-palette.css';
 import './styles/context-menu.css';
 import './styles/issue-capture.css';
@@ -41,7 +35,6 @@ import './styles/mode-icons.css';
 import './styles/composer-controls.css';
 import './styles/composer-expand.css';
 import './styles/composer-message-queue.css';
-/* file-panel / terminal / SCC / orchestrate surfaces: CSS loads with their lazy modules */
 import './styles/editor-quick-edit.css';
 import './styles/editor-intent-mode.css';
 import './styles/preview-panel.css';
@@ -67,7 +60,6 @@ import './styles/minnowos-responsive.css';
 import './styles/chat-app.css';
 import './styles/app-picker.css';
 import './styles/app-dialog.css';
-/* Phone layer last: it overrides the desktop shell above. */
 import './styles/mobile.css';
 
 import 'highlight.js/styles/github.min.css';
@@ -230,6 +222,8 @@ import { initElectronTrayBridge } from './electron-tray-bridge';
 import { installAppDialogs } from './ui/app-dialog';
 import { initializeCompanionAccess } from './companion/bootstrap';
 
+// ── Service worker ───────────────────────────────────────────────────────────
+
 /** Register shell caching only in browser-secure contexts (HTTPS or loopback). */
 function registerServiceWorker(): void {
   if (window.isSecureContext && 'serviceWorker' in navigator) {
@@ -237,9 +231,10 @@ function registerServiceWorker(): void {
   }
 }
 
+// ── Init app ─────────────────────────────────────────────────────────────────
+
 /** Boot app: sessions, settings, sidebar, models, first paint. */
 export async function initApp(): Promise<void> {
-  // Cold boot: show workspace picker immediately and warm the rest of the app behind it.
   let workspaceGatePending: Promise<void> | null = null;
   let workspaceGateModule: typeof import('./os/workspace-gate') | null = null;
   if (isOsShellEnabled()) {
@@ -248,7 +243,6 @@ export async function initApp(): Promise<void> {
     workspaceGatePending = gateHandle?.whenChosen ?? null;
   }
 
-  // Boot phase marks surface in DevTools when MINNOW_DEBUG=1 (see boot-metrics.ts).
   markBootPhase('ui-init');
   installAppDialogs();
   bindAskQuestionPlanScreenHooks({
@@ -265,15 +259,11 @@ export async function initApp(): Promise<void> {
   await detectConfigServer();
   refreshConfigStorageBanner();
   const migrated = await runMigrationIfNeeded();
-  // Load tools before any UI reads permissions (drawer + settings page rebuilds).
   await loadToolConfigFromStorage();
   await initPromptSystem();
   await initWorkAgentSystem();
-  // Skip forced re-fetch when startApp already hydrated unless migration wrote new data.
   await loadSessionsFromStorage(migrated ? { force: true } : undefined);
   registerSessionPersistenceShutdownHandler();
-  // Issues store migrates leftover bugs/state.json / minnow-bugs-v1 on first load.
-  // Issues taxonomy loads before issues store (guards + defaults reference catalog).
   const { loadIssuesTaxonomyFromStorage } = await import('./state/issues-taxonomy-store.ts');
   await loadIssuesTaxonomyFromStorage();
   const { loadIssuesFromStorage, migrateLegacyBugBoardsFromChats } = await import(
@@ -295,7 +285,6 @@ export async function initApp(): Promise<void> {
   initAgentActivityPanel();
   fillSystemPromptPresetSelect();
   await loadSystemPromptSettings();
-  // Tool permission DOM is built on first open (popover / drawer / Settings) — not at cold boot.
   registerToolHandlers();
   initComposerToolsPopover();
   initChatAppToolsPopover();
@@ -336,7 +325,6 @@ export async function initApp(): Promise<void> {
   await notifyCodeWorkspaceServerAvailability();
   bindWorkspacePathForToolCache(getWorkspacePath);
   initWorkspaceButton();
-  // Workspace path may still be default until the gate resolves — refresh again after pick.
   await refreshWorkspaceUi();
   markWelcomePendingIfNeeded();
   initWelcomePage();
@@ -356,7 +344,6 @@ export async function initApp(): Promise<void> {
   initComposerDrop();
   initComposerPaste();
   initAppSidebarResizers();
-  // Config cluster — independent loads; run in parallel while the user picks a folder.
   markBootPhase('config');
   await Promise.all([
     loadSkillConfigFromStorage(),
@@ -378,24 +365,19 @@ export async function initApp(): Promise<void> {
       'minnow:boot:config',
       'minnow:boot:config-done',
     );
-  } catch {
-    /* missing marks */
-  }
+  } catch {}
   initStatsStrip();
   initChatScroll();
   initMinnowBrowserLinkRouting();
   loadToolConfigIntoDrawer();
   void syncWebSearchProviderFromSearchConfig();
 
-  // Wait for folder pick if this was a cold boot — gate stays covering Code.
   if (workspaceGatePending) {
     await workspaceGatePending;
   }
 
-  // Workspace-scoped chrome: file tree / terminal / hub, then sidebar + chat.
   await refreshWorkspaceUi();
   await notifyCodeWorkspaceServerAvailability();
-  // After cold pick, hash is Code — always warm workspace modules under the gate cover.
   if (
     workspaceGateModule?.isHoldingWorkspaceGateForAppReady() ||
     window.location.hash.startsWith('#/app/code')
@@ -442,14 +424,11 @@ export async function initApp(): Promise<void> {
   markBootPhase('first-paint');
   measureBootPhase('minnow:phase:to-first-paint', 'ui-init', 'first-paint');
 
-  // Drop the workspace-gate cover only after Code chrome is composed.
   if (workspaceGateModule?.isHoldingWorkspaceGateForAppReady()) {
     await workspaceGateModule.revealAppAfterWorkspaceGate();
   }
-  // Dual-gate for reload / non-gate boots (idempotent if the gate already revealed the loader).
   markChromeReady();
 
-  // Post-reveal: terminal history, models catalog, Issues warm, resumes.
   void import('./ui/terminal-panel').then((m) => m.refreshTerminalHistoryForActiveChat());
   void fetchModels().then(() => {
     syncModelSelectForActiveChat();
@@ -460,15 +439,10 @@ export async function initApp(): Promise<void> {
   warmIssuesAppInBackground();
 
   if (sessionState) {
-    // Arm the gate synchronously before anything below can restart a chat.
     parkResumeCandidatesAtBoot(sessionState);
-    // Deliberately not awaited — the prompt must not hold up the loop ticker and
-    // window listeners registered below. The gate runs the generation and
-    // incomplete-tool resumes itself once the user answers.
     startBootResumeGate(sessionState);
   }
 
-  // Session-scoped /loop ticker (15s safety scan + dueAt wake timer)
   const { startLoopTicker } = await import('./chat/loop/ticker');
   const { sendProgrammaticChatText } = await import('./chat/messaging');
   startLoopTicker({
@@ -498,11 +472,12 @@ export async function initApp(): Promise<void> {
   if (sidebarBackdrop) sidebarBackdrop.tabIndex = -1;
   if (fileSidebarBackdrop) fileSidebarBackdrop.tabIndex = -1;
   updateStatsExpandPreview();
-  // interactiveMs — time until initApp has finished (the number we previously lacked).
   markBootPhase('interactive');
   measureBootPhase('minnow:phase:init-app', 'ui-init', 'interactive');
   logBootPhaseTableIfDebug();
 }
+
+// ── Start app ────────────────────────────────────────────────────────────────
 
 /** Start init once the document is ready (module scripts often run after `load`). */
 async function startApp(): Promise<void> {
@@ -514,9 +489,6 @@ async function startApp(): Promise<void> {
   const { initCommandPalette } = await import('./ui/command-palette');
   initShellCommands();
   initCommandPalette();
-  // Capture infrastructure: the drag layer must be listening before the first
-  // dragstart, and the menu rows must be registered before the first
-  // right-click, so both go up with the rest of the shell chrome.
   const { initCaptureDragLayer } = await import('./ui/capture-drag');
   const { initIssueCaptureMenus } = await import('./ui/issue-capture');
   const { wireCaptureAccessors } = await import('./ui/issue-capture-wiring');
@@ -525,9 +497,6 @@ async function startApp(): Promise<void> {
   initIssueCaptureMenus();
   initCaptureSurfaceMenus();
   wireCaptureAccessors();
-  // Board → issue agent slot. Subscribed at boot so a run started in an
-  // earlier session keeps reporting after a reload, not only while Issues
-  // happens to be open.
   const { initIssueAgentWatcher } = await import('./chat/issues/agent-watch');
   initIssueAgentWatcher();
   installScopedSelectAllHandler();
@@ -538,7 +507,6 @@ async function startApp(): Promise<void> {
   installRendererDiagnostics();
   installLongTaskObserver();
   initNotificationAudioUnlock();
-  // Sessions must load before OS routing — Code app mount calls getActiveChat().
   await detectConfigServer();
   if (isOsShellEnabled() && !isPageReload()) {
     const hash = window.location.hash;
@@ -552,7 +520,6 @@ async function startApp(): Promise<void> {
       window.location.replace('#/workspaces');
     }
   }
-  // Probe the tool server in parallel with session hydrate — Code boot reads this flag (MIN-436).
   await Promise.all([loadSessionsFromStorage(), detectLocalServer()]);
   markBootPhase('sessions');
   if (isOsShellEnabled()) {
@@ -567,15 +534,8 @@ installFetchAuth();
 registerServiceWorker();
 
 initTheme();
-// Park decorative animation while the window is hidden — a tray-hidden shell should not
-// hold the GPU's 3D queue open against a local model's decode loop.
 initRenderIdleTracking();
-
-// Stamp mn-phone / mn-tablet / mn-touch before first paint so the shell never
-// renders a desktop layout and then reflows into the phone one.
 initMobileLayout();
-
-// Keep the inline loader until bundled CSS is applied (avoids unstyled shell FOUC).
 scheduleMarkAppReady();
 
 if (document.readyState === 'loading') {

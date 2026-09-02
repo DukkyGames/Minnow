@@ -1,7 +1,3 @@
-/**
- * Shared DOM + formatting helpers for the Models workbench panels.
- */
-
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -77,10 +73,6 @@ export function formatElapsed(sinceMs: number): string {
   return `${mins}m ${String(total % 60).padStart(2, '0')}s`;
 }
 
-/**
- * Copy text to the clipboard, flashing the trigger on success.
- * Falls back to a hidden textarea where the async API is unavailable.
- */
 export async function copyText(value: string, trigger?: HTMLElement): Promise<boolean> {
   let ok = false;
   try {

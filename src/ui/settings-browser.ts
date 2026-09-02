@@ -1,7 +1,3 @@
-/**
- * Settings → Browser — preview panel automation allowlist (`config.json` → `browser`).
- */
-
 import '../styles/settings-general.css';
 
 import { detectConfigServer, isServerStorageMode } from '../config/storage-mode';
@@ -29,6 +25,8 @@ import { setStatus } from './status';
 import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
 import { syncPreviewDevToolsDockToHost } from './preview-panel';
 
+// ── Patterns ─────────────────────────────────────────────────────────────────
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -50,6 +48,8 @@ function parsePatternsText(raw: string): string[] {
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 }
+
+// ── Render ───────────────────────────────────────────────────────────────────
 
 /** Mount browser automation controls into #settingsBrowserBody. */
 export async function renderBrowserSettingsSection(mount: HTMLElement): Promise<void> {
@@ -228,6 +228,8 @@ export async function renderBrowserSettingsSection(mount: HTMLElement): Promise<
     { label: 'Skills catalog', sectionId: 'skills' },
   ]);
 }
+
+// ── Allowlist ────────────────────────────────────────────────────────────────
 
 /** Cached meta for settings consumers (after loadBrowserMeta). */
 export function getBrowserSettingsMeta(): BrowserMeta {

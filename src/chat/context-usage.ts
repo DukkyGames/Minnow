@@ -1,7 +1,3 @@
-/**
- * Live chat context window budget (MIN-13): estimate used tokens vs model limit.
- */
-
 import { getModelRowForSelectOrCanonicalId } from '../api/models';
 import { contextLengthFromModelRow } from '../lib/context-length';
 import { formatModelLabel } from '../lib/format-model-label';
@@ -19,6 +15,8 @@ import {
   estimateTokensFromText,
   type OutboundPromptEstimate,
 } from './prompts/token-estimate-core';
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 export type ContextUsageSectionKey =
   | 'system'
@@ -67,6 +65,8 @@ export interface GetContextBudgetOptions {
   inFlight?: Omit<ContextInFlightOverlay, 'chatId'>;
 }
 
+// ── Breakdown ────────────────────────────────────────────────────────────────
+
 /** Rough token count for queued attachment payloads. */
 export function estimateAttachmentTokens(attachments: Attachment[]): number {
   let total = 0;
@@ -76,9 +76,6 @@ export function estimateAttachmentTokens(attachments: Attachment[]): number {
       total += estimateTokensFromText(attachment.text);
       continue;
     }
-    // API sends image_url parts, not base64 in text — cap per image like
-    // context-budget. Covers Design Mode crops and annotations too, which carry
-    // their pixels under different field names.
     if (attachmentImageDataUrl(attachment)) {
       total += ESTIMATE_IMAGE_URL_TOKENS;
       continue;
@@ -214,10 +211,6 @@ function resolveModelDisplayName(modelId: string): string {
   return formatModelLabel({ id: modelId }).primary;
 }
 
-/**
- * Effective context limit for usage UI: configured window when known, not catalog max.
- * Priority: live model cache → last-turn model_info fallback when cache is unavailable.
- */
 export function resolveContextLimit(modelId: string, chat: Chat): number | null {
   const cached = getModelRowForSelectOrCanonicalId(modelId);
   if (cached) {
@@ -240,6 +233,8 @@ export function computeContextUsagePercent(used: number, limit: number | null): 
   if (!Number.isFinite(raw)) return null;
   return Math.min(100, Math.max(0, Math.round(raw)));
 }
+
+// ── Budget ───────────────────────────────────────────────────────────────────
 
 /** Pure merge of estimate buckets + pending input into a budget snapshot. */
 export function assembleContextBudget(params: {
@@ -276,10 +271,6 @@ export function assembleContextBudget(params: {
   };
 }
 
-/**
- * Approximate context fill for the active (or given) chat and model.
- * Merges outbound prompt estimate with pending composer and attachments.
- */
 export async function getContextBudget(
   options?: GetContextBudgetOptions,
 ): Promise<ContextBudget> {

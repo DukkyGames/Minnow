@@ -1,29 +1,5 @@
-/**
- * P5-B — Names and OpenAI function schemas for the browser driver tools (MIN-720).
- *
- * Pure data, zero imports. Two very different modules need the *names*:
- *
- *  - `server/tools/browser-driver-tools.js` — the handlers, which pull in the
- *    driver, the allowlist, and the screenshot writer;
- *  - `server/runner/tool-set.js` — the id lists, which are re-exported from the
- *    isomorphic `server/runner/index.js` barrel that **Vite follows into the
- *    renderer bundle**.
- *
- * Keeping the names in one dependency-free file is what stops the second from
- * dragging the first into the client build (the same trap `server/runner/node.js`
- * documents), while still having a single source of truth for the surface.
- *
- * The renderer's own `browser_*` tools (`src/tools/browser-preview-tools.ts`)
- * are a different, Electron-bound surface. These are deliberately named
- * `browser_drive_*` so the two never collide: `browser_navigate` and friends
- * are listed in `RENDERER_ONLY_TOOL_IDS`, and a headless tool list that
- * contained one would be a bug, not a feature.
- */
-
-/** Page-read modes for `browser_drive_read_page`. `a11y` is the assertion surface. */
 export const PAGE_READ_MODES = /** @type {const} */ (['a11y', 'text', 'dom']);
 
-/** Console levels `browser_drive_read_console` will filter on. */
 export const CONSOLE_LEVELS = /** @type {const} */ ([
   'log',
   'info',
@@ -42,10 +18,6 @@ export const BROWSER_DRIVE_READ_NETWORK = 'browser_drive_read_network';
 export const BROWSER_DRIVE_SCREENSHOT = 'browser_drive_screenshot';
 export const BROWSER_DRIVE_RESIZE = 'browser_drive_resize';
 
-/**
- * Every browser driver tool id, in the order a Tester naturally uses them.
- * This is the whole surface — a name absent from here is not dispatchable.
- */
 export const BROWSER_DRIVER_TOOL_IDS = Object.freeze([
   BROWSER_DRIVE_NAVIGATE,
   BROWSER_DRIVE_READ_PAGE,
@@ -57,7 +29,6 @@ export const BROWSER_DRIVER_TOOL_IDS = Object.freeze([
   BROWSER_DRIVE_RESIZE,
 ]);
 
-/** Tools whose output is page-controlled text and must be fenced as untrusted. */
 export const BROWSER_DRIVER_UNTRUSTED_TOOL_IDS = Object.freeze([
   BROWSER_DRIVE_READ_PAGE,
   BROWSER_DRIVE_READ_CONSOLE,
@@ -72,18 +43,7 @@ const TIMEOUT_PROPERTY = {
 };
 
 /**
- * OpenAI-style function definitions.
- *
- * Unlike the rest of the headless set — which the effector stubs as
- * `{ name, description: name, additionalProperties: true }` because the real
- * schemas live in the renderer catalog — these are written out in full. There
- * is no renderer catalog entry for them, and a Final Tester that has to guess
- * the argument names of a browser it cannot see will guess wrong.
- *
- * @type {ReadonlyArray<{
- *   type: 'function',
- *   function: { name: string, description: string, parameters: Record<string, unknown> },
- * }>}
+ * @type {ReadonlyArray<{ type: 'function', function: { name: string, description: string, parameters: Record<string, unknown> }, }>}
  */
 export const BROWSER_DRIVER_TOOL_DEFINITIONS = Object.freeze([
   {

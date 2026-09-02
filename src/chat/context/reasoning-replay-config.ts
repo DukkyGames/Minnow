@@ -1,13 +1,3 @@
-/**
- * `features.replayPriorReasoning`: send prior-turn reasoning back on plain assistant rows.
- *
- * Tool-call rows already replay their thinking (Anthropic requires the signature to
- * pair with `tool_use`), but a finished prose turn drops it — so a model that reasoned
- * its way to an answer on turn 3 cannot see that reasoning on turn 4. Replaying costs
- * real tokens on every later turn and some providers reject the fields outright, so
- * this is opt-in and defaults to off.
- */
-
 const CONFIG_URL = '/api/config/file?key=config.json';
 
 export const DEFAULT_REPLAY_PRIOR_REASONING = false;

@@ -1,7 +1,3 @@
-/**
- * Settings → Appearance section composer.
- */
-
 import '../styles/settings-general.css';
 import '../styles/settings-appearance.css';
 

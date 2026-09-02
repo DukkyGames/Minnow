@@ -15,6 +15,8 @@
  * Phase 3 of `documentation/plans/issues-app-v2.md`.
  */
 
+// ── Patterns ─────────────────────────────────────────────────────────────────
+
 /** Matches `#KEY-12` — an issue mention that becomes a real `issueRefs` entry. */
 export const ISSUE_MENTION_RE = /#([A-Z][A-Z0-9]*-\d+)\b/g;
 
@@ -58,6 +60,8 @@ function unstash(text: string, vault: Vault): string {
   return text.replace(pattern, (_all, index) => vault.slots[Number(index)] ?? '');
 }
 
+// ── To HTML ──────────────────────────────────────────────────────────────────
+
 /**
  * Render one line of inline markdown to HTML.
  *
@@ -69,12 +73,10 @@ export function inlineToHtml(markdown: string): string {
   const vault: Vault = { slots: [] };
   let text = markdown ?? '';
 
-  // 1. Inline code — highest precedence, contents are never re-scanned.
   text = text.replace(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g, (_all, ticks: string, body: string) =>
     stash(vault, `<code>${escapeHtml(body)}</code>`),
   );
 
-  // 2. Links and images.
   text = text.replace(
     /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g,
     (_all, alt: string, src: string, title?: string) =>
@@ -96,8 +98,6 @@ export function inlineToHtml(markdown: string): string {
       ),
   );
 
-  // 3. Mention chips — data, not decoration. The DOM carries the target so a
-  //    click can open it and `collectInlineRefs` can write real links.
   text = text.replace(ISSUE_MENTION_RE, (all, id: string) =>
     stash(
       vault,
@@ -123,7 +123,6 @@ export function inlineToHtml(markdown: string): string {
     );
   });
 
-  // 4. Escape whatever is left, then emphasis on the escaped text.
   text = escapeHtml(text);
   text = text.replace(/~~([^~]+)~~/g, '<s>$1</s>');
   text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -152,6 +151,8 @@ function escapeMarkdownText(text: string): string {
   return text;
 }
 
+// ── From HTML ────────────────────────────────────────────────────────────────
+
 /**
  * Walk a DOM subtree back to inline markdown.
  *
@@ -176,8 +177,6 @@ function nodeToInline(node: Node): string {
   const el = node as Element;
   const tag = el.tagName.toLowerCase();
 
-  // Mentions serialize back to the literal text they were written from, so a
-  // chip is exactly as lossless as the `#KEY-1` a user typed.
   if (el.getAttribute('data-mention')) {
     return el.textContent ?? '';
   }
@@ -242,9 +241,6 @@ export function collectInlineRefs(markdown: string): InlineRefs {
   const issueIds: string[] = [];
   const codeRefs: InlineRefs['codeRefs'] = [];
 
-  // Fenced and inline code do not contain mentions, only text that looks like
-  // them; stripping first is what stops `# KEY-1` in a shell transcript from
-  // becoming a link.
   const scannable = text
     .replace(/```[\s\S]*?(?:```|$)/g, '')
     .replace(/~~~[\s\S]*?(?:~~~|$)/g, '')

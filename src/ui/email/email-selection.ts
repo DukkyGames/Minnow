@@ -1,11 +1,3 @@
-/**
- * Pure selection helpers for the Email inbox conversation list.
- *
- * Keeps checkbox / Shift-range / action-target / drag-group rules deterministic
- * and testable without mounting the stream.
- */
-
-/** Private MIME type for Minnow Email folder drops (not a public interchange format). */
 export const EMAIL_DRAG_MIME = 'application/x-minnow-email-threads';
 
 /** Payload carried while dragging conversations onto a rail folder. */
@@ -27,6 +19,8 @@ export interface EmailSelectionState {
   folderTotal?: number;
 }
 
+// ── Selection state ──────────────────────────────────────────────────────────
+
 /** Create an empty selection state. */
 export function createEmailSelection(): EmailSelectionState {
   return { selected: new Set(), anchorId: null };
@@ -40,10 +34,7 @@ export function clearEmailSelection(state: EmailSelectionState): void {
   state.folderTotal = undefined;
 }
 
-/**
- * Drop selected ids that are no longer on the current page (or result set).
- * Returns true when anything was removed.
- */
+/** Drop selected ids that are no longer on the current page (or result set). */
 export function pruneEmailSelection(
   state: EmailSelectionState,
   validIds: Iterable<string>,
@@ -62,10 +53,7 @@ export function pruneEmailSelection(
   return changed;
 }
 
-/**
- * Toggle one conversation. Additive mode (Ctrl/Cmd-click) keeps others;
- * otherwise the click replaces the selection with this row.
- */
+/** Toggle one conversation. */
 export function toggleEmailSelection(
   state: EmailSelectionState,
   threadId: string,
@@ -135,10 +123,9 @@ export function shouldOfferFolderSelect(
   return masterCheckboxState(state.selected, pageIds) === 'all';
 }
 
-/**
- * Shift-click: select the contiguous range from the anchor to the target
- * using page order. Falls back to a single toggle when there is no anchor.
- */
+// ── Range select ─────────────────────────────────────────────────────────────
+
+/** Shift-click: select the contiguous range from the anchor to the target using page order. */
 export function selectEmailShiftRange(
   state: EmailSelectionState,
   pageIds: string[],
@@ -179,11 +166,7 @@ export function masterCheckboxState(
   return 'some';
 }
 
-/**
- * Which conversations a context-menu / toolbar action should hit.
- * Right-click on an unselected row acts on that row alone; on a selected row
- * it keeps the whole group.
- */
+/** Which conversations a context-menu / toolbar action should hit. */
 export function resolveActionTargetIds(
   selected: Set<string>,
   rowId: string,
@@ -193,14 +176,12 @@ export function resolveActionTargetIds(
   return id ? [id] : [];
 }
 
-/**
- * Which conversations a drag should move.
- * Dragging an unselected row moves only that row; dragging a selected row
- * moves the full selection.
- */
+/** Which conversations a drag should move. */
 export function resolveDragThreadIds(selected: Set<string>, rowId: string): string[] {
   return resolveActionTargetIds(selected, rowId);
 }
+
+// ── Drag payload ─────────────────────────────────────────────────────────────
 
 /** Encode a private drag payload as JSON text. */
 export function encodeEmailDragPayload(payload: EmailDragPayload): string {
@@ -227,10 +208,7 @@ export function parseEmailDragPayload(raw: string): EmailDragPayload | null {
   }
 }
 
-/**
- * Can this folder accept the drop? Account must match and the destination
- * must differ from the source folder.
- */
+/** Can this folder accept the drop? */
 export function canAcceptEmailDrop(
   payload: EmailDragPayload,
   dest: { accountId: string; folderPath: string },
@@ -240,10 +218,6 @@ export function canAcceptEmailDrop(
   return payload.sourceFolder !== dest.folderPath;
 }
 
-/**
- * Derive the primary read action for a selection.
- * Mark read when any selected conversation is unread; otherwise mark unread.
- */
 export function selectionReadAction(
   threads: Array<{ threadId: string; unreadCount: number }>,
   selected: Set<string>,
@@ -254,10 +228,6 @@ export function selectionReadAction(
   return 'unread';
 }
 
-/**
- * Derive the primary star action for a selection.
- * Star when any selected conversation is unstarred; otherwise unstar.
- */
 export function selectionStarAction(
   threads: Array<{ threadId: string; flagged: boolean }>,
   selected: Set<string>,

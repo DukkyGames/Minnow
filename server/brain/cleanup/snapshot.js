@@ -170,6 +170,7 @@ function hashSnapshot(snapshot) {
 
 /**
  * Shrink snapshot JSON until it fits maxChars (preserve diagnostics + catalog metadata).
+ * Drops non-diagnostic bodies first, then schema/index, then excerpts.
  * @param {Record<string, unknown>} snapshot
  * @param {number} maxChars
  */
@@ -185,7 +186,6 @@ function trimSnapshotToBudget(snapshot, maxChars) {
     /** @type {Record<string, unknown>} */ (current.diagnostics ?? {}),
   );
 
-  // Drop full bodies for non-diagnostic pages first (keep excerpts).
   for (const [path, entry] of Object.entries(bodies)) {
     if (entry.mode !== 'full') continue;
     if (diagnosticPaths.has(path)) continue;
@@ -200,7 +200,6 @@ function trimSnapshotToBudget(snapshot, maxChars) {
     if (measureSnapshotChars(current) <= maxChars) return current;
   }
 
-  // Shorten schema/index payloads.
   const schemaBody = String(current.schemaBody ?? '');
   const indexBody = String(current.indexBody ?? '');
   let schemaSlice = Math.min(schemaBody.length, SCHEMA_EXCERPT_CHARS);
@@ -216,7 +215,6 @@ function trimSnapshotToBudget(snapshot, maxChars) {
     };
   }
 
-  // Shrink all excerpts uniformly.
   let excerptLimit = EXCERPT_CHARS;
   while (measureSnapshotChars(current) > maxChars && excerptLimit > 80) {
     excerptLimit = Math.max(80, Math.floor(excerptLimit * 0.75));
@@ -230,7 +228,6 @@ function trimSnapshotToBudget(snapshot, maxChars) {
     current = { ...current, bodies };
   }
 
-  // Last resort: drop bodies for pages not in diagnostics.
   if (measureSnapshotChars(current) > maxChars) {
     for (const path of Object.keys(bodies)) {
       if (diagnosticPaths.has(path)) continue;

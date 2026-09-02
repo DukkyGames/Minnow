@@ -1,8 +1,3 @@
-/**
- * Stream Quick Edit completions via /api/generations (Phase 4).
- */
-
-
 import { formatGenerationErrorMessage, type GenerationEndEvent } from '../../api/generations';
 import { modelCache } from '../../app-state';
 import { thinkingToCompletionBody } from '../../agents/thinking-to-body';

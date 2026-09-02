@@ -32,6 +32,8 @@ export interface SlotPaneTabs {
   surface: 'viewer' | 'preview' | 'none';
 }
 
+// ── Defaults ─────────────────────────────────────────────────────────────────
+
 export const EMPTY_SLOT_PANE_TABS: SlotPaneTabs = {
   viewerPaths: [],
   activeViewerPath: null,
@@ -169,6 +171,8 @@ let panelState: FilePanelState = { ...DEFAULT_FILE_PANEL_STATE };
 let panelWorkspaceKey = '';
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 const SAVE_DEBOUNCE_MS = 400;
+
+// ── Normalize ────────────────────────────────────────────────────────────────
 
 function clampSplitRatio(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_FILE_PANEL_STATE.splitRatio;
@@ -367,7 +371,6 @@ function normalizeRightPaneMode(
   if (splitEnabled) return 'split';
   if (raw === 'viewer' || raw === 'preview') return raw;
   if (raw === 'split') return null;
-  // Older configs saved viewerOpen without rightPaneMode/previewSource after browser open.
   if (previewSource && viewerOpen) return 'preview';
   if (viewerOpen) return 'viewer';
   return null;
@@ -611,6 +614,8 @@ async function fetchFilePanelFromMeta(workspaceKey?: string): Promise<FilePanelS
   return normalizeFilePanelBlock(resolveFilePanelRaw(meta, key));
 }
 
+// ── State ────────────────────────────────────────────────────────────────────
+
 /** Current file panel state (mutate via patch helpers). */
 export function getFilePanelState(): FilePanelState {
   return panelState;
@@ -725,6 +730,8 @@ export function patchFilePanelState(partial: Partial<FilePanelState>): FilePanel
   scheduleSaveFilePanelPrefs();
   return panelState;
 }
+
+// ── Persist ──────────────────────────────────────────────────────────────────
 
 function scheduleSaveFilePanelPrefs(): void {
   if (saveTimer) clearTimeout(saveTimer);

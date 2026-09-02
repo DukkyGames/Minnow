@@ -101,10 +101,9 @@ async function reserveName(issueId, name) {
   throw new Error('Too many attachments with that name');
 }
 
+// Accepts a data: URL or bare base64 (paste vs file input).
 function decodeBase64(raw) {
   if (typeof raw !== 'string' || !raw) throw new Error('data is required');
-  // Accept a full data: URL as well as bare base64 — the paste path produces
-  // the former and a file input the latter.
   const comma = raw.startsWith('data:') ? raw.indexOf(',') : -1;
   const payload = comma >= 0 ? raw.slice(comma + 1) : raw;
   const buffer = Buffer.from(payload, 'base64');
@@ -168,8 +167,6 @@ async function handleGet(req, res, key) {
     'Content-Type',
     MIME_BY_EXT[path.extname(absolute).toLowerCase()] ?? 'application/octet-stream',
   );
-  // Attachment bytes never change under a key — reserveName never overwrites —
-  // so this is safe to cache hard, and image previews stop refetching.
   res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
   res.end(bytes);
 }

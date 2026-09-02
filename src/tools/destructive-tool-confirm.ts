@@ -1,8 +1,3 @@
-/**
- * Server-side destructive tools require confirmed: true after user approval.
- * When the user approves via the Ask permission strip, treat that as confirmation.
- */
-
 const MANAGE_BRAIN_DESTRUCTIVE = new Set([
   'delete_page',
   'clear_wiki',

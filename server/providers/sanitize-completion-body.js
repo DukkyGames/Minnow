@@ -1,13 +1,7 @@
-/**
- * Strip provider-incompatible completion fields before upstream POST.
- * Server mirror of src/providers/sanitize-completion-body.ts.
- */
-
 import { LLAMA_CPP_LOCAL_ID, MLX_LM_LOCAL_ID } from '../../src/models/runtime-ids.mjs';
 import { providerSupportsChatTemplateKwargs } from './provider-host.js';
 
 /**
- * True when OpenAI o-series / gpt-5 models expect max_completion_tokens.
  * @param {string} modelId
  */
 function modelUsesMaxCompletionTokens(modelId) {
@@ -18,7 +12,6 @@ function modelUsesMaxCompletionTokens(modelId) {
 }
 
 /**
- * True when the body explicitly disables thinking (must survive sanitization).
  * @param {unknown} thinking
  */
 function isThinkingExplicitlyDisabled(thinking) {
@@ -27,7 +20,6 @@ function isThinkingExplicitlyDisabled(thinking) {
 }
 
 /**
- * GLM-5.3 / GLM-5.3-Flash ids. Mirror of `isGlm53ModelId` in src/lib/reasoning-effort.ts.
  * @param {string} modelId
  */
 function isGlm53ModelId(modelId) {
@@ -36,7 +28,6 @@ function isGlm53ModelId(modelId) {
 }
 
 /**
- * GLM-5.3 last-line defense: thinking is always on; effort is low | high | max.
  * @param {Record<string, unknown>} next
  * @param {string} modelId
  */
@@ -69,7 +60,6 @@ function rewriteGlm53ThinkingBody(next, modelId) {
 }
 
 /**
- * GPT models on OpenCode Zen / OpenAI Responses API reject custom temperature.
  * @param {string} modelId
  */
 function modelRejectsTemperature(modelId) {
@@ -79,7 +69,6 @@ function modelRejectsTemperature(modelId) {
   return id.includes('gpt-5');
 }
 
-/** Drop Minnow-only message fields that providers reject as unknown. */
 function stripInternalApiMessageFields(body) {
   if (!Array.isArray(body.messages)) return body;
   return {
@@ -94,9 +83,6 @@ function stripInternalApiMessageFields(body) {
 }
 
 /**
- * llama.cpp / mlx-lm accept min_p / top_k / repetition_penalty / enable_thinking.
- * Prefer the persisted flag; fall back to the stable local ids so in-memory
- * tests and generations that only pass `{ id }` still keep those fields.
  * @param {{ id?: string, supportsExtendedSamplers?: boolean }} provider
  */
 function providerKeepsExtendedSamplers(provider) {
@@ -106,7 +92,6 @@ function providerKeepsExtendedSamplers(provider) {
 }
 
 /**
- * Normalize a chat completion body for the target provider.
  * @param {Record<string, unknown>} body
  * @param {{ apiKind?: string, id?: string, supportsExtendedSamplers?: boolean, baseUrl?: string }} provider
  * @param {{ reasoning?: boolean, reasoningAllowedOptions?: string[] } | null | undefined} [modelCapabilities]
@@ -120,8 +105,6 @@ export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilit
 
   const next = stripInternalApiMessageFields({ ...body });
   const templateKwargsReachModel = providerSupportsChatTemplateKwargs(provider);
-  // Hosted OpenAI rejects LM Studio / llama.cpp sampler fields. Local llama.cpp
-  // and mlx-lm keep them so min_p actually reaches the serve.
   if (!providerKeepsExtendedSamplers(provider)) {
     delete next.top_k;
     delete next.min_p;
@@ -135,7 +118,6 @@ export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilit
     modelCapabilities?.reasoning === true ||
     (modelCapabilities?.reasoningAllowedOptions?.length ?? 0) > 0;
   if (!reasoningSupported) {
-    // Keep explicit thinking disable — without it some models stream only to reasoning_content.
     if (!isThinkingExplicitlyDisabled(next.thinking)) {
       delete next.thinking;
     }
@@ -143,9 +125,6 @@ export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilit
     delete next.reasoning_effort;
   }
 
-  // llama-server disables reasoning on `reasoning_effort: "none"`, which covers
-  // templates that read the effort but not `enable_thinking`. Local-only: hosted
-  // OpenAI 400s on `none` (its enum is minimal/low/medium/high).
   if (
     reasoningSupported &&
     templateKwargsReachModel &&
@@ -185,8 +164,6 @@ export function sanitizeCompletionBodyForProvider(body, provider, modelCapabilit
     delete next.thinking_budget_tokens;
   }
 
-  // Jinja kwargs reach local runtimes and loopback OpenAI-compatible servers
-  // (MTPLX, etc.); hosted cloud APIs reject the unknown field with a 400.
   if (!templateKwargsReachModel) {
     delete next.chat_template_kwargs;
     delete next.preserve_thinking;

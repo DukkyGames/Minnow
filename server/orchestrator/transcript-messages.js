@@ -1,10 +1,5 @@
 /**
- * Map a lossy attempt transcript (TurnEvent JSONL) onto the API-message shape
- * `renderTranscriptView` already understands.
- *
- * Boards keep their own log rows. The drawer paints assistant / tool_call /
- * tool_result messages. One mapper so those two views cannot invent a second
- * event vocabulary. Pure: no I/O, no journal.
+ * Map a lossy attempt transcript (TurnEvent JSONL) onto the API-message shape `renderTranscriptView` already understands.
  */
 
 /**
@@ -39,9 +34,6 @@ function lastAssistant(messages) {
 
 /**
  * True when coalesced `thinking` may rewrite this assistant row's `reasoning`.
- * Only empty, tool-free stubs are open carriers — once the row has tool_calls
- * or visible prose, later thinking is a new turn and must append after tools.
- *
  * @param {Record<string, unknown>} row
  * @returns {boolean}
  */
@@ -107,12 +99,6 @@ function lastOpenToolCallId(messages) {
 
 /**
  * Apply one recorded TurnEvent onto an API-message list.
- *
- * High-frequency types (`delta`, `phase`, …) are ignored here — they never
- * land on disk, and live overlays handle them separately. Coalesced
- * `thinking` and `attempt_end.summary` do land on disk and must hydrate
- * into Activity; otherwise a reasoning-only or delta-only turn paints empty.
- *
  * @param {unknown[]} messages
  * @param {unknown} event
  * @returns {unknown[]}
@@ -165,9 +151,6 @@ export function applyTurnEventToMessages(messages, event) {
     return [...list, { role: 'assistant', content: text }];
   }
 
-  // Coalesced on disk: rewrite the open reasoning stub, or start a new row.
-  // Never attach post-tool thinking onto a tool_calls assistant — that painted
-  // later Thoughts above the tools that already ran.
   if (type === 'thinking') {
     const text = typeof rec.text === 'string' ? rec.text.trim() : '';
     if (!text) return list;
@@ -180,7 +163,6 @@ export function applyTurnEventToMessages(messages, event) {
     return [...list, { role: 'assistant', content: '', reasoning: text }];
   }
 
-  // Effector writes this after the attempt; use it only when no later prose exists.
   if (type === 'attempt_end') {
     const summary = typeof rec.summary === 'string' ? rec.summary.trim() : '';
     if (!summary) return list;

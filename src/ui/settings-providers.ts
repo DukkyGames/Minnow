@@ -1,7 +1,3 @@
-/**
- * Settings → Providers: list, add, edit, and remove LLM backends.
- */
-
 import '../styles/settings-general.css';
 import '../styles/settings-providers.css';
 
@@ -56,6 +52,8 @@ const API_KIND_LABELS: Record<ApiKind, string> = {
   'anthropic-v1': 'Anthropic Messages',
 };
 
+// ── Status ───────────────────────────────────────────────────────────────────
+
 /** Status pill matching LSP/server instrumentation (semantic green only when positive). */
 function createProviderStatusPill(
   label: string,
@@ -100,6 +98,8 @@ async function resolveProbePreferredModelIdAsync(
   return undefined;
 }
 
+// ── Parse ────────────────────────────────────────────────────────────────────
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -140,6 +140,8 @@ function parseAuthStyle(select: HTMLSelectElement | null): AuthStyle {
 
 const NO_LOADED_MODEL_PROBE_MSG =
   'No model is loaded for this provider. Load a model in LM Studio (or your backend), then refresh models from the chat bar before probing structured output.';
+
+// ── Paths ────────────────────────────────────────────────────────────────────
 
 /** Show or hide the provider edit form error line (probe / save failures). */
 function setProviderEditFormError(providerId: string, message: string | null): void {
@@ -309,6 +311,8 @@ function applyProviderPreset(form: ParentNode, preset: ProviderPreset): void {
     }
   }
 }
+
+// ── Add flow ─────────────────────────────────────────────────────────────────
 
 /** Show preset picker and hide the add form. */
 function showProvidersAddPicker(): void {
@@ -542,6 +546,8 @@ let providersOfflineEl: HTMLElement | null = null;
 let providersAddGroupEl: HTMLElement | null = null;
 let providersAddFormBound = false;
 let providersListActionsBound = false;
+
+// ── Fields ───────────────────────────────────────────────────────────────────
 
 /** Build the settings-general shell once (matches Usage / Thinking layout). */
 function ensureProvidersShell(): HTMLElement {
@@ -915,6 +921,8 @@ function appendApiFields(
   return kindSel;
 }
 
+// ── Edit ─────────────────────────────────────────────────────────────────────
+
 /** Persist optional API key after profile create/update. */
 async function saveApiKeyIfProvided(
   providerId: string,
@@ -1027,8 +1035,6 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
 
   appendPricingFields(form, provider.pricing);
 
-  // Only LM Studio needs a *loaded* model: every other backend serves whatever its
-  // catalog lists, so the server resolves the probe target from the live catalog.
   const needsLoadedModel = provider.apiKind === 'lm-studio-v0';
   const loadedModelId = findLoadedModelIdForProvider(provider.id);
   const probesBlocked = needsLoadedModel && !loadedModelId;
@@ -1080,6 +1086,8 @@ function buildProviderEditForm(provider: ProviderPublic): HTMLFormElement {
 
   return form;
 }
+
+// ── List ─────────────────────────────────────────────────────────────────────
 
 function formatStructuredOutputBadge(
   caps: ProviderCapabilities | null,
@@ -1442,10 +1450,6 @@ function bindProvidersListActions(listEl: HTMLElement): void {
             selectedModelId,
             provider?.apiKind,
           );
-          // LM Studio is the only backend where an empty cache really means
-          // "nothing to probe". Elsewhere the picker may simply not list this
-          // provider (My Models hides its llama.cpp / mlx rows), so hand the
-          // server no model id and let it resolve one from the live catalog.
           if (!modelId && provider?.apiKind === 'lm-studio-v0') {
             setProviderEditFormError(structuredProbeId, NO_LOADED_MODEL_PROBE_MSG);
             setStatus('err', NO_LOADED_MODEL_PROBE_MSG);
@@ -1499,6 +1503,8 @@ function bindProvidersListActions(listEl: HTMLElement): void {
   });
 }
 
+// ── Render ───────────────────────────────────────────────────────────────────
+
 /** Refresh Settings → Providers list and offline/add panel visibility. */
 export async function renderProvidersSettingsSection(): Promise<void> {
   let listEl: HTMLElement;
@@ -1530,7 +1536,6 @@ export async function renderProvidersSettingsSection(): Promise<void> {
   try {
     await fetchModels();
   } catch {
-    /* model cache may be partial; probe notices fall back to empty cache */
   }
 
   const { providers } = await listProviders();

@@ -1,7 +1,3 @@
-/**
- * Tracks chats running the post-turn /goal evaluator (headless, between turns).
- */
-
 const goalEvaluatingChatIds = new Set<string>();
 
 /** True while the goal evaluator agent loop is running for this chat. */

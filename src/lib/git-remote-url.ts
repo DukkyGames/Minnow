@@ -13,7 +13,6 @@ export function parseGitRemoteUrl(remoteUrl: string): ParsedGitRemote | null {
   const trimmed = remoteUrl.trim();
   if (!trimmed) return null;
 
-  // git@github.com:owner/repo.git
   const sshMatch = trimmed.match(/^[^@]+@([^:]+):([^/]+)\/(.+?)(?:\.git)?$/);
   if (sshMatch) {
     return {
@@ -23,7 +22,6 @@ export function parseGitRemoteUrl(remoteUrl: string): ParsedGitRemote | null {
     };
   }
 
-  // https://github.com/owner/repo.git or file:// paths with host
   try {
     const normalized = trimmed.replace(/\.git$/, '');
     const url = new URL(normalized.includes('://') ? normalized : `https://${normalized}`);

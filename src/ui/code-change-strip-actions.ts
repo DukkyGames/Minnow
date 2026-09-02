@@ -1,8 +1,3 @@
-/**
- * Commit and Create PR actions beside the code-change strip.
- * Commit stages chat-touched paths then runs /git-commit; Create PR runs /create-pr.
- */
-
 import { isChatStreaming } from '../chat/streaming-state';
 import { formatHistoryWithSkillTag } from '../skills/parse-slash';
 import { gitLog, gitStage } from '../state/git-api';
@@ -281,9 +276,6 @@ async function onCommitClick(): Promise<void> {
     setButtonsBusy(false);
     return;
   }
-  // The ledger records every path the chat ever touched, including files the agent created
-  // and then deleted again. Those are dropped server-side; when they were *all* of them
-  // there is nothing to commit and running the skill would just confuse it (MIN-651).
   if (stageRes.stagedPaths && stageRes.stagedPaths.length === 0) {
     setStatus('err', 'No files from this chat still exist to commit');
     setButtonsBusy(false);

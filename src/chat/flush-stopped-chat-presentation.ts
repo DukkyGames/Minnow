@@ -1,12 +1,3 @@
-/**
- * Clear client-side streaming/activity state for chats that were just stopped.
- *
- * A chat can hold a persisted `currentGenerationId` with no local turn behind it
- * (boot resume declined, transport error, swallowed abort). The agent activity
- * panel renders those as `main:<chatId>` rows, so without an explicit clear the
- * row — and its elapsed timer — keeps running forever even after Stop.
- */
-
 import { setChatAbort, setStreaming } from '../app-state';
 import { clearMainTurnActivity } from './main-turn-activity';
 import { clearChatResumeInterrupted } from './resume-interrupted';
@@ -85,7 +76,5 @@ async function runStoppedChatRepaint(chatIds: readonly string[]): Promise<void> 
     dots.syncChatItemDotsInDom();
     sidebar.renderSidebar();
     composer.syncComposerFromStreamingState();
-  } catch {
-    /* state is already clear; a missed repaint self-heals on the next render */
-  }
+  } catch {}
 }

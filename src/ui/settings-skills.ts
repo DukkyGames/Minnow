@@ -25,6 +25,8 @@ import { createSettingsSelectRow } from './settings-controls';
 import { createSettingsSwitch, createSettingsToggleRow } from './settings-switch';
 import { setStatus } from './status';
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -46,6 +48,8 @@ function createSwitch(
 ): HTMLLabelElement {
   return createSettingsSwitch({ checked, onChange }).root;
 }
+
+// ── Editor ───────────────────────────────────────────────────────────────────
 
 function mountSkillEditor(
   body: HTMLElement,
@@ -215,6 +219,8 @@ async function promptNewSkillId(): Promise<string | null> {
   }
   return id;
 }
+
+// ── Render ───────────────────────────────────────────────────────────────────
 
 /** Render the skills catalog into a settings group body. */
 export async function renderSkillsSettingsSection(mount: HTMLElement): Promise<void> {

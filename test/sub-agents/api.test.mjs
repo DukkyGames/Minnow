@@ -194,6 +194,8 @@ function readSse(pathname, enough, headers = {}) {
   });
 }
 
+// ── POST /api/agents spawn ───────────────────────────────────────────────────
+
 describe('POST /api/agents spawn 400 without model', () => {
   it('refuses spawn at the command boundary when preflight has no model', async () => {
     setAgentsEffectorFactory(() => noModelEffector());
@@ -208,6 +210,8 @@ describe('POST /api/agents spawn 400 without model', () => {
   });
 });
 
+// ── POST /api/agents spawn ok ────────────────────────────────────────────────
+
 describe('POST /api/agents spawn ok', () => {
   it('spawns a run and returns derived state', async () => {
     const body = await spawnOk({ parentTurnId: 'turn-1' });
@@ -219,6 +223,8 @@ describe('POST /api/agents spawn ok', () => {
     assert.equal(body.run?.parentTurnId, 'turn-1');
   });
 });
+
+// ── GET /api/agents list ─────────────────────────────────────────────────────
 
 describe('GET /api/agents list', () => {
   it('requires parentChatId', async () => {
@@ -236,6 +242,8 @@ describe('GET /api/agents list', () => {
   });
 });
 
+// ── POST /api/agents/:runId/cancel ───────────────────────────────────────────
+
 describe('POST /api/agents/:runId/cancel', () => {
   it('cancels an in-flight run', async () => {
     const spawned = await spawnOk();
@@ -247,6 +255,8 @@ describe('POST /api/agents/:runId/cancel', () => {
     assert.equal(got.body.status, 'cancelled');
   });
 });
+
+// ── GET /api/agents/:runId/events ────────────────────────────────────────────
 
 describe('GET /api/agents/:runId/events SSE live vs journal', () => {
   it('journals carry seq; live frames do not', async () => {
@@ -323,6 +333,8 @@ describe('GET /api/agents/:runId/events SSE live vs journal', () => {
   });
 });
 
+// ── GET /api/agents/:runId/events ────────────────────────────────────────────
+
 describe('GET /api/agents/:runId/events SSE seq resume', () => {
   it('resumes from Last-Event-ID with exactly the missed tail', async () => {
     const spawned = await spawnOk();
@@ -345,6 +357,8 @@ describe('GET /api/agents/:runId/events SSE seq resume', () => {
     assert.deepEqual(seqs.slice(0, expected.length), expected.slice(0, seqs.length));
   });
 });
+
+// ── /api/agents routes ───────────────────────────────────────────────────────
 
 describe('/api/agents routes', () => {
   it('only spawn and cancel mutate', () => {
@@ -369,6 +383,8 @@ describe('/api/agents routes', () => {
     assert.equal(matchRoute('PUT', '/api/agents/r1'), null);
   });
 });
+
+// ── GET /api/agents/:runId/transcript ────────────────────────────────────────
 
 describe('GET /api/agents/:runId/transcript', () => {
   it('returns recorded tool_call lines for the latest attempt', async () => {

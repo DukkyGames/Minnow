@@ -29,6 +29,8 @@ import { runStandardPackForTarget } from './standard/runner.ts';
 import type { SuiteId } from './types.ts';
 import { saveCampaign } from './campaign-persistence.ts';
 
+// ── Suites ───────────────────────────────────────────────────────────────────
+
 const QUICK_SUITES: SuiteId[] = ['capability', 'speed'];
 const FULL_SUITES: SuiteId[] = [
   'capability',
@@ -101,6 +103,8 @@ function resolveCapabilityMatrixOptions(
   return { ...base, ...extra };
 }
 
+// ── Per target ───────────────────────────────────────────────────────────────
+
 async function runIntegrationForTarget(
   target: BenchmarkTarget,
   suiteIds: SuiteId[],
@@ -134,8 +138,6 @@ async function runIntegrationForTarget(
       }
     },
   });
-  // Stamp the roster identity: a served My Models row runs under a rewritten
-  // provider/model, so the run alone cannot be mapped back to its grid column.
   return { target, runs: [{ ...run, targetKey }], cells: [] };
 }
 
@@ -269,12 +271,12 @@ async function runTargetWithOptionalLifecycle(
       try {
         await loadOutcome.unload();
         options.onProgress?.({ type: 'target-unload', targetKey });
-      } catch {
-        /* unload failure must not fail the row */
-      }
+      } catch {}
     }
   }
 }
+
+// ── Campaign ─────────────────────────────────────────────────────────────────
 
 /** Run a multi-model benchmark campaign. */
 export async function runBenchmarkCampaign(
@@ -303,9 +305,7 @@ export async function runBenchmarkCampaign(
   try {
     const config = await fetchEvalConfig();
     configConcurrency = config.maxConcurrency;
-  } catch {
-    /* offline */
-  }
+  } catch {}
   const concurrency = Math.max(
     1,
     Math.min(8, options.maxConcurrency ?? configConcurrency),

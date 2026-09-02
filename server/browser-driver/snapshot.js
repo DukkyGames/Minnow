@@ -1,15 +1,3 @@
-/**
- * P5-A — Accessibility-tree snapshot with stable uids (MIN-719).
- *
- * Restored from `server/cdp/snapshot.js` (deleted in 86cc513f), originally
- * ported from opencode-browser (MIT). One change: the uid counter is per-call
- * instead of module-level, so two concurrent sessions cannot interleave uids.
- *
- * This is the driver's primary read path. It is deliberately not a screenshot:
- * the issue's known hazard is that screenshot round-trips hang, so nothing that
- * asserts depends on one.
- */
-
 /** @typedef {import('./cdp-client.js').CdpClient} CdpClient */
 
 /**
@@ -20,7 +8,6 @@
  * @property {string} [value]
  * @property {number} backendNodeId
  * @property {SnapshotNode[]} [children]
- *
  * @typedef {object} Snapshot
  * @property {SnapshotNode[]} nodes
  * @property {Map<number, SnapshotNode>} byUid
@@ -28,7 +15,7 @@
  */
 
 /**
- * @param {unknown} field CDP AXValue
+ * @param {unknown} field
  * @returns {string}
  */
 function axValue(field) {
@@ -40,14 +27,6 @@ function axValue(field) {
 }
 
 /**
- * Walk one AX node into zero or more snapshot nodes.
- *
- * Returns an **array**, not a single node, because a node can be dropped while
- * its children survive. The version of this that shipped before returned `null`
- * for any ignored, unnamed node — and Chromium's `<html>` wrapper is exactly
- * that, so the whole document below it was discarded and every snapshot came
- * back as a lone `RootWebArea`. Ignored nodes are hoisted, never pruned.
- *
  * @param {Record<string, unknown>} axNode
  * @param {Record<string, Record<string, unknown>>} allNodes
  * @param {Map<number, SnapshotNode>} byUid
@@ -67,7 +46,6 @@ function walkAXTree(axNode, allNodes, byUid, counter, seen) {
   const backendNodeId = Number(axNode.backendDOMNodeId ?? 0);
   const ignored = Boolean(axNode.ignored);
 
-  // Reserve the uid before descending so parents number before their children.
   const uid = counter.next++;
 
   /** @type {SnapshotNode[]} */
@@ -79,11 +57,8 @@ function walkAXTree(axNode, allNodes, byUid, counter, seen) {
     children.push(...walkAXTree(childAx, allNodes, byUid, counter, seen));
   }
 
-  // Structural nodes the accessibility layer ignores carry no meaning of their
-  // own; their children take their place.
   if (ignored && !name) return children;
 
-  // Collapse anonymous single-child wrappers so the rendered tree stays readable.
   if (!name && !value && (role === 'generic' || role === 'none' || role === '') && children.length <= 1) {
     return children;
   }
@@ -102,7 +77,6 @@ function walkAXTree(axNode, allNodes, byUid, counter, seen) {
 }
 
 /**
- * Indented `[uid] role "name"` rendering.
  * @param {SnapshotNode[]} nodes
  * @param {number} [indent]
  * @returns {string}
@@ -122,8 +96,6 @@ export function renderTree(nodes, indent = 0) {
 }
 
 /**
- * Build a snapshot from a raw `Accessibility.getFullAXTree` result. Pure, so the
- * tree shaping is testable without a browser.
  * @param {Array<Record<string, unknown>> | undefined} axNodes
  * @returns {Snapshot}
  */

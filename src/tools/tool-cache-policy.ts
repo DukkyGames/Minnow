@@ -1,8 +1,3 @@
-/**
- * Static per-tool cache policy (no config / UI imports).
- * Shared by result-cache and parallel-tool-policy.
- */
-
 export type ToolCachePolicy = {
   cacheable: boolean;
   ttlMs: number;

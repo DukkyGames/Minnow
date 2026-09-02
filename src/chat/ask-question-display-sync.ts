@@ -1,11 +1,3 @@
-/**
- * Cycle-safe slot for ask_question modal park/unpark.
- *
- * `question-cards-modal` and `ask-question-display` import each other through
- * the UI graph. The registry lives here so a load-time `queueMicrotask` cannot
- * hit a TDZ on `let displayContextSync`.
- */
-
 export type AskQuestionDisplayContextSync = () => void;
 
 const state: { sync: AskQuestionDisplayContextSync | null } = { sync: null };

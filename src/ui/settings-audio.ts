@@ -1,7 +1,3 @@
-/**
- * Settings → Audio: input/output devices and capture constraints.
- */
-
 import { detectConfigServer } from '../config/storage-mode';
 import { loadVoiceMeta, saveVoiceMeta } from '../config/voice-meta';
 import { appendSettingsGroup } from './settings-layout';
@@ -21,7 +17,6 @@ async function primeAudioDeviceLabels(): Promise<void> {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     for (const track of stream.getTracks()) track.stop();
   } catch {
-    // Permission denied — enumerateDevices may still return generic labels.
   }
 }
 

@@ -1,14 +1,3 @@
-/**
- * Send-time remap for the synthetic My Models picker id.
- *
- * `minnow-library` is not a registry provider — there is no
- * `providers/minnow-library/profile.json`. Chat remaps in the renderer
- * (`resolveLibrarySendBinding`). The V2 runner never goes through that path,
- * so boards would call `getProvider('minnow-library')` and ENOENT. This module
- * is the server twin: remap (and auto-load) *before* any completions call,
- * without writing remapped ids back onto `board.model`.
- */
-
 import path from 'node:path';
 
 import { listCachedModels } from './cached.js';
@@ -23,7 +12,6 @@ import { MODEL_LOAD_TIMEOUT_MS } from './timeouts.js';
 import { MINNOW_LIBRARY_PROVIDER_ID } from '../providers/store.js';
 import { LLAMA_CPP_LOCAL_ID, MLX_LM_LOCAL_ID } from '../../src/models/runtime-ids.mjs';
 
-/** Same wording as the renderer request-binding path (`library-request-binding.ts`). */
 export const LIBRARY_MODEL_NOT_LOADED_MESSAGE =
   'Model is not loaded — load it in Models, or send a chat message to start it.';
 
@@ -46,8 +34,6 @@ let testDeps = null;
  */
 
 /**
- * Test seam so unit / effector tests can fake a live serve without spawning
- * llama-server. Production callers omit this.
  * @param {LibraryBindingDeps | null} [deps]
  */
 export function setLibraryBindingDepsForTests(deps = null) {
@@ -55,8 +41,6 @@ export function setLibraryBindingDepsForTests(deps = null) {
 }
 
 /**
- * True when the pair is the picker id plus a library row (`gguf:` / `mlx:`).
- * Cloud and direct llama-cpp-local / mlx-lm-local ids pass through unchanged.
  * @param {string | undefined} providerId
  * @param {string | undefined} modelId
  */
@@ -68,17 +52,6 @@ export function isLibraryModelBinding(providerId, modelId) {
 }
 
 /**
- * Remap a V2 attempt binding onto the completions provider.
- *
- * Pass-through when the pair is not `minnow-library` + `gguf:`/`mlx:`.
- * When it is, look up a running serve and return `{ llama-cpp-local, modelLabel }`
- * or `{ mlx-lm-local, snapshotPath }` — the same contract as
- * `resolveLibrarySendBinding`. Missing serve auto-loads via `startServe`
- * (libraryId so launch prefs apply). Load failure throws rather than returning
- * the synthetic id.
- *
- * Does not mutate the input; callers must not persist the result onto `board.model`.
- *
  * @param {{ providerId?: string, id?: string } | null | undefined} binding
  * @param {LibraryBindingDeps} [deps]
  * @returns {Promise<{ providerId: string, id: string }>}
@@ -147,10 +120,6 @@ async function findOrStartServe(libraryId, deps) {
 }
 
 /**
- * Running/starting serve for this picker id. Llama.cpp matches `--alias` /
- * filename via `serveMatchesModelId`; MLX also matches snapshot path because
- * `mlx_lm.server` keys requests by directory, not `mlx:repo`.
- *
  * @param {string} libraryId
  * @param {ReturnType<typeof mergeDeps>} deps
  */
@@ -160,9 +129,6 @@ async function findMatchingLiveServe(libraryId, deps) {
   const direct = pickPreferredServe(llama, mlx);
   if (direct) return direct;
 
-  // Older MLX rows omit libraryId (startServe only recently stamps it). Fall
-  // back to the cached snapshot directory vs serve.modelPath, which is how
-  // chat's `activeServeFor` matches.
   const target = await resolveCachedTarget(libraryId, deps).catch(() => null);
   if (!target?.modelPath) return null;
   const serves = await deps.listServes();
@@ -187,7 +153,6 @@ function pickPreferredServe(a, b) {
 }
 
 /**
- * Completions ids once a serve is up — same contract as `resolveLibrarySendBinding`.
  * @param {object} serve
  * @returns {{ providerId: string, id: string }}
  */
@@ -209,9 +174,6 @@ function remapFromServe(serve) {
 }
 
 /**
- * Flatten a `gguf:repo:rel` / `mlx:repo` picker id onto a cached scan row.
- * Mirrors `buildLibrary` ids without importing the TS library module.
- *
  * @param {string} libraryId
  * @param {ReturnType<typeof mergeDeps>} deps
  * @returns {Promise<{ runtime: string, modelPath: string, modelLabel: string, libraryId: string, quant?: string, weightsGb?: number } | null>}
@@ -276,9 +238,6 @@ function parseLibraryId(libraryId) {
 }
 
 /**
- * Absolute GGUF path from a cached row. HF hub cache uses
- * `<cache>/models--org--repo/snapshots/<rel>`; downloads and extra folders
- * store `row.path` as the directory that already contains `rel_path`.
  * @param {{ path?: string, repo_id?: string, is_local_dir?: boolean, status?: string }} row
  * @param {string} relPath
  */

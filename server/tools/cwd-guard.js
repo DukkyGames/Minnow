@@ -22,11 +22,9 @@
 export function guardCdOutsideWorktree(command, worktreeRoot) {
   if (!worktreeRoot) return { command, redirected: false };
 
-  // Match a leading absolute cd — Windows (C:\, C:/) or Unix (/).
   const leadingAbsCd = /^\s*cd\s+["']?([A-Za-z]:[\\/]|\/)/;
   if (!leadingAbsCd.test(command)) return { command, redirected: false };
 
-  // Extract the target path (stops at whitespace, quote, or shell operator).
   const targetMatch = command.match(/^\s*cd\s+["']?([^\s"';&|]+)/);
   const target = targetMatch?.[1] ?? '';
 
@@ -36,7 +34,6 @@ export function guardCdOutsideWorktree(command, worktreeRoot) {
     return { command, redirected: false };
   }
 
-  // Strip the offending leading `cd <target>` (plus optional surrounding quotes).
   const remainder = command
     .replace(/^\s*cd\s+["']?[^\s"';&|]+["']?\s*/, '')
     .trim();

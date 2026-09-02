@@ -31,6 +31,8 @@ let primaryBtn: HTMLButtonElement | null = null;
 let backBtn: HTMLButtonElement | null = null;
 let skipBtn: HTMLButtonElement | null = null;
 
+// ── Mount ────────────────────────────────────────────────────────────────────
+
 /** Whether first-run wizard should open on boot (does not claim overlay). */
 export async function shouldShowOnboardingOnBoot(): Promise<boolean> {
   let state = await loadOnboardingState();
@@ -173,6 +175,8 @@ function onKeyDown(ev: KeyboardEvent): void {
   }
 }
 
+// ── Steps ────────────────────────────────────────────────────────────────────
+
 function refreshApplicableSteps(): void {
   if (!ctx) return;
   applicableSteps = getApplicableSteps(ctx);
@@ -253,7 +257,6 @@ async function goNext(): Promise<void> {
     ctx.searxngSkipped = Boolean(ctx.state.steps.extras?.data?.searxngSkipped);
   }
 
-  // Apps selection can drop email/calendar; provider/extras unlock path-dependent steps.
   if (step.id === 'apps' || step.id === 'provider-choice' || step.id === 'extras') {
     refreshApplicableSteps();
   }
@@ -306,6 +309,8 @@ async function skipCurrent(): Promise<void> {
     await unmountOnboarding(true);
   }
 }
+
+// ── Settings ─────────────────────────────────────────────────────────────────
 
 /** Re-run entry from Settings. */
 export async function rerunOnboardingFromSettings(): Promise<void> {

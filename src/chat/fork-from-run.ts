@@ -1,7 +1,3 @@
-/**
- * Fork / replay from a user history index with optional model overrides.
- */
-
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { clearAttachments } from '../attachments/store';
 import { parseSlashCommand } from '../skills/parse-slash';
@@ -61,11 +57,6 @@ export async function forkFromUserIndex(
     return;
   }
 
-  /*
-   * Every index below is absolute into the full transcript. On a lazy boot this
-   * chat may still hold an empty placeholder, which made the retry affordance on a
-   * failed turn report "Invalid message" — precisely when it is needed.
-   */
   try {
     await ensureChatHistoryLoaded(chatId);
   } catch {

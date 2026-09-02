@@ -22,6 +22,7 @@ import { recomputeAllNextRuns } from '../scheduler/store.js';
 
 /**
  * Ensure ~/.minnow layout, load workspace and API registries.
+ * Sweep old generation checkpoints so they do not outlive a returning client.
  * @returns {Promise<{ workspacePath: string, homePath: string }>}
  */
 export async function bootstrapMinnowRuntime() {
@@ -41,7 +42,6 @@ export async function bootstrapMinnowRuntime() {
   await initServersApi();
   await initPluginsApi();
   await recomputeAllNextRuns();
-  // Replayable generations are only useful for as long as a client might come back.
   sweepCheckpoints();
   const homePath = getMinnowHome();
   return {

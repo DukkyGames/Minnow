@@ -4,8 +4,7 @@ import type { ParseReportResult as RunnerParseReportResult, TurnToolDefinition }
 export const REPORT_TOOL_NAME: 'report_outcome';
 
 /**
- * Execute-time parse result. Compatible with `runTurn({ parseReport })`.
- * `ok: false` is a tool-boundary rejection, not `no_report`.
+ * Execute-time parse result.
  */
 export type ParseReportResult = RunnerParseReportResult;
 

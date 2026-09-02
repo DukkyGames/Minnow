@@ -1,22 +1,3 @@
-/**
- * The agent tools §10 asked for: search, comment, assign, unlink, move.
- *
- * Kept beside `issue-tools.ts` rather than inside it because these are a
- * different generation with a different contract — every one of them exists
- * because the original five made an agent do something lossy:
- *
- * - `issue_get_state` returns *every* field of *every* issue, which burns an
- *   agent's context. `issue_search` adds a query, field selection and paging.
- * - `notes` is one overwritable string, so an agent reporting progress
- *   clobbered the user's last note. `issue_comment` appends to a timeline.
- * - `issue_link` is append-only by design, so a wrong link could not be
- *   corrected. `issue_unlink` removes one.
- * - Status and rank were separate writes, so an agent moving a card fought the
- *   user's manual ordering. `issue_move` does both in one call.
- *
- * Phase 4 of `documentation/plans/issues-app-v2.md`.
- */
-
 import {
   addIssueComment,
   appendIssueActivity,
@@ -31,6 +12,8 @@ import {
 import { rankBetween } from '../issues/rank.ts';
 import { getWorkspacePath } from '../state/workspace.ts';
 import type { IssueCard, IssueStatus } from '../types.ts';
+
+// ── Names ────────────────────────────────────────────────────────────────────
 
 /** Tool names this module owns. */
 export const ISSUE_V2_TOOL_NAMES = [
@@ -109,13 +92,6 @@ function projectFields(issue: IssueCard, fields: readonly string[]): Record<stri
   return out;
 }
 
-/**
- * Attachment paths an agent may read.
- *
- * Included in `issue_search` output rather than behind a separate tool: §10
- * asks for read *access*, and knowing an attachment exists without its path is
- * the current uselessness being fixed.
- */
 function withAttachmentPaths(issue: IssueCard, out: Record<string, unknown>): void {
   if (!('attachments' in out)) return;
   out.attachments = (issue.attachments ?? []).map((attachment) => ({
@@ -126,6 +102,8 @@ function withAttachmentPaths(issue: IssueCard, out: Record<string, unknown>): vo
     bytes: attachment.bytes,
   }));
 }
+
+// ── Search ───────────────────────────────────────────────────────────────────
 
 function runSearch(args: Record<string, unknown>): string {
   const query = str(args, 'query');
@@ -177,7 +155,6 @@ function runSearch(args: Record<string, unknown>): string {
       total: matches.length,
       offset,
       limit,
-      // So an agent knows to page rather than assuming it saw everything.
       hasMore: offset + page.length < matches.length,
       fields,
       issues,
@@ -234,8 +211,6 @@ function runAssign(args: Record<string, unknown>): string {
   if (clear) {
     clearIssueAgentRun(issueId);
   } else if (agentId) {
-    // Queued, not running. Starting a worktree and a board is a side effect a
-    // tool call should not have; the UI's dispatch path owns that.
     startIssueAgentRun(issueId, { agentId });
     updateIssue(issueId, {});
     const current = findIssueById(issueId);
@@ -284,15 +259,12 @@ function runUnlink(args: Record<string, unknown>): string {
     const before = issue.issueRefs?.length ?? 0;
     issue.issueRefs = (issue.issueRefs ?? []).filter((entry) => entry.issueId !== targetIssueId);
     removed += before - issue.issueRefs.length;
-    // Relations are bidirectional, so the inverse has to go too or the target
-    // keeps pointing at a link this issue no longer has.
     const target = findIssueById(targetIssueId);
     if (target?.issueRefs) {
       target.issueRefs = target.issueRefs.filter((entry) => entry.issueId !== issueId);
     }
   }
 
-  // Route the timestamp bump and save through the store's own writer.
   updateIssue(issueId, {});
   return JSON.stringify({ issue_id: issueId, removed }, null, 2);
 }
@@ -312,8 +284,6 @@ function runMove(args: Record<string, unknown>): string {
   const beforeId = str(args, 'before_issue_id');
   const afterId = str(args, 'after_issue_id');
 
-  // Rank against the destination column's current occupants, so a tool call
-  // lands where the agent said rather than at whatever end sorts first.
   const peers = listIssues()
     .filter((card) => card.id !== issueId && card.status === status && card.rank)
     .sort((a, b) => (a.rank ?? '').localeCompare(b.rank ?? ''));
@@ -340,6 +310,8 @@ function runMove(args: Record<string, unknown>): string {
   });
   return JSON.stringify({ issue_id: issueId, status: updated.status, rank: updated.rank }, null, 2);
 }
+
+// ── Execute ──────────────────────────────────────────────────────────────────
 
 /** Execute one of the v2 issue tools. */
 export async function executeIssueV2Tool(

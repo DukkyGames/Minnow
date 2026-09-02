@@ -1,7 +1,3 @@
-/**
- * Super Plan review pass helpers (Phase 5 — plan-reviewer tasks + UI heuristic).
- */
-
 /** Review passes run sequentially; pass 2 receives pass 1 critique. */
 export const SUPER_PLAN_REVIEW_PASSES = [1, 2] as const;
 
@@ -53,10 +49,6 @@ const UI_INVOLVEMENT_PATTERNS: readonly RegExp[] = [
   /\bui-designer\b/i,
 ];
 
-/**
- * Heuristic: true when spec/research/plan text suggests UI work.
- * Used to decide whether to run the optional Impeccable shape/critique stage.
- */
 export function planInvolvesUi(...texts: (string | undefined | null)[]): boolean {
   const combined = texts
     .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
@@ -71,10 +63,6 @@ function section(title: string, body: string | undefined): string {
   return `\n## ${title}\n\n${trimmed}\n`;
 }
 
-/**
- * Build the task envelope for a plan-reviewer sub-agent spawn.
- * Pass 2 includes pass-1 critique so the reviewer can verify fixes and hunt for misses.
- */
 export function buildPlanReviewerTask(input: PlanReviewerTaskInput): string {
   const totalPasses = input.reviewRounds ?? SUPER_PLAN_REVIEW_PASSES.length;
   const lines: string[] = [

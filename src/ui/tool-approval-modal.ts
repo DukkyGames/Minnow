@@ -1,8 +1,3 @@
-/**
- * Inline tool approval strip above the composer (not a centered modal).
- * Matches Minnow bench tokens: --surface, --border, mono for payload preview.
- */
-
 import { streaming } from '../app-state';
 import type { ToolApprovalRequest } from '../tools/tool-approval-types';
 import { getActiveComposerSurface } from './composer-surface';
@@ -20,13 +15,8 @@ import {
 
 export type ToolApprovalModalResult = 'allow-once' | 'always-allow' | 'cancel';
 
-/**
- * Maps a key event to approval choice 1–3, or null if not a plain digit hotkey.
- * Uses `code` so layout / numpad variants still match when `key` differs.
- */
 function digitHotkeyChoice(ev: KeyboardEvent): 1 | 2 | 3 | null {
   if (ev.metaKey || ev.ctrlKey || ev.altKey) return null;
-  // Shift + top-row digit is punctuation on common layouts; `code` is still Digit1…Digit3.
   if (ev.shiftKey && /^Digit[1-3]$/.test(ev.code)) return null;
   const byCode: Record<string, 1 | 2 | 3> = {
     Digit1: 1,
@@ -74,7 +64,6 @@ export function showToolApprovalModal(
   request: ToolApprovalRequest,
 ): Promise<ToolApprovalModalResult> {
   return new Promise((resolve) => {
-    // Aborted before paint: never show the strip (cancelled run / Stop).
     if (request.signal?.aborted) {
       resolve('cancel');
       return;
@@ -260,8 +249,6 @@ export function showToolApprovalModal(
       }
       const digit = digitHotkeyChoice(ev);
       if (digit === null) return;
-      // Same visibility as Esc: digits work while the strip is open. Skip only if the user
-      // is typing in another field (composer is disabled here, so focus is often on <body>).
       if (isTypingOutsideApprovalHost(host, document.activeElement)) return;
       ev.preventDefault();
       ev.stopPropagation();

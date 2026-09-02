@@ -11,7 +11,6 @@
 export function sha1Hex(text) {
   const bytes = utf8Bytes(String(text));
   const bitLen = bytes.length * 8;
-  // Pad: 0x80, zeros, then 64-bit big-endian length. SHA-1 block size is 64.
   const padded = bytes.slice();
   padded.push(0x80);
   while (padded.length % 64 !== 56) padded.push(0);

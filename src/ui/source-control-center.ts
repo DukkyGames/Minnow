@@ -1,13 +1,3 @@
-/**
- * Source Control Center — the full-column git surface inside Code.
- *
- * Header carries repo identity plus the three sync actions people actually
- * reach for. A left rail routes between seven sections. Everything else lives
- * in the command palette, so the chrome never grows a row of equal buttons.
- *
- * Replaces the Git Center lightbox (MIN-198 era).
- */
-
 import '../styles/source-control-center.css';
 
 import {
@@ -112,6 +102,8 @@ let forgeChipEl: HTMLElement | null = null;
 let pullBtn: HTMLButtonElement | null = null;
 let pushBtn: HTMLButtonElement | null = null;
 
+// ── Open state ───────────────────────────────────────────────────────────────
+
 /** Whether the center is mounted in the main column. */
 export function isSourceControlCenterOpen(): boolean {
   return Boolean(document.getElementById(ROOT_ID));
@@ -123,11 +115,11 @@ export function refreshSourceControlCenter(): void {
   void refreshAll();
 }
 
+// ── Shell ────────────────────────────────────────────────────────────────────
+
 function effectiveCwd(): string | undefined {
   return resolvePanelWorktreeCwd(panelCwd);
 }
-
-// ── Sections ─────────────────────────────────────────────────────────────────
 
 function sections(): SectionDef[] {
   return [
@@ -197,8 +189,6 @@ const context: SccContext = {
   setBadge: (section, badge) => applyRailBadge(section, badge),
 };
 
-// ── Shell ────────────────────────────────────────────────────────────────────
-
 function buildShell(): HTMLElement {
   const shell = el('div', 'scc-root');
   shell.id = ROOT_ID;
@@ -215,7 +205,6 @@ function buildShell(): HTMLElement {
 function buildHeader(): HTMLElement {
   const header = el('header', 'scc-head');
 
-  // Identity: repo, branch, worktree.
   const identity = el('div', 'scc-head__identity');
 
   repoNameEl = el('span', 'scc-head__repo');
@@ -243,7 +232,6 @@ function buildHeader(): HTMLElement {
   forgeChipEl.hidden = true;
   identity.appendChild(forgeChipEl);
 
-  // Sync: the three actions worth permanent chrome.
   const sync = el('div', 'scc-head__sync');
 
   syncEl = el('span', 'scc-head__gauge');
@@ -272,7 +260,6 @@ function buildHeader(): HTMLElement {
 
   sync.append(syncEl, fetchBtn, pullBtn, pushBtn);
 
-  // Trailing chrome.
   const actions = el('div', 'scc-head__actions');
 
   const paletteBtn = button({
@@ -339,7 +326,7 @@ function modKeyLabel(key: string): string {
   return mac ? `⌘${key}` : `Ctrl ${key}`;
 }
 
-// ── Section routing ──────────────────────────────────────────────────────────
+// ── Navigation ───────────────────────────────────────────────────────────────
 
 async function showSection(id: SccSectionId): Promise<void> {
   if (!paneEl) return;
@@ -397,7 +384,7 @@ function paintRailBadge(section: SccSectionId): void {
   }
 }
 
-// ── Git state ────────────────────────────────────────────────────────────────
+// ── Refresh ──────────────────────────────────────────────────────────────────
 
 async function refreshGitState(): Promise<void> {
   const cwd = effectiveCwd();
@@ -442,6 +429,8 @@ async function refreshForgeState(): Promise<void> {
     forge,
   });
 }
+
+// ── Header ───────────────────────────────────────────────────────────────────
 
 function paintHeader(): void {
   const workspace = getWorkspacePath().trim();
@@ -566,7 +555,6 @@ function openBranchSwitcher(): void {
       const typed = name.trim();
       if (!typed || typed === currentBranch) return;
 
-      // Prefer an exact existing branch; otherwise auto-fix and create (MIN-659).
       const existsExact = localBranches.includes(typed);
       const branch = existsExact ? typed : slugifyGitRefName(typed);
       if (!branch || branch === currentBranch) return;
@@ -580,8 +568,6 @@ function openBranchSwitcher(): void {
     },
   });
 }
-
-// ── Commands ─────────────────────────────────────────────────────────────────
 
 function advancedContext() {
   return {
@@ -622,6 +608,8 @@ async function reviewCurrentBranchPr(): Promise<void> {
   }
   showToast(`Reviewing #${match.number}`, 'success');
 }
+
+// ── Commands ─────────────────────────────────────────────────────────────────
 
 function buildCommands(): Command[] {
   const onGitHub = (): boolean => Boolean(forge?.supported);
@@ -872,8 +860,6 @@ async function createTag(): Promise<void> {
   );
 }
 
-// ── Keyboard ─────────────────────────────────────────────────────────────────
-
 const SECTION_ORDER: SccSectionId[] = [
   'changes',
   'history',
@@ -884,13 +870,13 @@ const SECTION_ORDER: SccSectionId[] = [
   'checks',
 ];
 
+// ── Keys ─────────────────────────────────────────────────────────────────────
+
 function handleKey(event: KeyboardEvent): void {
   if (!isSourceControlCenterOpen()) return;
 
   const mod = event.ctrlKey || event.metaKey;
 
-  // Ctrl+K is not intercepted here — the global handler owns it, and the global
-  // palette already carries these commands while this surface is open.
   if (isCommandPaletteOpen()) return;
 
   if (mod && /^[1-7]$/.test(event.key)) {
@@ -919,8 +905,6 @@ function handleKey(event: KeyboardEvent): void {
   if (activeView?.onKey?.(event)) event.stopPropagation();
 }
 
-// ── Polling ──────────────────────────────────────────────────────────────────
-
 function startPolling(): void {
   stopPolling();
   gitTimer = window.setInterval(() => {
@@ -943,12 +927,12 @@ function stopPolling(): void {
   forgeTimer = undefined;
 }
 
-// ── Lifecycle ────────────────────────────────────────────────────────────────
-
 async function closeCompetingMainColumnViews(): Promise<void> {
   const { closeOtherCodeStageViews } = await import('./main-column-overlay');
   await closeOtherCodeStageViews('source-control');
 }
+
+// ── Lifecycle ────────────────────────────────────────────────────────────────
 
 /** Mount the Source Control Center into the Code main column. */
 export async function openSourceControlCenter(options?: {
@@ -977,9 +961,6 @@ export async function openSourceControlCenter(options?: {
   area.classList.add(CHAT_AREA_CLASS);
   document.getElementById('mainColumn')?.classList.add(MAIN_COLUMN_CLASS);
 
-  // Source Control has no palette of its own any more: it contributes its verbs
-  // to the one global palette while it is open. Ctrl+K is a single chord with a
-  // single meaning, and the header button opens the same list it always did.
   unregisterGlobalCommands = registerCommandSource(
     'source-control',
     () => (isSourceControlCenterOpen() ? buildCommands() : []),
@@ -993,7 +974,6 @@ export async function openSourceControlCenter(options?: {
   await refreshGitState();
   startPolling();
 
-  // The gh probe spawns a subprocess; do not make the first paint wait on it.
   void refreshForgeState().then(() => {
     if (activeSection === 'pulls' || activeSection === 'checks') void activeView?.refresh();
   });

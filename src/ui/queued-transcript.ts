@@ -1,11 +1,3 @@
-/**
- * Transcript bubbles for composer-queued follow-ups (MIN-647).
- *
- * The composer strip is the compact control; these bubbles are the
- * "not sent-and-forgotten" reading in the chat itself. Live stream / tool
- * rows insert before `#queuedTranscript` via {@link appendChatTranscriptNode}.
- */
-
 import {
   getPendingMessageQueue,
   getPendingMessageQueueCount,
@@ -109,15 +101,11 @@ function resolveQueuedTranscriptMount(): HTMLElement | null {
   if (typeof document === 'undefined') return null;
   const mount = getActiveChatMountElement();
   if (!mount) return null;
-  // Skip a detached node; do not treat missing `isConnected` (older test DOM) as detached.
   if (mount.isConnected === false) return null;
   return mount;
 }
 
-/**
- * Rebuild the queued-follow-up cluster at the tail of the active transcript.
- * No-ops when the chat mount is not in the document (tests, overlays).
- */
+/** Rebuild the queued-follow-up cluster at the tail of the active transcript. */
 export function syncQueuedTranscript(): void {
   const mount = resolveQueuedTranscriptMount();
   if (!mount) return;

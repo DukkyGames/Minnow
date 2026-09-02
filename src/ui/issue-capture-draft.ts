@@ -1,10 +1,3 @@
-/**
- * Quick-capture draft — unsent title, chips, and destination survive dismiss.
- *
- * Saved when the popover closes without filing (Escape, click-away, blur) and
- * restored the next time quick capture opens for the same workspace.
- */
-
 import {
   isCapturePayloadEmpty,
   parseCapturePayloadJson,
@@ -45,7 +38,6 @@ function writeStore(store: DraftStore): void {
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
   } catch {
-    // Private browsing or quota — in-memory draft still works for the session.
   }
 }
 
@@ -128,6 +120,5 @@ export function resetIssueCaptureDraftForTests(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch {
-    /* ignore */
   }
 }

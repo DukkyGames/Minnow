@@ -1,11 +1,3 @@
-/**
- * Linux Landlock adapter — invokes the `minnow-sandbox` helper (MIN-553 Phase 5).
- *
- * Same argv-wrapper shape as Seatbelt: helper becomes the spawn parent, then
- * execve's the already-resolved one-shot command. Phase 6 (WSL) should call
- * wrapWithLandlock / buildLandlockArgv inside the WSL tree — not a second policy.
- */
-
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,25 +5,16 @@ import { fileURLToPath } from 'node:url';
 import { CREDENTIAL_DENY_ENTRIES } from './policy.js';
 import { SANDBOX_UNAVAILABLE_REASON, describeSandboxUnavailable } from './unavailable.js';
 
-/** Helper exit when Landlock syscalls / ABI are missing (see native/minnow-sandbox). */
 export const LANDLOCK_EXIT_ABI_UNAVAILABLE = 75;
-/** Helper exit when ruleset apply fails after ABI negotiate. */
 export const LANDLOCK_EXIT_APPLY_FAILED = 76;
 
 const HELPER_NAME = 'minnow-sandbox';
 
-/**
- * Absolute path to this module's directory (works under Electron asar when the
- * helper itself lives outside asar via extraResources).
- */
 function sandboxModuleDir() {
   return path.dirname(fileURLToPath(import.meta.url));
 }
 
 /**
- * Repo / install candidates for the helper binary.
- * Order: env override → Electron resources → build output → PATH.
- *
  * @param {NodeJS.ProcessEnv} [env]
  * @param {{ resourcesPath?: string, moduleDir?: string }} [opts]
  * @returns {string[]}
@@ -42,35 +25,26 @@ export function listMinnowSandboxHelperCandidates(
 ) {
   /** @type {string[]} */
   const out = [];
-  // Override is handled exclusively in resolveMinnowSandboxHelper (authoritative).
 
   if (resourcesPath) {
-    // electron-builder linux.extraResources → resources/minnow-sandbox
     out.push(path.join(resourcesPath, HELPER_NAME));
     out.push(path.join(resourcesPath, 'bin', HELPER_NAME));
   }
 
-  // Dev tree: native/minnow-sandbox/minnow-sandbox (server/terminal/sandbox → repo = ../../..)
   const repoNative = path.resolve(moduleDir, '../../../native/minnow-sandbox', HELPER_NAME);
   out.push(repoNative);
 
-  // Next to a sibling "resources" folder (some unpacked layouts)
   out.push(path.resolve(moduleDir, '../../../../resources', HELPER_NAME));
 
   return out;
 }
 
 /**
- * Resolve an executable helper path, or null if none exist.
- * Also accepts a bare name on PATH (last resort — Phase 6 WSL distros).
- *
  * @param {NodeJS.ProcessEnv} [env]
  * @param {{ resourcesPath?: string, moduleDir?: string }} [opts]
  * @returns {string | null}
  */
 export function resolveMinnowSandboxHelper(env = process.env, opts = {}) {
-  // Explicit override wins even when missing — callers/tests need a way to force
-  // "no helper" without PATH / resources accidentally satisfying the probe.
   const override = env.MINNOW_SANDBOX_HELPER?.trim();
   if (override) {
     try {
@@ -86,11 +60,9 @@ export function resolveMinnowSandboxHelper(env = process.env, opts = {}) {
         return candidate;
       }
     } catch {
-      /* ignore */
     }
   }
 
-  // PATH lookup without spawning `which` — scan PATH entries.
   const pathEnv = env.PATH || env.Path || '';
   for (const dir of pathEnv.split(path.delimiter)) {
     if (!dir) continue;
@@ -98,15 +70,12 @@ export function resolveMinnowSandboxHelper(env = process.env, opts = {}) {
     try {
       if (fs.existsSync(candidate)) return candidate;
     } catch {
-      /* ignore */
     }
   }
   return null;
 }
 
 /**
- * System prefixes agents need to run shells / dynamic linkers / package tools.
- * Landlock is allowlist-only — these are RO (read+exec) grants.
  * @returns {string[]}
  */
 export function defaultSystemReadRoots() {
@@ -128,8 +97,6 @@ export function defaultSystemReadRoots() {
 }
 
 /**
- * Device nodes that are not under policy writeRoots but must stay writable
- * (shell redirects, tty ioctl). Mirrors Seatbelt literals in seatbelt.js.
  * @returns {readonly string[]}
  */
 export function landlockDeviceWriteAllowlist() {
@@ -137,11 +104,6 @@ export function landlockDeviceWriteAllowlist() {
 }
 
 /**
- * Shell / toolchain files under $HOME that must stay readable without granting
- * the entire home (which would also allow ~/.minnow / ~/.ssh via Landlock
- * parent→child inheritance). Only emit paths that exist as regular files —
- * Landlock rejects directory-only rights on files (EINVAL); the helper also
- * skips, but omitting missing rc files keeps argv lean.
  * @param {string} home
  * @returns {string[]}
  */
@@ -167,14 +129,12 @@ export function homeShellReadPaths(home) {
         out.push(abs);
       }
     } catch {
-      /* skip unreadable */
     }
   }
   return out;
 }
 
 /**
- * Whether `absPath` equals or is nested under `root`.
  * @param {string} absPath
  * @param {string} root
  */
@@ -186,7 +146,6 @@ function isUnder(absPath, root) {
 }
 
 /**
- * Map a host path to a POSIX form when it mirrors `/tmp` on a Windows drive.
  * @param {string} p
  */
 function toPosixTmpAligned(p) {
@@ -202,7 +161,6 @@ function toPosixTmpAligned(p) {
 }
 
 /**
- * Prefix check for Landlock write-root scoping (POSIX `/tmp` vs `C:\tmp\…` on Windows).
  * @param {string} absPath
  * @param {string} root
  */
@@ -217,8 +175,6 @@ function isUnderWriteRoot(absPath, root) {
 }
 
 /**
- * Normalize a write root for Landlock without mapping WSL POSIX paths like `/tmp`
- * to `C:\tmp` when argv is built on Windows for execution inside WSL.
  * @param {string} writeRoot
  */
 function resolveLandlockWriteRoot(writeRoot) {
@@ -231,7 +187,6 @@ function resolveLandlockWriteRoot(writeRoot) {
 }
 
 /**
- * Join a write root with a directory entry (POSIX roots stay POSIX).
  * @param {string} root
  * @param {string} name
  */
@@ -243,10 +198,6 @@ function joinWriteRootEntry(root, name) {
 }
 
 /**
- * Enumerate $HOME children for RO allow, skipping credential / minnow deny roots.
- * Landlock cannot "carve out" a deny under an allowed parent — so we never grant
- * the home directory itself, only selected children + shell rc files.
- *
  * @param {import('./policy.js').SandboxPolicy} policy
  * @returns {string[]}
  */
@@ -264,11 +215,9 @@ export function buildHomeReadAllowlist(policy) {
 
   for (const ent of entries) {
     const abs = path.join(home, ent.name);
-    // Skip anything under a deny-read root (including ~/.minnow wholesale).
     if (policy.denyReadRoots.some((d) => isUnder(abs, d) || isUnder(d, abs))) {
       continue;
     }
-    // Skip known credential relative entries even if resolve failed to expand.
     const hitCredential = CREDENTIAL_DENY_ENTRIES.some((e) => {
       const relRoot = e.rel.split(path.sep)[0];
       return ent.name === relRoot || ent.name === e.rel;
@@ -282,10 +231,6 @@ export function buildHomeReadAllowlist(policy) {
 }
 
 /**
- * Landlock cannot carve a deny out of an allowed parent. When a writable root
- * (e.g. /tmp) contains a deny-read subtree (tests may put MINNOW_HOME there),
- * grant read/write on siblings only instead of the whole parent (--write implies read).
- *
  * @param {string} writeRoot
  * @param {import('./policy.js').SandboxPolicy} policy
  * @returns {string[]}
@@ -323,12 +268,10 @@ export function buildScopedWriteRootGrants(writeRoot, policy) {
   return grants;
 }
 
-/** @deprecated Use buildScopedWriteRootGrants */
+/** @deprecated */
 export const buildWriteRootReadGrants = buildScopedWriteRootGrants;
 
 /**
- * Build --write / --read path lists for the helper from a workspace policy.
- *
  * @param {import('./policy.js').SandboxPolicy} policy
  * @returns {{ writePaths: string[], readPaths: string[] }}
  */
@@ -354,7 +297,6 @@ export function buildLandlockPathLists(policy, { compactHomeRead = false } = {})
       readSet.add(grant);
     }
   }
-  // Always allow the workspace root for read even if somehow omitted from writes.
   if (policy.workspaceRoot) readSet.add(policy.workspaceRoot);
   return {
     writePaths: writePaths.filter((p) => typeof p === 'string' && p.length > 0),
@@ -363,8 +305,6 @@ export function buildLandlockPathLists(policy, { compactHomeRead = false } = {})
 }
 
 /**
- * Argv for minnow-sandbox (helper path excluded) — Phase 6 can reuse this inside WSL.
- *
  * @param {{ command: string, args?: string[] }} spawnTarget
  * @param {import('./policy.js').SandboxPolicy} policy
  * @param {{ seccomp?: boolean, mapPath?: (p: string) => string }} [opts]
@@ -398,8 +338,6 @@ export function buildLandlockArgv(
 }
 
 /**
- * Wrap a resolved spawn target with minnow-sandbox.
- *
  * @param {{ command: string, args?: string[], shell?: boolean, cwd?: string, env?: NodeJS.ProcessEnv }} spawnTarget
  * @param {import('./policy.js').SandboxPolicy} policy
  * @param {{ helperPath?: string, seccomp?: boolean, mapPath?: (p: string) => string }} [opts]
@@ -424,14 +362,11 @@ export function wrapWithLandlock(spawnTarget, policy, opts = {}) {
 }
 
 /**
- * Probe helper presence + Landlock ABI via `--probe`.
  * @param {NodeJS.ProcessEnv} [env]
  * @returns {{ ok: boolean, reason?: string, detail?: string, abi?: number, helperPath?: string }}
  */
 export function probeLandlock(env = process.env) {
   if (process.platform !== 'linux' && env.MINNOW_SANDBOX_FORCE_PROBE !== '1') {
-    // Unit tests on Windows/macOS can force the probe path with a stub helper.
-    // Production resolveSandbox('linux') still uses this function from the adapter.
   }
 
   const helperPath = resolveMinnowSandboxHelper(env);
@@ -495,7 +430,6 @@ export function createLandlockAdapter() {
     kind: 'landlock',
     probe: async () => {
       const result = probeLandlock();
-      // Drop non-meta fields for the shared probe shape.
       return {
         ok: result.ok,
         ...(result.reason ? { reason: result.reason } : {}),

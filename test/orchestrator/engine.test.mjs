@@ -1,11 +1,3 @@
-/**
- * P1-B — the reconcile loop and the effector interface.
- *
- * The properties that matter are the ones that let V1's entire recovery
- * subsystem be deleted: ticking twice changes nothing, a process that vanishes
- * comes back with no code that knows about vanishing, and nothing is journaled
- * before the effect it records has happened.
- */
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -42,15 +34,7 @@ before(() => {
   previousHome = process.env.MINNOW_HOME;
 });
 
-/**
- * Every engine a test built.
- *
- * Each test gets its own MINNOW_HOME, so an engine left ticking would append
- * into the *next* test's board — which is exactly the kind of cross-test
- * contamination that makes a scheduler suite untrustworthy.
- *
- * @type {Array<{ dispose: () => void }>}
- */
+/** @type {Array<{ dispose: () => void }>} */
 let liveEngines = [];
 
 beforeEach(async () => {
@@ -62,8 +46,6 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  // Drain the report write against this test's home before the next
-  // beforeEach swaps MINNOW_HOME (an in-flight append would then ENOENT).
   for (const engine of liveEngines) await drainReportWrite(engine);
   for (const engine of liveEngines) engine.dispose();
   liveEngines = [];
@@ -78,14 +60,9 @@ after(() => {
   resetJournalCache();
 });
 
-// ---------------------------------------------------------------------------
-// Harness
-// ---------------------------------------------------------------------------
-
-/** A clock the test drives. Nothing here waits on real time. */
 function fakeClock() {
   let now = 1_700_000_000_000;
-  /** @type {Map<number, { at: number, fn: () => void }>} */
+/** @type {Map<number, { at: number, fn: () => void }>} */
   const timers = new Map();
   let nextHandle = 0;
   return {
@@ -98,15 +75,11 @@ function fakeClock() {
     clearTimer(handle) {
       timers.delete(/** @type {number} */ (handle));
     },
-    /** Advance time, firing everything due. */
     async advance(ms) {
       now += ms;
       const due = [...timers.entries()].filter(([, t]) => t.at <= now);
       for (const [handle, timer] of due) {
         timers.delete(handle);
-        // The engine's timer returns the in-flight tick (including the
-        // end-of-run report). Await it so observers do not see `finished`
-        // before `run.report.written` is on disk.
         await timer.fn();
       }
       await settle();
@@ -117,15 +90,6 @@ function fakeClock() {
   };
 }
 
-/**
- * Let the engine go quiet.
- *
- * The engine's appends are real filesystem writes, and each one costs several
- * turns of the loop — the write itself, plus the `stat` that revalidates the
- * journal's tail. Draining microtasks is not enough, and under-settling makes
- * the suite *wrong* rather than flaky: the next tick reads a state that has not
- * caught up and correctly does nothing, which looks exactly like a stalled board.
- */
 async function settle(rounds = 60) {
   for (let round = 0; round < 3; round += 1) {
     for (let i = 0; i < rounds; i += 1) await Promise.resolve();
@@ -147,8 +111,6 @@ const task = (id, extra = {}) => ({
 });
 
 /**
- * A loaded engine over a fresh board.
- *
  * @param {{ boardId?: string, tasks?: object[], script?: object[], effector?: object }} [setup]
  */
 async function harness(setup = {}) {
@@ -173,16 +135,10 @@ async function harness(setup = {}) {
   return { boardId, engine, effector, clock };
 }
 
-/** True once the run is folded complete and `run.report.written` is on disk. */
 async function finishedWithReport(engine) {
   return engine.getState().finished && journalHasReport(await engine.getEvents());
 }
 
-/**
- * Wait for an in-flight end-of-run report so afterEach can dispose safely.
- *
- * User-stopped boards also write a report (`finished` stays false).
- */
 async function drainReportWrite(engine) {
   try {
     const st = engine.getState();
@@ -192,17 +148,9 @@ async function drainReportWrite(engine) {
       await settle();
     }
   } catch {
-    // Engine was never loaded.
   }
 }
 
-/**
- * Run a board to completion, bounded so a stall fails instead of hanging.
- *
- * `state.finished` flips when `run.finished` is journaled. The report line is
- * appended after that in the same tick, so returning on `finished` alone races
- * `run.report.written` (and can leave a write in flight across afterEach).
- */
 async function runToCompletion(engine, clock, concurrency = 1, maxTicks = 400) {
   await engine.startBoard(concurrency);
   for (let i = 0; i < maxTicks; i += 1) {
@@ -214,7 +162,7 @@ async function runToCompletion(engine, clock, concurrency = 1, maxTicks = 400) {
   assert.fail(`board did not finish in ${maxTicks} ticks`);
 }
 
-// ---------------------------------------------------------------------------
+// ── The tick ─────────────────────────────────────────────────────────────────
 
 describe('engine — the tick', () => {
   it('runs a single-task board end to end', async () => {
@@ -279,8 +227,6 @@ describe('engine — the tick', () => {
     const { engine } = await harness({ script: [{ emit: { outcome: 'pass', delayMs: 5000 } }] });
     await engine.startBoard(1);
 
-    // Fire a burst without awaiting: the first pass runs, the rest set the dirty
-    // bit, and exactly one extra pass follows.
     const ticks = Array.from({ length: 50 }, () => engine.tick());
     await Promise.all(ticks);
     await settle();
@@ -308,11 +254,11 @@ describe('engine — the tick', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Journaling ───────────────────────────────────────────────────────────────
 
 describe('engine — journaling completed effects only', () => {
   it('appends task.attempt.started strictly after effector.start() resolves', async () => {
-    /** @type {string[]} */
+/** @type {string[]} */
     const order = [];
     const inner = createScriptedEffector({ script: [{ emit: { outcome: 'pass', delayMs: 9999 } }] });
     const effector = {
@@ -358,7 +304,6 @@ describe('engine — journaling completed effects only', () => {
     await engine.startBoard(1);
     await settle();
 
-    // The first two starts throw, and there is no effect to record for either.
     let events = await readEvents(boardId);
     assert.equal(events.filter((e) => e.type === 'task.attempt.started').length, 0);
     assert.equal(attempts, 1);
@@ -369,8 +314,6 @@ describe('engine — journaling completed effects only', () => {
     events = await readEvents(boardId);
     assert.equal(events.filter((e) => e.type === 'task.attempt.started').length, 0);
 
-    // The next tick simply tries again, and succeeds. That is the whole
-    // recovery mechanism — no backoff, no retry counter, no repair path.
     await engine.tick();
     await settle();
     events = await readEvents(boardId);
@@ -378,8 +321,6 @@ describe('engine — journaling completed effects only', () => {
       (e) => e.type === 'task.attempt.started' && e.role === 'builder',
     );
     assert.equal(builderStarts.length, 1, 'the builder was started more than once');
-    // The two failed starts consumed no attempts, so the policy still sees this
-    // as the task's first try.
     assert.equal(
       events.filter((e) => e.type === 'task.attempt.ended' && e.role === 'builder').length,
       1,
@@ -398,7 +339,7 @@ describe('engine — journaling completed effects only', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Self-healing ─────────────────────────────────────────────────────────────
 
 describe('engine — self-healing is a consequence, not a feature', () => {
   it('restarts a process that vanished, with no watchdog involved', async () => {
@@ -410,7 +351,6 @@ describe('engine — self-healing is a consequence, not a feature', () => {
     assert.equal(effector.inspect().length, 1);
     assert.equal(effector.started.length, 1);
 
-    // Kill it out from under the engine: no exit event, no outcome, nothing.
     effector.vanishAll();
     assert.equal(effector.inspect().length, 0);
 
@@ -438,14 +378,9 @@ describe('engine — self-healing is a consequence, not a feature', () => {
   });
 
   it('warns, and leaks nothing, when an effector breaks the inspect() contract', async () => {
-    // An attempt must stay visible to `inspect()` until its `onEnd` handler has
-    // resolved. An effector that drops it first lets `reapVanished` journal
-    // `crashed` for work that actually passed. The engine cannot undo that — the
-    // fold ignores a second end for a closed attempt — but it must say so, and
-    // it must not park the orphaned end in `bufferedEnds` forever.
-    /** @type {Array<(end: object) => Promise<void>>} */
+/** @type {Array<(end: object) => Promise<void>>} */
     const handlers = [];
-    /** @type {Array<{ taskId: string, role: string, attemptId: string }>} */
+/** @type {Array<{ taskId: string, role: string, attemptId: string }>} */
     let running = [];
     let nextId = 0;
 
@@ -469,7 +404,6 @@ describe('engine — self-healing is a consequence, not a feature', () => {
     const attempt = running[0];
     assert.ok(attempt, 'nothing started');
 
-    // The contract violation: gone from inspect() with the end still to come.
     running = [];
     await clock.advance(10_000);
     await settle();
@@ -514,9 +448,6 @@ describe('engine — self-healing is a consequence, not a feature', () => {
   });
 
   it('lets running work finish when the cap is lowered, but starts nothing new', async () => {
-    // The cap gates starting, not continuing. Killing a builder halfway through
-    // an edit to enforce a number the user changed after the fact throws away
-    // real work; the useful behaviour is to stop picking up more.
     const tasks = [task('A'), task('B'), task('C'), task('D')];
     const { engine, effector } = await harness({
       tasks,
@@ -531,7 +462,6 @@ describe('engine — self-healing is a consequence, not a feature', () => {
     assert.equal(effector.inspect().length, 3, 'in-flight work was killed by a cap change');
     assert.equal(effector.started.length, 3, 'a fourth task was started below the cap');
 
-    // Raising it again picks up the remaining task.
     await engine.setConcurrency(4);
     await settle();
     assert.equal(effector.inspect().length, 4);
@@ -553,7 +483,7 @@ describe('engine — self-healing is a consequence, not a feature', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Policy ───────────────────────────────────────────────────────────────────
 
 describe('engine — the policy has one application point', () => {
   it('retries, then abandons, then skips what the abandonment stranded', async () => {
@@ -572,7 +502,6 @@ describe('engine — the policy has one application point', () => {
     assert.equal(state.tasks.get('A').phase, 'abandoned');
     assert.equal(state.tasks.get('B').phase, 'skipped');
     assert.equal(state.tasks.get('B').skippedBy, 'A');
-    // An abandoned task must never block one that does not depend on it.
     assert.equal(state.tasks.get('C').phase, 'merged');
     assert.equal(state.finished, true);
 
@@ -583,7 +512,6 @@ describe('engine — the policy has one application point', () => {
     assert.ok(abandon.evidence, 'the abandonment carries no evidence');
     assert.ok(abandonmentEvidenceIsComplete(abandon.evidence));
     assert.ok(abandon.evidence.attempts.length >= 3);
-    // Three builder attempts before giving up, per the policy table.
     assert.equal(
       events.filter((e) => e.type === 'task.attempt.started' && e.taskId === 'A').length,
       3,
@@ -602,7 +530,6 @@ describe('engine — the policy has one application point', () => {
     const events = await readEvents(boardId);
     assert.equal(events.filter((e) => e.type === 'merge.conflicted').length, 1);
     assert.equal(events.filter((e) => e.type === 'merge.succeeded').length, 1);
-    // The retry is the builder, with a rebase seed. No merge-fixer role exists.
     const seeds = events
       .filter((e) => e.type === 'task.attempt.started')
       .map((e) => e.seedKind);
@@ -657,7 +584,7 @@ describe('engine — the policy has one application point', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Commands ─────────────────────────────────────────────────────────────────
 
 describe('engine — commands', () => {
   it('records a stop and desires nothing afterwards', async () => {
@@ -694,12 +621,11 @@ describe('engine — commands', () => {
       effector.inspect().map((r) => r.taskId).sort(),
       ['A', 'B'],
     );
-    // And asking again while it runs does nothing.
     assert.equal(await engine.startTask('B'), false);
   });
 
   it('emits every appended event to subscribers, in order', async () => {
-    /** @type {string[]} */
+/** @type {string[]} */
     const seen = [];
     const { engine, clock } = await harness();
     engine.subscribe((event) => seen.push(String(event.type)));
@@ -710,10 +636,6 @@ describe('engine — commands', () => {
   });
 
   it('keeps a hand-started attempt running on a stopped board', async () => {
-    // PRD §6: Manual = Stopped, with the user starting individual tasks by hand.
-    // `startTask` used to spawn the process, journal its start, and have the very
-    // next tick stop it again — leaving the task `building` forever behind an
-    // attempt that no longer existed, and returning 200 while doing it.
     const { engine, effector } = await harness({
       script: [{ emit: { outcome: 'pass', delayMs: 9999 } }],
     });
@@ -747,8 +669,6 @@ describe('engine — commands', () => {
   });
 
   it('stops a hand-started attempt when the board is stopped', async () => {
-    // Manual work is still work: Stop means stop, not "stop except the ones I
-    // started myself".
     const { engine, effector } = await harness({
       script: [{ emit: { outcome: 'pass', delayMs: 9999 } }],
     });
@@ -776,20 +696,15 @@ describe('engine — commands', () => {
     const state = engine.getState();
     assert.equal(state.tasks.get('A').attempts.at(-1).outcome, 'pass');
     assert.equal(state.tasks.get('A').phase, 'idle');
-    // A passing builder advances to the tester only on a *running* board. Here
-    // the user drives each step.
     assert.deepEqual(effector.started.map((s) => s.role), ['builder']);
     assert.equal(state.status, 'created');
 
-    // And the next hand start picks up where the policy says it should.
     assert.equal(await engine.startTask('A'), true);
     await settle();
     assert.deepEqual(effector.started.map((s) => s.role), ['builder', 'tester']);
   });
 
   it('reaps a hand-started attempt that vanishes, with no board running', async () => {
-    // The safety-net timer is the only thing that would ever notice. On a
-    // stopped board nothing else ticks at all.
     const { engine, effector, clock } = await harness({
       script: [{ emit: { outcome: 'pass', delayMs: 9999 } }],
     });
@@ -821,10 +736,9 @@ describe('engine — commands', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Registry ─────────────────────────────────────────────────────────────────
 
 describe('engine — the registry', () => {
-  /** A board on disk with no engine attached to it. */
   async function coldBoard(boardId = 'reg') {
     await createBoard(boardId);
     await appendEvent(
@@ -844,11 +758,6 @@ describe('engine — the registry', () => {
     createScriptedEffector({ script: [{ emit: { outcome: 'pass', delayMs: 9999 } }] });
 
   it('never hands out an engine that has not finished loading', async () => {
-    // The registry used to store the engine and *then* await `load()`, so a
-    // second caller arriving during the load received one with `state === null`.
-    // `getState()` threw, and `startBoard`/`stopBoard`/`setConcurrency` ran
-    // `foldInto(null, …)`. Every first page load after a server restart hits a
-    // cold board, so this was reached constantly.
     const boardId = await coldBoard();
 
     const results = await Promise.allSettled(
@@ -878,8 +787,6 @@ describe('engine — the registry', () => {
   });
 
   it('peeks nothing while a load is in flight', async () => {
-    // `peekEngine` is read synchronously by `GET /api/boards/:id`, which calls
-    // `getState()` on whatever it gets back.
     const boardId = await coldBoard();
     const loading = getEngine(boardId, effectorFactory, { tickMs: 60_000 });
     assert.equal(peekEngine(boardId), undefined);
@@ -889,8 +796,6 @@ describe('engine — the registry', () => {
   });
 
   it('retries a board whose load failed rather than caching the failure', async () => {
-    // A rejected promise left in the registry would answer every later request
-    // with the same failure, and the board would stay broken until a restart.
     await createBoard('broken');
     await appendEvent(
       'broken',
@@ -906,8 +811,6 @@ describe('engine — the registry', () => {
     const failOnce = () => {
       attempts += 1;
       if (attempts > 1) return effectorFactory();
-      // `load()` wires up `onEnd`, so this fails the load itself rather than the
-      // construction before it.
       return {
         inspect: () => [],
         start: async () => ({ attemptId: 'x' }),
@@ -923,6 +826,8 @@ describe('engine — the registry', () => {
     assert.equal(engine.getState().boardId, 'broken');
   });
 });
+
+// ── Dead ends ────────────────────────────────────────────────────────────────
 
 describe('engine — dead ends never stall the run (MIN-712)', () => {
   it('skips a diamond DAG behind the abandoned root only', async () => {
@@ -962,8 +867,6 @@ describe('engine — dead ends never stall the run (MIN-712)', () => {
   });
 
   it('starts an unrelated task on the tick immediately after abandonment', async () => {
-    // Concurrency 1 so C cannot sneak in beside A's retries. After A is
-    // abandoned the next start must be C — not an idle stall.
     const tasks = [
       task('A'),
       task('B', { dependsOn: ['A'], touches: ['src/b/**'] }),
@@ -1060,12 +963,10 @@ describe('engine — dead ends never stall the run (MIN-712)', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Exclusions ───────────────────────────────────────────────────────────────
 
 describe('engine — what must not be in it', () => {
   it('has exactly one timer', async () => {
-    // A second timer in this file is a watchdog, a nudge, or a deferred
-    // continuation by another name — the mechanisms that took V1 to 26,657 lines.
     const source = await fs.readFile(ENGINE_SOURCE, 'utf8');
     const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
     assert.equal((code.match(/setTimeout\s*\(/g) ?? []).length, 1);
@@ -1101,13 +1002,13 @@ describe('engine — what must not be in it', () => {
   });
 
   it('does not statically import core/plan.js or core/derive.js', async () => {
-    // P8-B: the graph is an argument. A static import would weld the engine
-    // to boards and block a second graph in the same process.
     const source = await fs.readFile(ENGINE_SOURCE, 'utf8');
     assert.doesNotMatch(source, /from\s+['"]\.\/core\/plan\.js['"]/);
     assert.doesNotMatch(source, /from\s+['"]\.\/core\/derive\.js['"]/);
   });
 });
+
+// ── Reopen ───────────────────────────────────────────────────────────────────
 
 describe('engine — reopen after finish', { concurrency: 1 }, () => {
   const slowPass = [{ emit: { outcome: 'pass', delayMs: 9999 } }];

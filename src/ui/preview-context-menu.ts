@@ -1,8 +1,3 @@
-/**
- * Legacy Minnow-styled DOM context menu helpers (tests / fallback).
- * Production Electron preview uses main-process Menu.popup at the click position.
- */
-
 import type {
   MinnowPreviewContextMenuItem,
   MinnowPreviewContextMenuOpenPayload,
@@ -87,10 +82,7 @@ function renderMenuItems(items: MinnowPreviewContextMenuItem[]): void {
   }
 }
 
-/**
- * Map guest-local (x, y) onto viewport client coords using #previewBody's current rect.
- * The WebContentsView is sized to match #previewBody.
- */
+/** Map guest-local (x, y) onto viewport client coords using #previewBody's current rect. */
 export function mapGuestPointToClient(guestX: number, guestY: number): { x: number; y: number } {
   const body = document.getElementById('previewBody');
   if (!body) return { x: guestX, y: guestY };

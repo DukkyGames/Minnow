@@ -1,26 +1,3 @@
-/**
- * In-process completions for the shared runner (MIN-700 / P2-C).
- *
- * The renderer talks to generations over HTTP (`POST /api/generations` then
- * `GET …/stream`). A Node runner is already inside the same process as
- * `pumpUpstream`, so it must not take that hop — it would serialize every
- * token through a socket and leave an extra abort path to keep in sync.
- *
- * This adapter creates generation state, pumps upstream, and fans SSE bytes
- * to a callback subscriber. `persist` is always false: the journal (later
- * phases) is the record, not the generations store's 30s ephemeral cache.
- *
- * Fallback role is the agent family (`sub-agent` by default, matching
- * `tryNonStreamingFallback` in the extracted loop). Lightweight roles in
- * `NON_AGENT_FALLBACK_ROLES` (`utility`, `chat-titles`, `goal-eval`,
- * `editor-completion`) would silently pick a different model; those are
- * coerced back to `sub-agent`. The loop still passes `input.type` (e.g.
- * `turn`, `explore`) and those stay as-is — they are not non-agent roles.
- *
- * Do not import `generations/routes.js`. The HTTP path stays for the renderer.
- * Node callers import this module via `server/runner/node.js`, not `index.js`.
- */
-
 import { validateProviderId } from '../providers/validate.js';
 import { readConfigJson } from '../config/store.js';
 import { listProviders } from '../providers/store.js';
@@ -34,10 +11,6 @@ import {
   removeLocalSubscriber,
 } from '../generations/store.js';
 
-/**
- * Default fallback role when the loop does not pass one.
- * Agent work, not a utility/title/eval/completion job.
- */
 export const RUNNER_FALLBACK_ROLE = 'sub-agent';
 
 /**
@@ -46,7 +19,6 @@ export const RUNNER_FALLBACK_ROLE = 'sub-agent';
  */
 function resolveRunnerFallbackRole(raw) {
   const role = typeof raw === 'string' && raw.trim() ? raw.trim() : RUNNER_FALLBACK_ROLE;
-  // A non-agent role here would route the turn onto a titles/eval model.
   if (NON_AGENT_FALLBACK_ROLES.has(role)) {
     return RUNNER_FALLBACK_ROLE;
   }
@@ -54,8 +26,6 @@ function resolveRunnerFallbackRole(raw) {
 }
 
 /**
- * Same AbortError shape fetch-chat uses so the extracted loop's catch path
- * does not need a Node-vs-DOM branch.
  * @returns {Error}
  */
 function abortError() {
@@ -89,11 +59,6 @@ function throwIfTerminalFailed(terminal, sawBytes) {
 }
 
 /**
- * Pull-based async iterable over one generation's upstream SSE bytes.
- * Yields the same utf8 payloads `feedSseEventBuffer` already consumes.
- * The HTTP `event: end` sentinel is not yielded — terminal status is a throw
- * or a clean return, matching fetch-chat's raw subscribe.
- *
  * @param {import('../generations/store.js').GenerationState} state
  * @returns {AsyncIterable<string>}
  */
@@ -152,9 +117,6 @@ function iterateLocalSse(state) {
 }
 
 /**
- * Create state, bind abort → `cancel(state)`, start `pumpUpstream`.
- * Subscribe before pumping so the first bytes cannot land unobserved.
- *
  * @param {string} providerId
  * @param {unknown} body
  * @param {{ signal?: AbortSignal, fallbackRole?: string | null }} [options]
@@ -172,7 +134,6 @@ async function startInProcessCompletion(providerId, body, options = {}) {
   const bodyObj = body && typeof body === 'object' ? /** @type {{ model?: string }} */ (body) : {};
   const primaryModelId = typeof bodyObj.model === 'string' ? bodyObj.model : '';
 
-  // Same chain helper the HTTP POST uses — do not re-implement auth/base URL.
   const candidates = resolveFallbackChain({
     role: fallbackRole,
     primaryProviderId: id,
@@ -205,8 +166,6 @@ async function startInProcessCompletion(providerId, body, options = {}) {
 }
 
 /**
- * SSE byte stream for one completion, no HTTP hop.
- *
  * @param {string} providerId
  * @param {unknown} body
  * @param {{ signal?: AbortSignal, fallbackRole?: string | null }} [options]
@@ -218,10 +177,6 @@ export async function createCompletionStream(providerId, body, options = {}) {
 }
 
 /**
- * Server-default `PostChatCompletions`. Synthetic Response whose body replays
- * the in-process SSE stream so `runTurn` / `createSubAgentRunner` need no
- * loop change. The renderer adapter keeps HTTP `/api/generations`.
- *
  * @type {import('./adapters').PostChatCompletions}
  */
 export async function postChatCompletionsInProcess(provider, body, signal, options = {}) {
@@ -248,7 +203,6 @@ export async function postChatCompletionsInProcess(provider, body, signal, optio
       }
     },
     cancel() {
-      // Reader cancel (thinking-budget trip, drop) must stop upstream too.
       cancelGeneration(started.state);
     },
   });

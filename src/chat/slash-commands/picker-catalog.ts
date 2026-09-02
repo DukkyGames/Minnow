@@ -1,7 +1,3 @@
-/**
- * Merged slash picker rows: SKILL.md skills + built-in slash commands.
- */
-
 import { filterSlashCommands, type SlashCommandListItem } from './registry';
 import { getSkillCatalog } from '../../skills/client';
 import type { SkillListItem } from '../../skills/types';

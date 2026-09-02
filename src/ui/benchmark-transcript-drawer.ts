@@ -1,7 +1,3 @@
-/**
- * Read-only benchmark test transcript drawer (messages, tool calls, results).
- */
-
 import type { TestResult } from '../benchmark/types.ts';
 import { SUITE_LABELS } from './benchmark-transcript-labels.ts';
 import {
@@ -44,7 +40,6 @@ export function closeBenchmarkTranscriptDrawer(): void {
   const onClose = openLayer.onClose;
   openLayer.backdrop.remove();
   openLayer = null;
-  // Fire after teardown so callers can clear selection without seeing a stale layer.
   onClose?.();
 }
 
@@ -174,7 +169,6 @@ export function openBenchmarkTranscriptDrawer(
 ): void {
   closeBenchmarkTranscriptDrawer();
 
-  // Always mount on body so the drawer is visible from Settings (Bench view is hidden).
   const root = document.body;
 
   const backdrop = document.createElement('div');

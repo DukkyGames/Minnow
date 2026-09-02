@@ -1,11 +1,4 @@
 #!/usr/bin/env node
-/**
- * Helper to document fetching full-tier benchmark datasets from HuggingFace.
- * Usage: node scripts/fetch-benchmark-dataset.mjs <pack-id> <output.json>
- *
- * Example:
- *   node scripts/fetch-benchmark-dataset.mjs cais/mmlu ./mmlu-full-sample.json
- */
 
 import { writeFileSync } from 'node:fs';
 

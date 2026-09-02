@@ -1,7 +1,3 @@
-/**
- * CodeMirror keymap + extension hook for Quick Edit (Mod-K, Phase 4).
- */
-
 import { Prec, type Extension } from '@codemirror/state';
 import { keymap, type KeyBinding } from '@codemirror/view';
 import { openQuickEditPanel } from './panel';

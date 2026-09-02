@@ -1,7 +1,3 @@
-/**
- * Compare-to-shipped-default controls for Settings prompt editors.
- */
-
 import { buildLineDiff, promptsMatchForDiff } from '../chat/prompts/text-diff';
 import { isLocalServerAvailable } from '../tools/config';
 import { appConfirm } from './app-dialog';
@@ -20,7 +16,6 @@ export function getPromptDiffLayout(): PromptDiffLayout {
     const v = localStorage.getItem(LAYOUT_STORAGE_KEY);
     if (v === 'side-by-side') return 'side-by-side';
   } catch {
-    /* ignore */
   }
   return 'unified';
 }
@@ -29,7 +24,6 @@ export function setPromptDiffLayout(layout: PromptDiffLayout): void {
   try {
     localStorage.setItem(LAYOUT_STORAGE_KEY, layout);
   } catch {
-    /* ignore */
   }
 }
 

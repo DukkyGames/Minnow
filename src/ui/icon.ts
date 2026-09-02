@@ -1,17 +1,9 @@
-/**
- * Central icon registry — Flaticon Uicons (Regular Rounded + Solid Rounded).
- * Single source of truth for semantic icon names and Uicons class mapping.
- */
-
-/** Options for `createIcon` / `iconHtml`. */
 export interface IconOptions {
   /** Sets `--mn-icon-size` (default 18px via `.icon-svg`). */
   size?: number;
   /** Extra classes (e.g. `email-icon`, `email-icon--filled`). */
   className?: string;
 }
-
-// ── Shell ────────────────────────────────────────────────────────────────────
 
 export type ShellIconName =
   | 'close'
@@ -30,10 +22,7 @@ export type ShellIconName =
   | 'globe'
   | 'folder'
   | 'fileText'
-  // File explorer pane control (folder glyph, not a nested tree).
   | 'fileTree';
-
-// ── Apps ─────────────────────────────────────────────────────────────────────
 
 export type AppIconName =
   | 'appCode'
@@ -57,8 +46,6 @@ export type AppIconName =
   | 'appCodeBrainMap'
   | 'appDevServer';
 
-// ── Modes ────────────────────────────────────────────────────────────────────
-
 export type ModeIconName =
   | 'modeGeneral'
   | 'modeBuild'
@@ -67,8 +54,6 @@ export type ModeIconName =
   | 'modeDebug'
   | 'modeOrchestrate'
   | 'modeReef';
-
-// ── Git ──────────────────────────────────────────────────────────────────────
 
 export type GitIconName =
   | 'gitPull'
@@ -83,8 +68,6 @@ export type GitIconName =
   | 'gitWorktree'
   | 'gitGraph'
   | 'gitCommit';
-
-// ── Email ────────────────────────────────────────────────────────────────────
 
 export type EmailIconName =
   | 'compose'
@@ -106,8 +89,6 @@ export type EmailIconName =
   | 'automations'
   | 'testConnection'
   | 'signOut';
-
-// ── Chrome ───────────────────────────────────────────────────────────────────
 
 export type ChromeIconName =
   | 'search'
@@ -157,15 +138,11 @@ export type ChromeIconName =
   | 'inbox'
   | 'moon';
 
-// ── Board ────────────────────────────────────────────────────────────────────
-
 export type BoardIconName =
   | 'boardBuild'
   | 'boardFix'
   | 'boardTest'
   | 'boardGroup';
-
-// ── Status ───────────────────────────────────────────────────────────────────
 
 export type StatusIconName =
   | 'statusPass'
@@ -173,8 +150,6 @@ export type StatusIconName =
   | 'statusSkip'
   | 'statusRunning'
   | 'statusPending';
-
-// ── Brain ────────────────────────────────────────────────────────────────────
 
 export type BrainIconName =
   | 'brainGraph'
@@ -184,8 +159,6 @@ export type BrainIconName =
   | 'brainMemories'
   | 'brainIngest'
   | 'brainLint';
-
-// ── Metrics ──────────────────────────────────────────────────────────────────
 
 export type MetricIconName =
   | 'metricTps'
@@ -209,7 +182,6 @@ export type IconName =
 
 /** Uicons class for each semantic name — transcribed from confirmed mapping. */
 export const ICON_CLASS: Record<IconName, string> = {
-  // Shell
   close: 'fi-rr-cross-small',
   minimize: 'fi-rr-minus-small',
   maximize: 'fi-rr-square',
@@ -226,10 +198,8 @@ export const ICON_CLASS: Record<IconName, string> = {
   globe: 'fi-rr-globe',
   folder: 'fi-rr-folder',
   fileText: 'fi-rr-document',
-  // Files pane control (MIN-655): folder glyph, not a nested tree.
   fileTree: 'fi-rr-folder',
 
-  // Apps
   appCode: 'fi-rr-code-simple',
   appChat: 'fi-rr-comment',
   appResearch: 'fi-rr-search',
@@ -251,7 +221,6 @@ export const ICON_CLASS: Record<IconName, string> = {
   appCodeBrainMap: 'fi-rr-sitemap',
   appDevServer: 'fi-rr-cloud-code',
 
-  // Modes (Solid Rounded — filled glyphs read better at 12–14px in the mode strip)
   modeGeneral: 'fi-sr-comment-dots',
   modeBuild: 'fi-sr-hammer',
   modePlan: 'fi-sr-clipboard-list',
@@ -260,7 +229,6 @@ export const ICON_CLASS: Record<IconName, string> = {
   modeOrchestrate: 'fi-sr-network',
   modeReef: 'fi-sr-water',
 
-  // Git
   gitPull: 'fi-rr-cloud-download',
   gitPush: 'fi-rr-cloud-upload',
   gitFetch: 'fi-rr-refresh',
@@ -274,7 +242,6 @@ export const ICON_CLASS: Record<IconName, string> = {
   gitGraph: 'fi-rr-chart-network',
   gitCommit: 'fi-rr-code-commit',
 
-  // Email
   compose: 'fi-rr-pencil',
   reply: 'fi-rr-arrow-turn-down-left',
   replyAll: 'fi-rr-reply-all',
@@ -295,7 +262,6 @@ export const ICON_CLASS: Record<IconName, string> = {
   testConnection: 'fi-rr-plug',
   signOut: 'fi-rr-sign-out-alt',
 
-  // Chrome
   search: 'fi-rr-search',
   chevronLeft: 'fi-rr-angle-small-left',
   chevronRight: 'fi-rr-angle-small-right',
@@ -343,20 +309,17 @@ export const ICON_CLASS: Record<IconName, string> = {
   inbox: 'fi-rr-inbox',
   moon: 'fi-rr-moon',
 
-  // Board
   boardBuild: 'fi-sr-hammer',
   boardFix: 'fi-sr-band-aid',
   boardTest: 'fi-sr-flask',
   boardGroup: 'fi-rr-objects-column',
 
-  // Status
   statusPass: 'fi-rr-check-circle',
   statusFail: 'fi-rr-cross-circle',
   statusSkip: 'fi-rr-minus-circle',
   statusRunning: 'fi-rr-spinner',
   statusPending: 'fi-rr-clock',
 
-  // Brain
   brainGraph: 'fi-rr-chart-network',
   brainLog: 'fi-rr-list',
   brainSchema: 'fi-rr-table-layout',
@@ -365,7 +328,6 @@ export const ICON_CLASS: Record<IconName, string> = {
   brainIngest: 'fi-rr-inbox-in',
   brainLint: 'fi-rr-triangle-warning',
 
-  // Metrics
   metricTps: 'fi-rr-bolt',
   metricTtft: 'fi-rr-play',
   metricGen: 'fi-rr-clock',
@@ -402,7 +364,6 @@ export function iconHtml(name: IconName, options: IconOptions = {}): string {
 /** Apply a different semantic icon to an existing Uicons element. */
 export function applyIcon(el: HTMLElement, name: IconName, options: IconOptions = {}): void {
   const uicon = ICON_CLASS[name];
-  // Strip prior fi-* tokens, keep non-uicon utility classes.
   const keep = Array.from(el.classList).filter(
     (c) => c !== 'fi' && !c.startsWith('fi-rr-') && !c.startsWith('fi-sr-'),
   );

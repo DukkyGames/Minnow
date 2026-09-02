@@ -1,7 +1,3 @@
-/**
- * Work Agent registry: built-ins from shipped prompts + user overrides.
- */
-
 import { parsePromptMarkdown } from '../chat/prompts/parse-front-matter';
 import { parseWorkAgentMetaFromMarkdown } from './work-agent-meta-parse';
 import type {
@@ -11,7 +7,6 @@ import type {
 
 const SKIP_PREFIXES = ['_template', '_example'];
 
-/** Default registry order when registry.json is missing (tests). */
 export const DEFAULT_REGISTRY_IDS = [
   'default',
   'builder',
@@ -68,16 +63,12 @@ function mergeRawFile(
     try {
       const { markdownBody } = parsePromptMarkdown(raw, relativePath);
       acc.fullBody = markdownBody.trim();
-    } catch {
-      /* skip */
-    }
+    } catch {}
   } else {
     try {
       const { markdownBody } = parsePromptMarkdown(raw, relativePath);
       acc.liteBody = markdownBody.trim();
-    } catch {
-      /* skip */
-    }
+    } catch {}
   }
 }
 
@@ -105,7 +96,6 @@ function buildAgentsFromRaw(rawMap: Record<string, string>): Map<string, WorkAge
   return out;
 }
 
-/** Merge user override scalars onto a built-in definition. */
 export function mergeWorkAgentDefinition(
   builtin: WorkAgentDefinition,
   override: WorkAgentUserOverride | undefined,
@@ -162,19 +152,16 @@ function orderedAgents(map: Map<string, WorkAgentDefinition>): WorkAgentDefiniti
   return list;
 }
 
-/** Set registry.json index (call from init or tests). */
 export function setWorkAgentRegistryIndex(index: WorkAgentRegistryIndex): void {
   registryIndex = { ids: [...index.ids] };
 }
 
-/** Replace user overrides map (from API or tests). */
 export function setUserWorkAgentOverrides(
   overrides: Record<string, WorkAgentUserOverride>,
 ): void {
   userOverrides = { ...overrides };
 }
 
-/** Merge one agent override row (after Settings save). */
 export function mergeUserWorkAgentOverride(
   agentId: string,
   patch: WorkAgentUserOverride,
@@ -190,12 +177,10 @@ export function mergeUserWorkAgentOverride(
   userOverrides[agentId] = next;
 }
 
-/** Load built-in agents from Vite glob or test fixture map. */
 export function initBuiltinWorkAgentRegistry(raw: Record<string, string> = {}): void {
   builtinAgents = buildAgentsFromRaw(raw);
 }
 
-/** Register additional agent files (tests). */
 export function registerWorkAgentFilesFromRaw(rawMap: Record<string, string>): void {
   const built = buildAgentsFromRaw(rawMap);
   for (const [id, agent] of built) {
@@ -203,7 +188,6 @@ export function registerWorkAgentFilesFromRaw(rawMap: Record<string, string>): v
   }
 }
 
-/** Merge pack-sourced agents from GET /api/work-agents (npm start). */
 export function registerPackAgentsFromApi(agents: WorkAgentDefinition[]): void {
   for (const agent of agents) {
     if (agent.source === 'pack' && agent.id) {
@@ -212,7 +196,6 @@ export function registerPackAgentsFromApi(agents: WorkAgentDefinition[]): void {
   }
 }
 
-/** Replace built-in registry from server snapshot (headless CLI — no Vite glob). */
 export function registerWorkAgentsFromServerSnapshot(agents: WorkAgentDefinition[]): void {
   for (const agent of agents) {
     if (!agent?.id) continue;
@@ -226,27 +209,23 @@ export function resetWorkAgentRegistry(): void {
   registryIndex = { ids: [...DEFAULT_REGISTRY_IDS] };
 }
 
-/** List all work agents in registry order (merged overrides). */
 export function listWorkAgents(includeDisabled = false): WorkAgentDefinition[] {
   const agents = orderedAgents(builtinAgents);
   if (includeDisabled) return agents;
   return agents.filter((a) => !a.disabled);
 }
 
-/** Shipped built-in row before user overrides (null if unknown). */
 export function getBuiltinWorkAgent(id: string): WorkAgentDefinition | null {
   const agent = builtinAgents.get(id);
   return agent ? { ...agent } : null;
 }
 
-/** Get one agent by id (null if missing). */
 export function getWorkAgent(id: string): WorkAgentDefinition | null {
   const agent = builtinAgents.get(id);
   if (!agent) return null;
   return mergeWorkAgentDefinition(agent, userOverrides[id]);
 }
 
-/** First agent whose defaultForModes includes modeId. */
 export function getDefaultWorkAgentForMode(modeId: string): WorkAgentDefinition | null {
   const mode = modeId.trim();
   if (!mode) return null;
@@ -260,12 +239,10 @@ export function getDefaultWorkAgentForMode(modeId: string): WorkAgentDefinition 
   return null;
 }
 
-/** User override row for an agent id. */
 export function getUserWorkAgentOverride(agentId: string): WorkAgentUserOverride | undefined {
   return userOverrides[agentId];
 }
 
-/** Effective prompt override string for an agent (user JSON field). */
 export function getWorkAgentPromptOverride(agentId: string): string | null {
   const override = userOverrides[agentId]?.promptOverride;
   if (typeof override === 'string' && override.trim()) return override.trim();

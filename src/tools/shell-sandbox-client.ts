@@ -1,7 +1,3 @@
-/**
- * Client helpers for agent shell sandbox mode + availability (MIN-553 Phase 3).
- */
-
 import {
   getToolSecurityMetaCached,
   loadToolSecurityMeta,

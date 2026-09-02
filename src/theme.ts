@@ -2,6 +2,8 @@
  * Sixteen palette themes (8 families × dark/light), persistence, and DOM application.
  */
 
+// ── Catalog ──────────────────────────────────────────────────────────────────
+
 export const THEME_STORAGE_KEY = 'minnow.theme';
 export const THEME_FOLLOW_SYSTEM_KEY = 'minnow.theme.followSystem';
 export const THEME_FAMILY_KEY = 'minnow.theme.family';
@@ -104,17 +106,13 @@ function readStorage(key: string): string | null {
 function writeStorage(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
-  } catch {
-    /* private mode */
-  }
+  } catch {}
 }
 
 function removeStorage(key: string): void {
   try {
     localStorage.removeItem(key);
-  } catch {
-    /* private mode */
-  }
+  } catch {}
 }
 
 function systemPrefersLight(): boolean {
@@ -175,6 +173,8 @@ function migrateLegacyThemeStorage(): void {
     removeStorage(THEME_STORAGE_KEY);
   }
 }
+
+// ── Storage ──────────────────────────────────────────────────────────────────
 
 export function getFollowSystem(): boolean {
   return readStorage(THEME_FOLLOW_SYSTEM_KEY) === '1';
@@ -262,6 +262,8 @@ function clearBootInlineThemeVars(root: HTMLElement): void {
     root.style.removeProperty(name);
   }
 }
+
+// ── Apply ────────────────────────────────────────────────────────────────────
 
 /** Set data-theme, color-scheme, meta theme-color; optionally persist explicit choice. */
 export function applyTheme(id: ThemeId, options: ApplyThemeOptions = {}): void {

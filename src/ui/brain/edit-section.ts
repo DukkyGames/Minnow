@@ -1,7 +1,3 @@
-/**
- * Brain app — Edit section: metadata toolbar + split source/preview, save via PUT /page.
- */
-
 import { fetchBrainPage, saveBrainPage } from '../../brain/client';
 import { getGraphSelectedPath, setGraphSelectedPath } from './graph-section';
 import { renderBrainMarkdown } from './wikilink-markdown';
@@ -22,6 +18,8 @@ function setEditStatus(kind: 'ok' | 'err' | 'spin', message: string): void {
   el.textContent = message;
   el.dataset.kind = kind;
 }
+
+// ── Preview ──────────────────────────────────────────────────────────────────
 
 /** Mirror path, title, and tags into the wiki-style preview header. */
 function refreshEditPreviewChrome(): void {
@@ -92,6 +90,8 @@ function applyEditViewMode(mode: EditViewMode): void {
   });
 }
 
+// ── Bind ─────────────────────────────────────────────────────────────────────
+
 function bindEditSection(): void {
   if (bindingsDone) return;
   bindingsDone = true;
@@ -127,6 +127,8 @@ function bindEditPreview(): void {
     document.getElementById(id)?.addEventListener('input', refreshEditPreviewChrome);
   }
 }
+
+// ── Load save ────────────────────────────────────────────────────────────────
 
 async function loadEditForm(): Promise<void> {
   const pathEl = document.getElementById('brainEditPath') as HTMLInputElement | null;

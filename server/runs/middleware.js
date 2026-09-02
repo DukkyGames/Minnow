@@ -68,8 +68,6 @@ export async function handleRunsConfigRequest(req, res, pathname) {
         return true;
       }
       if (req.method === 'PUT') {
-        // P8-G: the journal is the record. Leftover ~/.minnow/runs/registry/
-        // files are left in place and never imported (no last-write-wins).
         sendJson(res, 410, {
           error: 'sub-agent registry writes are gone; the journal is the record',
         });

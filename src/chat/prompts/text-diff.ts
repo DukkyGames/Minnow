@@ -1,7 +1,3 @@
-/**
- * Line-level diff helpers for prompt compare UI (testable, no DOM).
- */
-
 import { diffLines } from 'diff';
 
 export type DiffLineType = 'unchanged' | 'add' | 'remove';

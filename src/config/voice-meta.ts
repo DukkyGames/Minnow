@@ -172,6 +172,8 @@ export interface VoiceConfig {
 
 const QWEN_CUSTOM_VOICE_06B = 'Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice';
 
+// ── Defaults ─────────────────────────────────────────────────────────────────
+
 function clampNum(value: unknown, min: number, max: number, fallback: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, value));
@@ -339,6 +341,8 @@ let cachedVoice: VoiceConfig | null = null;
 function isQwen06bCustomVoice(modelId: string): boolean {
   return modelId.includes('0.6B-CustomVoice');
 }
+
+// ── Parse ────────────────────────────────────────────────────────────────────
 
 function parseSttLocal(raw: Record<string, unknown>, base: VoiceSttLocalConfig): VoiceSttLocalConfig {
   const out = { ...base };
@@ -636,7 +640,6 @@ function parseVoiceBlock(raw: unknown): VoiceConfig {
 
   if (typeof sttRaw.enabled === 'boolean') stt.enabled = sttRaw.enabled;
 
-  // Migrate legacy flat STT fields into provider backend.
   if (typeof sttRaw.providerId === 'string' && sttRaw.providerId.trim()) {
     stt.provider.providerId = sttRaw.providerId.trim();
   }
@@ -680,7 +683,6 @@ function parseVoiceBlock(raw: unknown): VoiceConfig {
   if (typeof ttsRaw.enabled === 'boolean') tts.enabled = ttsRaw.enabled;
   if (typeof ttsRaw.streaming === 'boolean') tts.streaming = ttsRaw.streaming;
 
-  // Migrate legacy flat TTS fields into provider backend.
   if (typeof ttsRaw.providerId === 'string' && ttsRaw.providerId.trim()) {
     const pid = ttsRaw.providerId.trim();
     if (pid === 'browser') {
@@ -739,6 +741,8 @@ function parseVoiceBlock(raw: unknown): VoiceConfig {
   return { audio, stt, tts, limits };
 }
 
+// ── Persist ──────────────────────────────────────────────────────────────────
+
 function readLocalVoiceMeta(): VoiceConfig {
   try {
     const raw = localStorage.getItem(VOICE_META_STORAGE_KEY);
@@ -796,6 +800,8 @@ export type VoiceMetaPatch = {
   };
   limits?: Partial<VoiceLimitsConfig>;
 };
+
+// ── Merge ────────────────────────────────────────────────────────────────────
 
 function mergeVoiceConfig(current: VoiceConfig, patch: VoiceMetaPatch): VoiceConfig {
   const merged = parseVoiceBlock({

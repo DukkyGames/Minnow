@@ -83,6 +83,8 @@ export interface StartCapabilityMatrixRunParams {
   onSettled?: () => void;
 }
 
+// ── Run state ────────────────────────────────────────────────────────────────
+
 type Listener = (state: MatrixRunUiState) => void;
 type ProbeListener = () => void;
 
@@ -284,6 +286,8 @@ function clearActiveMatrixSession(): void {
   activeRunPayload = null;
 }
 
+// ── Subscribe ────────────────────────────────────────────────────────────────
+
 /** Subscribe to run UI state; dispose only removes the listener (run keeps going). */
 export function subscribeCapabilityMatrixRun(listener: Listener): () => void {
   listeners.add(listener);
@@ -355,7 +359,6 @@ export function abortCapabilityMatrixRun(): void {
   abortController?.abort();
   abortController = null;
   clearActiveMatrixSession();
-  // Keep completed probes on the grid until the user starts a new run.
   setUiState({
     running: false,
     phaseLabel: 'Cancelled',
@@ -448,6 +451,8 @@ function handleCampaignProgress(
       return chips;
   }
 }
+
+// ── Start run ────────────────────────────────────────────────────────────────
 
 /** Start or resume a capability-matrix campaign for the roster. */
 export async function startCapabilityMatrixRun(
@@ -623,6 +628,8 @@ export interface CapabilityMatrixResumeSummary {
   payload: ActiveCapabilityMatrixRunPayload;
 }
 
+// ── Resume ───────────────────────────────────────────────────────────────────
+
 /** Pending capability-matrix sweep in sessionStorage (user must confirm resume). */
 export function getCapabilityMatrixResumeSummary(): CapabilityMatrixResumeSummary | null {
   if (isCapabilityMatrixRunActive()) return null;
@@ -682,7 +689,6 @@ export function resumeCapabilityMatrixRunFromCampaign(
 export function tryResumeCapabilityMatrixRunFromSession(
   _params: Omit<StartCapabilityMatrixRunParams, 'resumePayload'>,
 ): void {
-  /* no-op: Phase 7 resume banner handles continuation */
 }
 
 /** Test hook: replace the in-flight abort controller. */

@@ -1,7 +1,3 @@
-/**
- * Brain app — Schema section: view and edit schema.md.
- */
-
 import { fetchBrainSchema, saveBrainSchema } from '../../brain/client';
 
 let bindingsDone = false;

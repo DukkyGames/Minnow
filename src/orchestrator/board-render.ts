@@ -1,28 +1,3 @@
-/**
- * Rendering a `BoardState` into DOM. Nothing here reads or writes anything else.
- *
- * The split matters: these functions take a state and a set of callbacks and
- * return elements. They hold no state of their own, so what is on screen is a
- * function of what the journal says — which is the same property the engine has,
- * and the reason a stale view cannot become a wrong one.
- *
- * V1's board rendering read from a store the renderer itself wrote to. Here
- * there is no store, and no way to make one: the only input is the argument.
- *
- * ## Phase 9
- *
- * The task list is waves × kanban columns (P9-B) rather than a flat list, a
- * finished run gets a report instead of one paragraph (P9-G), and failures that
- * stop work from starting have somewhere to appear (P9-A). None of that changes
- * the rule above: a card's column is `columnOf()` over the fold, and the only
- * writes on this page are the callbacks in {@link BoardActions}, each of which
- * is a POST.
- *
- * The selected task's detail overlay lives in `task-detail.ts`. It is the same
- * kind of pure function of state, split out only because it grew a reading
- * surface (files, attempts, logs) that the board itself does not have.
- */
-
 import type { BoardState, TaskState } from '../../server/orchestrator/core/types';
 import { reopenTargets } from '../../server/orchestrator/core/plan.js';
 import type { DiffLine } from '../chat/prompts/text-diff';
@@ -37,24 +12,18 @@ import {
 } from './board-columns';
 import { el, empty, field, pill } from './dom';
 
-/** What the surface can ask the engine to do, passed in rather than imported. */
+// ── Types ────────────────────────────────────────────────────────────────────
+
 export interface BoardActions {
   startTask: (taskId: string) => void;
-  /** P9-H — journals `task.abandoned { reason: 'user' }`. Never a local write. */
   abandonTask: (taskId: string) => void;
-  /** Reopen failed work. Omit ids to reopen every abandoned/skipped task (or add a fix task). */
   rerun: (taskIds?: string[]) => void;
-  /** null when no task is selected. */
   select: (taskId: string | null) => void;
-  /** Load one attempt's transcript into the detail panel. */
   openTranscript: (attemptId: string) => void;
-  /** Fetch, or collapse, one changed file's diff in the detail panel. */
   toggleFileDiff: (path: string) => void;
-  /** Open a changed file in the editor, the same jump the chat file list makes. */
   openFile: (path: string) => void;
 }
 
-/** A transcript being shown in the detail panel — P9-D. */
 export interface TranscriptView {
   attemptId: string;
   status: 'loading' | 'ready' | 'error';
@@ -64,7 +33,6 @@ export interface TranscriptView {
   error?: string;
 }
 
-/** One changed file's diff, fetched only when its row is opened. */
 export interface FileDiffView {
   status: 'loading' | 'ready' | 'error';
   lines: readonly DiffLine[];
@@ -72,13 +40,6 @@ export interface FileDiffView {
   error?: string;
 }
 
-/**
- * What the selected task changed, read from git at its merge commit.
- *
- * `source: 'planned'` means the task has not merged (or git could not answer),
- * so the panel shows the declared footprint from `TaskState` instead and the
- * absence of line counts reads as "not yet" rather than "nothing".
- */
 export interface TaskFilesView {
   taskId: string;
   status: 'loading' | 'ready' | 'error';
@@ -94,20 +55,14 @@ export interface TaskFilesView {
 
 export interface BoardViewOptions {
   selectedTaskId: string | null;
-  /** Tasks whose manual start is in flight, so the button can say so. */
   pendingTaskIds: ReadonlySet<string>;
-  /**
-   * Live agent output from SSE `event: live` (P2-F bus, P2-G render).
-   * Presentation-only — never folded into `BoardState`.
-   */
   liveHeadlines?: ReadonlyMap<string, { role: string; text: string }>;
-  /** Work failing to start, from SSE `event: error` (P9-A). Also never folded. */
   engineErrors?: ReadonlyMap<string, EngineError>;
-  /** The transcript open in the detail panel, if any. */
   transcript?: TranscriptView | null;
-  /** The selected task's changed files. Read-only, like the transcript. */
   files?: TaskFilesView | null;
 }
+
+// ── Tones ────────────────────────────────────────────────────────────────────
 
 export const PHASE_TONE: Record<TaskState['phase'], 'neutral' | 'live' | 'good' | 'warn' | 'bad'> = {
   idle: 'neutral',
@@ -129,31 +84,14 @@ export const OUTCOME_TONE: Record<string, 'neutral' | 'good' | 'warn' | 'bad'> =
   conflicted: 'warn',
 };
 
-/** Human wording for a phase. The state's vocabulary, not a second one. */
 export function phaseLabel(state: BoardState, task: TaskState): string {
   if (task.phase === 'idle' && isBlocked(state, task)) return 'blocked';
   if (task.phase === 'idle' && task.attempts.length > 0) return 'waiting';
   return task.phase;
 }
 
-// ---------------------------------------------------------------------------
-// Runhead — V1 `.board-header` instrument strip (restated under `.ov2`)
-// ---------------------------------------------------------------------------
+// ── Header ───────────────────────────────────────────────────────────────────
 
-/**
- * The board's status strip. Markup matches the Orchestrator `.board-header`
- * (title, badge, telemetry, then run controls) so Boards is the same instrument
- * rather than a second chrome vocabulary. `ob-runhead` stays for the twin-shape
- * name; the rules live under `.ov2` so Phase 4 can delete V1 CSS.
- *
- * `connected` is separate from `status` on purpose: a board can be running while
- * this window is not receiving its events, and a view that conflated the two
- * would show a stalled board as a stopped one.
- *
- * `controls` is the interactive cluster (model, concurrency, Start/Stop). It is
- * passed in so this file stays a pure function of state: the POSTs live in the
- * view, not here.
- */
 export function renderBoardHeader(
   state: BoardState,
   connected: boolean,
@@ -184,7 +122,6 @@ export function renderBoardHeader(
   return header;
 }
 
-/** Status chip: Ready / Running / Stopped / Complete / Failed / Reconnecting. */
 function renderStatusBadge(state: BoardState, connected: boolean): HTMLElement {
   const { variant, label } = headerStatus(state, connected);
   const badge = el('span', `board-header__badge board-header__badge--${variant}`);
@@ -200,7 +137,6 @@ function headerStatus(
   state: BoardState,
   connected: boolean,
 ): { variant: string; label: string } {
-  // A live run whose stream dropped is stalled, not stopped: Stop would be a lie.
   if (!connected && state.status === 'running') {
     return { variant: 'stalled', label: 'Reconnecting' };
   }
@@ -215,11 +151,6 @@ function headerStatus(
   return { variant: 'ready', label: 'Ready' };
 }
 
-/**
- * Inline telemetry: done/total tasks, waves, in-flight vs N, thin progress.
- * Elapsed is omitted: V2's fold has no wall-clock start, and inventing one
- * in the renderer would be a second clock.
- */
 function renderHeaderTelemetry(state: BoardState): HTMLElement {
   const telemetry = el('div', 'board-header__telemetry');
   const metricsRow = el('div', 'board-header__metrics');
@@ -271,7 +202,6 @@ function renderHeaderTelemetry(state: BoardState): HTMLElement {
   return telemetry;
 }
 
-/** Secondary band: only alerts (stop reason, integration sha). */
 function renderHeaderMeta(state: BoardState, connected: boolean): HTMLElement | null {
   const bits: string[] = [];
   if (state.status === 'stopped' && state.stopReason) {
@@ -311,20 +241,7 @@ export function countPhase(state: BoardState, phase: TaskState['phase']): number
   return n;
 }
 
-// ---------------------------------------------------------------------------
-// Engine errors — P9-A
-// ---------------------------------------------------------------------------
 
-/**
- * Failures that stopped work from starting.
- *
- * One block, not one toast per tick: these repeat every tick for as long as the
- * precondition is broken, and `consecutive` is what turns forty identical
- * failures into a sentence rather than forty notifications.
- *
- * Returns null when there is nothing to say, so the caller can skip the node
- * rather than paint an empty container.
- */
 export function renderEngineErrors(
   errors: ReadonlyMap<string, EngineError> | undefined,
 ): HTMLElement | null {
@@ -351,17 +268,8 @@ export function renderEngineErrors(
   return wrap;
 }
 
-// ---------------------------------------------------------------------------
-// Tasks — waves × columns (P9-B)
-// ---------------------------------------------------------------------------
+// ── Task list ────────────────────────────────────────────────────────────────
 
-/**
- * The board: one kanban grid per declared wave.
- *
- * Waves are the outer grouping because a wave is the unit the plan declares and
- * the unit dependencies respect; columns are the inner grouping because what a
- * task is *doing* is the thing anyone watching a run is actually asking.
- */
 export function renderTaskList(
   state: BoardState,
   actions: BoardActions,
@@ -399,12 +307,6 @@ export function renderTaskList(
   return list;
 }
 
-/**
- * The empty state — P9-I.
- *
- * A board with no tasks is a plan that parsed and declared none, which is worth
- * saying plainly rather than showing a blank grid.
- */
 function renderEmptyBoard(state: BoardState): HTMLElement {
   const wrap = el('div', 'ov2-blank');
   wrap.appendChild(el('p', 'ov2-blank__title', 'This board has no tasks.'));
@@ -437,8 +339,6 @@ function renderColumn(
 
   const body = el('div', 'ov2-col__body');
   if (tasks.length === 0) {
-    // Kept, not collapsed: a lane that vanishes when it empties makes the board
-    // jump under the pointer, and an empty Testing column is information.
     body.appendChild(el('p', 'ov2-col__empty', '—'));
   }
   for (const task of tasks) body.appendChild(renderTaskCard(state, task, actions, options));
@@ -463,18 +363,13 @@ function renderTaskCard(
   const head = el('button', 'ov2-task__head');
   head.type = 'button';
   head.dataset.taskId = task.id;
-  // Roving tabindex: the grid is one tab stop, arrows move within it (P9-I).
   head.tabIndex = selected ? 0 : -1;
   head.setAttribute('aria-pressed', selected ? 'true' : 'false');
   head.setAttribute(
     'aria-label',
     `${task.id} ${task.title}, ${phaseLabel(state, task)}`,
   );
-  // Survives a repaint: the surface rebuilds from scratch on every frame, so
-  // focus is restored by key rather than by node identity (P9-I).
   head.dataset.focusKey = `task:${task.id}`;
-  // Open (or replace) the detail overlay. Same-card click does not toggle closed —
-  // dismiss is Close, scrim, or Escape (see renderTaskDetail).
   head.addEventListener('click', () => {
     if (!selected) actions.select(task.id);
   });
@@ -498,8 +393,6 @@ function renderTaskCard(
 
   const live = options.liveHeadlines?.get(task.id);
   if (live && (task.phase === 'building' || task.phase === 'testing')) {
-    // Status still comes from derive(); this line is the live hook so a
-    // running attempt shows the current tool without journaling tokens.
     const liveLine = el('p', 'ov2-task__live', `${live.role}: ${live.text}`);
     liveLine.setAttribute('aria-live', 'polite');
     card.appendChild(liveLine);
@@ -509,8 +402,6 @@ function renderTaskCard(
     options.engineErrors?.get(`builder:${task.id}`) ??
     options.engineErrors?.get(`tester:${task.id}`);
   if (failure) {
-    // P9-A on the card itself, not only in the banner: the banner says the board
-    // is stuck, this says which card is stuck and why.
     const note = el('p', 'ov2-task__failed', failure.message);
     note.setAttribute('role', 'status');
     card.appendChild(note);
@@ -546,7 +437,6 @@ function renderCardControls(
   });
   controls.appendChild(start);
 
-  // P9-H. A journaled command, not a local write — see `engine.abandonTask`.
   const terminal =
     task.phase === 'merged' || task.phase === 'abandoned' || task.phase === 'skipped';
   const abandon = el('button', 'ov2-btn ov2-btn--ghost', 'Abandon');
@@ -563,13 +453,6 @@ function renderCardControls(
   return controls;
 }
 
-/**
- * "Start" or "Retry" — the same command either way.
- *
- * V1 had a separate retry path with its own counters. Here retrying *is*
- * starting: `nextAction()` reads the journal and picks the seed, so a task that
- * has failed twice gets the repair seed and the button does not have to know.
- */
 function startLabel(
   task: TaskState,
   startable: { can: boolean; mode?: 'start' | 'rerun' },
@@ -578,14 +461,6 @@ function startLabel(
   return task.attempts.some((a) => a.ended) ? 'Retry' : 'Start';
 }
 
-/**
- * Whether a manual start would be accepted, and why not when it would not.
- *
- * This mirrors `manualStart()` rather than guessing: a disabled button that
- * disagrees with the server is worse than no button. The server still decides —
- * a 409 comes back as a message — this only saves the round trip and explains
- * the reason in place.
- */
 export function isStartable(
   state: BoardState,
   task: TaskState,
@@ -603,20 +478,7 @@ export function isStartable(
   return { can: true, mode: 'start', why: '' };
 }
 
-// ---------------------------------------------------------------------------
-// Keyboard navigation
-// ---------------------------------------------------------------------------
 
-/**
- * Arrow-key navigation across the grid — P9-I.
- *
- * Ported from `orchestrate-board-keyboard.ts` **as navigation only**. V1's
- * Ctrl/Cmd+Arrow moved a card between lanes, which was a status write; a card's
- * column here is derived, so there is nothing for that gesture to mean.
- *
- * Left/right cross columns, up/down move within one. Delegated from the list so
- * a repaint does not have to re-bind anything.
- */
 function attachKeyboardGrid(list: HTMLElement): void {
   list.addEventListener('keydown', (event: KeyboardEvent) => {
     const key = event.key;
@@ -635,7 +497,6 @@ function attachKeyboardGrid(list: HTMLElement): void {
     const heads = [...column.querySelectorAll<HTMLElement>('.ov2-task__head')];
     const rowIndex = heads.indexOf(current);
 
-    /** @returns the first focusable head at or after `row` in a column */
     const focusIn = (index: number, row: number): boolean => {
       const target = columns[index];
       if (!target) return false;
@@ -654,7 +515,6 @@ function attachKeyboardGrid(list: HTMLElement): void {
         handled = true;
       }
     } else {
-      // Skip empty columns rather than dead-ending on one.
       const step = key === 'ArrowLeft' ? -1 : 1;
       for (let i = columnIndex + step; i >= 0 && i < columns.length; i += step) {
         if (focusIn(i, rowIndex)) {
@@ -667,23 +527,8 @@ function attachKeyboardGrid(list: HTMLElement): void {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Finish report — P9-G
-// ---------------------------------------------------------------------------
+// ── Ledger ───────────────────────────────────────────────────────────────────
 
-/**
- * The per-task ledger, derived — the other half of P3-G's report.
- *
- * `renderFinishReport` below shows the persisted narrative artifact, which an
- * LLM wrote. This shows what the *journal* says: every task's outcome, how many
- * attempts it took, why anything was abandoned, the integration sha, and the
- * Final Tester's run instructions.
- *
- * Kept separate and rendered beneath it on purpose. The narrative can be late,
- * absent, or wrong; the ledger is a fold over the record and is none of those,
- * so the question "what actually happened" always has an answer on screen even
- * when the report writer never ran.
- */
 export function renderRunLedger(
   state: BoardState,
   actions?: Pick<BoardActions, 'rerun'>,
@@ -731,7 +576,6 @@ export function renderRunLedger(
   return wrap;
 }
 
-/** Ladder result plus Retry, so a failed final test is not a green pill and a shrug. */
 function renderFinalTest(
   state: BoardState,
   actions?: Pick<BoardActions, 'rerun'>,
@@ -783,7 +627,6 @@ function totalAttempts(state: BoardState): number {
   return n;
 }
 
-/** Why a task ended the way it did, in one phrase, or '' when it just worked. */
 function reasonFor(task: TaskState): string {
   if (task.abandonedReason) {
     return task.abandonedReason === 'user'
@@ -799,29 +642,19 @@ function reasonFor(task: TaskState): string {
   return '';
 }
 
-// ---------------------------------------------------------------------------
-// Loading — P9-I
-// ---------------------------------------------------------------------------
+// ── Skeleton ─────────────────────────────────────────────────────────────────
 
-/**
- * A skeleton, not the word "Loading".
- *
- * The board's shape is known before its content is, so showing that shape is
- * both faster to read and stops the layout jumping when the first frame lands.
- */
 export function renderSkeleton(rows = 6, className = 'ov2-skeleton'): HTMLElement {
   const wrap = el('div', className);
   wrap.setAttribute('aria-hidden', 'true');
   for (let i = 0; i < rows; i += 1) {
     const line = el('div', 'ov2-skeleton__line');
-    // Uneven widths read as content; equal bars read as a progress meter.
     line.style.width = `${55 + ((i * 37) % 40)}%`;
     wrap.appendChild(line);
   }
   return wrap;
 }
 
-/** The loading state for the whole board pane, announced for screen readers. */
 export function renderBoardSkeleton(): HTMLElement {
   const wrap = el('div', 'ov2-loading');
   const status = el('p', 'ov2-sr-only', 'Loading the board');
@@ -832,9 +665,7 @@ export function renderBoardSkeleton(): HTMLElement {
   return wrap;
 }
 
-// ---------------------------------------------------------------------------
-// Merge queue
-// ---------------------------------------------------------------------------
+// ── Timeline ─────────────────────────────────────────────────────────────────
 
 export function renderMergeQueue(state: BoardState): HTMLElement {
   const wrap = el('section', 'ov2-queue ob-sec');
@@ -848,7 +679,6 @@ export function renderMergeQueue(state: BoardState): HTMLElement {
     const item = el('li', 'ov2-queue__item');
     item.appendChild(el('span', 'ov2-queue__pos', String(index + 1)));
     item.appendChild(el('span', 'ov2-queue__id', id));
-    // Rule 5: the queue is serialised, so only the head is ever in flight.
     if (index === 0) item.appendChild(pill('merging', 'live'));
     list.appendChild(item);
   });
@@ -856,15 +686,7 @@ export function renderMergeQueue(state: BoardState): HTMLElement {
   return wrap;
 }
 
-// ---------------------------------------------------------------------------
-// Timeline
-// ---------------------------------------------------------------------------
 
-/**
- * The journal, as it is. Not a narrative — the raw record, because when a run
- * goes wrong the question is always "what actually happened", and any summary
- * here would be a second interpretation of events.
- */
 export function renderTimeline(
   events: readonly Record<string, unknown>[],
   truncated: boolean,
@@ -891,17 +713,7 @@ export function renderTimeline(
   return wrap;
 }
 
-// ---------------------------------------------------------------------------
-// Finish report (P3-G)
-// ---------------------------------------------------------------------------
 
-/**
- * The one report a set-and-forget run delivers. Data comes from the persisted
- * artifact, not from BoardState, so this view cannot feed the engine.
- *
- * Markdown is shown as preformatted text: the writer is an LLM, and this
- * surface must not interpret that string as HTML.
- */
 export function renderFinishReport(markdown: string | null, loading: boolean): HTMLElement {
   const wrap = el('section', 'ov2-finish');
   wrap.appendChild(el('h3', 'ov2-finish__title', 'Run report'));

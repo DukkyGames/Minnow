@@ -38,6 +38,8 @@ export interface WebhookDeliverySummary {
   attemptedAt: string;
 }
 
+// ── Fetch ────────────────────────────────────────────────────────────────────
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -62,6 +64,8 @@ async function fetchDeliveries(): Promise<WebhookDeliverySummary[]> {
   const data = (await res.json()) as { deliveries?: WebhookDeliverySummary[] };
   return Array.isArray(data.deliveries) ? data.deliveries : [];
 }
+
+// ── Subscriptions ────────────────────────────────────────────────────────────
 
 /**
  * Render webhook subscription management into the settings mount node.
@@ -326,6 +330,8 @@ function renderAddForm(mount: HTMLElement, onSaved: () => Promise<void>): void {
     })();
   });
 }
+
+// ── Deliveries ───────────────────────────────────────────────────────────────
 
 async function renderDeliveriesTable(mount: HTMLElement): Promise<void> {
   mount.replaceChildren();

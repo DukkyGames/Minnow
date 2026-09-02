@@ -1,7 +1,3 @@
-/**
- * Orchestrate hub: library-first ask pane + board rail (ob-* twin of Super Plan).
- */
-
 import '../styles/orchestrate-hub.css';
 import '../styles/ob-page.css';
 
@@ -57,6 +53,8 @@ export interface OrchestrateHubPlanPreviewElements {
   pathChip: HTMLElement;
   previewMount: HTMLElement;
 }
+
+// ── Hub chrome ───────────────────────────────────────────────────────────────
 
 /**
  * Load and render the selected plan file into the hub preview panel (plan screen parity).
@@ -133,6 +131,8 @@ export function teardownOrchestrateHub(): void {
   notifyCodeStageViewChanged();
 }
 
+// ── Board list ───────────────────────────────────────────────────────────────
+
 /** Workspace folders that have an orchestrate board or plan path. */
 export function listWorkspaceOrchestrateBoardGroups(
   workspacePath: string,
@@ -199,11 +199,7 @@ export function refreshOrchestrateHubBoardList(): void {
   });
 }
 
-/**
- * Re-populate the hub plan dropdown from the workspace. Called when session chats
- * change (e.g. a planner chat is deleted) so the plan list updates without the user
- * having to press Refresh (MIN-215). No-op when the hub is not mounted.
- */
+/** Re-populate the hub plan dropdown from the workspace. */
 export async function refreshOrchestrateHubPlanList(): Promise<void> {
   if (!isOrchestrateHubMounted()) return;
   const sel = document.getElementById('orchestrateHubPlanSelect');
@@ -237,13 +233,14 @@ async function loadHubPlans(
   });
 }
 
+// ── DOM ──────────────────────────────────────────────────────────────────────
+
 function buildOrchestrateHubDom(): HTMLElement {
   let filterText = '';
 
   const { page, main, railList, filterInput } = buildOrchestratePageShell({
     rootId: ORCHESTRATE_HUB_ROOT_ID,
     ariaLabel: 'Orchestrate boards',
-    // Library shell only — do not add .hub-root (Vibe hub padding/centering breaks the rail).
     extraRootClass: 'orchestrate-hub-root',
     onNewBoard: () => {
       document.getElementById('orchestrateHubPlanSelect')?.focus();
@@ -265,7 +262,6 @@ function buildOrchestrateHubDom(): HTMLElement {
     paintRail();
   });
 
-  // Ask pane: start from plan (dual-class titles for hub tests).
   const pane = document.createElement('div');
   pane.className = 'ob-pane--ask';
 
@@ -406,8 +402,6 @@ function buildOrchestrateHubDom(): HTMLElement {
     });
   });
 
-  // Always a blank Super Plan composer — not the last plan / live run the
-  // Code view-bar button would resume.
   makePlanBtn.addEventListener('click', () => {
     void openSuperPlanScreen({ preferNew: true });
   });
@@ -423,15 +417,10 @@ function buildOrchestrateHubDom(): HTMLElement {
   return page;
 }
 
+// ── Landing ──────────────────────────────────────────────────────────────────
+
 /** Paint orchestrate hub into #chatArea (replaces current main view). */
-/**
- * Where entering Orchestrator should land: the board you were last inside, else
- * the most recently active running board, else the hub itself.
- *
- * Modelled on `resolveSuperPlanTarget` — Super Plan already resumes rather than
- * always showing its own front door, and `lastBoardGroupId` has been persisted
- * end-to-end all along; nothing read it.
- */
+/** Where entering Orchestrator should land: the board you were last inside, else the most recently active running board, else the hub itself. */
 export function resolveOrchestrateLandingTarget(): ChatGroup | null {
   if (!sessionState) return null;
 
@@ -442,15 +431,11 @@ export function resolveOrchestrateLandingTarget(): ChatGroup | null {
   const running = listWorkspaceOrchestrateBoardGroups(workspace).filter(
     (group) => isLeftoverBoardRunning(group),
   );
-  // The list is already newest-first by board activity.
   return running[0] ?? null;
 }
 
 export interface RenderOrchestrateHubOptions {
-  /**
-   * Skip the resume and show the hub itself. Used by explicit "new board"
-   * entry points, mirroring Super Plan's `preferNew`.
-   */
+  /** Skip the resume and show the hub itself. */
   preferNew?: boolean;
 }
 
@@ -484,8 +469,6 @@ export function renderOrchestrateHub(): void {
   });
   const area = document.getElementById('chatArea');
   if (!area) return;
-  // Hub replaces #chatArea wholesale. Clear embed state first so a later
-  // renderBoardView does not think a task chat is still open and skip rebuild.
   closeBoardChatEmbedForTeardown();
   if (!hubReturnChatId && sessionState?.activeId) {
     hubReturnChatId = sessionState.activeId;
@@ -494,7 +477,6 @@ export function renderOrchestrateHub(): void {
   area.appendChild(buildOrchestrateHubDom());
   stripMainColumnOverlayClasses();
   area.classList.add('chat-area--orchestrate-hub', OB_CHAT_AREA_CLASS);
-  // Board view stays in chat state; hide board chrome while the hub overlay is open.
   document.getElementById('mainColumn')?.classList.remove('main-column--board-view');
   syncTopBarOrchestrateButton();
   notifyAskQuestionDisplayContextChanged();
@@ -524,7 +506,6 @@ export function closeOrchestrateHub(): void {
 export function toggleOrchestrateHubFromTopbar(): void {
   void import('../orchestrator/boards-view').then(async (m) => {
     if (m.isBoardsViewOpen()) {
-      // closeBoardsView restores the last chat and stamps #/app/code/chat.
       await m.closeBoardsView();
       return;
     }

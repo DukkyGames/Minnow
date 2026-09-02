@@ -1,13 +1,3 @@
-/**
- * Workspace-relative paths for plan selection (planner, Super Plan, V2 Boards create).
- *
- * Lives under `src/chat/plans/` rather than `src/chat/orchestrate/` so the path
- * does not imply a board engine. MIN-714: presentation/listing only — V2 state
- * is `derive(journal)` on the server.
- *
- * Executable plans live under documentation/plans/ but exclude references/ and verification/.
- */
-
 import type { Chat, ChatGroup } from '../../types';
 
 /** Prefix for all orchestrate plan paths (workspace-relative, forward slashes). */

@@ -22,6 +22,8 @@ async function pathExists(targetPath) {
 
 /**
  * Run ecosystem install commands when `changedFiles` touched a manifest or lockfile.
+ * Remove seed junctions first so the install cannot write into the main workspace.
+ * Windows `shell:true` spawns cmd.exe, so SIGTERM alone is not enough — kill the tree.
  * @param {string} root — integration worktree root (absolute)
  * @param {string[]} changedFiles — paths from a post-merge git diff
  * @param {{ timeout?: number }} [options]
@@ -53,9 +55,6 @@ export async function refreshDependencies(root, changedFiles, { timeout = INSTAL
 
       const label = `${install.command} ${install.args.join(' ')}`;
 
-      // Remove seed junctions so installs write into a real dir in this worktree.
-      // A junction that survives (open handle on Windows) would make the install
-      // write straight into the main workspace's dep dir — refuse instead.
       const materialized = await materializeDepDirs(root, entry.dirs);
       if (materialized.failed.length > 0) {
         const dirs = materialized.failed.join(', ');
@@ -70,7 +69,6 @@ export async function refreshDependencies(root, changedFiles, { timeout = INSTAL
           cwd: root,
           timeout,
           shell: process.platform === 'win32',
-          // Windows shell spawns cmd.exe; SIGTERM alone leaves grandchildren holding locks.
           killTree: killProcessTree,
         });
         if (result.code === 0) {

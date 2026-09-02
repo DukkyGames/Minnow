@@ -1,7 +1,3 @@
-/**
- * Reassemble a single chat turn verbatim from runs or history (MIN-139).
- */
-
 import { estimateTokensFromText } from '../chat/prompts/token-estimate-core';
 import { getActiveChat } from '../state/sessions';
 import type { Message } from '../types';

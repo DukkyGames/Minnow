@@ -140,7 +140,6 @@ export async function enqueuePendingAction(accountId, input) {
 
   const db = getMailDb(accountId);
   const destFolder = String(input.destFolder ?? '').trim();
-  // Reuse an identical open review row instead of stacking duplicates.
   const openRows = db
     .prepare(
       "SELECT * FROM pending_actions WHERE state = 'pending' AND source = ? AND action = ? AND dest_folder = ?",

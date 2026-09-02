@@ -1,7 +1,3 @@
-/**
- * Validate required tool parameters from OpenAI function schemas before execution.
- */
-
 import { BUILT_IN_TOOLS, type ToolDefinition } from './definitions.ts';
 
 function findBuiltInTool(functionName: string): ToolDefinition | undefined {
@@ -10,7 +6,6 @@ function findBuiltInTool(functionName: string): ToolDefinition | undefined {
 
 function isPresentRequiredValue(value: unknown, fieldKey?: string): boolean {
   if (value === undefined || value === null) return false;
-  // Empty files and no-op appends are valid; only reject when content is absent.
   if (typeof value === 'string') {
     if (fieldKey === 'content') return true;
     return value.trim().length > 0;

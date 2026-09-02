@@ -1,8 +1,3 @@
-/**
- * Per-menu resolver for which #modelSelect value Load/Unload should target.
- * Composer menus use the active chat model; the top bar uses the global default.
- */
-
 const loadUnloadValueResolvers = new WeakMap<HTMLElement, () => string>();
 
 /** Register how a host filter bar resolves the model key for load/unload actions. */

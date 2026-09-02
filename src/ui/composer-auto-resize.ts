@@ -1,10 +1,3 @@
-/**
- * Shared composer auto-grow: CSS field-sizing on Electron 43+, JS fallback
- * otherwise. Kept off `input.ts` so Super Plan can wire it without pulling the
- * Code send / steer / skill-picker graph.
- */
-
-/** Composer grows with content; caps at 40vh then scrolls without a visible thumb. */
 const COMPOSER_MIN_HEIGHT_PX = 44;
 const COMPOSER_MAX_HEIGHT_VH = 40;
 
@@ -18,30 +11,21 @@ function parsePositivePx(value: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-/**
- * Read computed style from the element's window. Tests run under happy-dom
- * where `getComputedStyle` is not a global — only `window.getComputedStyle`.
- */
+/** Read computed style from the element's window. */
 function readComposerComputedStyle(el: HTMLTextAreaElement): CSSStyleDeclaration | null {
   const view = el.ownerDocument?.defaultView ?? (typeof window !== 'undefined' ? window : null);
   if (!view || typeof view.getComputedStyle !== 'function') return null;
   return view.getComputedStyle(el);
 }
 
-/**
- * Floor for the JS resize path. Prefer the field's CSS min-height so Super Plan
- * (96px) is not collapsed to the chat composer's 44px.
- */
+/** Floor for the JS resize path. */
 function composerMinHeightPx(el: HTMLTextAreaElement): number {
   const style = readComposerComputedStyle(el);
   const fromCss = style ? parsePositivePx(style.minHeight) : null;
   return fromCss != null ? Math.max(COMPOSER_MIN_HEIGHT_PX, fromCss) : COMPOSER_MIN_HEIGHT_PX;
 }
 
-/**
- * Cap for the JS resize path. Prefer the field's CSS max-height when it is a
- * resolved px value, never exceeding the 40vh chat budget.
- */
+/** Cap for the JS resize path. */
 function composerMaxHeightPx(el: HTMLTextAreaElement): number {
   const inner =
     typeof window !== 'undefined' && Number.isFinite(window.innerHeight) ? window.innerHeight : 800;
@@ -71,12 +55,7 @@ function clearInlineComposerHeight(el: HTMLTextAreaElement): void {
   if (el.style.height) el.style.height = '';
 }
 
-/**
- * Grow a composer textarea to fit lines.
- * Electron 43+ uses CSS field-sizing, so this is a no-op (avoids height:auto
- * reflow on every keystroke, which lagged glyph paint on macOS).
- * Fallback engines skip height:auto unless the box must shrink.
- */
+/** Grow a composer textarea to fit lines. */
 export function autoResize(el: HTMLTextAreaElement): void {
   if (composerFieldSizingSupported()) {
     clearInlineComposerHeight(el);
@@ -87,7 +66,6 @@ export function autoResize(el: HTMLTextAreaElement): void {
   const minPx = composerMinHeightPx(el);
   const current = el.offsetHeight;
 
-  // Growing: overflowing content — set the new height without collapsing first.
   if (el.scrollHeight > el.clientHeight + 1) {
     const next = Math.min(Math.max(el.scrollHeight, minPx), maxPx);
     if (Math.abs(next - current) > 0.5) {
@@ -97,15 +75,12 @@ export function autoResize(el: HTMLTextAreaElement): void {
     return;
   }
 
-  // Single-line at the floor: do not set height:auto (that reflows the chat column).
   if (current <= minPx + 1) {
     el.style.height = `${minPx}px`;
     el.style.overflowY = 'hidden';
     return;
   }
 
-  // Shrink path only (deleted a line). Textarea scrollHeight is often clamped
-  // to clientHeight, so measuring natural height requires height:auto.
   el.style.overflowY = 'hidden';
   el.style.height = 'auto';
   const contentHeight = el.scrollHeight;
@@ -118,16 +93,11 @@ export function autoResize(el: HTMLTextAreaElement): void {
   el.style.overflowY = 'auto';
 }
 
-/**
- * Wire JS auto-resize when CSS field-sizing is unavailable (idempotent).
- * Used by Code, Chat, and Super Plan composers. Returns an unbind so mounted
- * surfaces (Super Plan) can drop the window resize listener on destroy.
- */
+/** Wire JS auto-resize when CSS field-sizing is unavailable (idempotent). */
 export function bindComposerAutoResize(el: HTMLTextAreaElement): () => void {
   autoResize(el);
   if (el.dataset.composerAutoResizeWired === '1') return () => {};
   el.dataset.composerAutoResizeWired = '1';
-  // field-sizing: content grows the box in the compositor; skip JS on input.
   if (composerFieldSizingSupported()) {
     return () => {
       delete el.dataset.composerAutoResizeWired;
@@ -140,7 +110,6 @@ export function bindComposerAutoResize(el: HTMLTextAreaElement): () => void {
     autoResize(el);
   };
   el.addEventListener('input', onInput);
-  // Bind to the field's window so unbind still works after tests swap globals.
   const view = el.ownerDocument.defaultView;
   view?.addEventListener('resize', onResize);
   return () => {

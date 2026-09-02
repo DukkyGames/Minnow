@@ -26,9 +26,7 @@ function readStorage(key: string): string | null {
 function writeStorage(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
-  } catch {
-    /* private mode */
-  }
+  } catch {}
 }
 
 function normalizeLayout(value: string | null): DesktopPrefs['desktopLayout'] {
@@ -56,9 +54,7 @@ function emitDesktopPrefs(): void {
   for (const fn of listeners) {
     try {
       fn({ ...prefs });
-    } catch {
-      /* ignore subscriber errors */
-    }
+    } catch {}
   }
 }
 

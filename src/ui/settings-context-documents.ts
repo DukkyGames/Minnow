@@ -1,6 +1,3 @@
-/**
- * Settings → Rules: workspace context document injection presets and paths.
- */
 
 import { CONTEXT_DOCUMENT_PRESETS } from '../chat/context-documents/catalog';
 import {

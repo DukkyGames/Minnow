@@ -1,11 +1,3 @@
-/**
- * Source Control Center — Checks.
- *
- * Workflow runs on the left, the selected run's jobs and steps on the right,
- * with failed-step logs one click away. A red run should never require leaving
- * the app to find out which step broke.
- */
-
 import {
   forgeRefresh,
   runCancel,
@@ -94,8 +86,6 @@ export function createChecksView(
   });
 
   toolbar.append(branchToggle, refreshBtn);
-
-  // ── Load ───────────────────────────────────────────────────────────────────
 
   async function refresh(): Promise<void> {
     if (destroyed) return;
@@ -259,8 +249,6 @@ export function createChecksView(
     );
   }
 
-  // ── Detail ─────────────────────────────────────────────────────────────────
-
   async function renderDetail(id: number): Promise<void> {
     if (!detailCol.querySelector('.scc-rundetail')) detailCol.replaceChildren(skeletonRows(7));
 
@@ -334,8 +322,6 @@ export function createChecksView(
     wrap.appendChild(head);
 
     if (run.jobs.length === 0) {
-      // No jobs on a failed run means GitHub never started one: the workflow
-      // file itself did not parse. The run log carries the actual reason.
       wrap.appendChild(buildNoJobsState(run, state));
       return wrap;
     }
@@ -347,10 +333,7 @@ export function createChecksView(
     return wrap;
   }
 
-  /**
-   * A run that reports zero jobs. When it also failed, the workflow file never
-   * parsed, so say that plainly and put the log one click away.
-   */
+  /** A run that reports zero jobs. */
   function buildNoJobsState(run: WorkflowRunDetail, state: RunState): HTMLElement {
     const wrap = el('div', 'scc-nojobs');
 
@@ -408,8 +391,6 @@ export function createChecksView(
     trigger.disabled = false;
 
     if (!result.ok || !result.log?.trim()) {
-      // GitHub keeps no log at all when a workflow fails to parse; gh reports
-      // that as "log not found", which reads like a bug unless it is explained.
       const missing = !result.ok && /log not found|no logs/i.test(result.error ?? '');
       host.replaceChildren(
         errorStrip(

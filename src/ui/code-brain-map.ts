@@ -1,7 +1,3 @@
-/**
- * Code app — Code map overlay in the main column (repo map, symbol search, call graph).
- */
-
 import '../styles/code-brain-map.css';
 
 import { sessionState } from '../state/sessions';
@@ -80,11 +76,7 @@ export function restoreCodeSectionIfMounted(): void {
   codeSectionHome = null;
 }
 
-/**
- * Restore the Brain code section before #chatArea is repainted (workspace switch, chat change).
- * Prevents #brainSection-code from being destroyed with the overlay DOM.
- * @returns true when an active code-map overlay was torn down.
- */
+/** Restore the Brain code section before #chatArea is repainted (workspace switch, chat change). */
 export function teardownCodeBrainMapBeforeChatPaint(): boolean {
   const hadOverlay = isCodeMapOverlayActive();
   if (!hadOverlay && !codeSectionHome) return false;

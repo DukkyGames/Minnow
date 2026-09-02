@@ -92,7 +92,6 @@ describe('neither V2 prompt mentions boards, waves, delegation, or lifecycle rep
   for (const [role, profile, abs] of FILES) {
     it(`${role} ${profile} is clean`, () => {
       const body = read(abs);
-      // Strip YAML front-matter so `id:` lines cannot false-positive.
       const start = body.indexOf('\n---\n');
       const content = start >= 0 ? body.slice(start + 5) : body;
       for (const [re, label] of banned) {

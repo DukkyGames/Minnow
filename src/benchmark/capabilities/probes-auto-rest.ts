@@ -21,7 +21,6 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
     requires: ['workspace', 'tool-server'],
     verdict: (out) => {
       if (!hasTool(out.toolCalls, 'execute_command')) return fail('No execute_command');
-      // The prompt asks for `node -e "console.log(9*7)"`, so the run really printed 63.
       if (out.executedResults.some((r) => r.includes('63'))) {
         return pass('execute_command ran and returned the expected output');
       }
@@ -35,9 +34,6 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
       'start_background_command',
       'stop_background_command',
       'list_running_commands',
-      // The prompt asks the model to stop the run "once it is running", so it needs a
-      // supported way to check. The returned log path is relative to the tool server's
-      // root, not the probe workspace, so shelling out to read it always failed.
       'read_command_log',
       'execute_command',
     ],
@@ -65,7 +61,6 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
       if (!hasAnyTool(out.toolCalls, ['run_python', 'run_javascript'])) {
         return fail('Expected run_python/javascript');
       }
-      // Expected mean is derived from the same array the prompt lists, never retyped.
       if (out.executedResults.some((r) => r.includes(CAP_MATRIX_MEAN_EXPECTED))) {
         return pass('Interpreter ran and returned the expected mean');
       }
@@ -138,8 +133,6 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
   'agents-todo-write': {
     kind: 'derived',
     maxToolRounds: 12,
-    // Needs real work tools alongside todo_write, otherwise there is no second round in
-    // which to update the list.
     toolIds: ['todo_write', 'list_directory', 'read_file', 'get_datetime'],
     verdict: (out) => {
       const rounds = out.rounds.filter((r) =>
@@ -160,8 +153,6 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
   'agents-issue-tools': {
     kind: 'tool-chain',
     maxToolRounds: 6,
-    // `issue_create` / `issue_list` are not catalog ids — the old spec offered nothing
-    // the model could call and never stubbed the real write tools.
     toolIds: ['issue_add', 'issue_update', 'issue_link', 'issue_get_state'],
     emitOnly: true,
     verdict: (out) => {
@@ -256,8 +247,6 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
   'mode-impeccable': {
     kind: 'derived',
     maxToolRounds: 8,
-    // The row asks whether the model loads the Impeccable context *before* it starts
-    // editing, so offer both the impeccable tools and the edit tools it should defer.
     toolIds: ['load_impeccable_context', 'load_aesthetics_reference', 'run_impeccable'],
     trapToolIds: ['save_file', 'replace_text_in_file'],
     verdict: (out) => {
@@ -296,7 +285,6 @@ export const REMAINING_AUTO_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'features-markdown': {
     kind: 'text',
-    // Prompt asks for a TypeScript snippet plus a small parameter table.
     verdict: (out) => {
       const t = out.contentText || out.text;
       const fences = (t.match(/```/g) ?? []).length;

@@ -81,7 +81,6 @@ describe('turnEventsToMessages', () => {
       },
     ]);
 
-    // Thoughts → List → Thoughts → report_outcome → final reply
     assert.equal(messages.length, 7);
     assert.equal(messages[0].reasoning, 'Let me list the top-level entries.');
     assert.equal(messages[0].tool_calls, undefined);

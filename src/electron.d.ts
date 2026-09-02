@@ -214,8 +214,6 @@ export interface MinnowPreviewContextMenuApi {
 }
 
 export interface MinnowPreviewApi {
-  // Every method takes an optional trailing `instanceId`; omitting it targets the default
-  // 'workspace-preview' instance, so every pre-MIN-364 call site keeps working unchanged.
   show(bounds?: MinnowPreviewBounds, tabId?: string, instanceId?: string): Promise<void>;
   hide(tabId?: string, instanceId?: string): Promise<void>;
   clear(tabId?: string, instanceId?: string): Promise<void>;

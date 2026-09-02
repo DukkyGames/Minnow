@@ -101,6 +101,7 @@ function isValidExpertId(expertId) {
 
 /**
  * Handle /api/brain requests. Returns true if handled.
+ * prune-links is a dry run unless the caller sets apply — it rewrites frontmatter.
  */
 export async function handleBrainRequest(req, res, pathname) {
   if (!pathname.startsWith('/api/brain')) {
@@ -331,7 +332,6 @@ export async function handleBrainRequest(req, res, pathname) {
 
     if (pathname === '/api/brain/prune-links' && req.method === 'POST') {
       const body = await readJsonBody(req);
-      // Dry run unless the caller explicitly confirms — this rewrites frontmatter.
       const report = await pruneWeakSimilarLinks({ dryRun: body.apply !== true });
       sendJson(res, 200, report);
       return true;
@@ -677,7 +677,6 @@ export async function handleBrainAndSynthesisRequest(req, res, pathname) {
 export async function initBrainApi() {
   await ensureBrainStore();
   try {
-    // Narrow SELECT id FROM chats — avoid raw state.json / whole-blob parse.
     const { readAllChatIds, useJsonSessionsStore } = await import(
       '../config/sessions-repo.js'
     );
@@ -690,7 +689,6 @@ export async function initBrainApi() {
           .filter(Boolean),
       );
     } else {
-      // JSON rollback: whole-blob resource read.
       const { readResource } = await import('../config/store.js');
       const sessions = await readResource('sessions');
       ids = new Set(

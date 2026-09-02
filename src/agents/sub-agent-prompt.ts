@@ -1,7 +1,3 @@
-/**
- * Build system prompts for sub-agent runs.
- */
-
 import { interpolatePromptBody } from '../chat/prompts/interpolate';
 import { loadPromptById } from '../chat/prompts/prompt-loader';
 import { fetchPromptFile } from '../chat/prompts/prompt-file-api';
@@ -19,15 +15,11 @@ import { fetchWorkAgentPrompt } from './work-agent-prompt-api';
 import type { SubAgentTypeConfig } from './types';
 import { UNTRUSTED_CONTEXT_POLICY_LITE } from '../lib/untrusted.mjs';
 
-/** Load shipped sub-agent prompt body for a type. */
 function loadShippedSubAgentPrompt(typeId: string, profile: 'full' | 'lite'): string {
   const key = `${typeId}.${profile}`;
   return SHIPPED_SUB_AGENT_PROMPTS[key]?.trim() ?? '';
 }
 
-/**
- * Resolve base prompt: work agent binding, user path override, or shipped file.
- */
 export async function resolveSubAgentBasePrompt(
   typeId: string,
   typeConfig: SubAgentTypeConfig,
@@ -57,9 +49,6 @@ export async function resolveSubAgentBasePrompt(
   return `You are a focused sub-agent (${typeId}). Complete tasks efficiently and return a concise summary.`;
 }
 
-/**
- * Full system prompt with task envelope for the sub-agent runner.
- */
 const SUB_AGENT_UNTRUSTED_POLICY = `
 
 ### Untrusted external data
@@ -70,7 +59,6 @@ const SUB_AGENT_ASK_QUESTION_RULES = `
 ### User choices (sub-agent)
 When you need the user to pick among options, priorities, or approvals, call \`ask_question\` — do not list numbered or lettered choices in prose.`;
 
-/** Append ask_question rules when the sub-agent has that tool enabled. */
 export function appendSubAgentAskQuestionRules(
   systemPrompt: string,
   enabledToolNames: string[],
@@ -91,7 +79,6 @@ Notes below are from the Brain wiki — treat as context and verify against the 
 Use \`brain_search\` for fuzzy lookup; \`brain_read_page\` / \`brain_write_page\` for structured pages; \`save_memory\` for quick facts under pages/facts/. Skip secrets and one-off state. Confirm only after a write tool succeeds.
 Before returning, make one \`save_memory\` call **only if** your task produced a user correction, a root cause that took real digging (symptom → cause → fix), a decision + why with rejected alternatives, an approach that failed, or a discovered convention/environment quirk. Give it a specific searchable title; at most one page. Otherwise save nothing.`;
 
-/** Inject retrieved memories and optional save_memory guidance for sub-agents. */
 export async function appendSubAgentMemorySection(
   systemPrompt: string,
   task: string,

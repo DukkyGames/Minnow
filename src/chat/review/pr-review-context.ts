@@ -1,9 +1,3 @@
-/**
- * Fetch the PR snapshot + patch, then build the reviewer task envelope.
- *
- * `buildPrReviewTask` is pure so tests can pin the budget split without hitting `gh`.
- */
-
 import {
   prDiff,
   prView,

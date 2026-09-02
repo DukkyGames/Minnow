@@ -1,7 +1,3 @@
-/**
- * Workspace context documents: global config + per-chat tri-state injection.
- */
-
 import {
   mergeThinkingTriState,
   normalizeThinkingTriState,
@@ -52,6 +48,8 @@ function normalizeConfigSlice(raw: unknown): ContextDocumentsConfig {
     customPaths: [...new Set(customPaths.map((p) => p.trim()))],
   };
 }
+
+// ── Load ─────────────────────────────────────────────────────────────────────
 
 /** Load contextDocuments + features.contextDocumentsInjectionDefault from config.json. */
 export async function loadContextDocumentsSettings(): Promise<{
@@ -110,6 +108,8 @@ export async function saveContextDocumentsInjectionDefault(enabled: boolean): Pr
   }
 }
 
+// ── Save ─────────────────────────────────────────────────────────────────────
+
 export async function saveContextDocumentsConfig(
   documents: ContextDocumentsConfig,
 ): Promise<boolean> {
@@ -141,6 +141,8 @@ export function isValidContextDocumentPath(path: string): boolean {
   const parts = trimmed.split('/').filter(Boolean);
   return !parts.some((p) => p === '..');
 }
+
+// ── Resolve ──────────────────────────────────────────────────────────────────
 
 export function resolveContextDocumentsInjectionTriState(
   chat: Chat,

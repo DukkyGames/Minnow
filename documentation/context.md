@@ -744,6 +744,7 @@ Scoped suites: see `package.json` (`test:memory`, `test:brain`, `test:product-wi
 
 - Root [`tsconfig.json`](../tsconfig.json) typechecks **`src/`** with **`strict: true`**; keep `npx tsc --noEmit` clean before merge (CI gate). Enablement plan: `plans/typescript-strict-enablement.md`.
 - Match surrounding code style; CSS uses `--mn-*` tokens only ([`tokens.css`](../src/styles/tokens.css)).
+- Comments: one short line above a function when the name is not enough. No comments inside functions except compiler/linter directives. Large files use 80-character section banners so you can jump by name, e.g. `// ── Branches ─────────────────────────────────────────────────────────────────` ([`scc-refs.ts`](../src/ui/scc-refs.ts), [`research/panel.ts`](../src/research/panel.ts)).
 - Update **this file** when architecture, APIs, or storage change.
 - Feature plans and historical notes live in [`documentation/plans/`](plans/) ? not here.
 - Path safety: file/git tools resolve under workspace root unless `TOOLS_ALLOW_ALL_PATHS=1`. On Windows and macOS, [`normalizeWorkspacePathKey`](../server/workspace/root.js) canonicalizes via `realpathForBoundaryCheck` so short/symlinked paths (GitHub Actions `RUNNER~1`, `/var` ? `/private/var`) match long paths from Node/git worktree list.

@@ -1,7 +1,3 @@
-/**
- * Expert registry: scan built-in + user prompt dirs, merge, cache.
- */
-
 import { parsePromptMarkdown } from '../prompts/parse-front-matter';
 import { fetchPromptFileRaw } from '../prompts/prompt-file-api';
 import { parseExpertMetaFromMarkdown } from './expert-meta-parse';
@@ -14,6 +10,8 @@ let builtinRaw: Record<string, string> | null = null;
 
 const builtinRegistry = new Map<string, ExpertRecord>();
 const userRegistry = new Map<string, ExpertRecord>();
+
+// ── Parse ────────────────────────────────────────────────────────────────────
 
 function shouldSkipExpertId(id: string): boolean {
   if (!id || id.startsWith('_')) return true;
@@ -55,16 +53,12 @@ function mergeAccumulator(
     try {
       const { markdownBody } = parsePromptMarkdown(raw, relativePath);
       acc.fullBody = markdownBody.trim();
-    } catch {
-      /* skip */
-    }
+    } catch {}
   } else {
     try {
       const { markdownBody } = parsePromptMarkdown(raw, relativePath);
       acc.liteBody = markdownBody.trim();
-    } catch {
-      /* skip */
-    }
+    } catch {}
   }
 }
 
@@ -146,6 +140,8 @@ async function loadUserExpertRecordFromApi(expertId: string): Promise<ExpertReco
   return recordFromRawFiles(expertId, fullRes.content, liteRes?.content ?? null);
 }
 
+// ── Init ─────────────────────────────────────────────────────────────────────
+
 /** Initialize built-in experts from Vite glob (idempotent). */
 export function initBuiltinExpertRegistry(raw: Record<string, string> = {}): void {
   if (builtinRegistry.size > 0 && Object.keys(raw).length === 0) return;
@@ -198,6 +194,8 @@ function mergedRegistry(): ExpertRecord[] {
   return list.sort((a, b) => a.meta.label.localeCompare(b.meta.label));
 }
 
+// ── Lookup ───────────────────────────────────────────────────────────────────
+
 /** List all experts for dropdown (sorted by label). */
 export function listExperts(): ExpertRecord[] {
   if (builtinRegistry.size === 0 && builtinRaw) {
@@ -210,6 +208,8 @@ export function listExperts(): ExpertRecord[] {
 export function getExpert(id: string): ExpertRecord | null {
   return userRegistry.get(id) ?? builtinRegistry.get(id) ?? null;
 }
+
+// ── Sync ─────────────────────────────────────────────────────────────────────
 
 /** Load user-created experts from ~/.minnow via the prompt API. */
 export async function syncExpertRegistryFromServer(): Promise<void> {

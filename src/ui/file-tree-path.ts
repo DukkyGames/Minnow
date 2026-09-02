@@ -1,8 +1,3 @@
-/**
- * Workspace-relative path helpers for the file tree (forward slashes).
- */
-
-/** Normalize separators and collapse duplicate slashes. */
 export function normalizeTreePath(p: string): string {
   return p.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^\.\//, '') || '.';
 }
@@ -68,10 +63,7 @@ export function remapExpandedDirs(
   });
 }
 
-/**
- * Destination path for moving `source` into folder `destDir`.
- * Returns null when the move is a no-op or would create a directory cycle.
- */
+/** Destination path for moving `source` into folder `destDir`. */
 export function computeMoveDestination(source: string, destDir: string): string | null {
   const src = normalizeTreePath(source);
   const dest = normalizeTreePath(destDir);

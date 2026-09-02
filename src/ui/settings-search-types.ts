@@ -1,7 +1,3 @@
-/**
- * Settings global finder — searchable entry types (registry-driven index).
- */
-
 import type { SettingsSectionId } from './settings-page-types';
 
 export type SettingsSearchEntryKind =

@@ -1,16 +1,3 @@
-/**
- * WebContentsView preview host (MIN-112 / MIN-224 / MIN-364): N named preview
- * *instances* per window (workspace-preview, design, studio-frame:<n>, …),
- * each of which owns its own multi-tab Chromium guest set.
- *
- * Instances are a different axis than tabs: an instance is a parallel named
- * surface (its own host DOM element + bounds); tabs are pages within one
- * surface. All IPC handlers accept an optional trailing `instanceId` that
- * defaults to DEFAULT_PREVIEW_INSTANCE_ID ('workspace-preview') so every
- * existing call site — which never passes one — transparently keeps hitting
- * the single surface that shipped before MIN-364.
- */
-
 import {
   BrowserWindow,
   WebContentsView,
@@ -42,6 +29,8 @@ import {
 } from './preview-context-menu.js';
 import { splitPreviewBounds, type DevToolsDockPosition } from './preview-devtools-layout.js';
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
 export interface PreviewBounds {
   x: number;
   y: number;
@@ -49,7 +38,6 @@ export interface PreviewBounds {
   height: number;
 }
 
-/** Payload from renderer for PREVIEW_LOAD_SOURCE. */
 export interface PreviewLoadSourcePayload {
   kind: 'workspace' | 'url';
   path?: string;
@@ -60,9 +48,7 @@ export interface PreviewLoadSourcePayload {
 interface PreviewHostEntry {
   view: WebContentsView;
   visible: boolean;
-  /** Embedded DevTools view — non-null while docked DevTools is open for this tab. */
   devtools: WebContentsView | null;
-  /** Separate DevTools window for popout mode. */
   devtoolsPopout: BrowserWindow | null;
 }
 
@@ -71,7 +57,8 @@ interface WindowPreviewState {
   activeTabId: string | null;
 }
 
-/** windowId → instanceId → { tabs, activeTabId }. Eviction frees native resources; see evictInstanceState. */
+// ── Registry ─────────────────────────────────────────────────────────────────
+
 const previewInstances = new PreviewInstanceRegistry<WindowPreviewState>({
   createState: () => ({ tabs: new Map(), activeTabId: null }),
   onEvict: (windowId, instanceId, state) => {
@@ -79,16 +66,12 @@ const previewInstances = new PreviewInstanceRegistry<WindowPreviewState>({
   },
 });
 
-/** Window-level listeners (did-finish-load / closed) are wired once per window, not per instance. */
 const wiredWindowIds = new Set<number>();
 
-/** webContents.id → live CDP picking session (MIN-370). At most one per guest. */
 const cdpPickSessions = new Map<number, CdpPickSession>();
 
-/** Last renderer-supplied bounds per (window, instance) — reused for layout while already visible, never to auto-reveal. */
 const lastBoundsByInstance = new Map<string, PreviewBounds>();
 
-/** Per-window DevTools dock preference (renderer sets via IPC). */
 const devtoolsDockByWindow = new Map<number, DevToolsDockPosition>();
 
 function resolveDevToolsDock(win: BrowserWindow): DevToolsDockPosition {
@@ -130,11 +113,12 @@ function rememberPreviewBounds(win: BrowserWindow, bounds: PreviewBounds, instan
   }
 }
 
+// ── Window wiring ────────────────────────────────────────────────────────────
+
 function ensurePreviewSession(): void {
   configurePreviewSession(session.fromPartition(PREVIEW_SESSION_PARTITION));
 }
 
-/** Attach window-scoped listeners exactly once, regardless of how many instances the window ends up hosting. */
 function ensureWindowWiring(win: BrowserWindow): void {
   if (wiredWindowIds.has(win.id)) return;
   wiredWindowIds.add(win.id);
@@ -151,14 +135,12 @@ function windowState(win: BrowserWindow, instanceId?: string): WindowPreviewStat
   return previewInstances.ensure(win.id, instanceId);
 }
 
-/** Resolve the BrowserWindow that owns an IPC invoke from the renderer. */
 function windowFromInvoke(event: IpcMainInvokeEvent): BrowserWindow | null {
   const win = BrowserWindow.fromWebContents(event.sender);
   if (!win || win.isDestroyed()) return null;
   return win;
 }
 
-/** Send a main → renderer event on the window's primary webContents. */
 function sendToRenderer(win: BrowserWindow, channel: string, ...args: unknown[]): void {
   if (win.isDestroyed()) return;
   win.webContents.send(channel, ...args);
@@ -166,15 +148,12 @@ function sendToRenderer(win: BrowserWindow, channel: string, ...args: unknown[])
 
 function resolveTabId(win: BrowserWindow, tabId: string | undefined, instanceId?: string): string | null {
   const state = windowState(win, instanceId);
-  // Renderer tab ids exist before the main-process guest is created (address bar, loadSource).
   if (typeof tabId === 'string' && tabId.trim()) return tabId.trim();
-  // activeTabId may be set by PREVIEW_LOAD_SOURCE / TAB_ACTIVATE before getOrCreateTab runs.
   if (state.activeTabId) return state.activeTabId;
   const first = state.tabs.keys().next().value as string | undefined;
   return first ?? null;
 }
 
-/** Deny sensitive permissions in the preview guest by default. */
 function attachPermissionHandler(wc: WebContents): void {
   wc.session.setPermissionRequestHandler((_webContents, permission, callback) => {
     const denyByDefault = new Set([
@@ -188,7 +167,9 @@ function attachPermissionHandler(wc: WebContents): void {
   });
 }
 
-/** Close and detach a tab's DevTools (embedded or popout). Safe when already gone. */
+// ── DevTools ─────────────────────────────────────────────────────────────────
+
+// closeDevTools() is a no-op when DevTools uses setDevToolsWebContents; destroy the view instead.
 function teardownEntryDevTools(win: BrowserWindow | null, entry: PreviewHostEntry): void {
   const popout = entry.devtoolsPopout;
   if (popout && !popout.isDestroyed()) {
@@ -200,7 +181,6 @@ function teardownEntryDevTools(win: BrowserWindow | null, entry: PreviewHostEntr
       try {
         wc.closeDevTools();
       } catch {
-        /* guest tearing down */
       }
     }
     return;
@@ -214,22 +194,16 @@ function teardownEntryDevTools(win: BrowserWindow | null, entry: PreviewHostEntr
     try {
       win.contentView.removeChildView(dt);
     } catch {
-      /* not attached */
     }
   }
   try {
-    // Destroying the devtools WebContents is what actually closes DevTools:
-    // guest.closeDevTools() is a silent no-op when DevTools renders into a
-    // custom WebContents via setDevToolsWebContents (verified by probe).
     if (!dt.webContents.isDestroyed()) {
       dt.webContents.close();
     }
   } catch {
-    /* view already torn down — accessing .webContents on a destroyed view throws */
   }
 }
 
-/** Close docked DevTools now and tell the renderer. Single close path for toggle + shortcut. */
 function closeEntryDevTools(
   win: BrowserWindow,
   tabId: string,
@@ -243,7 +217,6 @@ function closeEntryDevTools(
   sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, false, id);
 }
 
-/** Re-apply the last known bounds so the guest/DevTools split updates without a renderer round-trip. */
 function relayoutInstanceEntry(win: BrowserWindow, entry: PreviewHostEntry, instanceId?: string): void {
   if (!entry.visible || win.isDestroyed()) return;
   const id = PreviewInstanceRegistry.resolveInstanceId(instanceId);
@@ -252,7 +225,6 @@ function relayoutInstanceEntry(win: BrowserWindow, entry: PreviewHostEntry, inst
   applyPreviewViewBounds(entry, bounds, hostZoomFactor(win), resolveDevToolsDock(win));
 }
 
-/** Place a popout DevTools window beside the Minnow shell without covering the preview. */
 function positionPopoutDevToolsWindow(parent: BrowserWindow, popout: BrowserWindow): void {
   const parentBounds = parent.getBounds();
   popout.setBounds({
@@ -276,7 +248,6 @@ function createPopoutDevToolsWindow(): BrowserWindow {
   });
 }
 
-/** When the user closes the popout shell, tear down DevTools and sync renderer state. */
 function wirePopoutDevToolsClosed(
   win: BrowserWindow,
   tabId: string,
@@ -292,7 +263,6 @@ function wirePopoutDevToolsClosed(
       try {
         wc.closeDevTools();
       } catch {
-        /* guest already gone */
       }
     }
     relayoutInstanceEntry(win, entry, instanceId);
@@ -302,7 +272,6 @@ function wirePopoutDevToolsClosed(
   });
 }
 
-/** Open DevTools in a dedicated BrowserWindow (popout mode). */
 function openPopoutEntryDevTools(
   win: BrowserWindow,
   tabId: string,
@@ -315,7 +284,6 @@ function openPopoutEntryDevTools(
   positionPopoutDevToolsWindow(win, popout);
   wirePopoutDevToolsClosed(win, tabId, entry, instanceId, popout);
 
-  // Route DevTools into the popout window — undocked on WebContentsView guests is unreliable.
   wc.setDevToolsWebContents(popout.webContents);
   wc.openDevTools({ mode: 'detach', activate: true });
   popout.show();
@@ -323,7 +291,6 @@ function openPopoutEntryDevTools(
   sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, true, instanceId);
 }
 
-/** Retarget already-open DevTools when dock preference changes (avoids close/reopen + stale events). */
 function migrateEntryDevToolsDock(
   win: BrowserWindow,
   tabId: string,
@@ -348,20 +315,17 @@ function migrateEntryDevToolsDock(
     positionPopoutDevToolsWindow(win, popout);
     wirePopoutDevToolsClosed(win, tabId, entry, instanceId, popout);
 
-    // Retarget before tearing down the embedded shell so the DevTools session stays open.
     wc.setDevToolsWebContents(popout.webContents);
     entry.devtools = null;
     try {
       win.contentView.removeChildView(embedded);
     } catch {
-      /* not attached */
     }
     try {
       if (!embedded.webContents.isDestroyed()) {
         embedded.webContents.close();
       }
     } catch {
-      /* view already torn down */
     }
     popout.show();
     relayoutInstanceEntry(win, entry, instanceId);
@@ -382,7 +346,6 @@ function migrateEntryDevToolsDock(
   try {
     win.contentView.addChildView(devtoolsView);
   } catch {
-    /* window tearing down */
   }
 
   wc.setDevToolsWebContents(devtoolsView.webContents);
@@ -394,7 +357,6 @@ function migrateEntryDevToolsDock(
   relayoutInstanceEntry(win, entry, instanceId);
 }
 
-/** Open DevTools for one tab guest (embedded bottom/side or popout window). */
 function openEntryDevTools(
   win: BrowserWindow,
   tabId: string,
@@ -418,16 +380,15 @@ function openEntryDevTools(
   try {
     win.contentView.addChildView(devtoolsView);
   } catch {
-    /* window tearing down */
   }
-  // setDevToolsWebContents must run before openDevTools; 'detach' renders into our view.
   wc.setDevToolsWebContents(devtoolsView.webContents);
   wc.openDevTools({ mode: 'detach', activate: false });
   relayoutInstanceEntry(win, entry, id);
   sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, true, id);
 }
 
-/** Forward guest navigation / load lifecycle to the Minnow renderer (instanceId lets multi-surface listeners filter). */
+// ── Guest events ─────────────────────────────────────────────────────────────
+
 function wirePreviewGuestEvents(win: BrowserWindow, tabId: string, entry: PreviewHostEntry, instanceId: string): void {
   const wc = entry.view.webContents;
   let suppressNavigationUntilFailHandled = false;
@@ -487,7 +448,6 @@ function wirePreviewGuestEvents(win: BrowserWindow, tabId: string, entry: Previe
     handleTabGuestCrash(win, tabId, details.reason, details.exitCode, instanceId);
   });
 
-  // F12 / Ctrl+Shift+I / Cmd+Opt+I inside the page toggles docked DevTools (MIN-177).
   wc.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return;
     const key = input.key.toLowerCase();
@@ -504,10 +464,7 @@ function wirePreviewGuestEvents(win: BrowserWindow, tabId: string, entry: Previe
     }
   });
 
-  // Fallback for DevTools closed from inside its own UI; toggle/shortcut close directly.
   wc.on('devtools-closed', () => {
-    // Destroying an embedded DevTools view during dock migration emits a stale close after
-    // DevTools has already been retargeted to a popout or new embedded shell.
     if (!wc.isDestroyed() && wc.isDevToolsOpened()) return;
     if (!isEntryDevToolsOpen(entry)) return;
     teardownEntryDevTools(win.isDestroyed() ? null : win, entry);
@@ -515,21 +472,20 @@ function wirePreviewGuestEvents(win: BrowserWindow, tabId: string, entry: Previe
     sendToRenderer(win, channels.PREVIEW_DEVTOOLS_STATE, tabId, false, instanceId);
   });
 
-  // Right-click → Minnow-styled DOM menu in the renderer (suppress Chromium default).
   wc.on('context-menu', (event, params) => {
     event.preventDefault();
     handleGuestContextMenu(win, tabId, instanceId, entry, params);
   });
 }
 
-/** Detach a guest view from its window and close its WebContents. Safe to call on an already-torn-down window. */
+// ── Destroy guests ───────────────────────────────────────────────────────────
+
 function destroyGuestEntry(win: BrowserWindow | null, entry: PreviewHostEntry): void {
   teardownEntryDevTools(win, entry);
   if (win && !win.isDestroyed()) {
     try {
       win.contentView.removeChildView(entry.view);
     } catch {
-      /* already detached */
     }
   }
   if (!entry.view.webContents.isDestroyed()) {
@@ -537,7 +493,6 @@ function destroyGuestEntry(win: BrowserWindow | null, entry: PreviewHostEntry): 
   }
 }
 
-/** Tear down a crashed guest without switching the active tab or closing renderer tabs. */
 function handleTabGuestCrash(
   win: BrowserWindow,
   tabId: string,
@@ -569,7 +524,6 @@ function destroyTabGuest(win: BrowserWindow, tabId: string, instanceId?: string)
   destroyGuestEntry(win, entry);
 }
 
-/** Registry eviction callback: free native resources for an idle instance; the registry has already dropped it. */
 function evictInstanceState(windowId: number, instanceId: string, state: WindowPreviewState): void {
   const win = BrowserWindow.fromId(windowId);
   for (const entry of state.tabs.values()) {
@@ -609,6 +563,8 @@ async function loadSourceInGuest(
   if (!url) return;
   await wc.loadURL(url);
 }
+
+// ── Bounds ───────────────────────────────────────────────────────────────────
 
 function roundBounds(bounds: PreviewBounds): { x: number; y: number; width: number; height: number } {
   const w = Math.max(0, Math.round(bounds.width));
@@ -671,7 +627,6 @@ function applyPreviewViewBounds(
       entry.devtools.setBounds(split.devtools);
       entry.devtools.setVisible(true);
     } else {
-      // Pane too short to dock usefully — DevTools stays open, reappears when it grows.
       entry.devtools.setVisible(false);
       entry.devtools.setBounds({ x: 0, y: 0, width: 0, height: 0 });
     }
@@ -689,7 +644,6 @@ function hidePreviewHostEntry(entry: PreviewHostEntry): void {
   }
 }
 
-/** Hide + detach every tab view belonging to a single instance. */
 function detachAllTabViews(win: BrowserWindow, instanceId?: string): void {
   const state = previewInstances.get(win.id, instanceId);
   if (!state) return;
@@ -698,24 +652,23 @@ function detachAllTabViews(win: BrowserWindow, instanceId?: string): void {
     try {
       win.contentView.removeChildView(entry.view);
     } catch {
-      /* not attached */
     }
     if (entry.devtools) {
       try {
         win.contentView.removeChildView(entry.devtools);
       } catch {
-        /* not attached */
       }
     }
   }
 }
 
-/** Hide + detach every tab view across every instance of a window (e.g. on renderer reload). */
 function detachAllInstanceViews(win: BrowserWindow): void {
   for (const instanceId of previewInstances.listInstanceIds(win.id)) {
     detachAllTabViews(win, instanceId);
   }
 }
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
 
 function createTabGuest(win: BrowserWindow, tabId: string, instanceId: string): PreviewHostEntry {
   ensurePreviewSession();
@@ -751,7 +704,6 @@ function showActiveTab(win: BrowserWindow, bounds?: PreviewBounds, instanceId?: 
   const tabId = resolveTabId(win, state.activeTabId ?? undefined, id);
   if (!tabId) return null;
   const entry = getOrCreateTab(win, tabId, id);
-  // Capture paint state before detach — tab switch must keep showing when the pane is already open.
   const instanceAlreadyVisible =
     previewInstances.isVisible(win.id, id) ||
     [...state.tabs.values()].some((tab) => tab.visible);
@@ -764,7 +716,6 @@ function showActiveTab(win: BrowserWindow, bounds?: PreviewBounds, instanceId?: 
   });
   const layoutBounds = explicitBoundsValid ? bounds : lastBoundsByInstance.get(key);
   const hasLayout = isValidPreviewBounds(layoutBounds);
-  // Paint only with explicit show(bounds) or while already visible. lastBounds must not auto-reveal.
   const shouldPaint = attachMode === 'paint' && hasLayout;
   if (shouldPaint) {
     applyPreviewViewBounds(entry, layoutBounds!, hostZoomFactor(win), resolveDevToolsDock(win));
@@ -776,13 +727,11 @@ function showActiveTab(win: BrowserWindow, bounds?: PreviewBounds, instanceId?: 
   try {
     win.contentView.addChildView(entry.view);
   } catch {
-    /* already attached */
   }
   if (entry.devtools) {
     try {
       win.contentView.addChildView(entry.devtools);
     } catch {
-      /* already attached */
     }
   }
   state.activeTabId = tabId;
@@ -812,7 +761,8 @@ function reopenOpenDevToolsForDockChange(win: BrowserWindow): void {
   }
 }
 
-/** Register preview IPC handlers (replaces main.ts stubs). */
+// ── IPC ──────────────────────────────────────────────────────────────────────
+
 export function registerPreviewHostIpc(): void {
   registerPreviewContextMenuIpc({
     windowFromEvent: windowFromInvoke,
@@ -843,7 +793,6 @@ export function registerPreviewHostIpc(): void {
     const state = windowState(win, instanceId);
     if (!state.tabs.has(tabId)) getOrCreateTab(win, tabId, instanceId);
     state.activeTabId = tabId;
-    // Activate without bounds: navigation while hidden; do not restore lastBounds.
     showActiveTab(win, undefined, instanceId);
   });
 
@@ -936,7 +885,6 @@ export function registerPreviewHostIpc(): void {
       }
       try {
         await loadSourceInGuest(entry.view.webContents, payload);
-        // Attach for navigation while hidden; renderer show(bounds) is the only reveal path.
         showActiveTab(win, undefined, instanceId);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -963,7 +911,6 @@ export function registerPreviewHostIpc(): void {
       try {
         await entry.view.webContents.loadURL(url);
         if (win) {
-          // Attach for navigation while hidden; do not restore lastBounds as a reveal.
           showActiveTab(win, undefined, instanceId);
         }
       } catch (err) {
@@ -1022,7 +969,6 @@ export function registerPreviewHostIpc(): void {
         return;
       }
       rememberPreviewBounds(win, bounds, instanceId);
-      // setBounds must not turn a hidden guest on — only preview.show(bounds) reveals.
       if (!entry.visible) return;
       applyPreviewViewBounds(entry, bounds, hostZoomFactor(win), resolveDevToolsDock(win));
     },
@@ -1058,13 +1004,11 @@ export function registerPreviewHostIpc(): void {
           try {
             win.contentView.addChildView(entry.view);
           } catch {
-            /* already attached */
           }
           if (entry.devtools) {
             try {
               win.contentView.addChildView(entry.devtools);
             } catch {
-              /* already attached */
             }
           }
           temporarilyShown = true;
@@ -1073,7 +1017,6 @@ export function registerPreviewHostIpc(): void {
       try {
         return await previewCapturePageBase64(entry.view.webContents);
       } finally {
-        // Do not leave a capture restore painted over Issues / other apps.
         if (temporarilyShown && !shouldKeepPreviewGuestVisibleAfterCapture(wasVisible)) {
           hidePreviewHostEntry(entry);
           if (win && !win.isDestroyed()) {
@@ -1108,7 +1051,6 @@ export function registerPreviewHostIpc(): void {
       }
       if (win && tabId && typeof tabId === 'string') {
         windowState(win, instanceId).activeTabId = tabId;
-        // Attach for navigation; stay hidden unless the renderer already showed this instance.
         showActiveTab(win, undefined, instanceId);
       }
       if (typeof url !== 'string') {
@@ -1218,7 +1160,6 @@ export function registerPreviewHostIpc(): void {
   );
 }
 
-/** Tear down all preview hosts (app quit). */
 export function destroyAllPreviewHosts(): void {
   for (const win of BrowserWindow.getAllWindows()) {
     destroyHostForWindow(win);

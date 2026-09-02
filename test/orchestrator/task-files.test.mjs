@@ -63,7 +63,6 @@ describe('patchToDiffLines', () => {
       lines.map((l) => l.type),
       ['unchanged', 'unchanged', 'remove', 'add', 'unchanged', 'remove', 'add'],
     );
-    // The preamble is dropped: `+++ b/a.ts` is not an added line of code.
     assert.equal(
       lines.some((l) => l.text.includes('+++')),
       false,
@@ -112,14 +111,11 @@ describe('reading a real repository', () => {
       await git('add', '.');
       await git('commit', '-m', 'base');
 
-      // A plain (single-parent) commit: the squash-merge shape.
       await fs.writeFile(path.join(repo, 'a.txt'), 'alpha\nbeta\n', 'utf8');
       await git('add', '.');
       await git('commit', '-m', 'squashed task');
       squashSha = (await git('rev-parse', 'HEAD')).trim();
 
-      // A real merge commit: the merge-queue shape, and the case `git show`
-      // prints as empty without `-m --first-parent`.
       await git('checkout', '-b', 'task');
       await fs.writeFile(path.join(repo, 'b.txt'), 'x\ny\nz\n', 'utf8');
       await git('add', '.');
@@ -128,7 +124,6 @@ describe('reading a real repository', () => {
       await git('merge', '--no-ff', '-m', 'merge task', 'task');
       mergeSha = (await git('rev-parse', 'HEAD')).trim();
     } catch (err) {
-      // A machine with no usable git is not a failing assertion about this code.
       available = false;
       console.warn(`[task-files] skipping repo tests: ${err.message}`);
     }
@@ -152,8 +147,6 @@ describe('reading a real repository', () => {
 
   it('counts a merge commit, which git shows as empty unless asked', async (t) => {
     if (!available) return t.skip('git unavailable');
-    // This is the whole reason `showArgs` passes `-m --first-parent`. Without
-    // them a merged task renders as having changed no files at all.
     const stats = await readCommitFileStats(mergeSha, repo);
     assert.ok(stats, 'a merge commit must not read as an empty diffstat');
     assert.deepEqual(
@@ -176,8 +169,6 @@ describe('reading a real repository', () => {
 
   it('answers with nothing rather than throwing when git cannot help', async (t) => {
     if (!available) return t.skip('git unavailable');
-    // A pruned worktree, a moved repo, or a sha from another clone: the panel
-    // falls back to the declared footprint, and the board still opens.
     assert.equal(await readCommitFileStats('0123456789abcdef0123', repo), null);
     assert.equal(await readCommitFileDiff(mergeSha, 'nope.txt', repo), null);
     assert.equal(await readCommitFileStats('not-a-sha', repo), null);

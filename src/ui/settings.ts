@@ -81,7 +81,6 @@ export function saveSystemPromptSettings(): void {
   try {
     localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(payload));
   } catch {
-    /* ignore quota / private mode */
   }
 }
 
@@ -181,7 +180,6 @@ export function toggleDrawer(): void {
     closeDrawer();
     return;
   }
-  // Legacy drawer tools list is built on first open (not during cold boot).
   ensureToolsSectionFilled('toolsList');
   drawerReturnFocus = document.activeElement as HTMLElement | null;
   drawer.classList.add('open');

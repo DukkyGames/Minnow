@@ -1,16 +1,5 @@
-/**
- * Shapes for the sub-agent graph. Separate from `server/orchestrator/core/types`
- * on purpose: dumping these into board `EVENT_SCHEMAS` would couple two
- * journals that share only an envelope.
- */
-
-/** Envelope version this graph writes. Readers tolerate anything >= 1. */
 export type EnvelopeVersion = number;
 
-/**
- * Shared envelope. Same fields as P0-B: `v`, optional `seq` / `ts`, `type`.
- * `ts` is wall-clock and display-only — the fold must not read it.
- */
 export interface EventEnvelope {
   v: number;
   seq?: number;
@@ -26,16 +15,10 @@ export type AttemptOutcome =
   | 'crashed'
   | 'timeout';
 
-/** The only engine role this graph starts. Type names are not roles. */
 export type SubAgentRole = 'sub-agent';
 
 export type SeedKind = 'initial' | 'continue';
 
-/**
- * `cancelling` is the P10-L window: `run.cancelled` is on the journal and an
- * attempt is still open. Scheduling treats it like a stop; replay treats it
- * as in-flight until `attempt.ended` (reap after effector.stop).
- */
 export type RunPhase = 'idle' | 'running' | 'passed' | 'abandoned' | 'cancelled' | 'cancelling';
 
 export type AgentsStatus = 'idle' | 'running';
@@ -83,17 +66,11 @@ export interface RunState {
   abandonedReason: string | null;
   abandonedEvidence: Record<string, unknown> | null;
   cancelledReason: 'user' | null;
-  /** Folded from `result.delivered`. Pending vs delivered is this flag. */
   delivered: boolean;
-  /** Why delivery was skipped, when `result.delivered` carried a skipReason. */
   deliveredSkipReason: 'missing_chat' | 'orchestrate' | null;
-  /** Folded from `run.nudged`. Once-per-run check-in; survives reload. */
   nudged: boolean;
-  /** Parent user-send turn — card placement / cancel-all after reload. */
   parentTurnId: string | null;
-  /** Parent tool_call id — card anchor after reload. */
   parentToolCallId: string | null;
-  /** Per-run model override from spawn; effector reads this first. */
   model: { providerId: string; id: string } | null;
 }
 
@@ -106,7 +83,6 @@ export interface AgentsState {
 
 export interface Caps {
   globalMaxConcurrent: number;
-  /** Missing types fall back to {@link DEFAULT_TYPE_MAX_CONCURRENT}. */
   maxConcurrentByType?: Readonly<Record<string, number>>;
 }
 

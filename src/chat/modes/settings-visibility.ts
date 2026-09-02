@@ -1,7 +1,3 @@
-/**
- * Which composer modes appear in Settings search and similar admin UIs.
- */
-
 import { isDeveloperReleased } from '../../os/app-registry';
 import type { AppId } from '../../os/types';
 import type { ModeId } from './types';

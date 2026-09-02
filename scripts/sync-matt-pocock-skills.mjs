@@ -1,12 +1,3 @@
-/**
- * Maintains skills-lock.json hashes for the Matt Pocock Skills Library pack.
- * No longer vendors into src/skills — install via Settings → Skills Library (MIN-476).
- *
- * Env:
- *   MATT_POCOCK_SKILLS_REF=main     — upstream git ref (default main)
- *   MATT_POCOCK_SKILLS_SYNC_STRICT=1 — exit non-zero on failure (CI)
- *   MATT_POCOCK_SKILLS_TARGET       — override cache root (default .cache/matt-pocock-skills)
- */
 
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -131,7 +122,7 @@ async function resolveUpstreamFiles(upstreamPath, sha, entry) {
  * @returns {Promise<Array<{ relPath: string, downloadUrl: string }>>}
  */
 async function collectUpstreamFiles(apiPath, sha) {
-  /** @type {Array<{ relPath: string, downloadUrl: string }>} */
+/** @type {Array<{ relPath: string, downloadUrl: string }>} */
   const files = [];
   const entries = await listGithubContents(apiPath, sha);
 
@@ -192,11 +183,11 @@ function sha256Hex(content) {
  * @returns {Record<string, string>}
  */
 function hashSkillTree(skillDir) {
-  /** @type {Record<string, string>} */
+/** @type {Record<string, string>} */
   const hashes = {};
 
-  /** @param {string} dir */
-  /** @param {string} prefix */
+/** @param {string} dir */
+/** @param {string} prefix */
   function walk(dir, prefix) {
     for (const name of fs.readdirSync(dir)) {
       const full = path.join(dir, name);
@@ -225,7 +216,7 @@ function hashSkillTree(skillDir) {
  * @param {string} ref
  */
 function updateLockFile(fileHashes, commitSha, ref) {
-  /** @type {Record<string, unknown>} */
+/** @type {Record<string, unknown>} */
   let lock = { version: 1, skills: {} };
   if (fs.existsSync(LOCK_FILE)) {
     lock = JSON.parse(fs.readFileSync(LOCK_FILE, 'utf8'));
@@ -250,7 +241,7 @@ function updateLockFile(fileHashes, commitSha, ref) {
  * @param {string} sha
  */
 async function syncAllSkills(catalog, sha) {
-  /** @type {Record<string, Record<string, string>>} */
+/** @type {Record<string, Record<string, string>>} */
   const allHashes = {};
 
   for (const entry of catalog.skills) {
@@ -263,7 +254,7 @@ async function syncAllSkills(catalog, sha) {
       continue;
     }
 
-    /** @type {Array<{ relPath: string, buf: Buffer }>} */
+/** @type {Array<{ relPath: string, buf: Buffer }>} */
     const staged = [];
     for (const file of files) {
       const repoPath = `${upstreamPath}/${file.relPath}`;

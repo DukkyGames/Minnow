@@ -1,10 +1,3 @@
-/**
- * Code-change strip control: undo the last agent turn (chat rewind + file restore).
- * Lives next to #codeChangeStrip; Uicons undo glyph via createIcon.
- * Hidden when the workspace is not a git repository (no snapshots) or the undo
- * target turn did not mutate files (chat-only rewind stays on message ⋮).
- */
-
 import {
   canUndoTurn,
   getUndoEligibility,
@@ -34,6 +27,8 @@ let gitCache: { path: string; isRepo: boolean; at: number } | null = null;
 /** Monotonic token so overlapping async syncs don't apply stale visibility. */
 let syncGen = 0;
 
+// ── Button ───────────────────────────────────────────────────────────────────
+
 function findExistingButton(): HTMLButtonElement | null {
   for (const id of UNDO_BUTTON_IDS) {
     const el = document.getElementById(id) as HTMLButtonElement | null;
@@ -61,7 +56,6 @@ function ensureButton(): HTMLButtonElement | null {
     return btnEl;
   }
 
-  // Fallback: inject into the strip row if markup was not present.
   const row =
     document.querySelector('.code-change-strip-row') ??
     document.querySelector('.code-change-strip-wrap');
@@ -113,9 +107,10 @@ export function invalidateComposerUndoGitCache(): void {
   gitCache = null;
 }
 
+// ── Click ────────────────────────────────────────────────────────────────────
+
 async function onUndoClick(): Promise<void> {
   const chat = getActiveChat();
-  // Strip undo requires git — refuse if the workspace lost its repo mid-session.
   if (!(await workspaceHasGitRepo())) {
     setStatus('err', 'Undo needs a git repository in this workspace');
     syncComposerUndoFromActiveChat();
@@ -159,6 +154,8 @@ async function onUndoClick(): Promise<void> {
   );
 }
 
+// ── Sync ─────────────────────────────────────────────────────────────────────
+
 /** Wire the code-change strip Undo control (idempotent). */
 export function initComposerUndo(): void {
   const btn = ensureButton();
@@ -173,10 +170,7 @@ export function initComposerUndo(): void {
   syncComposerUndoFromActiveChat();
 }
 
-/**
- * Refresh visibility / disabled state from the active chat.
- * Hidden when the workspace is not a git repository or the undo target had no file edits.
- */
+/** Refresh visibility / disabled state from the active chat. */
 export function syncComposerUndoFromActiveChat(): void {
   const btn = ensureButton();
   if (!btn) return;
@@ -193,7 +187,6 @@ export function syncComposerUndoFromActiveChat(): void {
     const targetChangedFiles =
       target && run ? runHadCodeChanges(chat, run) : false;
 
-    // No git or no file edits on the undo target → hide (chat-only undo stays on ⋮).
     if (!hasGit || !targetChangedFiles) {
       btn.hidden = true;
       btn.disabled = true;

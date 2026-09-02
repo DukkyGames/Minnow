@@ -1,8 +1,3 @@
-/**
- * Deterministic self-pacing for auto /loop runs (no extra LLM calls).
- * Changed output → halve delay; unchanged → double; clamp to [1m, 60m].
- */
-
 import type { ActiveLoopState, Chat } from '../../types';
 import { updateActiveLoop } from '../../state/sessions';
 import {
@@ -19,10 +14,6 @@ export function normalizeLoopOutputForDigest(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-/**
- * Simple stable digest of normalized text for change detection.
- * Not cryptographic — only needs deterministic equality across runs.
- */
 export function digestLoopOutput(text: string): string {
   const normalized = normalizeLoopOutputForDigest(text);
   let hash = 2166136261;
@@ -49,10 +40,6 @@ export function clampLoopAutoDelayMs(ms: number): number {
   return Math.min(MAX_LOOP_AUTO_DELAY_MS, Math.max(MIN_LOOP_INTERVAL_MS, Math.floor(ms)));
 }
 
-/**
- * Compute next delay from whether the digest changed.
- * Changed → max(1m, current/2); unchanged → min(60m, current*2).
- */
 export function nextAutoDelayMs(currentDelayMs: number, outputChanged: boolean): number {
   const current = clampLoopAutoDelayMs(currentDelayMs);
   if (outputChanged) {
@@ -72,10 +59,6 @@ export function lastAssistantText(chat: Chat): string {
   return '';
 }
 
-/**
- * After a loop-fired turn settles, adjust the auto-loop delay from output digest.
- * Interval loops are left alone (dueAt already advanced by intervalMs).
- */
 export function maybeRescheduleLoopsAfterTurn(chat: Chat, now = Date.now()): void {
   const loopId = pendingPaceByChat.get(chat.id);
   if (loopId == null) return;

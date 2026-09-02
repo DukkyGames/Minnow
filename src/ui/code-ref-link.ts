@@ -1,8 +1,3 @@
-/**
- * Compact file + line-range links (composer chips and user message bubbles).
- * File/URL chips pinned on a chat (MIN-630) use the same control class.
- */
-
 import { formatCodeRefLabel } from '../attachments/code-ref-format';
 import { iconHtml } from './icon';
 

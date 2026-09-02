@@ -1,29 +1,19 @@
-/**
- * Split-GGUF filename helpers.
- *
- * llama.cpp `-m` points at shard 00001 and loads `00002..N` from the same
- * directory. Discover used to download only the first matching GGUF, so a
- * `-00001-of-00003` repo looked servable with two shards missing.
- */
-
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-/** `-00001-of-00003.gguf` (zero-padded 5-digit index and count). */
 export const SPLIT_GGUF_RE = /-(\d{5})-of-(\d{5})\.gguf$/i;
 
 /**
  * @typedef {object} SplitGgufName
- * @property {string} dir Repo-relative directory ('' for a basename).
- * @property {string} prefix Filename up to but not including `-NNNNN-of-NNNNN`.
- * @property {number} index 1-based shard index from the name.
- * @property {number} count Total shards advertised in the name.
- * @property {string} ext `.gguf` preserving original case.
+ * @property {string} dir
+ * @property {string} prefix
+ * @property {number} index
+ * @property {number} count
+ * @property {string} ext
  */
 
 /**
- * Parse a split-GGUF path. Returns null for ordinary single-file names.
- * @param {string} filePath repo-relative or basename
+ * @param {string} filePath
  * @returns {SplitGgufName | null}
  */
 export function parseSplitGgufFilename(filePath) {
@@ -44,7 +34,6 @@ export function parseSplitGgufFilename(filePath) {
 }
 
 /**
- * Build `prefix-0000i-of-0000N.ext` (optionally under `dir/`).
  * @param {SplitGgufName} parsed
  * @param {number} index
  * @param {number} [count]
@@ -55,8 +44,6 @@ export function splitGgufShardName(parsed, index, count = parsed.count) {
 }
 
 /**
- * If `chosen` is a split shard, expand to every `00001..N` sibling and assert
- * the listing contains exactly N of them. Non-split names return `[chosen]`.
  * @param {string} chosen
  * @param {string[]} listedPaths
  * @returns {string[]}
@@ -80,10 +67,8 @@ export function expandSplitGgufFilenames(chosen, listedPaths) {
 }
 
 /**
- * Refuse to serve a split model when `00002..splitCount` are missing beside
- * shard 1. No-ops when splitCount ≤ 1 (single-file models and unknown headers).
- * @param {string} modelPath Absolute path passed as llama.cpp `-m` (shard 1).
- * @param {number} splitCount From GGUF `split.count`.
+ * @param {string} modelPath
+ * @param {number} splitCount
  */
 export async function assertSplitGgufSiblings(modelPath, splitCount) {
   const n = Number(splitCount);

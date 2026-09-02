@@ -1,13 +1,3 @@
-/**
- * Tool-call row preview harness (dev-only, not shipped).
- *
- * Mounts the real `renderToolCall` / `renderToolResult` against canned tool
- * results so every row state can be checked without driving a live chat.
- * Pick a palette with `?theme=`.
- *
- *   /dev/tool-row-preview.html?theme=swamp-dark
- */
-
 import '../src/styles/fonts.css';
 import '../src/styles/tokens.css';
 import '../src/styles/global.css';
@@ -28,7 +18,6 @@ function heading(text: string): void {
   stage.appendChild(h);
 }
 
-/** Render one row; omit `result` to leave it in the running state. */
 function row(
   name: string,
   args: Record<string, unknown>,
@@ -41,7 +30,6 @@ function row(
   return wrap;
 }
 
-/** Expand a row so the body layout is visible without a click. */
 function open(wrap: HTMLElement): HTMLElement {
   wrap.querySelector('details')?.setAttribute('open', '');
   return wrap;

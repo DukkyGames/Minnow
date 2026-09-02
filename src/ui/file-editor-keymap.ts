@@ -1,8 +1,3 @@
-/**
- * CodeMirror keymaps for the file viewer (Tab indent / LSP accept, Escape blur).
- * Kept separate from LSP extensions so tests avoid the tools client graph.
- */
-
 import {
   acceptCompletion,
   closeCompletion,
@@ -15,10 +10,7 @@ import { Prec, type Extension } from '@codemirror/state';
 import { keymap, type EditorView, type KeyBinding } from '@codemirror/view';
 import { shouldLspTabTakePrecedence } from './editor-completion-policy';
 
-/**
- * LSP dropdown navigation (Tab accept is on {@link fileEditorTabBinding}).
- * Enter is intentionally omitted so it inserts a newline while the menu is open.
- */
+/** LSP dropdown navigation (Tab accept is on {@link fileEditorTabBinding}). */
 export const lspCompletionKeymapBindings: KeyBinding[] = [
   { key: 'Ctrl-Space', run: startCompletion },
   { mac: 'Alt-`', run: startCompletion },
@@ -84,10 +76,7 @@ export const fileEditorKeymapBindings: KeyBinding[] = [
   fileEditorCycleTabBinding,
 ];
 
-/**
- * Shared file-viewer keymaps: Tab/Shift+Tab (LSP accept or indent), Escape blur.
- * Runs above {@link editorCoreExtensions} defaultKeymap Tab/Escape.
- */
+/** Shared file-viewer keymaps: Tab/Shift+Tab (LSP accept or indent), Escape blur. */
 export function fileEditorKeymapExtensions(): Extension[] {
   return [Prec.high(keymap.of(fileEditorKeymapBindings))];
 }

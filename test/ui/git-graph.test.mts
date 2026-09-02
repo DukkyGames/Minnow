@@ -38,6 +38,8 @@ const D = 'dddddddddddddddddddddddddddddddddddddddd';
 const E = 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
 const M = '1111111111111111111111111111111111111111';
 
+// ── detectTrunkBranch ────────────────────────────────────────────────────────
+
 describe('detectTrunkBranch', () => {
   it('prefers main when present in refs', () => {
     const trunk = detectTrunkBranch([
@@ -46,6 +48,8 @@ describe('detectTrunkBranch', () => {
     assert.equal(trunk, 'main');
   });
 });
+
+// ── assignCommitVisuals ──────────────────────────────────────────────────────
 
 describe('assignCommitVisuals', () => {
   it('marks mainline commits with the accent color', () => {
@@ -77,6 +81,8 @@ describe('assignCommitVisuals', () => {
     assert.equal(visuals[1].isMain, true);
   });
 });
+
+// ── computeGraphLayout ───────────────────────────────────────────────────────
 
 describe('computeGraphLayout', () => {
   it('keeps a linear history on one continuous lane', () => {
@@ -217,6 +223,8 @@ describe('computeGraphLayout', () => {
   });
 });
 
+// ── computeSquashLinks ───────────────────────────────────────────────────────
+
 describe('computeSquashLinks', () => {
   const squashHistory = [
     commit(M, [B], { refs: ['HEAD -> main'], subject: 'Add feature (#12)' }),
@@ -269,6 +277,8 @@ describe('computeSquashLinks', () => {
     );
   });
 });
+
+// ── computeCollapsedRows ─────────────────────────────────────────────────────
 
 describe('computeCollapsedRows', () => {
   it('keeps only mainline rows and clusters branch commits on their fork base', () => {
@@ -341,6 +351,8 @@ describe('computeCollapsedRows', () => {
   });
 });
 
+// ── computeCollapsedMainlineLayout ───────────────────────────────────────────
+
 describe('computeCollapsedMainlineLayout', () => {
   it('uses a single lane with no merge curves', () => {
     const main = assignCommitVisuals(
@@ -363,6 +375,8 @@ describe('computeCollapsedMainlineLayout', () => {
   });
 });
 
+// ── buildMainlineSet ─────────────────────────────────────────────────────────
+
 describe('buildMainlineSet', () => {
   it('follows first parents from the trunk tip', () => {
     const commits = [
@@ -375,6 +389,8 @@ describe('buildMainlineSet', () => {
     assert.equal(mainline.size, 3);
   });
 });
+
+// ── extractLocalBranchRefs ───────────────────────────────────────────────────
 
 describe('extractLocalBranchRefs', () => {
   it('keeps local branches and HEAD pointers', () => {
@@ -393,6 +409,8 @@ describe('extractLocalBranchRefs', () => {
     assert.deepEqual(refs, ['main']);
   });
 });
+
+// ── graphMarkerWidthPx ───────────────────────────────────────────────────────
 
 describe('graphMarkerWidthPx', () => {
   it('uses only lanes active on the row, not the global graph width', () => {

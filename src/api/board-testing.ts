@@ -1,6 +1,4 @@
-/**
- * Client helpers for Settings → Advanced → Board testing API.
- */
+// ── Types ────────────────────────────────────────────────────────────────────
 
 export type FakeModelStatus = {
   running: boolean;
@@ -206,6 +204,8 @@ export type SubmitBoardScenarioIterationRequest = {
 
 const BASE = '/api/orchestrate/board-testing';
 
+// ── Request ──────────────────────────────────────────────────────────────────
+
 async function requestJson<T>(
   pathname: string,
   options: RequestInit = {},
@@ -242,6 +242,8 @@ export async function fetchBoardTestingStatus(
 ): Promise<BoardTestingStatus> {
   return requestJson<BoardTestingStatus>('/status', { signal });
 }
+
+// ── Fake model ───────────────────────────────────────────────────────────────
 
 /** Start the in-process fake model server and register the provider. */
 export async function startFakeModel(
@@ -312,6 +314,8 @@ export async function fetchBoardLogTail(
     { signal },
   );
 }
+
+// ── Scenarios ────────────────────────────────────────────────────────────────
 
 /** Fetch server-provided scenario metadata when the catalog route is available. */
 export async function fetchBoardScenarioCatalog(

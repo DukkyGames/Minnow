@@ -1,8 +1,3 @@
-/**
- * Agent undo — rewind chat to the fork user message without regenerating.
- * Phase 2: optionally restore the working tree from per-turn git snapshots.
- */
-
 import { streamingChatIds } from '../app-state';
 import { normalizeModeId } from './modes/types';
 import { truncateChatHistory } from './history-truncate';
@@ -33,6 +28,8 @@ export type UndoBlockReason =
   | 'worktree'
   | 'no_turn'
   | 'not_found';
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 export interface UndoEligibility {
   ok: boolean;
@@ -146,10 +143,8 @@ function hasMaterializedReplyAfterFork(chat: Chat, forkHistoryIndex: number): bo
   return chat.history.slice(forkHistoryIndex + 1).some((m) => m.role !== 'user');
 }
 
-/**
- * Pick the last agent turn still present in history so Undo can rewind it.
- * Prefers the active branch at that fork when one is set.
- */
+// ── Eligibility ──────────────────────────────────────────────────────────────
+
 export function resolveUndoTarget(
   chat: Chat,
 ): { runId: string; forkHistoryIndex: number } | undefined {
@@ -166,7 +161,6 @@ export function resolveUndoTarget(
       continue;
     }
     const fork = run.forkHistoryIndex;
-    // Only rewind turns whose reply is still visible in the transcript.
     if (!hasMaterializedReplyAfterFork(chat, fork)) continue;
     if (fork > bestFork) bestFork = fork;
   }
@@ -217,12 +211,7 @@ export function undoBlockMessage(reason: UndoBlockReason): string {
   }
 }
 
-/**
- * Whether Undo is allowed for this chat, and which turn it would rewind.
- * Board / orchestrate / worktree chats are blocked in v1.
- */
 export function getUndoEligibility(chat: Chat): UndoEligibility {
-  // Use streamingChatIds directly so this module stays free of UI imports.
   if (streamingChatIds.has(chat.id)) {
     return { ok: false, reason: 'streaming', message: MSG_STREAMING };
   }
@@ -280,10 +269,6 @@ export function formatSnapshotRestoreConfirm(info: UndoConfirmInfo): string {
   return lines.join('\n');
 }
 
-/**
- * Prefer Minnow’s in-app confirm (Electron-safe). Fall back to native confirm
- * outside Electron, then a conservative headless default for tests without a DOM dialog.
- */
 async function defaultConfirm(info: UndoConfirmInfo): Promise<boolean> {
   const labels = snapshotRestoreConfirmLabels(info);
   const message = formatSnapshotRestoreConfirm(info);
@@ -291,16 +276,13 @@ async function defaultConfirm(info: UndoConfirmInfo): Promise<boolean> {
   try {
     const { appConfirm } = await import('../ui/app-dialog');
     return await appConfirm(message, labels);
-  } catch {
-    // Module or DOM unavailable (unit tests) — try native next when not in Electron.
-  }
+  } catch {}
 
   const isElectron = globalThis.minnow?.app?.isElectron === true;
   if (!isElectron && typeof globalThis.confirm === 'function') {
     return globalThis.confirm(`${labels.title}\n\n${message}`);
   }
 
-  // Headless / no confirm hook — proceed only when nothing risky.
   return !info.divergentHead && info.files.length === 0;
 }
 
@@ -313,10 +295,8 @@ function resolveUndoGit(partial?: Partial<UndoGitDeps>): UndoGitDeps {
   };
 }
 
-/**
- * Confirm + restore a turn's pre or post snapshot. Best-effort: missing SHAs,
- * server off, or non-git cwd skip calmly without throwing.
- */
+// ── Restore ──────────────────────────────────────────────────────────────────
+
 export async function confirmAndRestoreTurnSnapshot(
   run: TurnRunRecord,
   which: 'pre' | 'post',
@@ -332,14 +312,12 @@ export async function confirmAndRestoreTurnSnapshot(
   const kind: 'undo' | 'redo' = which === 'pre' ? 'undo' : 'redo';
   const git = resolveUndoGit(options?.git);
 
-  // Diff snapshot vs current working tree (includes post-turn user edits).
   const diff = await git.snapshotDiff({ cwd, fromSha: targetSha });
   const files =
     diff.ok && Array.isArray(diff.files)
       ? diff.files.map((f) => f.path).filter(Boolean)
       : [];
 
-  // Divergence: real commit landed on top of the tip we recorded at pre-snapshot.
   let divergentHead = false;
   if (run.headShaAtTurn?.trim()) {
     const tip = await git.log({ cwd, count: 1 });
@@ -349,7 +327,6 @@ export async function confirmAndRestoreTurnSnapshot(
     }
   }
 
-  // Skip confirm when nothing would change and HEAD is stable.
   const needsConfirm = divergentHead || files.length > 0;
   if (needsConfirm) {
     const confirmFn = options?.confirm ?? defaultConfirm;
@@ -374,10 +351,6 @@ export async function confirmAndRestoreTurnSnapshot(
   };
 }
 
-/**
- * Rewind the last agent turn. Chat rewind always runs when eligible; file restore
- * is best-effort when snapshot SHAs exist (server/git optional).
- */
 export async function undoLastAgentTurn(
   chatId: string,
   options?: UndoTurnOptions,
@@ -397,10 +370,8 @@ export async function undoLastAgentTurn(
   const wantFiles = options?.restoreFiles !== false;
   const git = resolveUndoGit(options?.git);
 
-  // Confirm file restore BEFORE mutating chat history so Cancel leaves everything intact.
   let pendingFileRestore = false;
   if (wantFiles && run?.preTurnSnapshotSha?.trim() && run.snapshotCwd?.trim()) {
-    // Probe confirm only — restore runs after successful truncate.
     const targetSha = run.preTurnSnapshotSha.trim();
     const cwd = run.snapshotCwd.trim();
     const diff = await git.snapshotDiff({ cwd, fromSha: targetSha });
@@ -429,11 +400,8 @@ export async function undoLastAgentTurn(
     pendingFileRestore = true;
   }
 
-  // Capture follow-ups after the reply onto the run before we slice history.
   persistActiveBranchSuffix(chat, forkHistoryIndex);
 
-  // Ensure the target run still has a redo payload even if persist was a no-op
-  // (e.g. only the assistant row existed and finalizeRun already stored it).
   if (run && (!run.outputMessages || run.outputMessages.length === 0)) {
     const suffix = chat.history.slice(forkHistoryIndex + 1);
     if (suffix.length > 0) {
@@ -449,7 +417,6 @@ export async function undoLastAgentTurn(
     };
   }
 
-  // Prune may leave the fork inactive already; clear explicitly for honesty.
   clearActiveBranch(chat, forkHistoryIndex);
   touchChat(chat);
   scheduleSaveSessions();
@@ -466,7 +433,6 @@ export async function undoLastAgentTurn(
       filesRestored = true;
       safetySnapshotSha = restored.safetySha;
     }
-    // Soft-fail: chat rewind already succeeded; callers toast calmly.
   }
 
   return {

@@ -1,7 +1,3 @@
-/**
- * Multi-server log pane: one buffer + SSE stream per serverId, with backfill on attach.
- */
-
 import { fetchTerminalLog, streamTerminalRun } from '../api/terminal';
 import { stripAnsi } from '../lib/strip-ansi';
 import { getActiveChat, scheduleSaveSessions } from '../state/sessions';
@@ -73,7 +69,6 @@ function applyFilterToActive(): void {
     });
     return;
   }
-  // Simple text filter: hide text nodes' parent spans that don't match.
   for (const node of Array.from(buf.el.childNodes)) {
     const text = node.textContent?.toLowerCase() ?? '';
     if (node instanceof HTMLElement) {
@@ -163,10 +158,7 @@ export function setActiveLogServer(serverId: string): void {
   applyFilterToActive();
 }
 
-/**
- * Sync tab list and attach/detach streams for each server's runId.
- * Backfills from fetchTerminalLog before live SSE.
- */
+/** Sync tab list and attach/detach streams for each server's runId. */
 export async function syncDevServerLogs(
   servers: { id: string; name: string; runId: string | null; command: string | null }[],
 ): Promise<void> {

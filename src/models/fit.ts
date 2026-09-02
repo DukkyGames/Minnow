@@ -22,6 +22,8 @@ import {
 import type { GeometrySource } from './model-geometry.d.mts';
 import type { CatalogModel, HardwareSnapshot, ModelFitResult } from './types';
 
+// ── GPU tables ───────────────────────────────────────────────────────────────
+
 export const GPU_BANDWIDTH: Record<string, number> = {
   '5090': 1792,
   '5080': 960,
@@ -160,6 +162,8 @@ export const CONTEXT_TARGET: Record<string, number> = {
   stt: 2048,
 };
 
+// ── Scoring ──────────────────────────────────────────────────────────────────
+
 function lookupBandwidth(gpuName: string | null | undefined): number | null {
   if (typeof gpuName !== 'string' || !gpuName) return null;
   const gn = gpuName.toLowerCase();
@@ -182,8 +186,6 @@ function estimateSpeed(
   const backend = system.backend || 'cpu_x86';
 
   if (bw && (runMode === 'gpu' || runMode === 'cpu_offload')) {
-    // Streaming the weights once per token is what sets the ceiling, so this is the real
-    // file size, not the quant's nominal bit width.
     const bpp = WEIGHT_GIB_PER_BILLION[quant] ?? DEFAULT_WEIGHT_GIB_PER_BILLION;
     const modelGb = pb * bpp;
     if (modelGb <= 0) return 0.0;
@@ -298,8 +300,6 @@ function tryQuantAt(
 ): QuantFit | null {
   const geometry = geometryForModel(model);
   const weightsBytes = weightsBytesFor(paramsB(model), quant);
-  // Guessed geometry earns a margin; a confident-looking number that OOMs is worse than a
-  // conservative one. See GEOMETRY_UNCERTAINTY.
   const headroom = GEOMETRY_UNCERTAINTY[geometry.source] ?? 1;
 
   const estimateAt = (context: number, onGpu: boolean) =>
@@ -402,6 +402,8 @@ export interface AnalyzeModelOptions {
   scoringUseCase?: string | null;
   targetContext?: number | null;
 }
+
+// ── Analyze ──────────────────────────────────────────────────────────────────
 
 export function analyzeModel(
   model: CatalogModel,
@@ -666,6 +668,8 @@ export interface RankModelsOptions {
   fitOnly?: boolean;
 }
 
+// ── Rank models ──────────────────────────────────────────────────────────────
+
 export async function rankModels(
   system: HardwareSnapshot,
   options: RankModelsOptions = {},
@@ -768,8 +772,6 @@ export async function rankModels(
     return filtered.slice(0, limit);
   }
 
-  // Score sort pushes too_tight rows to the bottom; without a reserved slice they
-  // never appear in the UI limit and the "Fit only" toggle looks broken.
   const fitting = filtered.filter((r) => r.fit_level !== 'too_tight');
   const tight = filtered.filter((r) => r.fit_level === 'too_tight');
   if (tight.length === 0) {

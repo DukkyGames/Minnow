@@ -1,16 +1,3 @@
-/**
- * Board chats open inside the Orchestrate main pane.
- *
- * Board chats are not listed in the chats panel (see `isBoardOwnedChat`), so
- * clicking one on the board must not tear the board down and hand the column to
- * a transcript with no home. Instead `.board-root` is parked and a `.ob-chat`
- * host takes its place inside `.ob-main`, with the rail switching from the board
- * library to this board's chats.
- *
- * Parking rather than destroying matters: a 31-task board is expensive to
- * rebuild, and the run keeps streaming while you read one task's transcript.
- */
-
 import { isChatStreaming } from '../chat/streaming-state';
 import {
   getBoardGroupForChat,
@@ -34,13 +21,10 @@ import {
 export { queryBoardChatTranscriptHost };
 
 const OB_CHAT_CLASS = 'ob-chat';
-/**
- * Marks the column while a board chat is open, so the composer and its strips
- * come back. A class on `.main-column` (the idiom every other stage view uses)
- * rather than `:has(.ob-chat)`: `:has()` did not reliably re-invalidate when the
- * host is added deep in the subtree, leaving the composer hidden.
- */
+/** Marks the column while a board chat is open, so the composer and its strips come back. */
 const MAIN_COLUMN_CHAT_CLASS = 'main-column--board-chat';
+
+// ── Box sync ─────────────────────────────────────────────────────────────────
 
 function syncMainColumnBoardChatClass(open: boolean): void {
   document
@@ -71,11 +55,7 @@ function syncBoardChatColumnBoxes(): void {
   syncBoardChatTerminalBox();
 }
 
-/**
- * The composer is a `#mainColumn` sibling of `.chat-viewport`, but the board rail
- * lives inside `#chatArea`. Without this, the rail height stops at the viewport
- * bottom while the composer sits underneath in the main pane column only.
- */
+/** The composer is a `#mainColumn` sibling of `.chat-viewport`, but the board rail lives inside `#chatArea`. */
 function syncBoardChatRailColumnBox(): void {
   const column = document.getElementById('mainColumn');
   if (!column) return;
@@ -102,14 +82,7 @@ function syncBoardChatRailColumnBox(): void {
   column.style.setProperty('--ob-board-chat-rail-left', nextLeft);
 }
 
-/**
- * Publish the open transcript's content box to `.main-column` (see ob-page.css).
- *
- * The composer is a `.main-column` row and cannot see inside `.ob-page`, so it
- * would otherwise stretch the full window width — under the rail, and far wider
- * than the messages it writes to. Measuring beats deriving from `--ob-rail-w`:
- * the rail overlays instead of reserving space on a narrow pane.
- */
+/** Publish the open transcript's content box to `.main-column` (see ob-page.css). */
 function syncBoardChatComposerBox(): void {
   const column = document.getElementById('mainColumn');
   if (!column) return;
@@ -128,8 +101,6 @@ function syncBoardChatComposerBox(): void {
   if (width <= 0) return;
   const nextLeft = `${Math.max(0, Math.round(left))}px`;
   const nextWidth = `${Math.round(width)}px`;
-  // Writing unconditionally would resize the composer, resize the page, and call
-  // this observer straight back — bail once the box has settled.
   if (
     column.style.getPropertyValue('--ob-chat-composer-left') === nextLeft &&
     column.style.getPropertyValue('--ob-chat-composer-width') === nextWidth
@@ -140,13 +111,7 @@ function syncBoardChatComposerBox(): void {
   column.style.setProperty('--ob-chat-composer-width', nextWidth);
 }
 
-/**
- * Publish `.ob-main`'s box to `.main-column` so the terminal dock sits beside
- * the pinned chats rail instead of stretching under it (see ob-page.css).
- *
- * Measured from the main pane, not the padded transcript: the dock should
- * share the chat column's left edge, not the message content inset.
- */
+/** Publish `.ob-main`'s box to `.main-column` so the terminal dock sits beside the pinned chats rail instead of stretching under it (see ob-page.css). */
 function syncBoardChatTerminalBox(): void {
   const column = document.getElementById('mainColumn');
   if (!column) return;
@@ -181,8 +146,6 @@ function bindComposerBoxObserver(): void {
   const codeViews = document.getElementById('codeViews');
   const pane = queryObMain();
   if (!column || typeof ResizeObserver !== 'function') return;
-  // Observe the column + transcript + main pane, not `.ob-page` — the shell
-  // rail observer already watches the page; doubling up caused loop noise.
   composerBoxObserver = new ResizeObserver(() => scheduleBoardChatComposerBoxSync());
   composerBoxObserver.observe(column);
   if (transcript?.isConnected) composerBoxObserver.observe(transcript);
@@ -190,11 +153,7 @@ function bindComposerBoxObserver(): void {
   if (pane?.isConnected) composerBoxObserver.observe(pane);
 }
 
-/**
- * Re-assert composer chrome while a board chat embed is open.
- * Stream-end refresh can drop `main-column--board-chat`, which hides the
- * input bar, approval host, and question UI (see ob-page.css).
- */
+/** Re-assert composer chrome while a board chat embed is open. */
 export function ensureBoardChatComposerChrome(): void {
   if (!isBoardChatEmbedOpen()) return;
   syncMainColumnBoardChatClass(true);
@@ -251,11 +210,12 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 }
 
+// ── Escape ───────────────────────────────────────────────────────────────────
+
 function bindEscapeToBoard(onBack: () => void): void {
   unbindEscapeToBoard();
   escapeHandler = (e: KeyboardEvent): void => {
     if (e.key !== 'Escape' || e.defaultPrevented) return;
-    // Composer text, rename fields and the row context menu own Escape first.
     if (isTypingTarget(e.target)) return;
     if (document.getElementById('chatItemContextMenu')) return;
     e.preventDefault();
@@ -325,13 +285,7 @@ function headerStateTone(chat: Chat, task: LeftoverBoardTask | undefined): strin
   return '';
 }
 
-/**
- * Everything the header draws, as one string.
- *
- * `refreshBoardChatHeader` runs on every animation frame of a live run (board
- * changes fire per stream token), and replacing the header that often threw away
- * the Back button between a click's mousedown and mouseup.
- */
+/** Everything the header draws, as one string. */
 function chatHeaderKey(chat: Chat, task: LeftoverBoardTask | undefined): string {
   return [
     chat.name?.trim() ?? '',
@@ -341,6 +295,8 @@ function chatHeaderKey(chat: Chat, task: LeftoverBoardTask | undefined): string 
     headerStateTone(chat, task),
   ].join(' | ');
 }
+
+// ── Header ───────────────────────────────────────────────────────────────────
 
 function buildChatHeader(
   chat: Chat,
@@ -376,11 +332,9 @@ function buildChatHeader(
   return head;
 }
 
-/**
- * Build (or reuse) the `.ob-chat` host inside `.ob-main`, parking the board.
- * @returns the transcript element the caller paints into, or null when
- *          Orchestrate does not own the column.
- */
+// ── Mount ────────────────────────────────────────────────────────────────────
+
+/** Build (or reuse) the `.ob-chat` host inside `.ob-main`, parking the board. */
 export function mountBoardChatHost(
   chat: Chat,
   group: ChatGroup,
@@ -440,10 +394,7 @@ export function refreshBoardChatHeader(): void {
   oldHead.replaceWith(buildChatHeader(chat, group, onBack));
 }
 
-/**
- * Remove the chat host and put the parked board back.
- * @returns true when a chat host was actually torn down.
- */
+/** Remove the chat host and put the parked board back. */
 export function unmountBoardChatHost(): boolean {
   const main = queryObMain();
   const host = main?.querySelector(`:scope > .${OB_CHAT_CLASS}`);
@@ -463,15 +414,11 @@ export function unmountBoardChatHost(): boolean {
     main.appendChild(parkedBoardRoot);
   }
   parkedBoardRoot = null;
-  // After the host is gone, so the measured boxes clear rather than going stale.
   syncBoardChatColumnBoxes();
   return true;
 }
 
-/**
- * Close the embed without repainting anything.
- * Used by navigation teardown, where the caller owns what paints next.
- */
+/** Close the embed without repainting anything. */
 export function closeBoardChatEmbedForTeardown(): void {
   if (!isBoardChatEmbedOpen()) return;
   setOpenBoardChatId(null);

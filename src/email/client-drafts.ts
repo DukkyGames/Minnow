@@ -117,7 +117,6 @@ export function fileToAttachment(
     reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
     reader.onload = () => {
       const result = String(reader.result ?? '');
-      // A data: URL is `data:<mime>;base64,<payload>` — keep only the payload.
       const comma = result.indexOf(',');
       resolve({
         filename: file.name,

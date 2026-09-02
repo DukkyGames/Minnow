@@ -1,8 +1,3 @@
-/**
- * Boot-time re-subscribe for in-flight backend generations (`currentGenerationId`).
- * Boot re-subscribe for main chat streams after reload (Phase 2b+).
- */
-
 import { isChatStreaming } from './streaming-state';
 import { GENERATION_LOST_ON_RESTART_MESSAGE } from '../api/generations';
 import type { Chat } from '../types';
@@ -21,16 +16,6 @@ export function listChatsWithGenerationId(chats: Chat[]): Chat[] {
   return chats.filter((c) => c.currentGenerationId?.trim());
 }
 
-/**
- * Resume chats that still reference a backend generation id.
- *
- * Only the active chat resumes at boot. A lazy boot leaves every other chat with an
- * empty history placeholder and a generation id that a server restart already
- * invalidated, so resuming them all meant hydrating and failing each one in turn —
- * and each failure ran the turn's history rollback. The rest resume on activation
- * (see `bootGenerationResumeForChat` from the chat switch), by which point their
- * transcript is loaded.
- */
 export async function bootGenerationResumeForChats(chats: Chat[]): Promise<void> {
   const resumable = listChatsWithGenerationId(chats);
   if (!resumable.length) {
@@ -51,11 +36,6 @@ export interface BootGenerationResumeOptions {
   ownsGlobalStreaming?: boolean;
 }
 
-/**
- * Re-subscribe to `chat.currentGenerationId` after reload or chat switch.
- * Does not push a new user message (`pushUser: false`).
- * No-ops while the boot resume gate is held (prompt unanswered or declined).
- */
 export async function bootGenerationResumeForChat(
   chat: Chat,
   options: BootGenerationResumeOptions = {},
@@ -94,9 +74,7 @@ export async function bootGenerationResumeForChat(
       ownsGlobalStreaming: options.ownsGlobalStreaming ?? true,
       goalDriven: isGoalLoopActive(chat),
     });
-  } catch {
-    /* runChatTurn surfaces inline errors; no auto-retry */
-  }
+  } catch {}
 }
 
 /** Inline error copy when GET /stream returns 404 (generation evicted on server restart). */

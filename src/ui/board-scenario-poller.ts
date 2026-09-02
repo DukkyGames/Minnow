@@ -6,10 +6,7 @@ export type BoardScenarioPollerOptions<T> = {
   isTerminal: (snapshot: T) => boolean;
 };
 
-/**
- * Single-flight, abortable polling used by the board scenario runner.
- * Starting a new lifecycle always aborts the previous request and timer.
- */
+/** Single-flight, abortable polling used by the board scenario runner. */
 export class BoardScenarioPoller<T> {
   private controller: AbortController | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;

@@ -1,7 +1,3 @@
-/**
- * Optional Impeccable shape/critique stage for Super Plan when UI is involved.
- */
-
 import { composeImpeccableSkillBody } from '../../skills/impeccable-client';
 import { planInvolvesUi, type SuperPlanReviewContext } from './review-helpers';
 
@@ -48,10 +44,6 @@ function inferImpeccableTarget(context: SuperPlanImpeccableContext): string {
   return 'Super Plan UI surfaces';
 }
 
-/**
- * Compose Impeccable skill body for shape or critique when the plan involves UI.
- * Returns null when UI heuristic is false — caller should skip this stage cleanly.
- */
 export async function composeSuperPlanImpeccableStage(
   command: SuperPlanImpeccableCommand,
   context: SuperPlanImpeccableContext,

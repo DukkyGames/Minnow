@@ -1,7 +1,3 @@
-/**
- * Per-user-message branch picker when multiple turn runs exist at a fork.
- */
-
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { confirmAndRestoreTurnSnapshot, UNDO_STATUS } from '../chat/undo-turn';
 import {
@@ -64,10 +60,7 @@ function removeBranchPickerFromRow(wrap: HTMLElement): void {
   wrap.classList.remove('msg--has-branch-picker');
 }
 
-/**
- * Re-attach the branch picker on an existing user row after a fork/replay turn
- * completes (history render happens earlier, before the second branch exists).
- */
+/** Re-attach the branch picker on an existing user row after a fork/replay turn completes (history render happens earlier, before the second branch exists). */
 export function refreshBranchPickerAtFork(chat: Chat, forkHistoryIndex: number): void {
   const wrap = findUserMessageRow(chat.id, forkHistoryIndex);
   if (!wrap) return;
@@ -75,10 +68,7 @@ export function refreshBranchPickerAtFork(chat: Chat, forkHistoryIndex: number):
   attachBranchPicker(wrap, chat.id, forkHistoryIndex);
 }
 
-/**
- * Show the picker when there are multiple branches, or a single redoable
- * branch while history ends at the fork user row (post-undo gap).
- */
+/** Show the picker when there are multiple branches, or a single redoable branch while history ends at the fork user row (post-undo gap). */
 function shouldAttachBranchPicker(
   chat: Chat,
   forkHistoryIndex: number,
@@ -86,7 +76,6 @@ function shouldAttachBranchPicker(
 ): boolean {
   if (branchCount >= 2) return true;
   if (branchCount < 1) return false;
-  // Single-branch redo: user message is the last history row (no active reply).
   return (
     chat.history.length === forkHistoryIndex + 1 &&
     chat.history[forkHistoryIndex]?.role === 'user'
@@ -110,7 +99,6 @@ export function attachBranchPicker(
   const active = getActiveRun(chat, forkHistoryIndex);
   const sorted = [...branches].sort((a, b) => a.createdAt - b.createdAt);
   const activeIndex = sorted.findIndex((run) => run.branchId === active?.branchId);
-  // History ends at the user row → no reply is active; offer restore, not "Branch N".
   const historyEndsAtFork =
     chat.history.length === forkHistoryIndex + 1 &&
     chat.history[forkHistoryIndex]?.role === 'user';
@@ -171,12 +159,10 @@ export function attachBranchPicker(
 
       item.append(label, meta);
 
-      // Only mark current when a reply is actually materialized (not post-undo).
       if (!historyEndsAtFork && active?.branchId === run.branchId) {
         item.classList.add('branch-picker__item--active');
         item.setAttribute('aria-current', 'true');
       }
-      // Menu label: "Restore branch" when redoing into an empty suffix.
       if (historyEndsAtFork) {
         label.textContent =
           sorted.length === 1
@@ -231,7 +217,6 @@ async function switchBranch(
   const targetRun = listSelectableBranchesAtFork(chat, forkHistoryIndex).find(
     (r) => r.branchId === branchId,
   );
-  // Capture before activate — after redo, history no longer ends at the fork.
   const isRedoRestore =
     chat.history.length === forkHistoryIndex + 1 &&
     chat.history[forkHistoryIndex]?.role === 'user';
@@ -243,8 +228,6 @@ async function switchBranch(
   }
   touchChat(chat);
   scheduleSaveSessions();
-  // Keep session activeId aligned with the chat whose branch we switched so the
-  // next composer send does not land in a different (or newly created) chat.
   const prevActiveId = sessionState?.activeId;
   const switched = await switchActiveChat(chat.id);
   if (switched) {
@@ -254,8 +237,6 @@ async function switchBranch(
   renderStatsForChat(chat);
   renderSidebar();
 
-  // MIN-409: optionally restore post-turn files when redoing an undone branch.
-  // Declining the confirm still keeps the chat messages switched.
   let filesRestored = false;
   if (targetRun?.postTurnSnapshotSha?.trim() && targetRun.snapshotCwd?.trim()) {
     const fileResult = await confirmAndRestoreTurnSnapshot(targetRun, 'post');

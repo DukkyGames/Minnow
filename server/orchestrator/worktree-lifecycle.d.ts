@@ -92,7 +92,6 @@ export function reconcileOrphanWorktrees(input: {
   discarded: Record<string, unknown>[];
 }>;
 
-/** P3-C calls this after a real merge. P3-A only exports the hook. */
 export function refreshIntegrationDepsAfterMerge(input: {
   boardId: string;
   sinceSha?: string;

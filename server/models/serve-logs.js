@@ -1,14 +1,3 @@
-/**
- * Serve process log tail — reads spawn logs under ~/.minnow/logs/models/{runId}.log
- * and, for MLX, the shared managed mlx-lm log under ~/.minnow/logs/servers/.
- *
- * llama-server writes through the shared terminal runner, so the log file is the
- * one source that survives a Minnow restart. Streaming polls file size and emits
- * the delta, which works for both in-memory and recovered runs. 200 ms keeps the
- * late b9628 burst (context / warmup / listening) ahead of `/health`, which used
- * to settle the card while the bar was still in the weights band.
- */
-
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { getServerLogPath } from '../servers/paths.js';
@@ -18,11 +7,9 @@ const POLL_MS = 200;
 const DEFAULT_TAIL_BYTES = 64 * 1024;
 const MAX_TAIL_BYTES = 512 * 1024;
 
-/** Managed server id whose stdout/stderr feed MLX model loads. */
 export const MLX_LM_MANAGED_SERVER_ID = 'mlx-lm';
 
 /**
- * Absolute spawn log for a llama.cpp run (`~/.minnow/logs/models/{runId}.log`).
  * @param {string} runId
  */
 export function logPathForRun(runId) {
@@ -30,8 +17,6 @@ export function logPathForRun(runId) {
 }
 
 /**
- * Append a line to a serve spawn log. Creates the file when createRun has not yet
- * written one (tests) so Phase 3 can grep `fit planner` after a manual over-budget load.
  * @param {string} runId
  * @param {string} line
  */
@@ -44,8 +29,6 @@ export async function appendServeLog(runId, line) {
 }
 
 /**
- * Absolute log file for a serve row — spawn logs for llama-cpp, managed server
- * logs for mlx-lm (one shared process, no per-serve runId).
  * @param {{ runId?: string | null, runtime?: string } | null | undefined} serve
  * @returns {string | null}
  */
@@ -86,17 +69,12 @@ async function readLogFileSince(logPath, offset) {
   let handle;
   try {
     const stat = await fsp.stat(logPath);
-    // Truncated or rotated behind us — restart from the tail.
     if (stat.size < offset) return readLogFileTail(logPath);
     if (stat.size === offset) return { text: '', size: stat.size, more: false };
     handle = await fsp.open(logPath, 'r');
     const toRead = Math.min(stat.size - offset, MAX_TAIL_BYTES);
     const buf = Buffer.alloc(toRead);
     await handle.read(buf, 0, buf.length, offset);
-    // Next offset is what we actually consumed. Returning `stat.size` here
-    // skipped every byte past MAX_TAIL_BYTES — the Qwen3.8 tokenizer dump is
-    // several MB, so `loading model tensors` and `server is listening` never
-    // reached the modelled bar.
     const end = offset + buf.length;
     return { text: buf.toString('utf8'), size: end, more: end < stat.size };
   } catch {
@@ -107,7 +85,6 @@ async function readLogFileSince(logPath, offset) {
 }
 
 /**
- * Read the trailing bytes of a serve log.
  * @param {string} runId
  * @param {number} [maxBytes]
  * @returns {Promise<{ text: string, size: number } | null>}
@@ -117,7 +94,6 @@ export async function readServeLogTail(runId, maxBytes = DEFAULT_TAIL_BYTES) {
 }
 
 /**
- * Read the trailing bytes of whichever log backs a serve row.
  * @param {{ runId?: string | null, runtime?: string }} serve
  * @param {number} [maxBytes]
  */
@@ -128,7 +104,6 @@ export async function readServeLogTailForServe(serve, maxBytes = DEFAULT_TAIL_BY
 }
 
 /**
- * Read bytes appended since a known offset.
  * @param {string} runId
  * @param {number} offset
  * @returns {Promise<{ text: string, size: number } | null>}
@@ -138,10 +113,9 @@ async function readServeLogSince(runId, offset) {
 }
 
 /**
- * Follow a log file at a fixed path, emitting the existing tail then appended chunks.
  * @param {string} logPath
  * @param {(event: { text: string, offset: number, initial?: boolean }) => void} onChunk
- * @returns {() => void} unsubscribe
+ * @returns {() => void}
  */
 function subscribeLogFile(logPath, onChunk) {
   let offset = 0;
@@ -150,8 +124,6 @@ function subscribeLogFile(logPath, onChunk) {
 
   const tick = async () => {
     if (stopped) return;
-    // Drain until EOF in this tick so a >512 KiB burst (tokenizer dump) does
-    // not wait N polls to catch up while /health already flipped the card.
     for (;;) {
       const chunk = await readLogFileSince(logPath, offset);
       if (stopped) return;
@@ -178,28 +150,18 @@ function subscribeLogFile(logPath, onChunk) {
 }
 
 /**
- * Follow a serve log, emitting the existing tail then appended chunks.
  * @param {string} runId
  * @param {(event: { text: string, offset: number, initial?: boolean }) => void} onChunk
- * @returns {() => void} unsubscribe
+ * @returns {() => void}
  */
 export function subscribeServeLog(runId, onChunk) {
   return subscribeLogFile(logPathForRun(runId), onChunk);
 }
 
 /**
- * Follow whichever log backs a serve row (spawn log or shared mlx-lm server log).
- *
- * `serveOrLookup` may be a snapshot or a function that returns the current row
- * (sync or async). The follow re-resolves the path every poll so it can wait
- * for `runId` (commitServes('llama-starting') races spawn) and switch files
- * when a port/Jinja retry assigns a new run.
- *
- * @param {{ runId?: string | null, runtime?: string } | (() =>
- *   { runId?: string | null, runtime?: string } | null | undefined |
- *   Promise<{ runId?: string | null, runtime?: string } | null | undefined>)} serveOrLookup
+ * @param {{ runId?: string | null, runtime?: string } | (() => { runId?: string | null, runtime?: string } | null | undefined | Promise<{ runId?: string | null, runtime?: string } | null | undefined>)} serveOrLookup
  * @param {(event: { text: string, offset: number, initial?: boolean }) => void} onChunk
- * @returns {() => void} unsubscribe — stays open while waiting for a log path
+ * @returns {() => void}
  */
 export function subscribeServeLogForServe(serveOrLookup, onChunk) {
   const lookup =
@@ -222,13 +184,9 @@ export function subscribeServeLogForServe(serveOrLookup, onChunk) {
         innerUnsub?.();
         innerUnsub = null;
         currentPath = logPath;
-        // Subscribe only once a path exists so we do not emit a fake empty
-        // `initial` tail that the UI would treat as the whole log.
         if (logPath) innerUnsub = subscribeLogFile(logPath, onChunk);
       }
     } catch {
-      // getServe can throw if the id was invalidated mid-follow; keep polling
-      // until the EventSource closes.
     } finally {
       attaching = false;
     }

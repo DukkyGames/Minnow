@@ -1,15 +1,5 @@
 /**
  * Generic append-only JSONL store, namespaced under `getMinnowHome()`.
- *
- * Boards used to hardcode `boards/<id>/`. Phase 8 needs a second graph
- * (sub-agents) at `agents/<id>/` without a second copy of torn-tail repair,
- * seq assignment, or snapshot memoisation. This module is that store;
- * {@link ./journal.js} is the boards thin binding so Phase 1–5 callers keep
- * `boardDir` / `journalPath` / `loadState` unchanged — and existing boards
- * keep resolving to exactly `~/.minnow/boards/<id>/journal.jsonl`.
- *
- * Fold and validation are arguments, not imports, so a second graph is not
- * forced through `derive()` / the board event schema.
  */
 
 import fs from 'node:fs/promises';
@@ -23,9 +13,7 @@ import { getMinnowHome, ensureMinnowLayout } from '../config/home.js';
 export const BOARDS_NAMESPACE = 'boards';
 
 /**
- * Ids (and namespace segments) reach here from HTTP, so they are never
- * interpolated into a path unchecked.
- *
+ * Ids (and namespace segments) reach here from HTTP, so they are never interpolated into a path unchecked.
  * @param {string} value
  * @param {string} [kind]
  * @returns {string}
@@ -71,9 +59,7 @@ export function snapshotFile(namespace, id, idKind = 'entry') {
 }
 
 /**
- * One namespaced journal. Each instance has its own append chain and seq
- * cache so two graphs with the same id cannot collide on numbering.
- *
+ * One namespaced journal.
  * @param {{
  *   namespace: string,
  *   idKind?: string,
@@ -97,26 +83,12 @@ export function createJournalStore(options) {
   const validate = options.validate;
   const queryAbandonments = options.queryAbandonments;
 
-  /**
-   * One promise chain per entry id.
-   *
-   * `seq` is assigned inside the chain, so two concurrent `appendEvent` calls
-   * for one entry queue rather than racing. Relying on `fs.appendFile` being
-   * atomic would order the *bytes* but not the numbering.
-   *
-   * @type {Map<string, Promise<unknown>>}
-   */
+  /** @type {Map<string, Promise<unknown>>} */
   const appendChains = new Map();
 
-  /**
-   * Highest `seq` written so far, per entry, alongside the file size it was
-   * observed at. A cache of the journal's tail, not a source.
-   *
-   * @type {Map<string, { seq: number, size: number }>}
-   */
+  /** @type {Map<string, { seq: number, size: number }>} */
   const highestSeq = new Map();
 
-  /** Distinguishes two temp snapshot files written inside the same millisecond. */
   let snapshotWrites = 0;
 
   /**
@@ -153,7 +125,6 @@ export function createJournalStore(options) {
    */
   function serialise(id, task) {
     const previous = appendChains.get(id) ?? Promise.resolve();
-    // The chain must not break on a rejection, or one bad append wedges the entry.
     const next = previous.then(task, task);
     appendChains.set(
       id,
@@ -198,11 +169,6 @@ export function createJournalStore(options) {
 
   /**
    * Give the journal a terminating newline, returning the size it now has.
-   *
-   * A crash mid-append leaves a final line with no newline. Leaving it that
-   * way is not harmless: the *next* append concatenates onto the unterminated
-   * line and the journal looks corrupt forever. See journal.js P1-A notes.
-   *
    * @param {string} id
    * @returns {Promise<number>}
    */
@@ -301,9 +267,7 @@ export function createJournalStore(options) {
   }
 
   /**
-   * Read one journal. A trailing partial line is dropped silently; a partial
-   * line anywhere else throws — that cannot be a crash.
-   *
+   * Read one journal.
    * @param {string} id
    * @returns {Promise<Record<string, unknown>[]>}
    */
@@ -509,9 +473,7 @@ export function createJournalStore(options) {
   }
 
   /**
-   * Current state. Equal to `fold(readEvents(id))`. A snapshot only ever
-   * changes how long that takes.
-   *
+   * Current state.
    * @param {string} id
    * @returns {Promise<unknown>}
    */
