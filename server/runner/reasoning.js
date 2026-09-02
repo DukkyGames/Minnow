@@ -1,17 +1,31 @@
+/** Coerce provider reasoning fields to a string (`content` / `text` objects, or a part list). */
+function coerceReasoningText(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value.map(coerceReasoningText).join("");
+  }
+  if (typeof value === "object") {
+    const rec = value;
+    if (typeof rec.content === "string") return rec.content;
+    if (typeof rec.text === "string") return rec.text;
+  }
+  return "";
+}
 function extractReasoningDelta(chunk) {
   const choice = chunk.choices?.[0];
   if (!choice) return "";
   const delta = choice.delta;
   if (!delta) return "";
-  if (delta.reasoning) return delta.reasoning;
-  if (delta.reasoning_content) return delta.reasoning_content;
-  if (delta.thinking) return delta.thinking;
+  const fromDelta = coerceReasoningText(delta.reasoning)
+    || coerceReasoningText(delta.reasoning_content)
+    || coerceReasoningText(delta.thinking);
+  if (fromDelta) return fromDelta;
   const msg = choice.message;
-  if (msg?.reasoning) return msg.reasoning;
-  if (msg?.reasoning_content) return msg.reasoning_content;
-  const msgThinking = msg?.thinking;
-  if (msgThinking) return msgThinking;
-  return "";
+  if (!msg) return "";
+  return coerceReasoningText(msg.reasoning)
+    || coerceReasoningText(msg.reasoning_content)
+    || coerceReasoningText(msg.thinking);
 }
 function extractReasoningSignatureDelta(chunk) {
   const signature = chunk.choices?.[0]?.delta?.reasoning_signature;
@@ -19,10 +33,9 @@ function extractReasoningSignatureDelta(chunk) {
 }
 function extractReasoningMessage(message) {
   if (!message) return "";
-  if (message.reasoning) return message.reasoning;
-  if (message.reasoning_content) return message.reasoning_content;
-  if (message.thinking) return message.thinking;
-  return "";
+  return coerceReasoningText(message.reasoning)
+    || coerceReasoningText(message.reasoning_content)
+    || coerceReasoningText(message.thinking);
 }
 function splitThinkingSegments(buffer) {
   const parts = buffer.split(/\n\n+/);

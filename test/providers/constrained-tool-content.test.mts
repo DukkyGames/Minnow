@@ -152,4 +152,12 @@ describe('constrained-tool-content', () => {
     assert.equal(merged.length, 1);
     assert.equal(merged[0].function.name, 'list_directory');
   });
+
+  test('mergeContentJsonToolCalls recovers constrained JSON from the thinking haystack', () => {
+    const merged = mergeContentJsonToolCalls('', [], {
+      thinkingXmlParseText: '{"tool_calls":[{"name":"get_datetime","arguments":{}}]}',
+    });
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0].function.name, 'get_datetime');
+  });
 });

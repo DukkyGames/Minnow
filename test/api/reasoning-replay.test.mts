@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  extractReasoningDelta,
   modelRejectsMessageReasoningReplay,
   modelRequiresReasoningContentReplay,
   outboundReasoningReplayFields,
@@ -51,6 +52,26 @@ describe('reasoning replay helpers', () => {
         toolCallTurn: true,
       }),
       { reasoning_content: '' },
+    );
+  });
+});
+
+describe('extractReasoningDelta', () => {
+  test('reads string reasoning_content', () => {
+    assert.equal(
+      extractReasoningDelta({
+        choices: [{ index: 0, delta: { reasoning_content: 'plan' } }],
+      }),
+      'plan',
+    );
+  });
+
+  test('coerces object thinking.content (nested provider shape)', () => {
+    assert.equal(
+      extractReasoningDelta({
+        choices: [{ index: 0, delta: { thinking: { content: 'nested' } } }],
+      } as never),
+      'nested',
     );
   });
 });

@@ -112,8 +112,13 @@ export class BenchmarkStreamContentRouter {
 
   ingestReasoningDelta(delta: string): void {
     if (!delta) return;
-    this.feedThinkingBudget(delta);
-    this.reasoningText += delta;
+    // Native reasoning (MTPLX / DeepSeek) can carry `<tool_call>` the same way
+    // an inline `<think>` span does — withhold markup, keep visible thoughts.
+    const visible = this.thinkingToolCallRouter.feed(delta);
+    if (visible) {
+      this.feedThinkingBudget(visible);
+      this.reasoningText += visible;
+    }
   }
 
   ingestContentDelta(delta: string): void {

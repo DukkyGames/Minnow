@@ -21,9 +21,10 @@ export declare function toolArgumentsRichnessScore(argumentsRaw: string): number
  * as are Qwen-style `<tool_call>` blocks from mlx-lm / llama.cpp servers.
  *
  * `thinkingXmlParseText` holds `<tool_call>` blocks captured inside a `<think>` span
- * (Qwen3.8 interleaved thinking emits the call *before* `</think>`). It is a last-resort
- * fallback only: a model that drafts a call while reasoning and then calls something else
- * must never have its streamed arguments rewritten from the draft.
+ * or on the native `reasoning_content` channel (Qwen3.8 / MTPLX emit the call *before*
+ * `</think>`, and some servers map that span onto reasoning instead of `content`).
+ * It is a last-resort fallback only: a model that drafts a call while reasoning and
+ * then calls something else must never have its streamed arguments rewritten from the draft.
  */
 export declare function mergeContentJsonToolCalls(fullText: string, streamed: ToolCall[], options?: {
     harmonyParseText?: string;

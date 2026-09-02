@@ -74,6 +74,26 @@ function reasoningThenProseChunks(reasoning, prose) {
   ];
 }
 
+function reasoningXmlToolChunks(reasoning, name, args) {
+  const xml = `<tool_call>{"name":${JSON.stringify(name)},"arguments":${JSON.stringify(args)}}</tool_call>`;
+  return [
+    `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: reasoning } }] })}\n\n`,
+    `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: xml } }] })}\n\n`,
+    `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`,
+    'event: end\ndata: {"status":"complete"}\n\n',
+  ];
+}
+
+function reasoningQwenXmlToolChunks(reasoning, name) {
+  const xml = `<tool_call>\n<function=${name}>\n</function>\n</tool_call>`;
+  return [
+    `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: reasoning } }] })}\n\n`,
+    `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: xml } }] })}\n\n`,
+    `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\n`,
+    'event: end\ndata: {"status":"complete"}\n\n',
+  ];
+}
+
 function reasoningThenToolChunks(reasoning, name, args, toolCallId = 'call_1') {
   const argStr = typeof args === 'string' ? args : JSON.stringify(args);
   return [
@@ -376,6 +396,68 @@ describe('TurnEvent members (P10-B)', () => {
         assert.ok(call < result, 'tool_call before tool_result');
         assert.ok(result < end0, 'tool_result before round_end');
         assert.equal(events[end0].toolCallCount, 1);
+      },
+    );
+  });
+
+  test('recovers a JSON tool_call from native reasoning_content (MTPLX)', { timeout: 20_000 }, async () => {
+    await withFake(
+      [
+        {
+          match: { nth: 0 },
+          emit: reasoningXmlToolChunks('I should check the clock.', 'get_datetime', {}),
+        },
+        { emit: proseSseChunks('It is noon.') },
+      ],
+      async (baseUrl) => {
+        const events = [];
+        await runTurn({
+          chatId: CHAT_UUID,
+          seed: 'What time is it?',
+          tools: [DATETIME_TOOL],
+          model: { providerId: 'local-fake', id: 'fake-model' },
+          onEvent: (event) => events.push(event),
+          deps: stubDeps(baseUrl, { runHeadlessToolBatch: passthroughBatch }),
+          execute: async () => ({ content: '2026-09-01T12:00:00.000Z' }),
+          ...CHAT_SHAPED,
+        });
+        const thinking = events.filter((e) => e.type === 'thinking').at(-1);
+        assert.equal(thinking?.text?.includes('tool_call'), false, 'markup must not stay in Thoughts');
+        assert.match(String(thinking?.text ?? ''), /I should check the clock/);
+        const streaming = events.find((e) => e.type === 'tool_streaming');
+        assert.equal(streaming?.name, 'get_datetime');
+        const call = events.find((e) => e.type === 'tool_call');
+        assert.equal(call?.name, 'get_datetime');
+        const result = events.find((e) => e.type === 'tool_result');
+        assert.ok(result, 'tool must execute');
+      },
+    );
+  });
+
+  test('recovers a Qwen XML tool_call from native reasoning_content', { timeout: 20_000 }, async () => {
+    await withFake(
+      [
+        {
+          match: { nth: 0 },
+          emit: reasoningQwenXmlToolChunks('Need the clock.', 'get_datetime'),
+        },
+        { emit: proseSseChunks('It is noon.') },
+      ],
+      async (baseUrl) => {
+        const events = [];
+        await runTurn({
+          chatId: CHAT_UUID,
+          seed: 'What time is it?',
+          tools: [DATETIME_TOOL],
+          model: { providerId: 'local-fake', id: 'fake-model' },
+          onEvent: (event) => events.push(event),
+          deps: stubDeps(baseUrl, { runHeadlessToolBatch: passthroughBatch }),
+          execute: async () => ({ content: '2026-09-01T12:00:00.000Z' }),
+          ...CHAT_SHAPED,
+        });
+        const thinking = events.filter((e) => e.type === 'thinking').at(-1);
+        assert.equal(thinking?.text?.includes('function='), false);
+        assert.equal(events.some((e) => e.type === 'tool_call' && e.name === 'get_datetime'), true);
       },
     );
   });

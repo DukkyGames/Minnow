@@ -17,7 +17,41 @@ function syntheticXmlToolCallId(index) {
 function isOpenTag(marker) {
   return !marker.startsWith("</");
 }
-function parseToolCallPayload(inner, index) {
+const QWEN_FUNCTION_OPEN_RE = /<function=([^>\s]+)\s*>/i;
+const QWEN_PARAMETER_RE = /<parameter=([^>\s]+)\s*>([\s\S]*?)(?:<\/parameter>|$)/gi;
+/** JSON-decode a Qwen XML parameter when the model wrote an object/array/number; otherwise keep the string. */
+function coerceQwenParameterValue(raw) {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return trimmed;
+  }
+}
+/**
+ * Qwen3.5 / Qwen3.8 / Qwen3-Coder native envelope (MTPLX, vLLM qwen3_coder):
+ * `<function=name><parameter=key>\nvalue\n</parameter></function>`
+ * Missing close tags are still accepted so a stream cut mid-envelope can run.
+ */
+function parseQwenXmlFunctionPayload(inner) {
+  const fnMatch = QWEN_FUNCTION_OPEN_RE.exec(inner);
+  if (!fnMatch) return null;
+  const name = fnMatch[1].trim();
+  if (!name) return null;
+  const args = {};
+  QWEN_PARAMETER_RE.lastIndex = 0;
+  let param = QWEN_PARAMETER_RE.exec(inner);
+  while (param) {
+    const key = (param[1] ?? "").trim();
+    if (key) {
+      args[key] = coerceQwenParameterValue(param[2] ?? "");
+    }
+    param = QWEN_PARAMETER_RE.exec(inner);
+  }
+  return { name, args };
+}
+function parseJsonToolCallPayload(inner, index) {
   const json = extractBalancedJsonObject(inner, 0);
   if (!json) {
     return null;
@@ -51,8 +85,29 @@ function parseToolCallPayload(inner, index) {
   const id = typeof record.id === "string" && record.id.trim() ? record.id.trim() : syntheticXmlToolCallId(index);
   return { id, type: "function", function: { name, arguments: argumentsJson } };
 }
+function parseToolCallPayload(inner, index) {
+  const fromJson = parseJsonToolCallPayload(inner, index);
+  if (fromJson) return fromJson;
+  const fromXml = parseQwenXmlFunctionPayload(inner);
+  if (!fromXml) return null;
+  return {
+    id: syntheticXmlToolCallId(index),
+    type: "function",
+    function: { name: fromXml.name, arguments: JSON.stringify(fromXml.args) }
+  };
+}
+/** Best-effort tool name from a still-open `<tool_call>` capture (for "Calling {tool}…"). */
+function peekToolCallName(haystack) {
+  if (!haystack) return "";
+  const parsed = parseToolCallPayload(haystack, 0);
+  if (parsed?.function?.name) return parsed.function.name;
+  const fn = QWEN_FUNCTION_OPEN_RE.exec(haystack);
+  if (fn?.[1]) return fn[1].trim();
+  const jsonName = /"name"\s*:\s*"([^"]+)"/.exec(haystack);
+  return jsonName?.[1]?.trim() ?? "";
+}
 function hasXmlToolCallMarkup(text) {
-  return Boolean(text) && TOOL_CALL_MARKER_RE.test(text);
+  return Boolean(text) && (TOOL_CALL_MARKER_RE.test(text) || QWEN_FUNCTION_OPEN_RE.test(text));
 }
 function tryParseXmlToolCallsFromText(text) {
   if (!text || !hasXmlToolCallMarkup(text)) {
@@ -60,18 +115,22 @@ function tryParseXmlToolCallsFromText(text) {
   }
   const out = [];
   const seen = /* @__PURE__ */ new Set();
+  function pushParsed(parsed) {
+    if (!parsed) return;
+    const dedupeKey = `${parsed.function.name}\0${parsed.function.arguments}`;
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+    out.push(parsed);
+  }
   TOOL_CALL_BLOCK_RE.lastIndex = 0;
   let match = TOOL_CALL_BLOCK_RE.exec(text);
   while (match) {
-    const parsed = parseToolCallPayload(match[2] ?? "", out.length);
-    if (parsed) {
-      const dedupeKey = `${parsed.function.name}\0${parsed.function.arguments}`;
-      if (!seen.has(dedupeKey)) {
-        seen.add(dedupeKey);
-        out.push(parsed);
-      }
-    }
+    pushParsed(parseToolCallPayload(match[2] ?? "", out.length));
     match = TOOL_CALL_BLOCK_RE.exec(text);
+  }
+  // Bare `<function=name>` with no wrapping `<tool_call>` (some Qwen streams).
+  if (out.length === 0) {
+    pushParsed(parseToolCallPayload(text, 0));
   }
   return out;
 }
@@ -120,6 +179,16 @@ class ContentToolCallRouter {
   /** True once a block on this stream parsed as a tool call. */
   hasCapturedToolCalls() {
     return this.parseText.length > 0;
+  }
+  /**
+   * Name of a tool call already captured, or of the block currently streaming.
+   * Empty until the envelope is unambiguous — used to leave the thinking timer.
+   */
+  peekStreamingToolName() {
+    const fromClosed = peekToolCallName(this.parseText);
+    if (fromClosed) return fromClosed;
+    if (!this.capturing) return "";
+    return peekToolCallName(this.captured + this.buffer);
   }
   /**
    * End the current block. Returns text to put back into prose when the payload

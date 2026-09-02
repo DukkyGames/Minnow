@@ -151,7 +151,13 @@ function mergeContentJsonToolCalls(fullText, streamed, options) {
     if (fromContent.length > 0) {
       return fromContent;
     }
-    return tryParseXmlToolCallsFromText(options?.thinkingXmlParseText ?? "");
+    const thinkingHaystack = options?.thinkingXmlParseText ?? "";
+    const fromThinkingXml = tryParseXmlToolCallsFromText(thinkingHaystack);
+    if (fromThinkingXml.length > 0) {
+      return fromThinkingXml;
+    }
+    // Constrained-decoding JSON that landed on the reasoning channel (MTPLX).
+    return tryParseToolCallsFromAssistantContent(thinkingHaystack);
   }
   const contentFallback = fromHarmony.length > 0 ? fromHarmony : fromXml.length > 0 ? fromXml : fromContent;
   return mergeStreamedWithContentToolCalls(streamed, contentFallback);

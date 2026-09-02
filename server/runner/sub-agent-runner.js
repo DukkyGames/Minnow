@@ -355,12 +355,26 @@ function createSubAgentRunner(deps) {
       reasoningText += text;
       notifyReasoningDelta();
     }
+    function noteThinkingSideToolProgress() {
+      // MTPLX / Qwen3.8 put `<tool_call>` on the native reasoning channel.
+      // Leave the thinking timer and surface "Calling {tool}…" as soon as the
+      // envelope names a function — do not wait for `delta.tool_calls`.
+      const streamingName = thinkingToolCallRouter.peekStreamingToolName()?.trim();
+      if (!streamingName) return;
+      if (!toolCallPhaseStarted) {
+        toolCallPhaseStarted = true;
+        thinkingBudgetTracker?.endSession();
+        emitReasoningEnd();
+      }
+      streamOptions?.onToolCallDelta?.(streamingName);
+    }
     function processRoutedParts(parts) {
       for (const [text, isThinking] of parts) {
         if (isThinking) {
           if (text) {
             noteThinkingChannel("inline");
             emitThinking(thinkingToolCallRouter.feed(text));
+            noteThinkingSideToolProgress();
           }
           continue;
         }
@@ -413,6 +427,7 @@ function createSubAgentRunner(deps) {
       }
       processRoutedParts(inlineRouter.flush());
       emitThinking(thinkingToolCallRouter.flush());
+      noteThinkingSideToolProgress();
       emitProse(toolCallRouter.flush());
     }
     reader = res.body.getReader();
@@ -425,9 +440,10 @@ function createSubAgentRunner(deps) {
       const reasoningDelta = extractReasoningDelta(chunk);
       if (reasoningDelta) {
         noteThinkingChannel("native");
-        feedThinkingBudget(reasoningDelta);
-        reasoningText += reasoningDelta;
-        notifyReasoningDelta();
+        // Same capture as inline `<think>` spans: withhold tool markup from the
+        // Thoughts panel and recover it as a real tool call after the stream.
+        emitThinking(thinkingToolCallRouter.feed(reasoningDelta));
+        noteThinkingSideToolProgress();
       }
       const contentDelta = extractStreamDelta(chunk);
       if (contentDelta) {
@@ -485,6 +501,7 @@ function createSubAgentRunner(deps) {
       // just moved out of `fullText` and into reasoning.
       thinkingXmlParseText: [
         thinkingToolCallRouter.getToolCallParseText(),
+        reasoningText,
         ...split.thinking
       ].join("\n")
     });

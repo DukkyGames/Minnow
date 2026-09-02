@@ -29,11 +29,44 @@ function streamThrough(router: ContentToolCallRouter, chunks: readonly string[])
 }
 
 describe('tryParseXmlToolCallsFromText', () => {
-  test('parses a Qwen tool_call block', () => {
-    const calls = tryParseXmlToolCallsFromText(READ_FILE);
+  test('parses a Qwen XML function/parameter envelope', () => {
+    const xml = `<tool_call>
+<function=read_file>
+<parameter=path>
+src/a.ts
+</parameter>
+</function>
+</tool_call>`;
+    const calls = tryParseXmlToolCallsFromText(xml);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].function.name, 'read_file');
     assert.deepEqual(JSON.parse(calls[0].function.arguments), { path: 'src/a.ts' });
+  });
+
+  test('parses Qwen XML with JSON parameter values and missing close tags', () => {
+    const xml = `<tool_call>
+<function=save_file>
+<parameter=path>
+out.json
+</parameter>
+<parameter=content>
+{"ok":true}
+`;
+    const calls = tryParseXmlToolCallsFromText(xml);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].function.name, 'save_file');
+    assert.deepEqual(JSON.parse(calls[0].function.arguments), {
+      path: 'out.json',
+      content: { ok: true },
+    });
+  });
+
+  test('parses a bare Qwen <function=name> block without a wrapping tool_call tag', () => {
+    const calls = tryParseXmlToolCallsFromText(
+      '<function=get_datetime>\n<parameter=ignored>\n\n</parameter>\n</function>',
+    );
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].function.name, 'get_datetime');
   });
 
   test('parses several blocks and drops duplicates', () => {
@@ -66,12 +99,21 @@ describe('tryParseXmlToolCallsFromText', () => {
 });
 
 describe('ContentToolCallRouter', () => {
-  test('withholds a tool_call block from visible prose', () => {
+  test('withholds a Qwen XML envelope from visible text', () => {
     const router = new ContentToolCallRouter();
-    const prose = streamThrough(router, ['I will read it.\n', READ_FILE]);
+    const xml =
+      '<tool_call>\n<function=read_file>\n<parameter=path>\na.ts\n</parameter>\n</function>\n</tool_call>';
+    const prose = streamThrough(router, ['I will read it.\n', xml]);
     assert.equal(prose, 'I will read it.\n');
     assert.equal(tryParseXmlToolCallsFromText(router.getToolCallParseText()).length, 1);
-    assert.equal(router.hasCapturedToolCalls(), true);
+    assert.equal(router.peekStreamingToolName(), 'read_file');
+  });
+
+  test('peekStreamingToolName names a JSON call before the close tag arrives', () => {
+    const router = new ContentToolCallRouter();
+    router.feed('<tool_call>{"name":"grep","arguments":{"q":');
+    assert.equal(router.peekStreamingToolName(), 'grep');
+    assert.equal(router.hasCapturedToolCalls(), false);
   });
 
   test('handles tags split across deltas', () => {
@@ -193,6 +235,25 @@ function streamTwoChannel(
   return { thinking: thinkingText, prose: proseText, calls: calls.map((c) => c.function.name) };
 }
 
+/**
+ * Native `reasoning_content` (MTPLX / DeepSeek): the think span is already split
+ * by the server, so there is no `<think>` wrapper — only the reasoning channel.
+ */
+function streamNativeReasoning(
+  chunks: readonly string[],
+): { thinking: string; calls: readonly string[] } {
+  const thinkingTools = new ContentToolCallRouter();
+  let thinkingText = '';
+  for (const chunk of chunks) {
+    thinkingText += thinkingTools.feed(chunk);
+  }
+  thinkingText += thinkingTools.flush();
+  const calls = mergeContentJsonToolCalls('', [], {
+    thinkingXmlParseText: [thinkingTools.getToolCallParseText(), thinkingText].join('\n'),
+  });
+  return { thinking: thinkingText, calls: calls.map((c) => c.function.name) };
+}
+
 describe('tool calls emitted inside a think span', () => {
   test('runs the call and keeps the markup out of the thinking bubble', () => {
     const out = streamTwoChannel([
@@ -265,6 +326,29 @@ describe('tool calls emitted inside a think span', () => {
     assert.equal(out.thinking.includes('tool_call'), false);
     assert.match(out.thinking, /plan/);
     assert.match(out.thinking, /now call/);
+  });
+});
+
+describe('tool calls on the native reasoning channel', () => {
+  test('runs a JSON tool_call that arrived as reasoning_content (MTPLX)', () => {
+    const out = streamNativeReasoning([
+      'I should read the file.\n',
+      READ_FILE,
+    ]);
+    assert.deepEqual(out.calls, ['read_file']);
+    assert.equal(out.thinking.includes('tool_call'), false);
+    assert.match(out.thinking, /I should read the file/);
+  });
+
+  test('runs a Qwen XML envelope that arrived as reasoning_content', () => {
+    const out = streamNativeReasoning([
+      'Need the clock.\n',
+      '<tool_call>\n<function=get_datetime>\n</function>\n</tool_call>',
+    ]);
+    assert.deepEqual(out.calls, ['get_datetime']);
+    assert.equal(out.thinking.includes('tool_call'), false);
+    assert.equal(out.thinking.includes('function='), false);
+    assert.match(out.thinking, /Need the clock/);
   });
 });
 
