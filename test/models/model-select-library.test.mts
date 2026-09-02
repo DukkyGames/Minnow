@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { encodeModelSelectKey } from '../../src/lib/model-select-key.ts';
 import {
-  dedupLlamaCppModelsAgainstLibrary,
+  omitLocalRuntimeCatalogModels,
   encodeLibraryModelSelectKey,
   isLibraryModelBinding,
   libraryBindingNeedsServeLoad,
@@ -138,43 +138,48 @@ describe('model-select-library', () => {
     assert.equal(resolveUpstreamProviderId('openai', 'gpt-4o'), 'openai');
   });
 
-  test('dedupLlamaCppModelsAgainstLibrary removes duplicate served labels', () => {
-    const library: LibraryModel[] = [sampleLibraryModel()];
+  test('omitLocalRuntimeCatalogModels clears llama.cpp and mlx-lm catalogs', () => {
     const results = [
       {
         provider: {
           id: LLAMA_CPP_LOCAL_PROVIDER_ID,
-          label: 'llama.cpp',
+          label: 'llama.cpp (local)',
           baseUrl: 'http://127.0.0.1:8085',
           apiKind: 'openai-v1' as const,
           enabled: true,
         },
         models: [
-          { id: 'Qwen3-8B', type: 'llm', state: 'loaded' },
+          // Alias id from --alias libraryId — used to slip past name-only dedupe.
+          { id: 'gguf:qwen/qwen3:file.gguf', type: 'llm', state: 'loaded' },
           { id: 'other-model', type: 'llm', state: 'loaded' },
         ],
       },
-    ];
-    const serves = [
       {
-        id: 'serve-1',
-        runtime: 'llama-cpp',
-        modelPath: '/tmp/file.gguf',
-        modelLabel: 'Qwen3-8B',
-        port: 8085,
-        baseUrl: 'http://127.0.0.1:8085',
-        providerId: LLAMA_CPP_LOCAL_PROVIDER_ID,
-        status: 'running' as const,
-        runId: null,
-        pid: 1,
-        error: null,
-        startedAt: 1,
-        stoppedAt: null,
+        provider: {
+          id: MLX_LM_LOCAL_PROVIDER_ID,
+          label: 'mlx-lm (local)',
+          baseUrl: 'http://127.0.0.1:8086',
+          apiKind: 'openai-v1' as const,
+          enabled: true,
+        },
+        models: [{ id: '/tmp/mlx-model', type: 'llm', state: 'loaded' }],
+      },
+      {
+        provider: {
+          id: 'lmstudio',
+          label: 'LM Studio',
+          baseUrl: 'http://127.0.0.1:1234',
+          apiKind: 'lm-studio-v0' as const,
+          enabled: true,
+        },
+        models: [{ id: 'keep-me', type: 'llm', state: 'loaded' }],
       },
     ];
-    const next = dedupLlamaCppModelsAgainstLibrary(results, library, serves);
-    assert.equal(next[0].models.length, 1);
-    assert.equal(next[0].models[0].id, 'other-model');
+    const next = omitLocalRuntimeCatalogModels(results);
+    assert.equal(next[0].models.length, 0);
+    assert.equal(next[1].models.length, 0);
+    assert.equal(next[2].models.length, 1);
+    assert.equal(next[2].models[0].id, 'keep-me');
   });
 
   test('libraryModelNeedsLoad reads cache load state', () => {

@@ -278,27 +278,38 @@ export function resolveLibraryModelIdForChatBinding(
 }
 
 /**
- * Drop llama-cpp-local catalog rows that duplicate a My Models row already listed
- * under the library optgroup (same served label / display name).
+ * True for Minnow-owned local runtime providers whose `/v1/models` catalogs
+ * must not appear in the picker (users select via My Models instead).
+ */
+export function isLocalRuntimeCatalogProviderId(providerId: string | undefined): boolean {
+  const id = providerId?.trim();
+  return id === LLAMA_CPP_LOCAL_PROVIDER_ID || id === MLX_LM_LOCAL_PROVIDER_ID;
+}
+
+/**
+ * Clear llama-cpp-local / mlx-lm-local catalog rows from picker results.
+ * Those providers stay registered for serve routing; the picker surface is My Models only.
+ */
+export function omitLocalRuntimeCatalogModels(
+  results: ProviderModelsResult[],
+): ProviderModelsResult[] {
+  return results.map((entry) => {
+    if (!isLocalRuntimeCatalogProviderId(entry.provider.id)) return entry;
+    // Empty models → optgroup omitted by buildMultiProviderModelSelectInnerHtml filters.
+    return entry.models.length === 0 ? entry : { ...entry, models: [] };
+  });
+}
+
+/**
+ * @deprecated Prefer {@link omitLocalRuntimeCatalogModels}. Kept so call sites and
+ * test mocks that still pass library/serves keep compiling; library/serves are ignored.
  */
 export function dedupLlamaCppModelsAgainstLibrary(
   results: ProviderModelsResult[],
-  library: LibraryModel[],
-  serves: ServeRecord[],
+  _library?: LibraryModel[],
+  _serves?: ServeRecord[],
 ): ProviderModelsResult[] {
-  const names = new Set(library.map((m) => m.name.trim().toLowerCase()).filter(Boolean));
-  for (const serve of serves) {
-    if (serve.status !== 'running' && serve.status !== 'starting') continue;
-    const label = serve.modelLabel?.trim().toLowerCase();
-    if (label) names.add(label);
-  }
-  if (names.size === 0) return results;
-
-  return results.map((entry) => {
-    if (entry.provider.id !== LLAMA_CPP_LOCAL_PROVIDER_ID) return entry;
-    const models = entry.models.filter((m) => !names.has(m.id.trim().toLowerCase()));
-    return { ...entry, models };
-  });
+  return omitLocalRuntimeCatalogModels(results);
 }
 
 // ── Merge ────────────────────────────────────────────────────────────────────

@@ -54,7 +54,7 @@ import {
 } from '../ui/default-model';
 import {
   decodeLibraryModelSelectKey,
-  dedupLlamaCppModelsAgainstLibrary,
+  omitLocalRuntimeCatalogModels,
   fetchLibraryModelSelectMerge,
   LIBRARY_MODEL_PROVIDER_ID,
   loadLibraryModelFromPicker,
@@ -445,15 +445,10 @@ export async function populateMultiProviderModelSelect(
     }
 
     let results = await fetchModelsForAllProviders(enabled, signal ?? new AbortController().signal);
+    // Never list llama.cpp / mlx-lm catalogs — My Models is the only picker surface.
+    results = omitLocalRuntimeCatalogModels(results);
 
     const libraryMerge = await fetchLibraryModelSelectMerge(signal).catch(() => null);
-    if (libraryMerge) {
-      results = dedupLlamaCppModelsAgainstLibrary(
-        results,
-        libraryMerge.library,
-        libraryMerge.serves,
-      );
-    }
 
     const withModels = results.filter((r) => r.models.length > 0);
     const providerModelCount = withModels.reduce((n, r) => n + r.models.length, 0);

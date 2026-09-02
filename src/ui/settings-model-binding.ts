@@ -1,7 +1,7 @@
 import { isServerStorageMode } from '../config/storage-mode';
 import { formatModelLabel } from '../lib/format-model-label';
 import {
-  dedupLlamaCppModelsAgainstLibrary,
+  omitLocalRuntimeCatalogModels,
   fetchLibraryModelSelectMerge,
   LIBRARY_MODEL_OPTGROUP_LABEL,
   LIBRARY_MODEL_PROVIDER_ID,
@@ -38,11 +38,10 @@ export async function fetchAllCatalogRosterTargets(): Promise<CatalogRosterTarge
   const enabled = providers.filter((p) => p.enabled !== false);
   const controller = new AbortController();
   let results = await fetchModelsForAllProviders(enabled, controller.signal);
+  // Roster export matches the picker: no llama.cpp / mlx-lm catalog duplicates.
+  results = omitLocalRuntimeCatalogModels(results);
 
   const merge = await fetchLibraryModelSelectMerge().catch(() => null);
-  if (merge?.library.length) {
-    results = dedupLlamaCppModelsAgainstLibrary(results, merge.library, merge.serves);
-  }
 
   const out: CatalogRosterTarget[] = [];
   for (const result of results) {

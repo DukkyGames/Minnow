@@ -49,7 +49,7 @@ mock.module('../../src/models/model-select-library.ts', {
     libraryBindingNeedsServeLoad: () => true,
     resolveLibraryModelIdForChatBinding: () => null,
     resolveLibrarySendBinding: () => null,
-    dedupLlamaCppModelsAgainstLibrary: <T,>(results: T) => results,
+    omitLocalRuntimeCatalogModels: <T,>(results: T) => results,
     fetchLibraryModelSelectMerge: async () => null,
     loadLibraryModelFromPicker: async (libraryId: string) => {
       loadLibraryCalls.push(libraryId);
