@@ -69,6 +69,34 @@ out.json
     assert.equal(calls[0].function.name, 'get_datetime');
   });
 
+  test('recovers unwrapped JSON after Qwen <function=name> as tool arguments', () => {
+    const xml = `<function=todo_write>
+{"todos":[{"text":"a","status":"in_progress"}]}
+</function>`;
+    const calls = tryParseXmlToolCallsFromText(xml);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].function.name, 'todo_write');
+    assert.deepEqual(JSON.parse(calls[0].function.arguments), {
+      todos: [{ text: 'a', status: 'in_progress' }],
+    });
+  });
+
+  test('recovers unwrapped todo_write JSON inside a tool_call wrapper', () => {
+    const xml = `<tool_call>
+<function=todo_write>
+{"todos":[{"text":"a","status":"in_progress"}]}
+</function>
+</tool_call>`;
+    const calls = tryParseXmlToolCallsFromText(xml);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].function.name, 'todo_write');
+    const args = JSON.parse(calls[0].function.arguments);
+    assert.notDeepEqual(args, {});
+    assert.deepEqual(args, {
+      todos: [{ text: 'a', status: 'in_progress' }],
+    });
+  });
+
   test('parses several blocks and drops duplicates', () => {
     const calls = tryParseXmlToolCallsFromText(
       `${READ_FILE}\n${READ_FILE}\n<tool_use>{"name":"grep","parameters":{"q":"foo"}}</tool_use>`,

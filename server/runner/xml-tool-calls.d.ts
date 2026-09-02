@@ -4,7 +4,9 @@
  * Qwen-family chat templates (and the mlx-lm / llama.cpp / MTPLX servers that serve them)
  * emit `<tool_call>{"name":…,"arguments":{…}}</tool_call>` or the native
  * `<function=name><parameter=key>value</parameter></function>` envelope as plain text
- * instead of OpenAI `delta.tool_calls`. Without this the block is rendered as prose
+ * instead of OpenAI `delta.tool_calls`. Unwrapped JSON after `<function=name>`
+ * (`<function=todo_write>{"todos":[…]}</function>`) is recovered as arguments so
+ * the call is not an empty `{}` payload. Without this the block is rendered as prose
  * (or swallowed as reasoning), no tool ever runs, and the model retries until the
  * generation buffer overflows.
  */

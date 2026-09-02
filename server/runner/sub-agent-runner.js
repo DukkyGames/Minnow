@@ -70,12 +70,15 @@ import {
 } from "./sub-agent-structured-outcome.js";
 import { averageStatsSegments, sumUsageSegments } from "./stats-math.js";
 import { looksLikeProseStructuredQuestion } from "./prose-question-detect.js";
+import { looksLikeIntentToAct } from "./intent-to-act-detect.js";
 import {
   EMPTY_POST_TOOL_CONTINUE_INSTRUCTION,
   hasPostToolTail,
   MAX_EMPTY_POST_TOOL_RETRIES,
   MAX_PROSE_QUESTION_RETRIES,
   PROSE_QUESTION_RETRY_INSTRUCTION,
+  MAX_INTENT_TO_ACT_RETRIES,
+  INTENT_TO_ACT_RETRY_INSTRUCTION,
   SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION,
   buildReportToolNudgeInstruction
 } from "./turn-continuation.js";
@@ -530,6 +533,7 @@ function createSubAgentRunner(deps) {
       );
       let toolTurns = 0;
       let proseQuestionRetries = 0;
+      let intentToActRetries = 0;
       let emptyPostToolRetries = 0;
       const hasAskQuestionTool = input.tools.some((t) => t.function.name === "ask_question");
       const typeConfig = await getSubAgentTypeConfig(input.type);
@@ -1256,6 +1260,22 @@ function createSubAgentRunner(deps) {
           proseQuestionRetries += 1;
           messages.push({ role: "assistant", content: prose });
           messages.push({ role: "user", content: PROSE_QUESTION_RETRY_INSTRUCTION });
+          emitProgress(void 0, true);
+          continue;
+        }
+        // Chat keeps nudgeToolUse off so a first-turn essay is not forced into
+        // tools. Announce-then-stop ("Let me inspect…") still gets one hidden
+        // retry. Truncation stays on the Continue chip, not this path.
+        if (
+          input.tools.length > 0 &&
+          prose &&
+          subStreamEnd.kind !== "truncated" &&
+          looksLikeIntentToAct(prose) &&
+          intentToActRetries < MAX_INTENT_TO_ACT_RETRIES
+        ) {
+          intentToActRetries += 1;
+          messages.push({ role: "assistant", content: prose });
+          messages.push({ role: "user", content: INTENT_TO_ACT_RETRY_INSTRUCTION });
           emitProgress(void 0, true);
           continue;
         }

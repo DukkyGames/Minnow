@@ -30,9 +30,32 @@ function coerceQwenParameterValue(raw) {
   }
 }
 /**
+ * True when parsed JSON is already an OpenAI-style tool envelope.
+ * Those stay on `parseJsonToolCallPayload` so we do not treat `{name,arguments}`
+ * as the arguments object of the surrounding `<function=name>`.
+ * @param {unknown} parsed
+ * @returns {boolean}
+ */
+function isJsonToolCallEnvelope(parsed) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+  const record = parsed;
+  const fn = record.function;
+  const topName = typeof record.name === "string" && record.name.trim();
+  const nestedName =
+    fn && typeof fn === "object" && !Array.isArray(fn) && typeof fn.name === "string" && fn.name.trim();
+  const hasArgs =
+    record.arguments !== void 0 ||
+    record.parameters !== void 0 ||
+    (fn && typeof fn === "object" && !Array.isArray(fn) && (fn.arguments !== void 0 || fn.parameters !== void 0));
+  return Boolean((topName || nestedName) && hasArgs);
+}
+
+/**
  * Qwen3.5 / Qwen3.8 / Qwen3-Coder native envelope (MTPLX, vLLM qwen3_coder):
  * `<function=name><parameter=key>\nvalue\n</parameter></function>`
  * Missing close tags are still accepted so a stream cut mid-envelope can run.
+ * mlx-lm / llama.cpp sometimes emit unwrapped JSON after `<function=name>`
+ * instead of `<parameter=key>` tags — recover that as the arguments object.
  */
 function parseQwenXmlFunctionPayload(inner) {
   const fnMatch = QWEN_FUNCTION_OPEN_RE.exec(inner);
@@ -42,12 +65,27 @@ function parseQwenXmlFunctionPayload(inner) {
   const args = {};
   QWEN_PARAMETER_RE.lastIndex = 0;
   let param = QWEN_PARAMETER_RE.exec(inner);
+  let hadParameter = false;
   while (param) {
+    hadParameter = true;
     const key = (param[1] ?? "").trim();
     if (key) {
       args[key] = coerceQwenParameterValue(param[2] ?? "");
     }
     param = QWEN_PARAMETER_RE.exec(inner);
+  }
+  if (!hadParameter) {
+    const json = extractBalancedJsonObject(inner, fnMatch.index + fnMatch[0].length);
+    if (json) {
+      try {
+        const parsed = JSON.parse(json);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && !isJsonToolCallEnvelope(parsed)) {
+          return { name, args: parsed };
+        }
+      } catch {
+        // Keep empty args — the markup reached us but the JSON did not parse.
+      }
+    }
   }
   return { name, args };
 }
