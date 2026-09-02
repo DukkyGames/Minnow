@@ -1,9 +1,3 @@
-/**
- * P8-D — sub-agent effector over runTurn() (MIN-757).
- *
- * Fake model host only — zero real LLM. The engine is the Phase 1 engine with
- * the P8-C graph injected; this file must not require engine.js logic changes.
- */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -95,9 +89,8 @@ function functionCallChunks(name, args, toolCallId = 'call_report') {
   ];
 }
 
-/** Many token deltas, then a report — journal must stay bounded by outcomes. */
 function longThenReportChunks(payload) {
-  /** @type {string[]} */
+/** @type {string[]} */
   const chunks = [];
   for (let i = 0; i < 40; i += 1) {
     chunks.push(`data: ${JSON.stringify({ choices: [{ delta: { content: `tok${i} ` } }] })}\n\n`);
@@ -146,20 +139,10 @@ async function waitFor(predicate, timeoutMs = 12_000) {
 }
 
 /**
- * In-memory journal that folds with the sub-agent graph, not the board one.
- * Engine `append` of a single event calls `appendEvent`.
- *
  * @returns {{
- *   appendEvent: Function,
- *   appendEvents: Function,
- *   readEvents: Function,
- *   readHighestSeq: Function,
- *   loadState: Function,
- *   readEventsSync: Function,
- * }}
  */
 function createMemoryAgentsJournal() {
-  /** @type {Record<string, unknown>[]} */
+/** @type {Record<string, unknown>[]} */
   const events = [];
   let seq = 0;
   return {
@@ -211,15 +194,6 @@ function runRequested(parentChatId, cwd, extra = {}) {
 
 /**
  * @param {{
- *   parentChatId?: string,
- *   journal?: ReturnType<typeof createMemoryAgentsJournal>,
- *   cwd?: string,
- *   limits?: object,
- *   runTurn?: Function,
- *   reapOrphans?: boolean,
- *   getState?: Function,
- *   deps?: object,
- * }} [opts]
  */
 function makeEffector(opts = {}) {
   const parentChatId = opts.parentChatId ?? 'chat-p8d';
@@ -235,9 +209,8 @@ function makeEffector(opts = {}) {
   });
 }
 
-/** Hang the upstream SSE so stop / timeout / kill can be observed. */
 function createHangServer() {
-  /** @type {import('http').ServerResponse[]} */
+/** @type {import('http').ServerResponse[]} */
   const open = [];
   const server = http.createServer((req, res) => {
     if (req.method === 'POST') {
@@ -265,12 +238,10 @@ function createHangServer() {
         try {
           res.write('event: end\ndata: {"status":"error","errorMessage":"model host killed"}\n\n');
         } catch {
-          /* already gone */
         }
         try {
           res.destroy();
         } catch {
-          /* ignore */
         }
       }
       if (typeof server.closeAllConnections === 'function') {
@@ -302,8 +273,6 @@ function streamingCount() {
     (state) => state.status === 'pending' || state.status === 'streaming',
   ).length;
 }
-
-// ---------------------------------------------------------------------------
 
 describe('P8-D source contract', () => {
   test('engine.js is untouched by this task', () => {
@@ -390,9 +359,9 @@ describe('sub-agent runner effector', { concurrency: false }, () => {
   const fake = createFakeModelServer({
     scenario: [{ match: { nth: 0 }, emit: functionCallChunks(DEFAULT_REPORT_TOOL_NAME, VERDICT_PASS) }],
   });
-  /** @type {string} */
+/** @type {string} */
   let homeDir = '';
-  /** @type {string} */
+/** @type {string} */
   let fakeBase = '';
 
   before(async () => {
@@ -476,7 +445,7 @@ describe('sub-agent runner effector', { concurrency: false }, () => {
       const parentChatId = 'chat-p8d-timeout-continue';
       const cwd = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'p8d-timeout-'));
       const journal = createMemoryAgentsJournal();
-      /** @type {import('../../server/runner/run-turn').RunTurnOptions[]} */
+/** @type {import('../../server/runner/run-turn').RunTurnOptions[]} */
       const seen = [];
       const box = { engine: /** @type {ReturnType<typeof createEngine> | null} */ (null) };
       const deps = stubDeps();
@@ -540,7 +509,7 @@ describe('sub-agent runner effector', { concurrency: false }, () => {
       const parentChatId = 'chat-p8d-cwd';
       const cwd = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'p8d-spawn-cwd-'));
       const journal = createMemoryAgentsJournal();
-      /** @type {string[]} */
+/** @type {string[]} */
       const seenCwd = [];
       const box = { engine: /** @type {ReturnType<typeof createEngine> | null} */ (null) };
       const effector = makeEffector({
@@ -580,9 +549,9 @@ describe('sub-agent runner effector', { concurrency: false }, () => {
     const parentChatId = 'chat-p8d-ask-null';
     const cwd = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'p8d-ask-'));
     const journal = createMemoryAgentsJournal();
-    /** @type {unknown[]} */
+/** @type {unknown[]} */
     const seenAsk = [];
-    /** @type {string[][]} */
+/** @type {string[][]} */
     const seenToolNames = [];
     const box = { engine: /** @type {ReturnType<typeof createEngine> | null} */ (null) };
     const effector = makeEffector({
@@ -757,7 +726,7 @@ describe('sub-agent runner effector', { concurrency: false }, () => {
       getState: () => state,
       limits: { wallClockMs: 1000, maxTurns: 40 },
     });
-    /** @type {import('../../server/orchestrator/engine.js').AttemptEnd | null} */
+/** @type {import('../../server/orchestrator/engine.js').AttemptEnd | null} */
     let ended = null;
     effector.onEnd((payload) => {
       ended = payload;
@@ -870,7 +839,7 @@ describe('sub-agent runner effector', { concurrency: false }, () => {
     await journal.appendEvent(parentChatId, runRequested(parentChatId, cwd));
     const state = await journal.loadState(parentChatId);
     const effector = makeEffector({ parentChatId, getState: () => state });
-    /** @type {import('../../server/orchestrator/engine.js').AttemptEnd | null} */
+/** @type {import('../../server/orchestrator/engine.js').AttemptEnd | null} */
     let ended = null;
     effector.onEnd((payload) => {
       ended = payload;
@@ -881,8 +850,6 @@ describe('sub-agent runner effector', { concurrency: false }, () => {
       seedKind: 'initial',
     });
     await waitFor(() => ended !== null);
-    // runTurn still returns no_report; the effector maps real prose onto a
-    // degraded pass so the parent is not abandoned with an empty summary.
     assert.equal(ended.outcome, 'pass');
     assert.equal(ended.summary, 'I finished but I will not call the tool.');
     } finally {

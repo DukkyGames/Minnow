@@ -118,6 +118,7 @@ export function getPtyAvailability() {
   }
 }
 
+// On exit, free the slot so reloads do not hit the 8-session cap.
 /**
  * @param {object} options
  * @param {string} [options.shellProfileId]
@@ -201,7 +202,6 @@ export async function createPtySession(options) {
         extra: { sessionId, shell: profile.id, exitCode: session.exitCode },
       });
     }
-    // Release the slot so reloads and tab churn do not exhaust the 8-session cap.
     destroyPtySession(sessionId);
   });
 

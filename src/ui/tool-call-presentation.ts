@@ -1,15 +1,3 @@
-/**
- * Per-tool presentation for tool-call rows in the chat transcript.
- *
- * A collapsed row reads like one line of a build log:
- *
- *     [icon]  Action   target/path/here            outcome
- *
- * Icon and action word are dedicated per tool. The target is the thing acted on,
- * and the outcome is the measurement that tool actually produces (lines read,
- * files listed, exit code, commits, matches) — not a generic "Done".
- */
-
 import { parseGitLogOneline } from '../chat/issues/git-helpers';
 import { parseListDirectoryResult } from '../lib/list-directory-parse';
 import { BUILT_IN_TOOLS, type ToolCategory } from '../tools/definitions';
@@ -29,13 +17,8 @@ const CATEGORY_ICON: Record<ToolCategory, IconName> = {
   lsp: 'appCode',
 };
 
-/**
- * Dedicated glyph per tool. Where the icon set has no distinct mark (copy vs move,
- * status vs diff), tools that share a family share a glyph and the action word
- * carries the difference.
- */
+/** Dedicated glyph per tool. */
 const TOOL_ICON: Record<string, IconName> = {
-  // utility
   get_datetime: 'appCalendar',
   calculate: 'appStats',
   ask_question: 'help',
@@ -62,13 +45,11 @@ const TOOL_ICON: Record<string, IconName> = {
   load_aesthetics_reference: 'designMode',
   run_impeccable: 'designMode',
 
-  // web
   web_search: 'search',
   wikipedia_search: 'appResearch',
   fetch_web_content: 'globe',
   rag_web_content: 'appResearch',
 
-  // files
   list_directory: 'folder',
   find_files: 'search',
   read_file: 'fileText',
@@ -89,7 +70,6 @@ const TOOL_ICON: Record<string, IconName> = {
   create_word_document: 'fileText',
   create_spreadsheet: 'grid',
 
-  // git
   git_status: 'gitLocal',
   git_diff: 'gitLocal',
   git_log: 'gitGraph',
@@ -98,7 +78,6 @@ const TOOL_ICON: Record<string, IconName> = {
   git_checkout: 'gitBranch',
   git_branch: 'gitBranch',
 
-  // code
   execute_command: 'terminal',
   start_background_command: 'terminal',
   stop_command: 'stop',
@@ -109,7 +88,6 @@ const TOOL_ICON: Record<string, IconName> = {
   run_javascript: 'appCode',
   run_python: 'appCode',
 
-  // agents & boards
   spawn_sub_agent: 'appAgentActivity',
   cancel_sub_agent: 'stop',
   list_sub_agents: 'appAgentActivity',
@@ -120,7 +98,6 @@ const TOOL_ICON: Record<string, IconName> = {
   issue_link: 'appIssues',
   issue_delete: 'trash',
 
-  // browser
   browser_list: 'browser',
   browser_navigate: 'globe',
   request_browser_origin_access: 'browser',
@@ -133,7 +110,6 @@ const TOOL_ICON: Record<string, IconName> = {
   browser_eval: 'terminal',
   browser_screenshot: 'deviceDesktop',
 
-  // brain
   brain_search: 'search',
   brain_read_page: 'appBrain',
   brain_list: 'appBrain',
@@ -142,7 +118,6 @@ const TOOL_ICON: Record<string, IconName> = {
   brain_ingest_source: 'brainIngest',
   manage_brain: 'appBrain',
 
-  // code intelligence
   repo_map: 'appCodeOverview',
   find_symbol: 'search',
   who_calls: 'brainGraph',
@@ -151,7 +126,6 @@ const TOOL_ICON: Record<string, IconName> = {
   get_lsp_diagnostics: 'appConsole',
   list_lsp_servers: 'appServers',
 
-  // mail
   list_mail: 'inbox',
   search_mail: 'search',
   get_thread: 'mailOpen',
@@ -161,10 +135,7 @@ const TOOL_ICON: Record<string, IconName> = {
   email_action: 'mail',
 };
 
-/**
- * Action word shown first in the row. Verb-first where the row has a target,
- * noun-phrase where the tool stands alone.
- */
+/** Action word shown first in the row. */
 const TOOL_ACTION: Record<string, string> = {
   get_datetime: 'Date & time',
   calculate: 'Calculate',
@@ -483,15 +454,11 @@ function parseAskQuestionAnswers(
       byQuestion.set(id, { ids, ...(other ? { other } : {}) });
     }
   } catch {
-    /* not the answered-JSON shape */
   }
   return { byQuestion, cancelled: false };
 }
 
-/**
- * Question cards from the call arguments, with the user's choice folded in when
- * the result is available — one list instead of prompts above and answers below.
- */
+/** Question cards from the call arguments, with the user's choice folded in when the result is available — one list instead of prompts above and answers below. */
 function parseAskQuestionItems(
   args: Record<string, unknown>,
   result?: string,
@@ -662,7 +629,6 @@ function buildToolTarget(
     if (p) return p;
   }
 
-  // Generic: first meaningful string argument, longest-standing keys first.
   const preferred = [
     'query',
     'url',
@@ -752,8 +718,6 @@ function buildToolOutcome(
     return undefined;
   }
 
-  // Generic: surface a short acknowledgement ("Created directory src/foo"). Deliberately
-  // narrow — anything looser drags content into the outcome zone.
   const trimmed = result.trim();
   const acknowledgement =
     /^(saved|created|updated|wrote|written|deleted|removed|moved|renamed|copied|added|staged|stopped|started|cancell?ed|done|ok)\b/i;
@@ -815,7 +779,6 @@ function consumedArgKeys(toolName: string, args: Record<string, unknown>): Set<s
     keys.add('source').add('destination').add('from').add('to').add('path');
   }
   if (PATH_ARG_TOOLS.has(toolName) && stringArg(args, 'path')) keys.add('path');
-  // Whatever the generic resolver picked for the target is already on screen.
   const targetKey = buildToolTarget(toolName, args)?.key;
   if (targetKey) keys.add(targetKey);
   return keys;
@@ -828,10 +791,7 @@ export interface ToolArgField {
   block: boolean;
 }
 
-/**
- * Readable key/value view of the arguments a tool was called with, minus anything
- * already shown in the row. Replaces dumping raw JSON at the user.
- */
+/** Readable key/value view of the arguments a tool was called with, minus anything already shown in the row. */
 export function buildToolArgFields(
   toolName: string,
   args: Record<string, unknown>,
@@ -875,10 +835,7 @@ export type FriendlyToolBody =
 const MAX_LIST_ROWS = 40;
 const MAX_PREVIEW_LINES = 14;
 
-/**
- * Structured expanded content for tools that have a better shape than a text blob.
- * Returns null to fall back to the raw output block.
- */
+/** Structured expanded content for tools that have a better shape than a text blob. */
 export function buildFriendlyToolBody(
   toolName: string,
   args: Record<string, unknown>,

@@ -1,8 +1,3 @@
-/**
- * Settings → Apps: toggle which optional Minnow apps appear in launchers.
- * When none are released yet, shows Always included + Coming soon.
- */
-
 import '../styles/settings-general.css';
 import '../styles/app-picker.css';
 

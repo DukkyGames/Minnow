@@ -1,8 +1,3 @@
-/**
- * Models → Local Server — server state, what is loaded, the endpoints it
- * exposes, and the runtime log.
- */
-
 import { subscribeServeLog, type ServeRecord } from '../../models/api-client';
 import { classifyLogLine, foldServeLogEvent, toLogLines } from '../../models/serve-log';
 import { isLiveServeStatus, isRetryableServeStatus, retryLabelForServe, serveStatusLabel } from '../../models/serve-status';
@@ -82,16 +77,10 @@ function preferredLogServe(serves: ServeRecord[]): ServeRecord | undefined {
   return serves.find((s) => s.id === logSource) ?? serves[0];
 }
 
-/**
- * Follow the log of whichever serve is selected in the log header.
- * Identity is serve id **and** runId so a connect that beat spawn reconnects
- * once the log file exists, instead of keeping a silent EventSource.
- */
+/** Follow the log of whichever serve is selected in the log header. */
 function bindLogStream(serve: ServeRecord | null): void {
   const serveId = serve?.id ?? null;
   const runId = serve?.runId ?? null;
-  // Idle (no serve) has no EventSource; still treat it as bound so load-card
-  // patches do not clear the buffer every tick.
   const alreadyBound =
     logSource === serveId && logRunId === runId && (serveId === null || Boolean(logUnsub));
   if (alreadyBound) return;
@@ -216,10 +205,7 @@ function cssEscape(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
-/**
- * "~12s left" for a predicted remainder. Null once the model has overshot — a stuck
- * "0s left" is worse than saying nothing.
- */
+/** "~12s left" for a predicted remainder. */
 function formatEta(etaMs: number | null): string | null {
   if (etaMs == null || !Number.isFinite(etaMs) || etaMs <= 0) return null;
   const seconds = Math.round(etaMs / 1000);
@@ -230,10 +216,7 @@ function formatEta(etaMs: number | null): string | null {
   return rest ? `~${minutes}m ${rest}s left` : `~${minutes}m left`;
 }
 
-/**
- * Spawning starts at a modelled 0. Printing that as "Loading 0%" looks stuck
- * before the first phase marker or time-model tick has anything to show.
- */
+/** Spawning starts at a modelled 0. */
 function shownLoadPercent(load: LoadProgress): number | null {
   return load.percent != null && load.percent > 0 ? Math.round(load.percent) : null;
 }
@@ -251,11 +234,7 @@ function loadMetaText(load: LoadProgress): string {
   return parts.join(' · ');
 }
 
-/**
- * Update percent / phase / bar on an existing loading card without replacing it.
- * Recreating the node restarts `models-spin` (0.7s) every load tick (~250ms).
- * The fill uses `--progress` + scaleX so ticks do not animate layout width.
- */
+/** Update percent / phase / bar on an existing loading card without replacing it. */
 function applyLoadProgress(
   card: HTMLElement,
   load: LoadProgress,
@@ -293,10 +272,7 @@ function applyLoadProgress(
   }
 }
 
-/**
- * True when every in-flight load already has a card we can patch.
- * Failures, new rows, and settled serves still take the full redraw.
- */
+/** True when every in-flight load already has a card we can patch. */
 function tryPatchInFlightLoads(
   host: HTMLElement,
   loads: LoadProgress[],
@@ -326,11 +302,7 @@ function tryPatchInFlightLoads(
   return true;
 }
 
-/**
- * Local Server cards open the inspector by serve id. Buttons inside the card
- * keep their own handlers; the card itself is not a button so Eject / Cancel
- * stay valid nested controls.
- */
+/** Local Server cards open the inspector by serve id. */
 function makeServeCardSelectable(card: HTMLElement, serveId: string): void {
   card.classList.add('is-selectable');
   if (getInspectedServe()?.id === serveId) card.classList.add('is-selected');
@@ -350,8 +322,6 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
     stateChip.classList.add('is-error');
     stateChip.textContent = 'Failed';
   } else {
-    // Label is its own node so progress ticks can change the copy without
-    // wiping `.models-spinner` and restarting the rotation.
     const spinner = el('span', 'models-spinner');
     spinner.setAttribute('aria-hidden', 'true');
     stateChip.append(el('span', 'models-loaded__state-label', loadChipLabel(load)), spinner);
@@ -404,8 +374,6 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
   if (!load.error) {
     const track = el('div', 'models-progress');
     const fill = el('div', 'models-progress__fill');
-    // A 0-width modelled bar reads as stuck. Stay indeterminate until the model
-    // has moved off the spawning floor.
     const percent = shownLoadPercent(load);
     if (percent != null) {
       fill.style.setProperty('--progress', String(Math.min(100, percent) / 100));
@@ -419,10 +387,7 @@ function loadingCard(load: LoadProgress, serve: ServeRecord | undefined): HTMLEl
   return card;
 }
 
-/**
- * One chip per working slot, Ready when idle, plus queue depth when the host
- * is deferring requests. Copy lives in {@link serveActivityChipLabels}.
- */
+/** One chip per working slot, Ready when idle, plus queue depth when the host is deferring requests. */
 function activityChips(activity: ServeActivity | undefined): HTMLElement[] {
   return serveActivityChipLabels(activity, getInFlightPromptOverlay()).map((label) => {
     const queued = /\bqueued$/i.test(label);
@@ -497,7 +462,6 @@ function loadedCard(serve: ServeRecord): HTMLElement {
   if (settings?.spec_type && settings.spec_type !== 'none') {
     meta.appendChild(chip(settings.spec_type));
   }
-  // /slots carries no tok/s of its own; this is Δdecoded over Δt from the poller.
   const rate = activity?.slots.find((slot) => slot.tokensPerSecond != null)?.tokensPerSecond;
   if (rate != null && rate > 0) meta.appendChild(chip(`${rate.toFixed(1)} tok/s`));
   card.appendChild(meta);
@@ -649,8 +613,6 @@ function logsBlock(serves: ServeRecord[]): HTMLElement {
   head.appendChild(controls);
   block.appendChild(head);
 
-  // The pane is a flex child of .models-surface; CSS keeps this <pre> as the
-  // scrollport so long output does not clip at the bottom of the stage.
   const body = el('pre', 'models-logs__body');
   body.id = 'modelsLogBody';
   body.setAttribute('role', 'log');
@@ -665,9 +627,6 @@ export function render(): void {
   if (!host) return;
 
   const state = getModelsState();
-  // Load ticks fire ~4×/s. Replacing the tree cancels the spinner animation.
-  // Still (re)bind the log stream: a patch-only tick is how runId arrives after
-  // llama-starting, and skipping bind here left Runtime log empty on reload.
   if (tryPatchInFlightLoads(host, state.loads, state.serves)) {
     bindLogStream(preferredLogServe(runningServes()) ?? null);
     return;
@@ -693,7 +652,6 @@ export function render(): void {
   }
   for (const serve of attention) {
     if (serve.status === 'error' && loadIds.has(serve.id)) continue;
-    // A Retry that spawned a new live row supersedes the crashed/error card.
     if (
       serves.some(
         (s) => isLiveServeStatus(s.status) && s.modelPath === serve.modelPath && s.id !== serve.id,
@@ -746,7 +704,6 @@ export function mountServerSection(): void {
   render();
   void refreshModels();
 
-  // "up 1m 04s" and load elapsed need a clock of their own.
   if (elapsedTimer != null) window.clearInterval(elapsedTimer);
   elapsedTimer = window.setInterval(() => {
     if (!isActive()) return;

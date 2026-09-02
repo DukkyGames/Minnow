@@ -1,8 +1,3 @@
-/**
- * Unified suggestion state for the editor: inline completion ghost text and
- * Intent proposals share one field, one effect, and one accept path.
- */
-
 import {
   EditorSelection,
   Facet,
@@ -52,11 +47,7 @@ export interface CompletionSuggestion {
 /** @deprecated Use {@link CompletionSuggestion}. */
 export type AiGhostValue = CompletionSuggestion;
 
-/**
- * Proposed replacement for the document range `[from, to)`. `intentText` is the
- * exact text the proposal was generated from — it is re-verified on every
- * transaction so a stale proposal can never be written to a shifted line.
- */
+/** Proposed replacement for the document range `[from, to)`. */
 export interface IntentSuggestion {
   kind: 'intent';
   from: number;
@@ -158,11 +149,7 @@ export function setIntentMode(view: EditorView, enabled: boolean): void {
   view.dispatch({ effects: setIntentEnabled.of(enabled) });
 }
 
-/**
- * Map an intent anchor through a transaction and re-verify it still covers the
- * text it was generated from. This is what keeps a proposal from landing on an
- * unrelated line after lines are inserted above it.
- */
+/** Map an intent anchor through a transaction and re-verify it still covers the text it was generated from. */
 function mapIntentSuggestion(
   suggestion: IntentSuggestion,
   tr: Transaction,
@@ -230,10 +217,7 @@ export function splitCloseBracketInsert(inserted: string): {
   return { typed: inserted, autoClosed: '' };
 }
 
-/**
- * Map a completion ghost through a document change (type-through) or keep it on
- * selection-only updates when the cursor stays at the anchor.
- */
+/** Map a completion ghost through a document change (type-through) or keep it on selection-only updates when the cursor stays at the anchor. */
 export function mapCompletionSuggestion(
   suggestion: CompletionSuggestion,
   tr: Transaction,
@@ -290,10 +274,7 @@ interface SuggestionFieldValue {
   decorations: DecorationSet;
 }
 
-/**
- * Value + decorations in one field so effect updates always repaint (separate
- * fields can miss decorations when read order races within one transaction).
- */
+/** Value + decorations in one field so effect updates always repaint (separate fields can miss decorations when read order races within one transaction). */
 export const suggestionField = StateField.define<SuggestionFieldValue>({
   create: () => ({ suggestion: null, decorations: Decoration.none }),
   update(value, tr) {
@@ -355,7 +336,6 @@ export function acceptCompletionGhost(view: EditorView): boolean {
     filePath,
     config,
   );
-  // Reindent the inserted text only — never from the anchor to end of document.
   const insertedEnd = insertPos + ghost.text.length;
   view.dispatch({
     changes,
@@ -426,10 +406,7 @@ export function acceptPartialCompletionGhost(view: EditorView): boolean {
   return true;
 }
 
-/**
- * Replace the intent line with the proposal. Re-verifies the anchor immediately
- * before dispatching; CodeMirror's own history is the undo path (no revert UI).
- */
+/** Replace the intent line with the proposal. */
 export function acceptIntentProposal(view: EditorView): boolean {
   const proposal = getIntentSuggestion(view.state);
   if (!proposal) return false;
@@ -473,8 +450,6 @@ export function acceptIntentProposal(view: EditorView): boolean {
     ],
     userEvent: 'input.complete',
   });
-  // Reindent only the block just written, then land the cursor at its end —
-  // measuring the reindent's own growth, which all falls inside that block.
   const replacedEnd = from + text.length;
   const lengthAfterReplace = view.state.doc.length;
   dispatchReindentAfterAccept(view, from, replacedEnd, filePath, config, text);

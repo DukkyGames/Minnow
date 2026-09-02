@@ -1,8 +1,3 @@
-/**
- * Per-turn git working-tree snapshots for agent undo (MIN-409).
- * Captures dangling commits around createRun / finalizeRun; failures are non-fatal.
- */
-
 import { reportBackgroundError } from '../boot/report-background-error';
 import { normalizeModeId } from './modes/types';
 import {
@@ -28,10 +23,6 @@ export function setSnapshotCreateForTests(fn: SnapshotCreateFn | null): void {
   snapshotCreateImpl = fn ?? gitSnapshotCreate;
 }
 
-/**
- * Skip snapshot capture for chats where Undo itself is blocked (board / worktree /
- * orchestrate) to avoid dangling-commit noise.
- */
 export function shouldCaptureTurnSnapshots(chat: Chat): boolean {
   if (normalizeModeId(chat.modeId) === 'orchestrate') return false;
   if (chat.boardTaskId?.trim() || chat.boardGroupId?.trim()) return false;
@@ -39,10 +30,6 @@ export function shouldCaptureTurnSnapshots(chat: Chat): boolean {
   return true;
 }
 
-/**
- * Resolve the cwd tools mutate for this chat — worktree when present, else sandbox /
- * live workspace. Returns undefined when no useful root is available.
- */
 export function resolveTurnSnapshotCwd(chat: Chat): string | undefined {
   if (!shouldCaptureTurnSnapshots(chat)) return undefined;
 
@@ -97,7 +84,6 @@ export async function capturePostTurnSnapshot(
     if (!result.ok || !result.sha) return;
     annotateRunSnapshots(chat, runId, {
       postTurnSnapshotSha: result.sha,
-      // Keep cwd if pre capture was skipped (e.g. repo appeared mid-turn).
       snapshotCwd: cwd,
     });
   } catch (err) {

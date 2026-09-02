@@ -1,11 +1,4 @@
 #!/usr/bin/env node
-/**
- * Fetch curated Skills Library packs at pinned commits and write offline browse indexes.
- * Run: npm run skills-library:index
- *
- * Env:
- *   SKILLS_LIBRARY_INDEX_STRICT=1 — exit non-zero when GitHub fetch fails
- */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -79,12 +72,11 @@ async function fetchSkillMdRaw(repo, commit, skillMdPath) {
 }
 
 /**
- * Load Matt Pocock upstream subpath → Minnow install id mapping from catalog.
  * @returns {Record<string, string>}
  */
 async function loadMattPocockInstallIds() {
   const catalog = JSON.parse(await fs.readFile(MATT_POCOCK_CATALOG_FILE, 'utf8'));
-  /** @type {Record<string, string>} */
+/** @type {Record<string, string>} */
   const map = {};
   for (const entry of catalog.skills) {
     map[`skills/${entry.category}/${entry.upstreamId}`] = entry.id;
@@ -108,7 +100,7 @@ async function generatePackIndex(pack) {
   const mattPocockIds =
     pack.postInstallPatch === 'matt-pocock' ? await loadMattPocockInstallIds() : null;
 
-  /** @type {Array<{ skillMdPath: string, raw: string, skillId?: string }>} */
+/** @type {Array<{ skillMdPath: string, raw: string, skillId?: string }>} */
   const skillFiles = [];
   for (const skillMdPath of skillMdPaths) {
     const raw = await fetchSkillMdRaw(repo, commit, skillMdPath);

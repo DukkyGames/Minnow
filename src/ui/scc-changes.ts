@@ -1,11 +1,3 @@
-/**
- * Source Control Center — Changes.
- *
- * Two columns: the working set on the left with the commit box pinned to the
- * bottom, the diff for whatever is selected on the right. Staging never moves
- * the selection, so you can walk a list with the keyboard and stage as you go.
- */
-
 import { appConfirm } from './app-dialog';
 import {
   gitCommit,
@@ -44,6 +36,8 @@ interface Selection {
   bucket: Bucket;
 }
 
+// ── Status ───────────────────────────────────────────────────────────────────
+
 const STATUS_TITLE: Record<string, string> = {
   M: 'Modified',
   A: 'Added',
@@ -59,6 +53,8 @@ function statusLetter(status: string): string {
   const first = status.trim().slice(0, 1).toUpperCase();
   return first || 'M';
 }
+
+// ── Changes view ─────────────────────────────────────────────────────────────
 
 export function createChangesView(ctx: SccContext): SccView {
   const root = el('div', 'scc-changes');
@@ -81,8 +77,6 @@ export function createChangesView(ctx: SccContext): SccView {
   let destroyed = false;
   let generateAbort: AbortController | null = null;
   let lastCounts = { staged: 0, unstaged: 0, untracked: 0 };
-
-  // ── Commit box ─────────────────────────────────────────────────────────────
 
   const messageInput = el('textarea', 'scc-commit__input');
   messageInput.placeholder = 'Commit message';
@@ -121,8 +115,6 @@ export function createChangesView(ctx: SccContext): SccView {
   commitBox.append(messageInput, commitActions);
   commitBox.addEventListener('submit', (event) => event.preventDefault());
 
-  // ── List toolbar ───────────────────────────────────────────────────────────
-
   const stageAllBtn = button({
     label: 'Stage all',
     onClick: () =>
@@ -143,8 +135,6 @@ export function createChangesView(ctx: SccContext): SccView {
   });
 
   listToolbar.append(stageAllBtn, unstageAllBtn, discardAllBtn);
-
-  // ── Data ───────────────────────────────────────────────────────────────────
 
   async function refresh(): Promise<void> {
     if (destroyed) return;
@@ -171,7 +161,6 @@ export function createChangesView(ctx: SccContext): SccView {
     renderList(staged, unstaged, untracked);
     syncCommitButtons();
 
-    // Selection may have been committed or discarded out from under us.
     if (selection && !hasPath(selection.path, staged, unstaged, untracked)) {
       selection = null;
     }
@@ -275,8 +264,6 @@ export function createChangesView(ctx: SccContext): SccView {
     return row;
   }
 
-  // ── Diff pane ──────────────────────────────────────────────────────────────
-
   async function select(path: string, bucket: Bucket): Promise<void> {
     if (selection?.path === path && selection.bucket === bucket) return;
     selection = { path, bucket };
@@ -351,8 +338,6 @@ export function createChangesView(ctx: SccContext): SccView {
     renderUnifiedPromptDiff(mount, lines, { lineNumbers: true });
   }
 
-  // ── Operations ─────────────────────────────────────────────────────────────
-
   async function run(
     fn: () => Promise<GitOpResult>,
     successMessage?: string,
@@ -376,7 +361,6 @@ export function createChangesView(ctx: SccContext): SccView {
   async function toggleStage(path: string, bucket: Bucket): Promise<void> {
     const cwd = ctx.getCwd();
     const staged = bucket === 'staged';
-    // Keep the selection on the same file so the diff pane does not jump.
     if (selection?.path === path) {
       selection = { path, bucket: staged ? 'unstaged' : 'staged' };
     }
@@ -438,7 +422,6 @@ export function createChangesView(ctx: SccContext): SccView {
     const message = messageInput.value.trim();
     if (!message || busy) return;
 
-    // Nothing staged: commit the whole working tree rather than failing.
     if (lastCounts.staged === 0) {
       const staged = await gitStageAll(ctx.getCwd());
       if (!staged.ok) {
@@ -542,8 +525,6 @@ export function createChangesView(ctx: SccContext): SccView {
     }
   }
 
-  // ── Keyboard ───────────────────────────────────────────────────────────────
-
   const navigate = listNavigator({
     getRows: () => [...listScroll.querySelectorAll<HTMLElement>('.scc-filerow')],
   });
@@ -587,6 +568,8 @@ export function createChangesView(ctx: SccContext): SccView {
     },
   };
 }
+
+// ── Focus ────────────────────────────────────────────────────────────────────
 
 /** Focus the commit message box if the Changes view is mounted (palette action). */
 export function focusCommitMessage(root: HTMLElement): void {

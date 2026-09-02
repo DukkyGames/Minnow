@@ -1,12 +1,3 @@
-/**
- * SQLite mail store for one email account (~/.minnow/email/mail-<accountId>.db).
- * Modelled on server/brain/code/schema.js (WAL + cached handle per key).
- *
- * `message_row_id` is the stable primary key: moves rewrite `folder`/`uid`, but
- * the row — and the triage/variants/bodies hanging off it — survive (MIN-350 D4).
- * WAL + one write path per account ends the read-modify-write races (D5).
- */
-
 import fs from 'node:fs';
 import Database from 'better-sqlite3';
 import { emailDbPath, emailRootDir } from './paths.js';
@@ -16,13 +7,10 @@ import { sanitizePreviewText } from './parse-body.js';
 /** @type {Map<string, import('better-sqlite3').Database>} */
 const dbByCacheKey = new Map();
 
-/** LRU order for open handles — oldest at index 0. */
 const dbCacheLru = [];
 
-/** Cap open handles so many accounts do not leak file descriptors. */
 export const MAX_OPEN_MAIL_DBS = 8;
 
-/** Bump when a migration needs an FTS rebuild (stored in PRAGMA user_version). */
 export const MAIL_SCHEMA_VERSION = 1;
 
 /**
@@ -213,12 +201,6 @@ function initSchema(database) {
 }
 
 /**
- * Add a column to an existing table if it is missing.
- *
- * `CREATE TABLE IF NOT EXISTS` above only covers fresh databases; stores created
- * by an earlier release need the ALTER. Kept separate from `user_version` so
- * adding a column never triggers the (expensive) FTS rebuild below.
- *
  * @param {import('better-sqlite3').Database} database
  */
 function ensureColumn(database, table, column, ddl) {
@@ -233,20 +215,14 @@ function ensureColumn(database, table, column, ddl) {
  * @param {import('better-sqlite3').Database} database
  */
 function migrateAddedColumns(database) {
-  // Inline images are addressed by Content-ID, so the reader can resolve
-  // `cid:` sources without re-parsing the whole message source.
   ensureColumn(database, 'attachments', 'content_id', "TEXT NOT NULL DEFAULT ''");
   ensureColumn(database, 'attachments', 'inline', 'INTEGER NOT NULL DEFAULT 0');
-  // Snoozed messages stay in the store but drop out of the list until due.
   ensureColumn(database, 'messages', 'snooze_until', "TEXT NOT NULL DEFAULT ''");
   database.exec(
     'CREATE INDEX IF NOT EXISTS idx_messages_snooze ON messages(snooze_until) WHERE snooze_until != \'\';',
   );
-  // Tracks how far a folder backfill has reached (newest-first) so sync can
-  // continue fetching older mail after the initial page lands.
   ensureColumn(database, 'sync_state', 'lowest_uid', 'INTEGER NOT NULL DEFAULT 0');
   ensureColumn(database, 'sync_state', 'backfill_complete', 'INTEGER NOT NULL DEFAULT 0');
-  // Local-only inbox tabs (Primary / Social / Other) — never round-trip to IMAP.
   ensureColumn(database, 'messages', 'category', "TEXT NOT NULL DEFAULT ''");
   ensureColumn(database, 'messages', 'category_source', "TEXT NOT NULL DEFAULT ''");
   ensureColumn(database, 'threads', 'category', "TEXT NOT NULL DEFAULT ''");
@@ -262,7 +238,6 @@ function migrateAddedColumns(database) {
   `);
 }
 
-/** FTS5 mirror over subject/from/body — replaces the substring scan (D10). */
 function createMessagesFtsTable(database) {
   database.exec(`
     CREATE VIRTUAL TABLE messages_fts USING fts5(
@@ -305,7 +280,6 @@ function migrateMessagesFts(database) {
   tx();
 }
 
-/** Cache key includes MINNOW_HOME so parallel tests never share a handle. */
 function mailDbCacheKey(accountId) {
   return `${getMinnowHome()}\0${String(accountId ?? '')}`;
 }
@@ -329,7 +303,6 @@ function evictOldestMailDbIfNeeded() {
 }
 
 /**
- * Open (or reuse) the mail store for an account.
  * @param {string} accountId
  * @returns {import('better-sqlite3').Database}
  */
@@ -358,7 +331,6 @@ export function getMailDb(accountId) {
   return db;
 }
 
-/** Close all open mail store handles (tests, shutdown). */
 export function closeMailDbs() {
   for (const db of dbByCacheKey.values()) {
     db.close();
@@ -367,7 +339,6 @@ export function closeMailDbs() {
   dbCacheLru.length = 0;
 }
 
-/** Close the handle for one account without touching the others. */
 export function closeMailDb(accountId) {
   const cacheKey = mailDbCacheKey(String(accountId ?? '').trim());
   const db = dbByCacheKey.get(cacheKey);
@@ -380,7 +351,6 @@ export function closeMailDb(accountId) {
 }
 
 /**
- * Close and delete the mail store for one account (.db / -wal / -shm).
  * @param {string} accountId
  */
 export function deleteMailDb(accountId) {
@@ -397,14 +367,11 @@ export function deleteMailDb(accountId) {
   return removed;
 }
 
-/** Test helper — count of open in-memory handles. */
 export function openMailDbCountForTests() {
   return dbByCacheKey.size;
 }
 
-// ---------------------------------------------------------------------------
 // Row <-> message serialization
-// ---------------------------------------------------------------------------
 
 function parseJson(raw, fallback) {
   if (typeof raw !== 'string' || !raw) return fallback;
@@ -416,8 +383,6 @@ function parseJson(raw, fallback) {
 }
 
 /**
- * Convert a `messages` row (optionally joined with bodies) to the cache message
- * shape the rest of server/email and the UI already consume.
  * @param {Record<string, any>} row
  * @param {{ attachments?: Array<Record<string, unknown>> }} [extra]
  */
@@ -441,7 +406,6 @@ export function rowToMessage(row, extra = {}) {
     hasAttachments: Boolean(row.has_attachments),
     attachments: extra.attachments ?? [],
     snoozeUntil: row.snooze_until || '',
-    // Local inbox tab label (primary / social / other); empty until classified.
     category: row.category || '',
     categorySource: row.category_source || '',
     inReplyTo: row.in_reply_to ?? '',
@@ -471,7 +435,6 @@ export function rowToMessage(row, extra = {}) {
   return message;
 }
 
-/** Load attachment metadata rows for a set of message row ids. */
 export function loadAttachments(db, messageRowIds) {
   /** @type {Map<number, Array<Record<string, unknown>>>} */
   const byRow = new Map();
@@ -497,14 +460,12 @@ export function loadAttachments(db, messageRowIds) {
   return byRow;
 }
 
-/** Attach `attachments` arrays to a batch of rows in one query. */
 export function hydrateAttachments(db, rows) {
   const ids = rows.map((row) => row.message_row_id).filter((id) => Number.isFinite(id));
   const byRow = loadAttachments(db, ids);
   return rows.map((row) => rowToMessage(row, { attachments: byRow.get(row.message_row_id) ?? [] }));
 }
 
-/** Refresh the FTS mirror for one message. */
 export function reindexMessageFts(db, messageRowId) {
   const row = db
     .prepare(
@@ -521,10 +482,6 @@ export function reindexMessageFts(db, messageRowId) {
   ).run(row.message_row_id, row.subject ?? '', row.from_addr ?? '', row.body ?? '');
 }
 
-/**
- * Recompute the materialized `threads` rollup for one thread id.
- * Called inside the caller's transaction after message writes.
- */
 export function recomputeThread(db, threadId) {
   const id = String(threadId ?? '');
   if (!id) return;
@@ -544,7 +501,6 @@ export function recomputeThread(db, threadId) {
   const last = rows[rows.length - 1];
   const participants = [];
   const folders = [];
-  // primary > social > other so a personal reply promotes a promo thread.
   const rank = { primary: 3, social: 2, other: 1 };
   let category = '';
   let categoryRank = 0;
@@ -597,13 +553,11 @@ export function recomputeThread(db, threadId) {
   });
 }
 
-/** Read a `meta` value as JSON. */
 export function readMeta(db, key, fallback = null) {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(key);
   return row ? parseJson(row.value, fallback) : fallback;
 }
 
-/** Write a `meta` value as JSON. */
 export function writeMeta(db, key, value) {
   if (value === undefined || value === null) {
     db.prepare('DELETE FROM meta WHERE key = ?').run(key);

@@ -1,8 +1,3 @@
-/**
- * FIM-style prompt builder and output alignment for editor AI inline completions.
- * Phase 6: structured context, LSP signals, cursor-aware alignment.
- */
-
 import type { EditorState, Transaction } from '@codemirror/state';
 import type { ApiMessage } from '../types';
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
@@ -292,7 +287,6 @@ export function applyContextBudget(
   for (const section of sorted) {
     const remaining = budgetChars - used;
     if (remaining <= 0) break;
-    // Lower-priority sections are omitted when they do not fit entirely.
     if (section.text.length > remaining) continue;
     kept.push(section.text);
     used += section.text.length;
@@ -589,7 +583,6 @@ export async function buildEditorAiCompletionMessagesAsync(
     lspDiagnostics = lsp.diagnostics;
     if (!lspHover) lspHover = lsp.hover;
   } catch {
-    /* degrade gracefully */
   }
 
   return buildEditorAiCompletionMessages({
@@ -663,10 +656,7 @@ function columnsToIndentUnitStr(col: number, indentUnitStr: string): string {
   return unit.repeat(units);
 }
 
-/**
- * Re-indent model completion text: preserve leading newlines, strip leading ws on
- * line 0, anchor continuation lines to the cursor indent, normalize tabs/spaces.
- */
+/** Re-indent model completion text: preserve leading newlines, strip leading ws on line 0, anchor continuation lines to the cursor indent, normalize tabs/spaces. */
 export function reindentCompletionText(
   text: string,
   prefix: string,

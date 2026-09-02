@@ -1,11 +1,3 @@
-/**
- * P10-G (MIN-772) — fold P10-B `stream_meta` / `round_end` into the live
- * metrics types `loop.ts` used to own.
- *
- * `TurnEvent.stream_meta.runtime` is `{ timings, prompt_progress }`, not a
- * status string. Display copy must go through {@link llamaRuntimeStatusView}.
- */
-
 import type { StreamMetaAccumulator } from '../api/chat';
 import type { TurnEvent } from '../../server/runner/run-turn';
 import type { LlamaPromptProgress, LlamaTimings, Stats, Usage } from '../types';
@@ -33,10 +25,6 @@ export function statsFromTurnEvent(value: unknown): Stats | undefined {
   return value as Stats;
 }
 
-/**
- * P10-B packs llama.cpp `timings` / `prompt_progress` on `runtime`.
- * Ignore strings and other shapes — those are not a status label.
- */
 export function llamaRuntimeFromStreamMetaRuntime(
   runtime: unknown,
 ): { timings?: LlamaTimings; prompt_progress?: LlamaPromptProgress } | undefined {
@@ -52,10 +40,6 @@ export function llamaRuntimeFromStreamMetaRuntime(
   return out;
 }
 
-/**
- * Map `stream_meta.runtime` through the llama.cpp status view.
- * A string runtime must not appear as the status detail.
- */
 export function runtimeStatusFromStreamMetaRuntime(
   runtime: unknown,
   hasOutput: boolean,
@@ -63,10 +47,6 @@ export function runtimeStatusFromStreamMetaRuntime(
   return llamaRuntimeStatusView(llamaRuntimeFromStreamMetaRuntime(runtime), hasOutput);
 }
 
-/**
- * Merge one throttled `stream_meta` event into the live accumulator.
- * Later chunks win, same as `mergeStreamMeta` on the SSE path.
- */
 export function applyStreamMetaEvent(
   acc: StreamMetaAccumulator,
   event: StreamMetaTurnEvent,
@@ -88,10 +68,6 @@ export function applyStreamMetaEvent(
   return next;
 }
 
-/**
- * Build the accumulator `finalizeResponseMeta` expects from a `round_end`.
- * Prefers the live merge (includes timings) and fills gaps from the event.
- */
 export function streamMetaFromRoundEnd(
   live: StreamMetaAccumulator,
   event: RoundEndTurnEvent,

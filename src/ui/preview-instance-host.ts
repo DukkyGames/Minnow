@@ -1,15 +1,3 @@
-/**
- * Generic per-instance Electron preview host binding (MIN-364).
- *
- * The workspace right pane keeps using preview-electron-visibility.ts unchanged (it is
- * intimately tied to #previewBody / #previewPane / the Code workspace chrome and stays the
- * dedicated wiring for the default 'workspace-preview' instance). This module is the reusable
- * counterpart for *other* named instances (Design surface, future Studio live-component
- * frames): it binds an arbitrary named instance to an arbitrary host element and keeps the
- * native WebContentsView bounds in sync via ResizeObserver, mirroring the show/hide + bounds
- * contract every instance shares with window.minnow.preview.
- */
-
 import { scheduleAnimationFrame } from '../lib/schedule-animation-frame';
 import type { MinnowPreviewBounds } from '../electron';
 
@@ -49,12 +37,6 @@ function syncInstance(instanceId: string): void {
   void api.show(bounds, undefined, instanceId);
 }
 
-/**
- * Bind a named preview instance to a host DOM element. Creates the instance (main process) and
- * keeps its bounds in sync with the element via ResizeObserver until the returned cleanup is
- * called. No-op (returns a no-op cleanup) outside Electron or without ResizeObserver support —
- * callers should fall back to preview-iframe-fallback.ts in that case.
- */
 export function bindPreviewInstanceToElement(instanceId: string, element: HTMLElement): () => void {
   unbindPreviewInstance(instanceId);
 

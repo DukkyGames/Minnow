@@ -1,13 +1,3 @@
-/**
-
- * CodeMirror extensions for the file viewer — LSP autocomplete via local server.
-
- * Tab/Escape keymaps live in `file-editor-keymap.ts`.
-
- */
-
-
-
 export {
 
   fileEditorEscapeBlurBinding,
@@ -17,8 +7,6 @@ export {
   fileEditorKeymapExtensions,
 
 } from './file-editor-keymap';
-
-
 
 import { autocompletion, snippet, startCompletion, type Completion, type CompletionContext, type CompletionResult } from '@codemirror/autocomplete';
 
@@ -70,13 +58,9 @@ import {
 
 import { formatDocumentInView } from './lsp-editor/format-document';
 
-
-
 /** LSP InsertTextFormat — snippet placeholders use $0, $1, … */
 
 const LSP_INSERT_TEXT_FORMAT_SNIPPET = 2;
-
-
 
 function dispatchCompletionChanges(
 
@@ -112,8 +96,6 @@ function dispatchCompletionChanges(
 
   }
 
-
-
   const changes = [
 
     { from, to, insert: insertText },
@@ -131,8 +113,6 @@ function dispatchCompletionChanges(
   });
 
 }
-
-
 
 function resolveReplaceSpan(
 
@@ -166,23 +146,17 @@ function resolveReplaceSpan(
 
 }
 
-
-
 function buildApply(filePath: string, item: LspCompletionItem): Completion['apply'] {
 
   const insertText = item.insertText;
 
   const isSnippet = item.insertTextFormat === LSP_INSERT_TEXT_FORMAT_SNIPPET;
 
-
-
   return (view, completion, from, to) => {
 
     const span = resolveReplaceSpan(view, item, from, to);
 
     const extraEdits = item.additionalTextEdits;
-
-
 
     if (extraEdits?.length || !item.data) {
 
@@ -191,8 +165,6 @@ function buildApply(filePath: string, item: LspCompletionItem): Completion['appl
       return;
 
     }
-
-
 
     dispatchCompletionChanges(view, span.from, span.to, insertText, undefined, isSnippet, completion);
 
@@ -214,8 +186,6 @@ function buildApply(filePath: string, item: LspCompletionItem): Completion['appl
 
 }
 
-
-
 /**
 
  * LSP autocomplete + in-editor UX (diagnostics, hover, signature, definition).
@@ -228,23 +198,15 @@ export function lspEditorExtensions(filePath: string): Extension[] {
 
   let lastResultIncomplete = false;
 
-
-
   const completionSource = async (context: CompletionContext): Promise<CompletionResult | null> => {
 
     if (!isCompletionRequestValid(context, triggerCharacters)) return null;
 
-
-
     context.addEventListener('abort', () => {}, { onDocChange: true });
-
-
 
     await waitForCompletionDebounce(context);
 
     if (context.aborted) return null;
-
-
 
     const pos = context.pos;
 
@@ -266,8 +228,6 @@ export function lspEditorExtensions(filePath: string): Extension[] {
 
     );
 
-
-
     const response = await fetchCompletions(filePath, line, character, {
 
       editorText,
@@ -276,11 +236,7 @@ export function lspEditorExtensions(filePath: string): Extension[] {
 
     });
 
-
-
     if (context.aborted) return null;
-
-
 
     if (response.triggerCharacters?.length) {
 
@@ -290,19 +246,13 @@ export function lspEditorExtensions(filePath: string): Extension[] {
 
     lastResultIncomplete = response.isIncomplete === true;
 
-
-
     const items = response.items;
 
     if (items.length === 0) return null;
 
-
-
     const word = context.matchBefore(LSP_IDENTIFIER_MATCH);
 
     const wordFrom = word ? word.from : pos;
-
-
 
     const result: CompletionResult = {
 
@@ -312,21 +262,15 @@ export function lspEditorExtensions(filePath: string): Extension[] {
 
     };
 
-
-
     if (!response.isIncomplete) {
 
       result.validFor = LSP_IDENTIFIER_MATCH;
 
     }
 
-
-
     return result;
 
   };
-
-
 
   const triggerInputHandler = EditorView.inputHandler.of((view, _from, to, text) => {
 
@@ -337,8 +281,6 @@ export function lspEditorExtensions(filePath: string): Extension[] {
     return false;
 
   });
-
-
 
   return [
 

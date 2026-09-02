@@ -1,7 +1,3 @@
-/**
- * Fire-and-forget Brain archive cleanup when a chat is deleted (MIN-139).
- */
-
 import { brainWorkspaceKeyFromPath } from '../../lib/brain-workspace-key';
 import { deleteChatArchive } from './store-client';
 

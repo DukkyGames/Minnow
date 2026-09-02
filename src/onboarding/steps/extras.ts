@@ -354,7 +354,6 @@ export const extrasStep: OnboardingStep = {
       ),
     );
 
-    // Hide llama-only row when managed path already installed runtime+model.
     const managedDone = Boolean(ctx.state.steps['provider-managed']?.done);
     const visibleRows = rows.filter((r) => !(r.id === 'llama' && managedDone));
 

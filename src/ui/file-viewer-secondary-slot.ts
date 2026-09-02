@@ -1,11 +1,3 @@
-/**
- * Secondary editor group for the right-pane split.
- *
- * Renders the secondary slot's own active tab into #fileViewerHostSecondary. It shares
- * the tab store with the primary group (one buffer per path, and a path only ever lives
- * in one slot), but keeps its own CodeMirror view, load trigger, and header chrome.
- */
-
 import { EditorState } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { setAssistantBubbleContent } from '../markdown/renderer';
@@ -62,6 +54,8 @@ let pendingMountPath: string | null = null;
 let mountGeneration = 0;
 let snapshotHookBound = false;
 
+// ── Snapshot ─────────────────────────────────────────────────────────────────
+
 function getHost(): HTMLElement | null {
   return document.getElementById('fileViewerHostSecondary');
 }
@@ -81,6 +75,8 @@ function bindSnapshotHook(): void {
   snapshotHookBound = true;
   registerSecondaryEditorSnapshot(snapshotSecondaryEditorTab);
 }
+
+// ── LSP ──────────────────────────────────────────────────────────────────────
 
 function clearSecondaryLspChangeTimer(): void {
   if (lspTimer) {
@@ -125,6 +121,8 @@ export function destroySecondaryViewerSlot(): void {
   if (host) host.replaceChildren();
   updateSecondaryViewerChrome();
 }
+
+// ── Mount ────────────────────────────────────────────────────────────────────
 
 function renderKeyFor(tab: ViewerTabState): string {
   return `${tab.path}::${tab.viewMode}::${tab.loadStatus}`;
@@ -331,6 +329,8 @@ function mountEditor(host: HTMLElement, tab: ViewerTabState, content: string): v
     updateSecondaryViewerChrome();
   })();
 }
+
+// ── Render ───────────────────────────────────────────────────────────────────
 
 /** Mount the secondary slot's active tab (loads content on demand). */
 export function renderSecondaryViewerSlot(tabPath: string | null): void {

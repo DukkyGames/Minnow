@@ -1,15 +1,5 @@
 /**
  * An in-memory journal store, satisfying the same interface as `journal.js`.
- *
- * V2 promotes scripted board testing from the dev affordance it was in V1 to a
- * first-class capability: the scheduler's correctness is established by running
- * thousands of generated boards, and that is only practical if a tick does not
- * cost a filesystem write. Durability is `journal.js`'s property and is tested
- * there; this store exists so the *scheduler* can be tested without paying for it.
- *
- * It keeps the parts of the contract the engine depends on — per-board `seq`
- * assignment, serialised appends, validation before acceptance — and drops only
- * the parts about surviving a crash, which an in-memory store cannot have anyway.
  */
 
 import { derive } from '../core/derive.js';
@@ -84,8 +74,6 @@ export function createMemoryJournal() {
         if (!checked.ok) {
           throw new Error(`refusing to journal an invalid event: ${checked.error}`);
         }
-        // Round-tripped through JSON, exactly as the disk store would, so a test
-        // cannot accidentally depend on object identity the real store loses.
         stamped.push(JSON.parse(JSON.stringify(line)));
       }
       target.push(...stamped);
@@ -127,7 +115,6 @@ export function createMemoryJournal() {
       return [...journals.keys()].sort();
     },
 
-    /** Synchronous read, for assertions that should not need to await. */
     readEventsSync(boardId) {
       return [...bucket(boardId)];
     },

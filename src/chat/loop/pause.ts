@@ -1,7 +1,3 @@
-/**
- * Pause / resume controls for session /loop timers.
- */
-
 import type { Chat } from '../../types';
 import { getActiveLoops, touchActiveLoops, updateActiveLoop } from '../../state/sessions';
 

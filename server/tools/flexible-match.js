@@ -154,14 +154,12 @@ export function flexibleReplaceAll(content, search, replace) {
   const needle = String(search ?? '');
   const repl = String(replace ?? '');
 
-  // 1. Exact match
   const exactParts = file.split(needle);
   const exactCount = needle.length > 0 ? exactParts.length - 1 : 0;
   if (exactCount > 0) {
     return { output: exactParts.join(repl), count: exactCount, mode: 'exact' };
   }
 
-  // 2. EOL-normalized match
   const fileEol = detectDominantEol(file);
   const eolNeedle = applyDominantEol(needle, fileEol);
   const eolRepl = applyDominantEol(repl, fileEol);
@@ -173,7 +171,6 @@ export function flexibleReplaceAll(content, search, replace) {
     }
   }
 
-  // 3. Whitespace-tolerant line-window match
   const wsResult = replaceWhitespaceTolerant(file, needle, repl);
   if (wsResult) {
     return { output: wsResult.output, count: wsResult.count, mode: 'whitespace' };
@@ -276,7 +273,6 @@ export function resolveInsertLineFromAnchor(content, anchor, position) {
   if (position === 'before') {
     return { lineIndex: anchorStartLine };
   }
-  // Insert after the line containing the end of the anchor.
   return { lineIndex: anchorEndLine + 1 };
 }
 

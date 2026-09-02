@@ -1,8 +1,3 @@
-/**
- * Chat search popover — fuzzy search across desktop and Code chats from the
- * sidebar / desktop rail search buttons. Results deep-link into the owning surface.
- */
-
 import {
   filterChatsByWorkspacePath,
   searchChats,
@@ -52,7 +47,6 @@ function persistSearchAllWorkspacesPreference(value: boolean): void {
   try {
     localStorage.setItem(ALL_WORKSPACES_STORAGE_KEY, value ? 'true' : 'false');
   } catch {
-    /* ignore quota / private mode */
   }
 }
 
@@ -293,7 +287,6 @@ function renderResults(query: string): void {
     return;
   }
 
-  // localStorage / Vite-only: full histories are in memory — keep the pure scorer.
   if (!isServerStorageMode()) {
     paintResults(query, searchChats(chatsForCurrentScope(), query));
     return;
@@ -312,7 +305,6 @@ function renderResults(query: string): void {
   })
     .then((hits) => {
       if (seq !== searchSeq || !resultsEl) return;
-      // Desktop scope filters client-side (server has no desktop-path notion).
       let mapped = mapServerHitsToResults(hits);
       if (searchContext === 'desktop' && !searchAllWorkspaces) {
         mapped = mapped.filter((r) => isDesktopSurfaceChat(r.chat));
@@ -321,7 +313,6 @@ function renderResults(query: string): void {
     })
     .catch(() => {
       if (seq !== searchSeq || !resultsEl) return;
-      // Network blip — fall back to in-memory titles / loaded histories.
       paintResults(query, searchChats(chatsForCurrentScope(), query));
     });
 }
@@ -386,7 +377,6 @@ function buildPopover(): HTMLDivElement {
 export function openChatSearchPopover(anchor: HTMLElement): void {
   closeChatSearchPopover();
 
-  // Prime the sandbox path caches so results classify desktop vs Code chats.
   void getChatsWorkspacePath();
   void getDesktopWorkspacePath();
 

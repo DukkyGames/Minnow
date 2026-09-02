@@ -1,8 +1,3 @@
-/**
- * Central catalog of searchable settings fields (MIN-130).
- * Feeds search index, live in-page filter, and chat deep-links.
- */
-
 import { isBoardTestingSettingsVisible } from '../config/dev-surfaces';
 import type { SettingsSectionId } from './settings-page-types';
 import { filterSettingsCatalogEntries } from './settings-catalog-filter';
@@ -141,7 +136,6 @@ function field(
 
 /** Static field catalog source — filtered for release gates in SETTINGS_FIELD_CATALOG. */
 const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
-  // —— General ——
   field('general.updates', 'App updates', 'general', 'general', {
     keywords: ['update', 'version', 'upgrade', 'beta', 'release', 'restart', 'auto-update'],
     description: 'Stay on the latest build. Downloads run in the background; restart when you are ready.',
@@ -221,7 +215,6 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   field('audio.noiseSuppression', 'Noise suppression', 'general', 'audio'),
   field('audio.autoGainControl', 'Auto gain control', 'general', 'audio'),
 
-  // —— Apps ——
   field('apps.visibility', 'App visibility', 'apps', 'apps', {
     keywords: ['dock', 'launcher', 'enable', 'disable', 'hide apps', 'optional apps', 'enable all'],
     description: 'Hide optional apps from the dock and launchers.',
@@ -268,7 +261,6 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
     description: 'Priority levels for issues.',
   }),
 
-  // —— Appearance ——
   field('appearance.theme', 'Theme presets', 'appearance', 'appearance', {
     keywords: ['color', 'dark', 'light', 'swamp', 'desert', 'ocean', 'coral', 'mono', 'matrix', 'human', 'mint', 'palette'],
   }),
@@ -283,7 +275,6 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
     keywords: ['tokens', 'override'],
   }),
 
-  // —— Models ——
   field('models.providers', 'Providers', 'models', 'providers', {
     keywords: ['api', 'lm studio', 'openai', 'backend'],
   }),
@@ -325,7 +316,6 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   field('models.usage.active', 'Active chat usage', 'models', 'usage'),
   field('models.usage.session', 'Workspace session usage', 'models', 'usage'),
 
-  // —— Agents ——
   field('agents.center', 'Agents center', 'agents', 'agent-center', {
     keywords: ['modes', 'work agents', 'sub-agents', 'prompts', 'routing'],
   }),
@@ -423,7 +413,6 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
     keywords: ['thinking', 'reasoning', 'replay'],
   }),
 
-  // —— Integrations ——
   field('integrations.search', 'Web search provider', 'integrations', 'search', {
     keywords: ['brave', 'tavily', 'duckduckgo', 'searxng', 'web research'],
   }),
@@ -483,7 +472,6 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   field('integrations.browser.patterns', 'Allowed origin patterns', 'integrations', 'browser'),
   field('integrations.browser.devtoolsDock', 'DevTools dock', 'integrations', 'browser'),
 
-  // —— Advanced ——
   field('advanced.diagnostics', 'Health & diagnostics', 'advanced', 'diagnostics', {
     keywords: ['errors', 'logs', 'crash', 'report', 'health strip', 'subsystem'],
     description: 'Subsystem probes, grouped errors, and a local log tail. Nothing is sent off-device.',
@@ -551,7 +539,6 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
     keywords: ['jsonl', 'invariants', 'check-board-log', 'orchestrate log'],
   }),
 
-  // —— About (General) ——
   field('about.info', 'Build info', 'general', 'about', {
     keywords: ['version', 'platform', 'node', 'electron'],
   }),

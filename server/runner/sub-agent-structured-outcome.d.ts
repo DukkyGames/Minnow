@@ -1,6 +1,3 @@
-/**
- * Parse, validate, and repair sub-agent structured final outcomes (MIN-43).
- */
 import { DEFAULT_SUB_AGENT_SUMMARY_SCHEMA } from './sub-agent-summary-schemas.js';
 /** One structured finding for parent orchestration. */
 export interface SubAgentFinding {

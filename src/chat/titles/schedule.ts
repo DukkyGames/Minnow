@@ -1,7 +1,3 @@
-/**
- * Fire-and-forget title jobs on the first user message (Step 07).
- */
-
 import { loadTitlesConfig } from '../../config/titles-meta';
 import { getActiveProvider } from '../../providers/store';
 import { hasMeasurableUsage } from '../../usage/pricing';
@@ -44,10 +40,6 @@ export function setGenerateChatTitleForTests(
   titleGenerateImpl = impl ?? generateChatTitle;
 }
 
-/**
- * True when this chat has no user messages yet (call before pushing the first user row).
- * Lazy-unloaded chats keep `history: []` until hydrate — use denormalized `messageCount`.
- */
 export function isFirstUserMessagePending(chat: Chat): boolean {
   if (chat.historyLoaded === false) {
     return getChatMessageCount(chat) === 0;
@@ -67,10 +59,6 @@ export function getTitleScheduleContext(chatId: string): TitleScheduleContext | 
   return scheduleContextByChatId.get(chatId);
 }
 
-/**
- * Schedule async title generation — returns immediately; never blocks send.
- * Pass `context` when the send path already resolved model/provider bindings.
- */
 export function scheduleChatTitleGeneration(
   chatId: string,
   seed: string,
@@ -93,10 +81,8 @@ export function scheduleChatTitleGeneration(
 
   emitTitleJobStarted(chatId, scheduleContextByChatId.get(chatId) ?? context);
 
-  // Fire-and-forget: a missing config server must not reject after the turn.
   void runTitleJob(chatId, seed, controller.signal)
     .catch(() => {
-      /* titles are best-effort */
     })
     .finally(() => {
       scheduleContextByChatId.delete(chatId);

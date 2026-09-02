@@ -1,8 +1,3 @@
-/**
- * Editor suggestions — one engine for inline completion ghost text and Intent
- * proposals. Public surface for the file viewer.
- */
-
 import { Compartment, Prec, type Extension } from '@codemirror/state';
 import { EditorView, ViewPlugin, keymap } from '@codemirror/view';
 import { getEditorAiCompletionConfigSync } from '../../config/editor-ai-completion';
@@ -28,10 +23,7 @@ import {
 /** Compartment for hot-reloading suggestions without remounting the editor. */
 export const editorSuggestionCompartment = new Compartment();
 
-/**
- * Always-on state that must survive compartment reconfiguration (the Intent
- * toggle would otherwise reset whenever Settings are saved).
- */
+/** Always-on state that must survive compartment reconfiguration (the Intent toggle would otherwise reset whenever Settings are saved). */
 export function editorSuggestionBaseExtensions(): Extension[] {
   return [intentEnabledField, acceptedIntentRegionsField];
 }
@@ -72,11 +64,7 @@ export function mountEditorSuggestions(view: EditorView, intentEnabled: boolean)
   view.dispatch({ effects: setIntentEnabled.of(intentEnabled) });
 }
 
-/**
- * Hot-apply editor settings without remounting CodeMirror. The bundle stays
- * mounted whenever requests are possible — inline completion being off must not
- * take Intent mode down with it.
- */
+/** Hot-apply editor settings without remounting CodeMirror. */
 export function reconfigureEditorSuggestions(
   view: EditorView,
   opts: EditorSuggestionOptions,

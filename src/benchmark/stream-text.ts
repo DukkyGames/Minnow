@@ -80,8 +80,6 @@ export class BenchmarkStreamContentRouter {
       thinkingModel: modelLikelyUsesInlineThinking(modelId),
     });
     this.thinkingBudgetTracker = thinkingBudgetTracker ?? null;
-    // The tracker already banks across phases (one budget per turn/probe). Skipping
-    // endSession keeps the tripped flag set across prose instead of starting a new phase.
     this.cumulativeBudget = options.cumulativeBudget === true;
   }
 
@@ -163,7 +161,6 @@ export class BenchmarkStreamContentRouter {
     for (const [text, isThinking] of parts) {
       if (isThinking) {
         if (text) {
-          // Tool-call markup inside the think span is withheld from reasoning text.
           const visible = this.thinkingToolCallRouter.feed(text);
           if (visible) {
             this.feedThinkingBudget(visible);
@@ -174,7 +171,6 @@ export class BenchmarkStreamContentRouter {
       }
       if (!text) continue;
       if (!this.cumulativeBudget) this.thinkingBudgetTracker?.endSession();
-      // `<tool_call>` markup is withheld from prose and parsed as tool calls instead.
       this.proseText += this.toolCallRouter.feed(text);
     }
   }

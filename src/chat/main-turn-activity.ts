@@ -1,7 +1,3 @@
-/**
- * Per-chat main turn activity (phase, tool name, model) for the global agent activity panel.
- */
-
 export type MainTurnPhase = 'loading_model' | 'generating' | 'tools' | 'thinking';
 
 export interface MainTurnActivity {
@@ -31,9 +27,7 @@ function notify(): void {
   for (const fn of listeners) {
     try {
       fn();
-    } catch {
-      /* ignore subscriber errors */
-    }
+    } catch {}
   }
 }
 

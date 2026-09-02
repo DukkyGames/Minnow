@@ -12,6 +12,14 @@ function resolveFailedTurnContinueInstruction(history) {
 const MAX_PROSE_QUESTION_RETRIES = 1;
 const PROSE_QUESTION_RETRY_INSTRUCTION = "Your previous reply is already in the chat. You presented multiple-choice options in plain text. Do not repeat that list in prose. Call the ask_question tool now with a questions array (each item: id, prompt, options as {id, label} objects). Wait for the user to answer before continuing.";
 const SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION = "You must use the available tools to complete the task. Do not answer with prose only \u2014 call the appropriate tool(s) now, then summarize after you have tool results.";
+/**
+ * @param {string} toolName
+ * @returns {string}
+ */
+function buildReportToolNudgeInstruction(toolName) {
+  const name = typeof toolName === "string" && toolName.trim() ? toolName.trim() : "report_outcome";
+  return `You must call the ${name} tool now with a valid JSON payload (outcome, summary, and the other required fields). Do not put the outcome only in assistant text, and do not reply with a JSON object as your message. A rejected ${name} call is not finished — read the error, fix the payload, and call the tool again.`;
+}
 function isTurnDebugEnabled() {
   return false;
 }
@@ -72,6 +80,7 @@ export {
   MAX_PROSE_QUESTION_RETRIES,
   PROSE_QUESTION_RETRY_INSTRUCTION,
   SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION,
+  buildReportToolNudgeInstruction,
   TURN_DEBUG_STORAGE_KEY,
   hasPostToolTail,
   isTurnDebugEnabled,

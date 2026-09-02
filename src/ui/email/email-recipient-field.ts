@@ -1,14 +1,3 @@
-/**
- * Recipient input with contact autocomplete.
- *
- * Suggestions come from addresses harvested out of the user's own mail, so the
- * list is useful from the first day without an address book to configure and
- * without anything leaving the machine.
- *
- * Only the token under the caret is completed: a field holding
- * `alice@x.com, bo` should suggest for `bo`, not re-suggest for the whole line.
- */
-
 import { fetchEmailContacts, type EmailContact } from '../../email/client-drafts';
 
 /** Debounce so a fast typist does not issue a query per keystroke. */
@@ -66,7 +55,6 @@ export function createRecipientField(options: {
   let contacts: EmailContact[] = [];
   let activeIndex = -1;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  // Guards against a slow response for an old prefix overwriting a newer one.
   let requestSeq = 0;
   let destroyed = false;
 
@@ -102,8 +90,6 @@ export function createRecipientField(options: {
       address.textContent = contact.name ? contact.address : '';
       item.append(name, address);
 
-      // `mousedown` rather than `click`: blur fires first on click and would
-      // close the list before the selection registered.
       item.addEventListener('mousedown', (event) => {
         event.preventDefault();
         choose(contact);
@@ -130,7 +116,6 @@ export function createRecipientField(options: {
         paint();
       })
       .catch(() => {
-        // Autocomplete is an assist; a failure should never interrupt typing.
         if (!destroyed && seq === requestSeq) close();
       });
   };
@@ -163,7 +148,6 @@ export function createRecipientField(options: {
   });
 
   input.addEventListener('blur', () => {
-    // Let a pending mousedown on a suggestion land first.
     setTimeout(() => {
       if (!destroyed) close();
     }, 0);

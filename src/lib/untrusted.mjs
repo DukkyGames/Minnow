@@ -23,7 +23,6 @@ const MAX_SOURCE_LEN = 64;
  * @returns {string}
  */
 export function escapeGuardMarkers(text) {
-  // Close marker first, then any open-marker prefix (bare or with attributes).
   return String(text ?? '')
     .replaceAll(GUARD_CLOSE, ESCAPED_CLOSE)
     .replaceAll(GUARD_OPEN_LITERAL, ESCAPED_OPEN)
@@ -41,7 +40,6 @@ export function sanitizeSourceLabel(source) {
     .replace(/\r\n/g, ' ')
     .replace(/[\r\n]/g, ' ');
 
-  // Printable ASCII only; strip quotes and control characters.
   label = label
     .replace(/[^\x20-\x7E]/g, '')
     .replace(/["'`]/g, '')

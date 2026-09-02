@@ -1,8 +1,5 @@
 import { appConfirm } from '../app-dialog';
-/**
- * Email automation rules — condition builder, multi-action rules, dry-run
- * preview, and a per-rule Runs (audit) view. Spec Part 4 / Phase 5.
- */
+/** Email automation rules — condition builder, multi-action rules, dry-run preview, and a per-rule Runs (audit) view. */
 
 import type {
   EmailAccount,
@@ -87,6 +84,8 @@ function option(select: HTMLSelectElement, value: string, label: string): void {
   select.appendChild(opt);
 }
 
+// ── Conditions ───────────────────────────────────────────────────────────────
+
 /** Human-readable one-liner for a condition. */
 function conditionText(cond: EmailAutomationCondition): string {
   const field = CONDITION_FIELDS.find((f) => f.value === cond.field)?.label ?? cond.field;
@@ -104,6 +103,8 @@ function actionText(action: EmailAutomationAction): string {
   if (action.type === 'run_scheduler_job') return `${label} (${action.jobId || '?'})`;
   return label;
 }
+
+// ── Automations ──────────────────────────────────────────────────────────────
 
 /**
  * Render automation drawer content.
@@ -272,6 +273,8 @@ async function renderRuns(
   mount.appendChild(table);
 }
 
+// ── Builder ──────────────────────────────────────────────────────────────────
+
 /** The new-rule builder form. */
 function renderBuilder(mount: HTMLElement, options: EmailAutomationsOptions): HTMLElement {
   const conditions: EmailAutomationCondition[] = [];
@@ -286,7 +289,6 @@ function renderBuilder(mount: HTMLElement, options: EmailAutomationsOptions): HT
   nameInput.required = true;
   form.appendChild(nameInput);
 
-  // Trigger
   const triggerRow = el('label', 'email-automation-field');
   triggerRow.appendChild(el('span', 'email-automation-label', 'Trigger'));
   const triggerSelect = el('select', 'email-select') as HTMLSelectElement;
@@ -294,7 +296,6 @@ function renderBuilder(mount: HTMLElement, options: EmailAutomationsOptions): HT
   triggerRow.appendChild(triggerSelect);
   form.appendChild(triggerRow);
 
-  // Tag value shown only for on_tag_match
   const tagRow = el('label', 'email-automation-field');
   tagRow.appendChild(el('span', 'email-automation-label', 'Tag'));
   const tagInput = el('input', 'email-input') as HTMLInputElement;
@@ -306,7 +307,6 @@ function renderBuilder(mount: HTMLElement, options: EmailAutomationsOptions): HT
     tagRow.hidden = triggerSelect.value !== 'on_tag_match';
   });
 
-  // Conditions
   form.appendChild(el('h5', 'email-automation-subhead', 'Conditions (all must match)'));
   const condList = el('div', 'email-automation-rows');
   form.appendChild(condList);
@@ -320,7 +320,6 @@ function renderBuilder(mount: HTMLElement, options: EmailAutomationsOptions): HT
   });
   form.appendChild(addCond);
 
-  // Actions
   form.appendChild(el('h5', 'email-automation-subhead', 'Actions'));
   const actionList = el('div', 'email-automation-rows');
   form.appendChild(actionList);
@@ -335,7 +334,6 @@ function renderBuilder(mount: HTMLElement, options: EmailAutomationsOptions): HT
   });
   form.appendChild(addAction);
 
-  // Trusted
   const trustedRow = el('label', 'email-automation-check');
   const trustedInput = el('input') as HTMLInputElement;
   trustedInput.type = 'checkbox';
@@ -359,7 +357,6 @@ function renderBuilder(mount: HTMLElement, options: EmailAutomationsOptions): HT
     config: triggerSelect.value === 'on_tag_match' ? { tag: tagInput.value.trim() } : {},
   });
 
-  // Dry-run
   const dryRow = el('div', 'email-automation-dryrun');
   const dryBtn = el('button', 'email-btn', 'Dry-run (last 7 days)') as HTMLButtonElement;
   dryBtn.type = 'button';
@@ -513,7 +510,6 @@ function buildActionRow(
   };
 
   typeSelect.addEventListener('change', () => {
-    // Reset params when the type changes so a stale folder/email can't leak.
     delete action.folder;
     delete action.to;
     delete action.body;

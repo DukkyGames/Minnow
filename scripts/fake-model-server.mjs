@@ -1,13 +1,4 @@
 #!/usr/bin/env node
-/**
- * Local OpenAI-v1 fake model server for orchestrate board manual runs and tests.
- *
- * Usage:
- *   node scripts/fake-model-server.mjs [--port N] [--scenario path.json] [--register]
- *
- * Scenario JSON: ordered list of { match: { role?, taskId?, nth? }, emit: [...sse chunks] }.
- * The first matching step wins; omitted match fields are wildcards.
- */
 
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -24,14 +15,14 @@ export { FAKE_MODEL_ID, FAKE_PROVIDER_ID };
 
 const DEFAULT_PORT = 18765;
 
-/** Every HTTP request recorded for assertions (method, url, body, parsed context). */
 export const requests = [];
 
 /** @type {Map<string, number>} */
 const matchOccurrenceCounts = new Map();
 
+// ── SSE chunks ───────────────────────────────────────────────────────────────
+
 /**
- * Build SSE chunks that stream a single board_report pass tool call.
  * @param {string} [taskId]
  * @param {string} [toolCallId]
  * @returns {string[]}
@@ -68,7 +59,6 @@ export function boardReportPassChunks(taskId = 'W1-A', toolCallId = 'call_fake_b
   ];
 }
 
-/** Prose completion — required after a tool-call round so runChatTurn can finish. */
 export function proseSseChunks(text = 'Done.', finishReason = 'stop') {
   const delta = JSON.stringify({
     choices: [{ delta: { content: text } }],
@@ -83,15 +73,11 @@ export function proseSseChunks(text = 'Done.', finishReason = 'stop') {
   ];
 }
 
-/** Tester chat: VERDICT marker the board finalizer parses. */
 export function testerVerdictChunks(verdict = 'pass') {
   return proseSseChunks(`VERDICT: ${verdict}`);
 }
 
 /**
- * OpenAI tool-call SSE chunks. V2 boards emit `save_file` then `report_outcome`
- * this way — the default V1 scenario still uses `board_report`.
- *
  * @param {string} name
  * @param {unknown} args
  * @param {string} [toolCallId]
@@ -144,14 +130,11 @@ export function saveFileChunks(filePath, content, toolCallId = 'call_save') {
   return functionCallChunks('save_file', { path: filePath, content }, toolCallId);
 }
 
-/**
- * Default board scenario: smart per-role / per-nth responses (no static wildcard).
- * Custom --scenario JSON can still override with explicit match steps.
- */
+// ── Scenario ─────────────────────────────────────────────────────────────────
+
 export const DEFAULT_SCENARIO = [];
 
 /**
- * Built-in responses when no explicit scenario step matches.
  * @param {{ role?: string; taskId?: string }} ctx
  * @param {number} nth 0-based per (role, taskId) chat turn sequence
  * @returns {string[]}
@@ -174,8 +157,6 @@ export function defaultEmitForContext(ctx, nth) {
     return proseSseChunks('Done.');
   }
   if (ctx.role === 'builder') {
-    // First build turn and missing-report nudges both need board_report so the
-    // board can advance; later prose-only acks are for multi-turn builder work.
     if (nth === 0) {
       return boardReportPassChunks(taskId, `call_build_${taskId.replace(/[^A-Za-z0-9]/g, '_')}`);
     }
@@ -186,7 +167,6 @@ export function defaultEmitForContext(ctx, nth) {
 }
 
 /**
- * True when the completion body is a missing-report nudge (board re-prompt).
  * @param {unknown} body
  */
 export function isMissingBoardReportNudge(body) {
@@ -231,7 +211,6 @@ export async function loadScenario(scenarioPath) {
 }
 
 /**
- * Flatten OpenAI-style messages to searchable text.
  * @param {unknown} body
  * @returns {string}
  */
@@ -257,18 +236,17 @@ function messagesText(body) {
     .join('\n');
 }
 
+// ── Request match ────────────────────────────────────────────────────────────
+
 /**
- * Infer orchestrate role + task id from a chat-completions body.
  * @param {unknown} body
  * @returns {{ role?: string; taskId?: string }}
  */
 export function extractRequestContext(body) {
   const text = messagesText(body);
-  /** @type {{ role?: string; taskId?: string }} */
+/** @type {{ role?: string; taskId?: string }} */
   const ctx = {};
 
-  // V2 system prompts lead with **Tester.** / **Builder.** (P2-E). Check
-  // tester first so a transcript that quotes both still classifies as tester.
   if (/\*\*Tester\.\*\*|Run per-task testing/i.test(text)) {
     ctx.role = 'tester';
   } else if (/merge conflict|merge-fixer|Re-commit the merge/i.test(text)) {
@@ -285,7 +263,6 @@ export function extractRequestContext(body) {
     ctx.role = 'builder';
   }
 
-  // V2 seeds are `# Task W1-A — Title`. V1 used `Task: W1-A —`.
   const v2Heading = text.match(/# Task\s+([A-Z0-9_-]+)\s+[—-]/);
   const taskLine = text.match(/Task:\s+([A-Z0-9_-]+)\s+[—-]/);
   if (v2Heading) {
@@ -314,7 +291,6 @@ function partialMatchKey(partial) {
 }
 
 /**
- * Pick scenario emit chunks for this completion request.
  * @param {ScenarioStep[]} scenario
  * @param {{ role?: string; taskId?: string }} ctx
  * @param {unknown} [body]
@@ -344,6 +320,8 @@ export function pickScenarioEmit(scenario, ctx, body) {
 
   return defaultEmitForContext(ctx, nth);
 }
+
+// ── HTTP server ──────────────────────────────────────────────────────────────
 
 /**
  * @param {{ scenario?: ScenarioStep[]; port?: number; host?: string }} [opts]
@@ -384,7 +362,7 @@ export function createFakeModelServer(opts = {}) {
         raw += chunk;
       });
       req.on('end', () => {
-        /** @type {unknown} */
+/** @type {unknown} */
         let body = null;
         try {
           body = raw ? JSON.parse(raw) : null;
@@ -459,6 +437,8 @@ export function createFakeModelServer(opts = {}) {
   };
 }
 
+// ── CLI ──────────────────────────────────────────────────────────────────────
+
 function printHelp() {
   console.log(`Usage: node scripts/fake-model-server.mjs [options]
 
@@ -485,7 +465,7 @@ Recorded requests are logged to stderr and exposed as export { requests }.
  * @param {string[]} argv
  */
 export function parseCliArgs(argv) {
-  /** @type {{ port: number; scenario?: string; register: boolean; help: boolean }} */
+/** @type {{ port: number; scenario?: string; register: boolean; help: boolean }} */
   const out = { port: DEFAULT_PORT, register: false, help: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];

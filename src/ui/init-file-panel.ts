@@ -1,7 +1,3 @@
-/**
- * Wire file tree sidebar, split viewer, and resizer after app boot.
- */
-
 import '../styles/file-panel.css';
 /* Material Icon Theme (PKief) — colorful file/folder glyphs for Code tree + tabs */
 import '../styles/file-type-icons.css';
@@ -138,10 +134,7 @@ function bindFilePanelControls(): void {
   bindPaneSlotFocusTracking();
 }
 
-/**
- * Clicking or tabbing into a pane makes it the focused editor group, so the next file
- * the user opens (and Ctrl+S / Ctrl+W) targets the pane they are looking at.
- */
+/** Clicking or tabbing into a pane makes it the focused editor group, so the next file the user opens (and Ctrl+S / Ctrl+W) targets the pane they are looking at. */
 function bindPaneSlotFocusTracking(): void {
   const slots: [string, PaneSlotId][] = [
     ['rightPaneSlotPrimary', 'primary'],
@@ -189,7 +182,6 @@ export async function initFilePanel(): Promise<void> {
   });
 
   await loadFilePanelPrefs();
-  // MIN-342: prefs may reload rightPaneMode=preview after osOnAppOpen collapsed the split.
   if (isCodeAppForeground()) {
     const { hideAllRightSplitPanesDom } = await import('./file-layout');
     hideAllRightSplitPanesDom();
@@ -211,7 +203,6 @@ export async function initFilePanel(): Promise<void> {
       await openFileInViewer(state.selectedPath);
     }
   }
-  // Desktop Viewer tab (and any visible empty host) shows recent files when nothing is open.
   if (getOpenViewerTabPaths().length === 0) {
     renderViewerEmptyState();
   }

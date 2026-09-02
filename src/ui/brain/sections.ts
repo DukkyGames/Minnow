@@ -1,7 +1,3 @@
-/**
- * Lazy-render Brain app section panels.
- */
-
 import type { BrainSectionId } from '../brain-page';
 import { renderCodeSection } from './code-section';
 import { renderEditSection } from './edit-section';

@@ -35,6 +35,8 @@ import { getIssuesTaxonomySync } from './issues-taxonomy-store';
 import { isLocalServerAvailable } from '../tools/config';
 import { getWorkspacePath } from './workspace';
 
+// ── Mode ─────────────────────────────────────────────────────────────────────
+
 const MODE_STORAGE_KEY = 'minnow.issues.github.mode';
 
 let cachedMode: IssuesGithubMode | null = null;
@@ -57,15 +59,11 @@ export function setIssuesGithubMode(mode: IssuesGithubMode): void {
   cachedMode = next;
   try {
     localStorage.setItem(MODE_STORAGE_KEY, next);
-  } catch {
-    /* Session-only is better than refusing to change the mode. */
-  }
+  } catch {}
   for (const listener of [...modeListeners]) {
     try {
       listener(next);
-    } catch {
-      /* ignore subscriber errors */
-    }
+    } catch {}
   }
 }
 
@@ -168,6 +166,8 @@ async function readRemote(issueId: string): Promise<RemoteIssueSnapshot | null> 
   return res.ok && res.issue ? res.issue : null;
 }
 
+// ── Sync ─────────────────────────────────────────────────────────────────────
+
 /**
  * Sync one issue.
  *
@@ -232,8 +232,6 @@ async function runIssueSync(issueId: string): Promise<SyncOutcome> {
       });
       if (!res.ok) return { ok: false, action: 'push', error: userFacingGithubError(res.error) };
 
-      // State is a separate `gh` verb, so it is a second call rather than a
-      // field on the edit.
       if (remote && action.fields.closed !== (remote.state === 'closed')) {
         await forge('issueState', { number, state: action.fields.closed ? 'closed' : 'open' });
       }
@@ -328,8 +326,6 @@ function writeLink(
     remoteUpdatedAt,
     now: Date.now(),
   });
-  // Also a visible chip, so the linkage shows in the Git section without the
-  // detail panel knowing about the sync layer.
   appendIssueLinks(issueId, {
     gitLinks: [{ kind: 'github-issue', ref: `#${number}`, url }],
   });
@@ -342,6 +338,8 @@ export interface ImportResult {
   imported: number;
   skipped: number;
 }
+
+// ── Import ───────────────────────────────────────────────────────────────────
 
 /**
  * Import remote issues that are not already linked.
@@ -362,7 +360,6 @@ export async function importGithubIssues(options?: {
       return { ok: false, error: 'GitHub sync is off', imported: 0, skipped: 0 };
     }
 
-    // listIssues()/addIssue throw if boot has not hydrated the store yet.
     if (!isIssuesStoreLoaded()) {
       return {
         ok: false,
@@ -414,10 +411,7 @@ export async function importGithubIssues(options?: {
         writeLink(card.id, remote.number, remote.url, remote.updatedAt);
         linked.add(remote.number);
         imported += 1;
-      } catch {
-        // One bad remote record must not abort the rest of the import or
-        // surface as an unhandled rejection that bricks the shell.
-      }
+      } catch {}
     }
 
     if (imported > 0) scheduleSaveIssues();

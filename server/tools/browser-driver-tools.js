@@ -1,38 +1,3 @@
-/**
- * P5-B — The browser driver as a tool surface (MIN-720).
- *
- * These handlers are registered in `SERVER_TOOL_HANDLERS`
- * (`server/runtime/tools-middleware.js`), so the Final Tester reaches the
- * browser through **exactly** the path every other tool takes: P2-D's
- * `executeInProcessTool` → the HTTP-layer guards → `executeServerTool` → the
- * registry. There is no side channel, and there is no board exception — a tool
- * that skipped the guard stack would be a hole in the isolation model.
- *
- * Three properties the issue makes non-negotiable, and where each lives:
- *
- * 1. **Determinism.** Reads are the assertion mechanism, so a read that varies
- *    run-to-run does not merely annoy, it produces flaky abandonments. Every
- *    volatile field is dropped (console timestamps, CDP request ids, response
- *    timings) and every collection with no causal order is sorted
- *    ({@link normalizeNetworkEntries}). The accessibility walk is already
- *    deterministic — its uids come from a per-call counter over document order.
- * 2. **Caps.** A DOM dump is unbounded. Everything returned goes through
- *    `server/tools/output-cap.js`, which appends a `[truncated — …]` footer so
- *    the agent is told, rather than silently reading half a page.
- * 3. **Per-call deadlines.** {@link withCallDeadline} is the only way a handler
- *    returns. A hung navigation fails one tool call with a string the agent can
- *    read; it never rejects upward into the attempt or the run.
- *
- * Screenshots exist and are never an assertion. See P5-A's hazard notes: those
- * round-trips hang. `browser_drive_screenshot` returns a path for a human.
- *
- * Session lifetime: one browser per attempt root (the tool context's effective
- * workspace root), launched lazily on the first navigate. P5-C owns the ladder
- * rung and should call {@link closeBrowserToolSession} when its rung ends; the
- * driver's own `hardTimeoutMs` watchdog and host-exit orphan drain are the
- * backstops if it does not.
- */
-
 import {
   BROWSER_DRIVE_CLICK,
   BROWSER_DRIVE_NAVIGATE,
@@ -50,32 +15,20 @@ import { loadBrowserConfig } from '../cdp/browser-config.js';
 import { launchBrowser } from '../browser-driver/index.js';
 import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
-/** Default per-tool-call deadline. Reads are fast; this is the wedge detector. */
 export const DEFAULT_CALL_TIMEOUT_MS = 30_000;
 
-/** Navigation gets longer — a cold dev server can take a while to answer. */
 export const DEFAULT_NAVIGATE_TIMEOUT_MS = 45_000;
 
-/** Ceiling on a caller-supplied `timeout_ms`. Nothing may opt out of a deadline. */
 export const MAX_CALL_TIMEOUT_MS = 120_000;
 
-/** Launching a browser is slower than driving one, and is inside navigate's call. */
 export const LAUNCH_CALL_TIMEOUT_MS = 90_000;
 
-/** Network ring-buffer size. Older entries are evicted first. */
 export const MAX_NETWORK_ENTRIES = 500;
 
-/** Smallest useful `max_chars`. Below this a page read tells you nothing. */
 export const MIN_PAGE_READ_CHARS = 500;
 
-/**
- * Stable prefix for "there is no browser here". P5-C matches on this to skip
- * the browser rung rather than failing the run — an unattended machine with no
- * Chromium must degrade, and a Tester cannot be asked to parse prose.
- */
 export const BROWSER_UNAVAILABLE_PREFIX = 'Error: browser unavailable';
 
-/** Stable prefix for an allowlist refusal, for the same reason. */
 export const BROWSER_BLOCKED_PREFIX = 'Error: navigation blocked by allowlist';
 
 /**
@@ -98,9 +51,9 @@ let launchOptions = {};
 /** @type {typeof launchBrowser} */
 let launcher = launchBrowser;
 
+// ── Session ──────────────────────────────────────────────────────────────────
+
 /**
- * P5-C seam: options every tool-launched browser gets (headless, viewport,
- * `hardTimeoutMs`). Merged over the driver's defaults, not replacing them.
  * @param {import('../browser-driver/index.js').LaunchOptions} [opts]
  */
 export function setBrowserToolLaunchOptions(opts = {}) {
@@ -108,24 +61,19 @@ export function setBrowserToolLaunchOptions(opts = {}) {
 }
 
 /**
- * Test seam: swap `launchBrowser`. Pass nothing to restore the real driver.
- * Exists so the timeout, allowlist, and cap behaviour can be tested through
- * the real dispatch path on a machine with no browser.
  * @param {typeof launchBrowser | null} [fn]
  */
 export function setBrowserToolLauncher(fn) {
   launcher = typeof fn === 'function' ? fn : launchBrowser;
 }
 
-/** Keys (attempt roots) with a live browser. Inspection and tests. */
 export function browserToolSessionKeys() {
   return [...sessions.keys()].sort();
 }
 
 /**
- * Close the browser for one attempt root. Idempotent, never throws.
- * @param {string} [key] defaults to the current tool context's root
- * @returns {Promise<boolean>} whether there was one to close
+ * @param {string} [key]
+ * @returns {Promise<boolean>}
  */
 export async function closeBrowserToolSession(key) {
   const resolved = key ?? currentSessionKey();
@@ -135,23 +83,17 @@ export async function closeBrowserToolSession(key) {
   try {
     await entry.session.close();
   } catch {
-    /* close is best-effort; the driver's watchdog is the backstop */
   }
   return true;
 }
 
-/** Close every tool-owned browser. Test teardown and host shutdown. */
 export async function closeAllBrowserToolSessions() {
   const keys = [...sessions.keys()];
   await Promise.all(keys.map((key) => closeBrowserToolSession(key)));
 }
 
-// ------------------------------------------------------------------ plumbing
 
 /**
- * One browser per attempt root. `getEffectiveWorkspaceRoot()` is the value
- * P2-D's dispatch pushed into the AsyncLocalStorage context, i.e. the attempt's
- * `cwd` — so two boards running at once never share a browser.
  * @returns {string}
  */
 function currentSessionKey() {
@@ -164,8 +106,6 @@ function currentSessionKey() {
 }
 
 /**
- * Filename-safe hint for the profile directory, so an orphaned profile can be
- * traced back to the attempt that left it.
  * @param {string} key
  * @returns {string}
  */
@@ -177,19 +117,6 @@ function labelFor(key) {
 const TIMED_OUT = Symbol('browser-tool-call-timed-out');
 
 /**
- * Run `fn` under an independent deadline. Nothing below this function is
- * allowed to reject upward: a hung navigation must cost one tool call, not the
- * attempt and certainly not the run.
- *
- * The work promise is defused with a `catch` before the race, because a
- * rejection that lands after the deadline has already been reported would
- * otherwise be an unhandled rejection — which on this host is a crash, i.e.
- * exactly the failure the deadline exists to prevent.
- *
- * Phases get their own deadlines rather than sharing one budget: launching a
- * browser and loading a page are different waits, and folding them together
- * would make a fast page inherit the launch allowance.
- *
  * @template T
  * @param {string} toolName
  * @param {number} timeoutMs
@@ -229,8 +156,6 @@ async function guardCall(toolName, timeoutMs, fn) {
 }
 
 /**
- * `guardCall` for the common case: the body already returns the agent-facing
- * string.
  * @param {string} toolName
  * @param {number} timeoutMs
  * @param {() => Promise<string>} fn
@@ -274,15 +199,6 @@ function clampInt(raw, fallback, min, max) {
 }
 
 /**
- * Everything an agent reads goes through the shared cap, so one page read
- * cannot blow the context window.
- *
- * `maxLineChars` differs by kind on purpose. Console and network output is
- * line-shaped and a single 400-char line is plenty. A DOM dump is frequently
- * *one* line — a minified document — and the default line cap would reduce a
- * whole page to 400 characters, which is a worse failure than truncating the
- * tail. There the total budget does the work alone.
- *
  * @param {string} text
  * @param {{ maxChars?: number, lineShaped?: boolean, hint?: string }} [opts]
  * @returns {string}
@@ -302,13 +218,10 @@ function capped(text, opts = {}) {
   return result.text;
 }
 
-// ------------------------------------------------------------------- session
+
+// ── Network ──────────────────────────────────────────────────────────────────
 
 /**
- * Attach the network recorder. The driver deliberately does not buffer network
- * traffic (P5-A is transport and lifecycle), so the tool layer owns it, keyed
- * by CDP request id — an id that is never emitted, because it varies run to run.
- *
  * @param {ToolSession} entry
  */
 async function enableNetworkRecording(entry) {
@@ -351,18 +264,11 @@ async function enableNetworkRecording(entry) {
     await client.send('Network.enable', {});
     entry.networkEnabled = true;
   } catch {
-    // Optional. `browser_drive_read_network` says so rather than lying with [].
     entry.networkEnabled = false;
   }
 }
 
 /**
- * Launch (once) the browser for this attempt root.
- *
- * Concurrent tool calls share one in-flight launch: two browsers for one
- * attempt would double the profile teardown and halve the meaning of
- * `browser_drive_read_page`.
- *
  * @param {string} key
  * @returns {Promise<ToolSession | { error: string }>}
  */
@@ -370,8 +276,6 @@ async function ensureSession(key) {
   const existing = sessions.get(key);
   if (existing) {
     if (existing.session.alive) return existing;
-    // The browser died (crash, external kill, hard timeout). Drop it and
-    // relaunch rather than handing back a session that rejects everything.
     sessions.delete(key);
   }
 
@@ -406,10 +310,6 @@ async function ensureSession(key) {
 }
 
 /**
- * Fetch the live session for a tool call that requires one. Tools other than
- * navigate never launch a browser — a `read_page` before any `navigate` has an
- * answer ("nothing is open"), not a browser to start.
- *
  * @returns {{ entry: ToolSession } | { error: string }}
  */
 function requireSession() {
@@ -430,13 +330,6 @@ function requireSession() {
 }
 
 /**
- * Resolve a snapshot uid to a CDP remote object.
- *
- * uids are only meaningful against the snapshot that produced them, which is
- * why every interaction invalidates `lastSnapshot`: acting on a uid from a
- * page that has since changed is the classic source of a driver that clicks
- * the wrong thing and reports success.
- *
  * @param {ToolSession} entry
  * @param {number} uid
  * @param {number} timeoutMs
@@ -507,11 +400,9 @@ async function releaseObject(entry, objectId) {
   try {
     await entry.session.client.send('Runtime.releaseObject', { objectId });
   } catch {
-    /* the object dies with the page; leaking one is not worth a failed call */
   }
 }
 
-/** A uid-addressed action changed the page, so the snapshot no longer describes it. */
 const STALE_SNAPSHOT_NOTE =
   'The page snapshot is now stale — call browser_drive_read_page again before the next uid.';
 
@@ -522,15 +413,8 @@ function invalidateSnapshot(entry) {
   entry.session.lastSnapshot = null;
 }
 
-// --------------------------------------------------------------- normalizers
 
 /**
- * Console entries as deterministic lines.
- *
- * The driver stamps every entry with `Date.now()`. That timestamp is exactly
- * the kind of field that makes two reads of one static page differ, so it is
- * dropped here rather than formatted.
- *
  * @param {Array<{ level: string, text: string, at?: number }>} entries
  * @param {{ level?: string, limit?: number }} [opts]
  * @returns {string[]}
@@ -550,14 +434,6 @@ export function normalizeConsoleEntries(entries, opts = {}) {
 }
 
 /**
- * Network entries as deterministic lines.
- *
- * Requests complete in whatever order the network gives them, so insertion
- * order is not reproducible even for a static page. Sorting on
- * (url, method, status) is: it is a total order over the fields we emit, and
- * the fields we emit are the ones that carry meaning. Request ids, timings,
- * and sizes are dropped for the same reason console timestamps are.
- *
  * @param {Iterable<{ url: string, method: string, status: number | null, failed: boolean, errorText: string }>} entries
  * @param {{ failedOnly?: boolean, limit?: number }} [opts]
  * @returns {string[]}
@@ -589,24 +465,16 @@ export function normalizeNetworkEntries(entries, opts = {}) {
   });
 }
 
-// ------------------------------------------------------------------ handlers
+
+// ── Navigate ─────────────────────────────────────────────────────────────────
 
 /**
- * `browser_drive_navigate`
- *
- * The allowlist is checked **before** the browser is launched, so a blocked
- * URL costs nothing and a Tester that guesses an origin does not spawn a
- * Chromium to be told no. `BrowserSession.navigate` checks it again against
- * the patterns snapshotted at launch; both call `server/cdp/allowlist.js`,
- * the same module `/api/browser/allowlist/check` serves the renderer from.
- *
  * @param {Record<string, unknown>} [args]
  * @returns {Promise<string>}
  */
 export async function toolBrowserDriveNavigate(args = {}) {
   const timeoutMs = callTimeout(args.timeout_ms, DEFAULT_NAVIGATE_TIMEOUT_MS);
 
-  // Phase 1: validate, check the allowlist, and (only then) have a browser.
   const prepared = await guardCall(BROWSER_DRIVE_NAVIGATE, LAUNCH_CALL_TIMEOUT_MS, async () => {
     const url = String(args.url ?? '').trim();
     if (!url) return 'Error: url is required';
@@ -636,7 +504,6 @@ export async function toolBrowserDriveNavigate(args = {}) {
   if (typeof prepared.value === 'string') return prepared.value;
   const { entry, url } = prepared.value;
 
-  // Phase 2: the load itself, on its own clock.
   return withCallDeadline(BROWSER_DRIVE_NAVIGATE, timeoutMs, async () => {
     const result = await entry.session.navigate(url, { timeoutMs });
     invalidateSnapshot(entry);
@@ -654,12 +521,6 @@ export async function toolBrowserDriveNavigate(args = {}) {
 }
 
 /**
- * `browser_drive_read_page`
- *
- * The assertion mechanism. `a11y` is the default because it is the most stable
- * of the three: role/name pairs survive styling churn that would break a DOM
- * diff, and its uids are what click/type address.
- *
  * @param {Record<string, unknown>} [args]
  * @returns {Promise<string>}
  */
@@ -700,13 +561,6 @@ export async function toolBrowserDriveReadPage(args = {}) {
 }
 
 /**
- * `browser_drive_click`
- *
- * `.click()` on the resolved node rather than a synthesized mouse event at
- * coordinates: coordinates need layout, scrolling, and overlay handling to be
- * right, and every one of those is a way for a verification click to land
- * somewhere else and still report success.
- *
  * @param {Record<string, unknown>} [args]
  * @returns {Promise<string>}
  */
@@ -742,13 +596,6 @@ export async function toolBrowserDriveClick(args = {}) {
 }
 
 /**
- * `browser_drive_type`
- *
- * `Input.insertText` after a real focus, not an assignment to `.value`.
- * Assigning `.value` on a framework-controlled input updates the DOM and not
- * the component state, which is the single most common way a browser test
- * passes against a field the app never saw.
- *
  * @param {Record<string, unknown>} [args]
  * @returns {Promise<string>}
  */
@@ -768,8 +615,6 @@ export async function toolBrowserDriveType(args = {}) {
 
     const { objectId, node } = await resolveNodeByUid(entry, uid, timeoutMs);
     try {
-      // Focus, and select the existing content when replacing: `insertText`
-      // overwrites the selection, so "clear" needs no separate delete.
       await callOn(
         entry,
         objectId,
@@ -806,7 +651,6 @@ export async function toolBrowserDriveType(args = {}) {
 }
 
 /**
- * `browser_drive_read_console`
  * @param {Record<string, unknown>} [args]
  * @returns {Promise<string>}
  */
@@ -829,7 +673,6 @@ export async function toolBrowserDriveReadConsole(args = {}) {
 }
 
 /**
- * `browser_drive_read_network`
  * @param {Record<string, unknown>} [args]
  * @returns {Promise<string>}
  */
@@ -860,12 +703,6 @@ export async function toolBrowserDriveReadNetwork(args = {}) {
 }
 
 /**
- * `browser_drive_screenshot`
- *
- * Evidence for a human report. Never an assertion — see the module header and
- * P5-A's hazard notes. A failure here returns a line, not an error, because a
- * missing screenshot must not turn a passing verification into a failure.
- *
  * @param {Record<string, unknown>} [args]
  * @returns {Promise<string>}
  */
@@ -889,7 +726,6 @@ export async function toolBrowserDriveScreenshot(args = {}) {
 }
 
 /**
- * `browser_drive_resize`
  * @param {Record<string, unknown>} [args]
  * @returns {Promise<string>}
  */
@@ -918,10 +754,6 @@ export async function toolBrowserDriveResize(args = {}) {
   });
 }
 
-/**
- * The registry slice. Spread into `SERVER_TOOL_HANDLERS` so P2-D dispatches
- * these exactly like `grep` or `git_status` — same guards, same output path.
- */
 export const BROWSER_DRIVER_TOOL_HANDLERS = Object.freeze({
   [BROWSER_DRIVE_NAVIGATE]: toolBrowserDriveNavigate,
   [BROWSER_DRIVE_READ_PAGE]: toolBrowserDriveReadPage,

@@ -386,9 +386,7 @@ export function subscribeEmailEvents(
     try {
       const payload = JSON.parse(event.data) as Record<string, unknown>;
       onEvent(event.type || String(payload.type ?? ''), payload);
-    } catch {
-      /* ignore malformed events */
-    }
+    } catch {}
   };
 
   source.addEventListener('summary_updated', handler);

@@ -1,8 +1,3 @@
-/**
- * Composer message queue: hold follow-ups while a turn is streaming (MIN-200).
- * Push-now promotes an item to {@link pendingSteerMessage}; otherwise items drain after a normal turn end.
- */
-
 import type { Chat, QueuedComposerMessage } from '../types';
 import { randomUUID } from '../lib/random-id';
 import {
@@ -14,18 +9,8 @@ import { isChatTurnInProgress } from './chat-turn-guard';
 import { enqueueSteerMessage } from './steer-message';
 
 type QueueChangedListener = () => void;
-/**
- * `var` is hoisted without a TDZ, unlike `let`. The composer UI used to
- * register a listener while this module was still evaluating (sessions →
- * composer-message-queue → here), which threw
- * "Cannot access 'queueChangedListener' before initialization".
- */
 var queueChangedListener: QueueChangedListener | null = null;
 
-/**
- * UI registers here so a dequeue (turn start) can drop transcript bubbles
- * immediately, rather than after the next turn finishes.
- */
 export function setPendingMessageQueueChangedListener(
   listener: QueueChangedListener | null,
 ): void {
@@ -155,7 +140,6 @@ export async function flushPendingMessageQueue(chat: Chat): Promise<void> {
   chat.pendingMessageQueue = queue.length > 0 ? queue : undefined;
   touchChat(chat);
   scheduleSaveSessions();
-  // Drop the queued bubble as the turn starts, not after it finishes.
   notifyPendingMessageQueueChanged();
   if (!item?.text.trim()) return;
 

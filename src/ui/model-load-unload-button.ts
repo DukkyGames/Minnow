@@ -1,7 +1,3 @@
-/**
- * Shared Load/Unload button UI — spinner + label while a model action is in flight.
- */
-
 import {
   beginModelLoadLock,
   endModelLoadLock,

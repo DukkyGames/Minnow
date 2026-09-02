@@ -1,11 +1,4 @@
-/**
- * MIN-752 — which V2 boards belong to the live Code workspace.
- *
- * Journals stay in the global `~/.minnow/boards/` tree (ids are stable). Listing
- * and mutating commands filter/reject by workspace instead of partitioning
- * storage. New boards stamp `workspacePath` on `board.created`; older journals
- * are inferred at read time and never rewritten.
- */
+/** Which boards belong to the live workspace. */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -34,8 +27,6 @@ async function directoryExists(absPath) {
 
 /**
  * True when `~/.minnow/worktrees/<otherRepoKey>/<boardId>/` exists.
- * That is proof the board already ran against a different workspace.
- *
  * @param {string} boardId
  * @param {string} workspaceRoot
  * @returns {Promise<boolean>}
@@ -80,13 +71,6 @@ async function planExistsInWorkspace(planPath, workspaceRoot) {
 
 /**
  * Does this folded board belong to `workspaceRoot`?
- *
- * 1. Stamped `workspacePath` matches (new journals).
- * 2. Legacy: a worktree slot exists under this repo, or an attempt worktree
- *    path sits under this repo's `~/.minnow/worktrees/<repoKey>/`.
- * 3. Legacy never-run: the plan file is in this workspace and the board has
- *    no slot under any other repo key.
- *
  * @param {import('./core/types').BoardState} state
  * @param {string} [workspaceRoot]
  * @returns {Promise<boolean>}
@@ -115,7 +99,6 @@ export async function boardBelongsToWorkspace(state, workspaceRoot = getWorkspac
         try {
           if (isResolvedPathUnderRoot(path.resolve(worktree), repoDir)) return true;
         } catch {
-          // Deleted slots still prove membership via getBoardWorktreesDir above.
         }
       }
     }

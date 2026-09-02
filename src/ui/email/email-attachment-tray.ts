@@ -1,11 +1,3 @@
-/**
- * Compose attachment tray — file picker, drag-and-drop, and the chip row.
- *
- * Files are held in memory as base64 until send: the compose payload is JSON,
- * and a draft autosave deliberately stores only the metadata, so a large deck
- * is never rewritten to disk on every keystroke.
- */
-
 import { fileToAttachment } from '../../email/client-drafts';
 
 /** Mirrors MAX_OUTGOING_ATTACHMENT_BYTES in server/email/smtp.js. */
@@ -94,8 +86,6 @@ export function createAttachmentTray(options: {
     const incoming = Array.from(files);
     if (!incoming.length) return;
 
-    // Check the projected total before reading anything: refusing after a
-    // 40MB read has already blocked the UI helps nobody.
     const projected = totalBytes() + incoming.reduce((sum, file) => sum + file.size, 0);
     if (projected > MAX_ATTACHMENT_TOTAL_BYTES) {
       options.onStatus?.(
@@ -118,7 +108,6 @@ export function createAttachmentTray(options: {
 
   picker.addEventListener('change', () => {
     void addFiles(picker.files ?? []).then(() => {
-      // Reset so re-picking the same file fires `change` again.
       picker.value = '';
     });
   });
@@ -135,10 +124,7 @@ export function createAttachmentTray(options: {
   };
 }
 
-/**
- * Wire drop-to-attach on a compose surface.
- * @returns a teardown function
- */
+/** Wire drop-to-attach on a compose surface. */
 export function enableAttachmentDrop(
   target: HTMLElement,
   tray: AttachmentTrayHandle,

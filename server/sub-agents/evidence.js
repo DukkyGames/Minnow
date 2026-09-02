@@ -1,16 +1,4 @@
 /**
- * P8-C — abandonment evidence for a sub-agent run.
- *
- * Same discipline as P3-H: the attempt *list* is never truncated. A single
- * transcript tail may be long; it is copied from the last attempt's evidence,
- * not sliced as a list of attempts.
- *
- * `decide()` stays last-attempt-only; this module is what the caller attaches.
- */
-
-/**
- * One finished (or still-open) attempt, flattened for the bundle.
- *
  * @param {import('./types').Attempt} attempt
  * @returns {Record<string, unknown>}
  */

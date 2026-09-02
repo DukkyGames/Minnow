@@ -1,11 +1,3 @@
-/**
- * Outbound chat history → provider `messages[]` (VLM parts, image placeholders).
- *
- * P6-D (MIN-726): these helpers used to live beside the client turn loop.
- * They are not a loop — callers compose the payload, then
- * `runTurn()` streams. Do not reintroduce a second SSE/tool loop here.
- */
-
 import { getPendingAttachments } from '../attachments/store';
 import type { Attachment } from '../attachments/types';
 import {
@@ -43,16 +35,12 @@ import type {
   UserMessage,
 } from '../types';
 
+// ── Options ──────────────────────────────────────────────────────────────────
+
 /** Options for {@link buildApiMessages} when the composer has pending files. */
 export interface BuildApiMessagesOptions {
   /** Active model id (used to detect VLM for multimodal user content). */
   modelId?: string;
-  /**
-   * When set, overrides vision detection for screenshot follow-ups and user
-   * image parts. Callers that know the catalog pass this (e.g. `runChatTurn`).
-   * This module does not import the model catalog — that would pull the runner
-   * graph into tests that only serialize attachments.
-   */
   vision?: boolean;
   /** Raw user text from the composer for the in-flight turn (not history placeholders). */
   pendingUserText?: string;
@@ -64,16 +52,7 @@ export interface BuildApiMessagesOptions {
   ephemeralContinueInstruction?: string;
   /** Surface-owned context injected as a system message without persisting in history. */
   ephemeralContext?: string;
-  /**
-   * Attachments belonging to this turn. Defaults to the composer's pending list only for
-   * callers that have not resolved their own set — the running turn always passes its own
-   * so the composer strip can be emptied at send time instead of at turn end (MIN-650).
-   */
   attachments?: Attachment[];
-  /**
-   * Replay prior-turn reasoning on plain assistant rows (`features.replayPriorReasoning`).
-   * Resolved once per turn by the caller so this stays synchronous.
-   */
   replayPriorReasoning?: boolean;
 }
 
@@ -107,6 +86,8 @@ function fileContentBlock(name: string, body: string): string {
   const safeName = name.replace(/"/g, "'");
   return `<file name="${safeName}">\n${body}\n</file>`;
 }
+
+// ── History ──────────────────────────────────────────────────────────────────
 
 /** User-visible / persisted content: text, file blocks, and image placeholders. */
 export function buildHistoryUserContent(
@@ -177,13 +158,6 @@ export function buildHistoryUserContent(
   return parts.join('\n\n');
 }
 
-/**
- * Non-VLM API payload: one string with text, file blocks, and image placeholders.
- *
- * A bare `[image: shot.png]` reads to the model like a file it should go fetch,
- * so it answers "I don't have an image tool" instead of saying it cannot see.
- * Spell out what actually happened whenever pixels were dropped.
- */
 function buildStringUserApiContent(
   userText: string,
   attachments: Attachment[],
@@ -192,6 +166,8 @@ function buildStringUserApiContent(
   if (!attachmentsHaveImages(attachments)) return content;
   return `${content}${USER_IMAGE_NO_VISION_HINT}`;
 }
+
+// ── VLM ──────────────────────────────────────────────────────────────────────
 
 /** VLM API payload: text part plus image_url parts (no image placeholders in text). */
 export function buildVlmUserApiContent(
@@ -272,11 +248,6 @@ export function buildVlmUserApiContent(
   return parts;
 }
 
-/**
- * Ceiling on image bytes stored per user row. Sessions are one JSON blob, so a
- * handful of 4K screenshots would make every save rewrite tens of megabytes;
- * over the cap the turn still sends the pixels, they just are not persisted.
- */
 const MAX_PERSISTED_IMAGE_BYTES = 6 * 1024 * 1024;
 
 /** Composer attachments → the image records stored on the pushed user row. */
@@ -295,18 +266,8 @@ export function persistableUserImages(
   return out;
 }
 
-/**
- * Most recent persisted user images replayed per request. Every replayed image
- * costs its full token price on every later turn, so an old screenshot must not
- * quietly eat the context window for the rest of the chat.
- */
 const MAX_REPLAYED_HISTORY_IMAGES = 6;
 
-/**
- * History rows whose persisted images should ride along as `image_url` parts.
- * Walks newest-first so the budget is spent on what the user just asked about,
- * and skips the row that already receives the in-flight composer attachments.
- */
 function historyImageReplayIndices(
   history: Message[],
   multimodalUserIdx: number,
@@ -339,13 +300,8 @@ function replayUserImageContent(message: UserMessage): ApiMessageContent {
   return parts;
 }
 
-/**
- * Serialize session history for the provider, including tool_calls and tool results.
- * Pending attachments on the last user turn become multimodal API content (VLM) or
- * inlined file blocks; history stays string-only with `[image: …]` placeholders.
- * Tool screenshots keep a string tool result (OpenAI pairing) and, on vision models,
- * a follow-up user message with `image_url` data URLs so the model can see the PNG.
- */
+// ── API ──────────────────────────────────────────────────────────────────────
+
 export function buildApiMessages(
   chat: Chat,
   sysPrompt: string,
@@ -368,18 +324,12 @@ export function buildApiMessages(
   const outboundHistory = copyHistoryForOutboundApi(chat.history);
   const multimodalUserIdx = indexOfMultimodalUserMessage(outboundHistory, pending);
   const modelId = options?.modelId;
-  // Tool screenshots stay conservative when the caller did not pass `vision`
-  // (unknown catalog → no follow-up pixels). User-attached images get the
-  // benefit of the doubt — same split `isVisionModel` / `canSendImagesToModel`
-  // had without a catalog row.
   const vlm = options?.vision ?? false;
   const sendUserImages = options?.vision ?? true;
   const replayIndices = sendUserImages
     ? historyImageReplayIndices(outboundHistory, multimodalUserIdx)
     : new Set<number>();
 
-  // Record where each row lands so archive collapse can address history rows by
-  // identity instead of guessing at `systemEnd + i` (see api-message-origin.ts).
   const pushFromHistory = (message: ApiMessage, historyIndex: number): void => {
     tagApiMessageHistoryIndex(message, historyIndex);
     messages.push(message);
@@ -417,7 +367,6 @@ export function buildApiMessages(
       );
       if (vlm) {
         const followUp = toolImageFollowUpUserMessage(m);
-        // The follow-up carries no history row of its own; it rides with the tool result.
         if (followUp) messages.push(followUp);
       }
       continue;
@@ -467,18 +416,6 @@ export function buildApiMessages(
   return repairUnpairedToolCalls(foldLeadingAssistantPreamble(messages));
 }
 
-/**
- * Persist-aligned prior transcript for `runTurn({ messages })`.
- *
- * Adds no rows of its own (no extra tool-screenshot follow-ups) and drops the
- * same UI-only notice rows `createSessionTranscriptStore().load` drops (the
- * P10-D chat decorator delegates `load` here — do not add a third filter), so
- * this array and the store's `have` count agree and suffix persist stays aligned.
- * Sending an `injection` / `context` row verbatim fails the completion with
- * HTTP 400 (unknown role), so it cannot ride along just to keep the length.
- * Overlays VLM `image_url` parts onto existing user rows. Inner `runTurn`
- * injects new tool-screenshot follow-ups from `execute` attachments.
- */
 export function overlayMultimodalHistoryForRunTurn(
   chat: Chat,
   options?: Pick<

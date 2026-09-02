@@ -1,7 +1,3 @@
-/**
- * Settings → Advanced → Board testing — manual orchestrate board workflow.
- */
-
 import '../styles/settings-general.css';
 import '../styles/settings-about.css';
 import { PLACEHOLDER_CHAT_NAME } from '../constants';
@@ -238,7 +234,6 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
   try {
     await loadSessionsFromStorage();
   } catch {
-    // Board pickers fall back to empty lists when sessions are unavailable.
   }
 
   const statusHost = el('div', 'board-testing-status-host');

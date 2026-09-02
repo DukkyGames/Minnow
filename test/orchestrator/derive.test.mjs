@@ -1,11 +1,3 @@
-/**
- * P0-C — the pure fold from journal to board state.
- *
- * The properties here are the ones that license deleting V1's recovery
- * subsystem: replay is deterministic, prefixes are consistent, a truncated or
- * partially-unknown journal still derives, and attempt counts exist without a
- * counter anywhere in the state.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { makeEvent } from '../../server/orchestrator/core/events.js';
@@ -19,11 +11,6 @@ import {
   readyTasks,
 } from '../../server/orchestrator/core/derive.js';
 
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
-
-/** Stamp a list of payload events with gapless seq and a fixed ts. */
 function journal(...events) {
   return events.map((e, i) => ({ ...e, seq: i + 1, ts: 1_700_000_000_000 + i }));
 }
@@ -48,7 +35,6 @@ const started = (taskId, attemptId, role, extra = {}) =>
 const ended = (taskId, attemptId, role, outcome, extra = {}) =>
   makeEvent('task.attempt.ended', { taskId, attemptId, role, outcome, ...extra });
 
-/** A task taken all the way through builder, tester, and merge. */
 const throughMerge = (taskId, n, sha) => [
   started(taskId, `${taskId}-b${n}`, 'builder'),
   ended(taskId, `${taskId}-b${n}`, 'builder', 'pass'),
@@ -58,7 +44,7 @@ const throughMerge = (taskId, n, sha) => [
   makeEvent('merge.succeeded', { taskId, sha }),
 ];
 
-// ---------------------------------------------------------------------------
+// ── Shape ────────────────────────────────────────────────────────────────────
 
 describe('derive — shape', () => {
   it('builds tasks from board.created in declared order', () => {
@@ -105,7 +91,6 @@ describe('derive — shape', () => {
     );
     assert.equal(stopped.status, 'stopped');
     assert.equal(stopped.stopReason, 'user');
-    // Concurrency survives a stop — restarting must not silently reset it.
     assert.equal(stopped.concurrency, 3);
   });
 
@@ -189,8 +174,6 @@ describe('derive — shape', () => {
         }),
       ),
     );
-    // Overflow is a scheduling signal, not a failure. Rebase-before-merge is the
-    // real conflict authority.
     assert.equal(state.tasks.get('W1-A').phase, 'building');
     assert.equal(state.tasks.get('W1-A').touchesOverflow.length, 1);
     assert.deepEqual(state.tasks.get('W1-A').touchesOverflow[0].actual, ['src/a/x.ts', 'package-lock.json']);
@@ -253,7 +236,7 @@ describe('derive — shape', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Attempt counts ───────────────────────────────────────────────────────────
 
 describe('derive — attempt counts without counters', () => {
   it('counts three builder and two tester attempts on one task', () => {
@@ -285,7 +268,6 @@ describe('derive — attempt counts without counters', () => {
         `TaskState.${key} looks like a counter — counts must stay derived`,
       );
     }
-    // `attempts` is the event list, not a number.
     assert.equal(Array.isArray(task.attempts), true);
   });
 
@@ -310,8 +292,6 @@ describe('derive — attempt counts without counters', () => {
   });
 
   it('counts an ended attempt whose started line is missing', () => {
-    // A hand-edited or pre-schema journal. Dropping it would undercount, and the
-    // count is exactly what the policy table runs on.
     const state = derive(journal(created(), ended('W1-A', 'ghost', 'builder', 'fail')));
     assert.equal(attemptCount(state, 'W1-A', 'builder'), 1);
   });
@@ -330,7 +310,7 @@ describe('derive — attempt counts without counters', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Readiness ────────────────────────────────────────────────────────────────
 
 describe('derive — readiness and dead ends', () => {
   it('holds a task until every dependency has merged', () => {
@@ -345,7 +325,6 @@ describe('derive — readiness and dead ends', () => {
   });
 
   it('does not cap readiness by concurrency', () => {
-    // Keeping the fold free of policy is what lets one state answer for N=1 and N=4.
     const state = derive(journal(created(), makeEvent('board.started', { concurrency: 1 })));
     assert.equal(readyTasks(state).length, 2);
   });
@@ -393,7 +372,7 @@ describe('derive — readiness and dead ends', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Tolerance ────────────────────────────────────────────────────────────────
 
 describe('derive — tolerance and totality', () => {
   const base = journal(
@@ -528,11 +507,6 @@ describe('derive — reopen after a finished run', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Generated journals
-// ---------------------------------------------------------------------------
-
-/** Deterministic PRNG (mulberry32) so a failure reproduces from its seed. */
 function rng(seed) {
   let a = seed >>> 0;
   return () => {
@@ -545,7 +519,6 @@ function rng(seed) {
 
 const OUTCOMES = ['pass', 'fail', 'blocked', 'no_report', 'crashed', 'timeout'];
 
-/** A plausible, structurally varied journal for a small linear-ish DAG. */
 function generateJournal(seed) {
   const r = rng(seed);
   const pick = (xs) => xs[Math.floor(r() * xs.length)];
@@ -598,7 +571,6 @@ describe('derive — determinism over generated journals', () => {
     for (let seed = 1; seed <= 200; seed += 1) {
       const events = generateJournal(seed);
       assert.deepEqual(derive(events), derive(events), `seed ${seed}`);
-      // And independent of how the caller supplies the events.
       assert.deepEqual(derive(events), derive(events.values()), `seed ${seed} (iterator)`);
     }
   });
@@ -612,9 +584,6 @@ describe('derive — determinism over generated journals', () => {
   });
 
   it('folding one event at a time equals folding them all at once', () => {
-    // The incremental-equivalence property proper. It is what licenses P1-B
-    // keeping a live state in memory and calling `foldInto` per appended event
-    // instead of re-folding the journal on every tick.
     for (let seed = 1; seed <= 50; seed += 1) {
       const events = generateJournal(seed);
       const incremental = emptyState();
@@ -645,34 +614,23 @@ describe('derive — determinism over generated journals', () => {
   });
 
   it('replay after a simulated crash reproduces the pre-crash state', () => {
-    // This is the property that deletes boot-resume, display-wake reconcile, and
-    // OOM-pause repair: restart *is* recovery.
-    //
-    // The crash is simulated the way a real one happens — the journal is
-    // serialised to JSONL, the process "dies" mid-append leaving a torn final
-    // line, and the restart reads the file back and re-parses it. Comparing two
-    // folds of the same in-memory array would prove nothing that the determinism
-    // test above does not already cover.
     for (let seed = 1; seed <= 100; seed += 1) {
       const events = generateJournal(seed);
       const cut = Math.floor(events.length / 2);
       const beforeCrash = derive(events.slice(0, cut));
 
       const lines = events.slice(0, cut).map((e) => JSON.stringify(e));
-      // A partial trailing line: the append that was in flight when power went.
       const torn = `${lines.join('\n')}\n${JSON.stringify(events[cut]).slice(0, 17)}`;
       const readBack = [];
       for (const line of torn.split('\n')) {
         try {
           readBack.push(JSON.parse(line));
         } catch {
-          // The journal store drops the torn tail; the fold must survive it too.
         }
       }
 
       assert.equal(readBack.length, cut, `seed ${seed}: torn line was not dropped`);
       assert.deepEqual(derive(readBack), beforeCrash, `seed ${seed}`);
-      // And the fold survives being handed the torn line itself.
       assert.deepEqual(derive([...readBack, torn.split('\n').at(-1)]), beforeCrash, `seed ${seed}`);
     }
   });

@@ -1,7 +1,3 @@
-/**
- * Import OS-dropped files and folders into the workspace via the tool server (binary-safe).
- */
-
 import {
   emptyDirectoriesToCreate,
   entriesFromFileList,
@@ -99,10 +95,7 @@ function destLabel(dir: string): string {
   return dir === '.' ? 'workspace root' : dir;
 }
 
-/**
- * Copy a dropped file/folder tree into a workspace folder (relative path, e.g. `.` or `src/lib`).
- * Refreshes the file tree when at least one file or empty directory succeeds.
- */
+/** Copy a dropped file/folder tree into a workspace folder (relative path, e.g. `.` or `src/lib`). */
 export async function importDroppedEntriesToWorkspace(
   entries: DroppedTreeEntry[],
   destDir: string,
@@ -130,7 +123,6 @@ export async function importDroppedEntriesToWorkspace(
     `Importing ${spinCount} ${spinNoun}${spinCount === 1 ? '' : 's'}…`,
   );
 
-  // Empty dirs first so a later failed file does not leave the tree missing folders.
   for (const relativePath of emptyDirs) {
     const destPath = workspacePathForDroppedEntry(dir, relativePath);
     const result = await importOneDirectory(destPath);

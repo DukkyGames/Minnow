@@ -21,6 +21,7 @@ import * as mlxLmProvisioner from './mlx-lm.js';
  * @property {object} provisioner
  */
 
+/** mlx-lm uses python-venv (native-binary would refuse to spawn it) and stays off by default so RAM is not held until a model loads. */
 /** @type {Record<string, ManagedServerDef>} */
 export const BUILTIN_SERVERS = {
   searxng: {
@@ -48,11 +49,8 @@ export const BUILTIN_SERVERS = {
     id: 'mlx-lm',
     label: 'MLX',
     description: 'Metal-native inference for MLX weights on Apple Silicon (mlx-lm).',
-    // 'native-binary' would make startServer() refuse to spawn it.
     kind: 'python-venv',
     defaultPort: 8087,
-    // Off by default: one process holds a whole model resident in RAM, so it
-    // starts when a model is loaded and stays up for fast switching after that.
     defaultAutoStart: false,
     healthPath: '/v1/models',
     provisioner: mlxLmProvisioner,

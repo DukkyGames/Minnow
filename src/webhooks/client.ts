@@ -15,6 +15,5 @@ export function notifySessionCreated(chatId: string, workspacePath?: string): vo
       ...(workspacePath ? { workspacePath } : {}),
     }),
   }).catch(() => {
-    /* non-blocking */
   });
 }

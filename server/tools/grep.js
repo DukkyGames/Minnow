@@ -1,7 +1,3 @@
-/**
- * Workspace-scoped content search via ripgrep (POLISH-021 / MIN-103, MIN-196).
- */
-
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -18,27 +14,21 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-/** Resolved once at load; remap for Electron asar.unpacked when packaged. */
 const rgExecutable = getRipgrepPath();
 
-/** Default max lines returned per request (automatic ceiling when capping is on). */
 export const GREP_DEFAULT_HEAD_LIMIT = 500;
 
-/** Hard cap for head_limit when result capping is on (must be > default so raising it works). */
 export const GREP_MAX_HEAD_LIMIT = 2_000;
 
-/** Default path ceiling for find_files when result capping is on. */
 export const FIND_FILES_DEFAULT_MAX = 2_000;
 
 export { GREP_MAX_OUTPUT_CHARS, GREP_MAX_LINE_CHARS };
 
-/** Skip files larger than this when ripgrep scans (bytes). */
 const GREP_MAX_FILE_BYTES = '2M';
 
 const VALID_OUTPUT_MODES = new Set(['content', 'count', 'files_with_matches', 'grouped']);
 
 /**
- * Clamp a numeric tool argument into [min, max].
  * @param {unknown} value
  * @param {number} min
  * @param {number} max
@@ -51,7 +41,6 @@ function clampInt(value, min, max, fallback) {
 }
 
 /**
- * Escape regex metacharacters when searching with a literal pattern.
  * @param {string} text
  */
 function escapeRegexLiteral(text) {
@@ -59,26 +48,17 @@ function escapeRegexLiteral(text) {
 }
 
 /**
- * True when a ripgrep output line is a primary match (not context or separator).
  * @param {string} line
  */
 export function isRipgrepMatchLine(line) {
   if (!line || line === '--') return false;
-  // Directory search: path/to/file.ts:42:content or path/to/file.ts-41-context
   if (/^[^:\n]+:\d+:/.test(line)) return true;
-  // Single-file search: 42:content
   return /^\d+:/.test(line);
 }
 
 /**
- * Apply offset pagination, line count, per-line length, and total char caps.
  * @param {string} stdout
- * @param {{
- *   offset?: number,
- *   headLimit?: number,
- *   maxLineChars?: number,
- *   maxOutputChars?: number,
- * }} [options]
+ * @param {{ offset?: number, headLimit?: number, maxLineChars?: number, maxOutputChars?: number, }} [options]
  * @returns {{ text: string, truncated: boolean, lineCount: number, nextOffset: number }}
  */
 export function capGrepOutput(stdout, options = {}) {
@@ -86,7 +66,6 @@ export function capGrepOutput(stdout, options = {}) {
   const applyResultCap = options.applyResultCap ?? policy.applyResultCap;
   const offset = Math.max(0, options.offset ?? 0);
   const explicitHead = options.explicitHeadLimit === true;
-  // Automatic head ceiling only when product caps are on (or the agent passed head_limit).
   const headLimit =
     explicitHead || applyResultCap
       ? (options.headLimit ?? GREP_DEFAULT_HEAD_LIMIT)
@@ -156,7 +135,7 @@ export function capGrepOutput(stdout, options = {}) {
 }
 
 /**
- * @deprecated Use capGrepOutput — kept for existing imports/tests.
+ * @deprecated
  * @param {string} stdout
  * @param {number} maxMatchLines
  */
@@ -165,8 +144,7 @@ export function truncateRipgrepOutput(stdout, maxMatchLines) {
 }
 
 /**
- * Reformat path:line:snippet rows into per-file blocks for easier scanning.
- * @param {string} cappedText Output from capGrepOutput (may include truncation footer).
+ * @param {string} cappedText
  */
 export function formatGroupedGrepOutput(cappedText) {
   const rawLines = cappedText.split('\n');
@@ -210,22 +188,9 @@ export function formatGroupedGrepOutput(cappedText) {
 }
 
 /**
- * Build ripgrep CLI args for the requested output mode.
- * @param {{
- *   outputMode: string,
- *   literal: boolean,
- *   caseInsensitive: boolean,
- *   context: number,
- *   glob: string,
- *   maxCount: number,
- * }} opts
+ * @param {{ outputMode: string, literal: boolean, caseInsensitive: boolean, context: number, glob: string, maxCount: number, }} opts
  */
 function buildRipgrepArgs(opts) {
-  // --path-separator / forces forward slashes in output on Windows so match paths match
-  // the workspace-relative style used everywhere else.
-  // --sort path makes output ordering deterministic across runs (and pages). ripgrep's
-  // default traversal order is filesystem-dependent, so without it offset pagination can
-  // skip or duplicate matches between pages (flaky on Windows CI).
   const rgArgs = [
     '--max-filesize',
     GREP_MAX_FILE_BYTES,
@@ -264,13 +229,8 @@ function buildRipgrepArgs(opts) {
 }
 
 /**
- * Run workspace grep via bundled ripgrep.
  * @param {Record<string, unknown>} args
- * @param {{
- *   resolveSafePath: (p: string, opts?: { write?: boolean }) => string,
- *   toRelativePath: (abs: string) => string,
- *   getWorkspaceRoot: () => string,
- * }} deps
+ * @param {{ resolveSafePath: (p: string, opts?: { write?: boolean }) => string, toRelativePath: (abs: string) => string, getWorkspaceRoot: () => string, }} deps
  */
 export async function runGrepSearch(args, deps) {
   const pattern = args?.pattern;
@@ -328,9 +288,6 @@ export async function runGrepSearch(args, deps) {
 
   const displayRoot = deps.toRelativePath(stat.isDirectory() ? resolved : path.dirname(resolved));
 
-  // Pass a target relative to the rg cwd (workspace root) so match lines are emitted as
-  // workspace-relative paths rather than absolute host paths — smaller output, consistent
-  // with other tools, and avoids the drive-letter colon confusing grouped-mode parsing.
   const relTarget = path.relative(workspaceRoot, resolved);
   const searchTarget =
     relTarget === ''
@@ -347,15 +304,9 @@ export async function runGrepSearch(args, deps) {
     caseInsensitive,
     context: ripgrepMode === 'content' ? context : 0,
     glob,
-    // --max-count limits matches per file; only meaningful when returning content lines.
-    // In count / files_with_matches mode it would silently under-report per-file totals.
-    // Skip when the agent opted out of the automatic head ceiling (unbounded rg).
     maxCount:
       ripgrepMode === 'content' && headLimit < 1_000_000 ? headLimit + offset : 0,
   });
-  // Always pass an explicit path target. `rg pattern` with no path reads from stdin when
-  // stdin is a pipe (as it is under execFile), which would hang forever — the "./" prefix
-  // that `rg pattern .` adds is stripped from the output below instead.
   rgArgs.push(rgPattern, searchTarget);
 
   let stdout = '';
@@ -380,8 +331,6 @@ export async function runGrepSearch(args, deps) {
     }
   }
 
-  // Strip the leading "./" that `rg pattern .` prefixes onto each path so match lines are
-  // plain workspace-relative paths. Only lines that begin with a path carry the prefix.
   const trimmed = stdout.replace(/^\.\//gm, '').trim();
   if (!trimmed) {
     return `No matches for "${pattern}" under ${displayRoot}`;
@@ -404,16 +353,8 @@ export async function runGrepSearch(args, deps) {
 }
 
 /**
- * List files matching a glob via ripgrep's `--files` walker.
- * Respects .gitignore, skips .git and hidden files, and tolerates unreadable
- * directories mid-walk (rg logs and continues instead of aborting the whole call).
- * Returns workspace-relative paths.
- * @param {Record<string, unknown>} args { pattern, path? }
- * @param {{
- *   resolveSafePath: (p: string, opts?: { write?: boolean }) => string,
- *   toRelativePath: (abs: string) => string,
- *   getWorkspaceRoot: () => string,
- * }} deps
+ * @param {Record<string, unknown>} args
+ * @param {{ resolveSafePath: (p: string, opts?: { write?: boolean }) => string, toRelativePath: (abs: string) => string, getWorkspaceRoot: () => string, }} deps
  * @param {{ maxResults?: number }} [options]
  */
 export async function runFindFilesSearch(args, deps, options = {}) {
@@ -449,7 +390,6 @@ export async function runFindFilesSearch(args, deps, options = {}) {
 
   const globNorm = pattern.replace(/\\/g, '/');
   const rgArgs = ['--files', '--path-separator', '/', '-g', globNorm];
-  // Omit a "." target so output paths are not prefixed with "./".
   if (target !== '.') {
     rgArgs.push(target);
   }
@@ -470,7 +410,6 @@ export async function runFindFilesSearch(args, deps, options = {}) {
       return `No files matching "${pattern}" under ${displayRoot}`;
     }
     if ((code === 1 || code === 2) && partial.trim()) {
-      // Exit 2 = partial results with a warning (e.g. one unreadable dir); keep what we got.
       stdout = partial;
     } else {
       const message = err instanceof Error ? err.message : String(err);

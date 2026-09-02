@@ -1,7 +1,3 @@
-/**
- * Super Plan activity collector — merges controller, main-turn, research SSE, and reviewer events.
- */
-
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
 import { getMainTurnActivity, subscribeMainTurnActivity } from '../chat/main-turn-activity';
 import { subscribeSuperPlanController } from '../chat/super-plan/controller';
@@ -28,11 +24,6 @@ import {
 } from '../research/client';
 import type { ResearchProgress } from '../research/types';
 
-/**
- * Rows kept on `chat.superPlan.activityLog`, mirroring the `MAX_PERSISTED_MESSAGES`
- * capping idiom in sub-agent-session-sync: enough to reconstruct the ledger,
- * bounded so `state.json` cannot grow without limit.
- */
 const MAX_PERSISTED_ACTIVITY = 200;
 
 export class PlanActivityCollector {
@@ -56,10 +47,7 @@ export class PlanActivityCollector {
     this.buffer = buffer;
   }
 
-  /**
-   * Subscribe to live activity. Replays persisted stage + research rows first so
-   * reload does not wipe the Activity ledger.
-   */
+  /** Subscribe to live activity. */
   async start(): Promise<void> {
     this.stop();
     const chat = findChatById(this.chatId);
@@ -71,7 +59,6 @@ export class PlanActivityCollector {
           const detail = await fetchResearchDetail(researchId);
           researchLog = normalizeResearchActivityLog(detail);
         } catch {
-          /* run may not exist yet */
         }
       }
       this.replayPersistedActivity(chat.superPlan, researchLog);
@@ -82,8 +69,6 @@ export class PlanActivityCollector {
       this.wireResearch(chat.superPlan.researchId);
     }
 
-    // Mirror every subsequent append onto the chat so the ledger outlives both
-    // leaving the screen and a reload (MIN-599).
     this.unsubBuffer = this.buffer.subscribe(() => this.persistBuffer());
 
     this.unsubMainTurn = subscribeMainTurnActivity(() => {
@@ -101,8 +86,6 @@ export class PlanActivityCollector {
     this.unsubController = subscribeSuperPlanController((updated) => {
       if (updated.id !== this.chatId || !updated.superPlan) return;
       this.recordStage(updated.superPlan);
-      // Normalize undefined/false so stage advances do not look like a resume
-      // (MIN-736). Only log when pause actually flips after we have a baseline.
       const paused = Boolean(updated.superPlan.paused);
       if (this.lastPaused === null) {
         this.lastPaused = paused;
@@ -155,29 +138,16 @@ export class PlanActivityCollector {
     if (!chat?.superPlan) return;
 
     const entries = this.buffer.getEntries();
-    // A buffer reset must never erase the stored ledger — losing it is the bug.
     if (!entries.length && chat.superPlan.activityLog?.length) return;
 
     chat.superPlan.activityLog =
       entries.length <= MAX_PERSISTED_ACTIVITY
         ? [...entries]
         : entries.slice(-MAX_PERSISTED_ACTIVITY);
-    // Dirty-hint rather than `touchChat`: an activity row is not a message, and
-    // must not reorder the sidebar. The save itself is debounced.
     scheduleSaveSessions({ chatId: this.chatId });
   }
 
-  /**
-   * Seed the buffer from the persisted ledger, then top it up with stage
-   * transitions and research SSE history.
-   *
-   * The persisted rows come first because they are the complete record — main
-   * turns and reviewer status included. The two derived sources only ever added
-   * stage and research rows, which is why the ledger used to come back nearly
-   * empty; they now fill gaps rather than being the whole replay, and rows
-   * already present are skipped by content (ids and timestamps are re-minted on
-   * every derivation, so they cannot be compared).
-   */
+  /** Seed the buffer from the persisted ledger, then top it up with stage transitions and research SSE history. */
   private replayPersistedActivity(state: SuperPlanState, researchLog: ResearchProgress[]): void {
     const seen = new Set<string>();
     this.replaying = true;
@@ -211,7 +181,6 @@ export class PlanActivityCollector {
     } finally {
       this.replaying = false;
     }
-    // Replay is history, not new activity — do not light up the unread badge.
     this.buffer.markRead();
 
     const active = state.activeStage;

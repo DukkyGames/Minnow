@@ -1,11 +1,3 @@
-/**
- * The handful of DOM primitives the V2 board surface uses.
- *
- * Local rather than imported from `src/ui/`: everything under `src/orchestrator`
- * is meant to survive Phase 4 deleting V1, and a helper reached across that line
- * is a dependency that quietly keeps V1 alive.
- */
-
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -33,7 +25,6 @@ export function button(options: {
   return node;
 }
 
-/** A labelled key/value pair, for the header strip and task detail. */
 export function field(label: string, value: string, extraClass?: string): HTMLElement {
   const wrap = el('div', extraClass ? `ov2-field ${extraClass}` : 'ov2-field');
   wrap.appendChild(el('span', 'ov2-field__label', label));
@@ -41,7 +32,6 @@ export function field(label: string, value: string, extraClass?: string): HTMLEl
   return wrap;
 }
 
-/** A status pill. `tone` maps onto the accent / warning / danger tokens. */
 export function pill(
   text: string,
   tone: 'neutral' | 'live' | 'good' | 'warn' | 'bad' = 'neutral',

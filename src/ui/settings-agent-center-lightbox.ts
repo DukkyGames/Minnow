@@ -1,7 +1,3 @@
-/**
- * Agents center detail lightbox — full prompt + settings for one mode or agent.
- */
-
 import {
   registerChromePopover,
   unregisterChromePopover,

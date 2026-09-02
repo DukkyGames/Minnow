@@ -1,7 +1,3 @@
-/**
- * Vibe Coding Hub — rich empty-chat landing inside #chatArea.
- */
-
 import '../styles/hub.css';
 
 import { EMPTY_STATE_HTML, PLACEHOLDER_CHAT_NAME } from '../constants';
@@ -52,7 +48,6 @@ function shouldPreservePlanScreenSession(chat: Chat): boolean {
 /** Remove hub chrome and restore the bottom composer. */
 export function teardownHub(): void {
   teardownHubDevServer();
-  // Move .input-bar out of #vibeHub before removing the hub (bar lives in hub-composer-slot).
   restoreComposer();
   const root = document.getElementById(HUB_ROOT_ID);
   if (root) root.remove();

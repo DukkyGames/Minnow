@@ -42,6 +42,8 @@ function makeEntryId(): string {
   return id;
 }
 
+// ── Format ───────────────────────────────────────────────────────────────────
+
 /** Format wall-clock time for log rows (HH:MM:SS). */
 export function formatActivityTimestamp(atMs: number): string {
   const date = new Date(atMs);
@@ -133,6 +135,8 @@ export function formatActivityLogLine(entry: ActivityLogEntry): string {
   }
   return parts.join(' · ');
 }
+
+// ── From events ──────────────────────────────────────────────────────────────
 
 /** Build log entries from a research SSE progress event. */
 export function entriesFromResearchProgress(event: ResearchProgress, atMs = Date.now()): ActivityLogEntry[] {
@@ -338,6 +342,8 @@ export function entryFromSubAgentStatus(
   };
 }
 
+// ── Buffer ───────────────────────────────────────────────────────────────────
+
 /** Ring buffer for live operational log rows. */
 export class ActivityLogBuffer {
   private entries: ActivityLogEntry[] = [];
@@ -360,9 +366,7 @@ export class ActivityLogBuffer {
     for (const fn of this.listeners) {
       try {
         fn();
-      } catch {
-        /* ignore subscriber errors */
-      }
+      } catch {}
     }
   }
 

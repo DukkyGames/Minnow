@@ -1,8 +1,3 @@
-/**
- * Streams an expanded prompt from the active chat model via /api/generations.
- * Utility role, persist: false — expansion never lands in chat history.
- */
-
 import {
   cancelGeneration,
   createGeneration,
@@ -58,10 +53,9 @@ export interface ExpandPromptResult {
   error?: string;
 }
 
-/**
- * Settings override when set, else the active chat's composer model (per-chat
- * picker), else the default provider.
- */
+// ── Binding ──────────────────────────────────────────────────────────────────
+
+/** Settings override when set, else the active chat's composer model (per-chat picker), else the default provider. */
 export async function resolveExpandPromptBinding(): Promise<ExpandPromptBinding> {
   const config = await loadPromptExpanderConfig();
   const chat = getActiveChat();
@@ -69,10 +63,7 @@ export async function resolveExpandPromptBinding(): Promise<ExpandPromptBinding>
   return resolveExpandPromptBindingFromChat(config, chat, fallbackProviderId);
 }
 
-/**
- * Binding the completions request should carry. My Models rows resolve to the
- * running serve; unloaded ones are started first, the same as a chat turn.
- */
+/** Binding the completions request should carry. */
 async function resolveExpandSendBinding(
   binding: ExpandPromptBinding,
   signal: AbortSignal,
@@ -106,6 +97,8 @@ async function resolveExpandSendBinding(
   };
 }
 
+// ── Errors ───────────────────────────────────────────────────────────────────
+
 function errorMessageFrom(err: unknown): string {
   if (err instanceof Error && err.message.trim()) {
     return formatGenerationErrorMessage(err.message);
@@ -134,13 +127,14 @@ function thinkingOffPatch(
   return body as Record<string, unknown>;
 }
 
+// ── Fetch ────────────────────────────────────────────────────────────────────
+
 /** Stream one expansion of `draft`; resolves with the final sanitized prompt. */
 export async function fetchExpandedPrompt(
   input: ExpandPromptRequest,
 ): Promise<ExpandPromptResult> {
   const draft = input.draft.trim();
   if (!draft) return { text: null };
-  // Attachments enrich the draft; they never stand in for one.
   const attachments = input.attachments ?? getPendingAttachments();
 
   const picked = await resolveExpandPromptBinding();
@@ -148,8 +142,6 @@ export async function fetchExpandedPrompt(
     return { text: null, error: EXPAND_NO_MODEL_MESSAGE };
   }
 
-  // My Models rows must be remapped to the running serve before completions —
-  // `minnow-library` is synthetic and resolveProvider would silently pick another.
   const send = await resolveExpandSendBinding(picked, input.signal);
   if ('error' in send) {
     return { text: null, error: send.error || undefined };
@@ -222,7 +214,6 @@ export async function fetchExpandedPrompt(
       () => {
         unsubscribe();
         void cancelGeneration(generationId).catch(() => {
-          /* best-effort, matches commit-message client */
         });
         finish(null);
       },

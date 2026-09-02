@@ -1,15 +1,5 @@
-/**
- * Retry a fetch-shaped call when the failure is a blip, not a bad request.
- *
- * Used by main chat, sub-agents, and goal evaluation. One policy: TypeError
- * transport failures and transient HTTP statuses share the same backoff.
- * A second retry helper would desynchronise those callers (P8-A / MIN-754).
- */
-
-/** Same-request-would-succeed-later. Mirrors generations/fallback.js. */
 const TRANSIENT_HTTP_STATUSES = new Set([408, 425, 429, 502, 503, 504, 529]);
 
-/** Initial try plus retries. Same ceiling as generations same-candidate retries. */
 const MAX_TRANSIENT_FETCH_ATTEMPTS = 3;
 
 function isTransientFetchError(err) {

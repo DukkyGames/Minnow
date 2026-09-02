@@ -1,10 +1,3 @@
-/**
- * Deep Research overlay inside the Code app main column (#chatArea).
- *
- * Reparents static `#researchView` from index.html (Run + Library tabs) and
- * reuses `src/research/panel.ts` for run/stream logic.
- */
-
 import '../styles/research-panel.css';
 
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
@@ -50,7 +43,6 @@ function emit(): void {
     try {
       fn();
     } catch {
-      /* ignore */
     }
   }
 }
@@ -170,7 +162,6 @@ export async function syncResearchPanelStatus(): Promise<void> {
   const err = document.getElementById(CONFIG_ERROR_ID);
   if (!banner || !idle || !err) return;
 
-  // The banner belongs to the composer, so it only shows while the composer is up.
   const askVisible = document.getElementById('researchAskPane')?.hidden === false;
   const root = getRoot();
   const running = root?.classList.contains('is-running') ?? false;
@@ -276,10 +267,7 @@ export function closeResearchPanel(options?: { restoreChat?: boolean }): void {
   emit();
 }
 
-/**
- * Restore Research out of #chatArea before the transcript repaints.
- * @returns true when an active embed was torn down.
- */
+/** Restore Research out of #chatArea before the transcript repaints. */
 export function teardownResearchPanelBeforeChatPaint(): boolean {
   const area = document.getElementById('chatArea');
   const root = getRoot();

@@ -1,7 +1,3 @@
-/**
- * Motion helpers for benchmark run UI (respects reduced motion).
- */
-
 export function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }

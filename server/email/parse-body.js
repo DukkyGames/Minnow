@@ -76,7 +76,6 @@ export function repairUtf8Mojibake(text) {
  */
 export function sanitizePreviewText(text) {
   let clean = String(text ?? '');
-  // Orphan UTF-8 lead bytes (e.g. lone 0xC2 from broken NBSP / figure-space runs).
   clean = clean.replace(/\u00c2(?=\s|\u00e2|$)/g, '');
   clean = clean.replace(MOJIBAKE_INVISIBLE_SEQUENCES, '');
   if (looksLikeUtf8Mojibake(clean)) {
@@ -152,7 +151,6 @@ export function decodeBodyPart(raw, encoding) {
     const decoded = text
       .replace(/=\r?\n/g, '')
       .replace(/=([0-9A-Fa-f]{2})/g, (_match, hex) => String.fromCharCode(parseInt(hex, 16)));
-    // QP gives raw bytes — reassemble as UTF-8 instead of Latin-1 code units.
     return Buffer.from(decoded, 'binary').toString('utf8');
   }
 
@@ -168,7 +166,6 @@ export function decodeMimeHeader(value) {
   if (!raw) {
     return '';
   }
-  // Minimal encoded-word decode: =?charset?Q?...?= / =?charset?B?...?=
   return raw.replace(/=\?([^?]+)\?([bqBQ])\?([^?]*)\?=/g, (_match, _charset, encoding, payload) => {
     try {
       if (encoding.toUpperCase() === 'B') {

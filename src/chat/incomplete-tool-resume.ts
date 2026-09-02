@@ -1,11 +1,3 @@
-/**
-
- * Boot- and chat-switch resume for tool batches interrupted by reload (e.g. open ask_question).
-
- */
-
-
-
 import { beginChatTurnSetup, endChatTurnSetup, isChatTurnSetupPending } from './chat-turn-guard';
 
 import { findIncompleteToolBatchAtTail, chatAwaitingUserInputTool } from './incomplete-tool-batch';
@@ -86,13 +78,6 @@ function ensureToolWrap(
 
 
 
-/**
-
- * Re-run pending tools from the tail assistant row, then continue the chat turn.
-
- * Returns true when a batch was found and resume started.
-
- */
 
 export async function resumeIncompleteToolBatch(
 
@@ -126,7 +111,6 @@ export async function resumeIncompleteToolBatch(
 
   }
 
-  // ask_question is still waiting on the parked/open strip — do not re-run the tool.
   if (isAskQuestionModalOpenForChat(chat.id)) {
 
     return false;
@@ -261,14 +245,6 @@ export async function resumeIncompleteToolBatch(
 
 
 
-/**
- * Whether the active chat has a tool batch the boot resume would pick up.
- *
- * Split out of `bootIncompleteToolResumeForChats` so the boot resume gate can ask
- * "is there anything here?" — and list it in the prompt — without resuming it.
- * Hydrates history for the same reason the resume does: a lazy boot leaves an empty
- * placeholder, and the tail scan would find nothing.
- */
 
 export async function hasIncompleteToolBatchForBoot(): Promise<boolean> {
 
@@ -330,13 +306,6 @@ export async function bootIncompleteToolResumeForChats(chats: readonly Chat[]): 
 
 
 
-/**
-
- * Open the desktop chat surface before resuming ask_question on reload so the strip
-
- * mounts in `#desktopQuestionHost` instead of a hidden Code bench host.
-
- */
 
 async function ensureAskQuestionSurfaceForChat(chat: Chat): Promise<void> {
 

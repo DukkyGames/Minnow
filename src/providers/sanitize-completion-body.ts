@@ -147,8 +147,6 @@ export function sanitizeCompletionBodyForProvider(
 
   const next = stripInternalApiMessageFields({ ...body });
   const templateKwargsReachModel = providerSupportsChatTemplateKwargs(provider);
-  // Hosted OpenAI rejects LM Studio / llama.cpp sampler fields. Local llama.cpp
-  // and mlx-lm keep them so min_p actually reaches the serve.
   if (!providerKeepsExtendedSamplers(provider)) {
     delete next.top_k;
     delete next.min_p;
@@ -162,7 +160,6 @@ export function sanitizeCompletionBodyForProvider(
     modelCapabilities?.reasoning === true ||
     (modelCapabilities?.reasoningAllowedOptions?.length ?? 0) > 0;
   if (!reasoningSupported) {
-    // Keep explicit thinking disable — without it some models stream only to reasoning_content.
     if (!isThinkingExplicitlyDisabled(next.thinking)) {
       delete next.thinking;
     }
@@ -170,9 +167,6 @@ export function sanitizeCompletionBodyForProvider(
     delete next.reasoning_effort;
   }
 
-  // llama-server disables reasoning on `reasoning_effort: "none"`, which covers
-  // templates that read the effort but not `enable_thinking`. Local-only: hosted
-  // OpenAI 400s on `none` (its enum is minimal/low/medium/high).
   if (
     reasoningSupported &&
     templateKwargsReachModel &&
@@ -193,19 +187,15 @@ export function sanitizeCompletionBodyForProvider(
     delete next.top_p;
   }
 
-  // Per-request llama.cpp reasoning budget — only for the local llama-cpp serve provider.
   if (provider.id !== LLAMA_CPP_LOCAL_PROVIDER_ID) {
     delete next.thinking_budget_tokens;
   }
 
-  // Jinja kwargs reach local runtimes and loopback OpenAI-compatible servers
-  // (MTPLX, etc.); hosted cloud APIs reject the unknown field with a 400.
   if (!templateKwargsReachModel) {
     delete next.chat_template_kwargs;
     delete next.preserve_thinking;
   }
 
-  // Kimi (Moonshot AI) thinking/code models only accept temperature=1.
   if (/kimi/i.test(modelId) && typeof next.temperature === 'number' && next.temperature !== 1) {
     next.temperature = 1;
   }

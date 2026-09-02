@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Wait until the Minnow dev server (Vite + /api middleware) is reachable.
- * Prefers ~/.minnow/run/dev-host.json written by server.js, then probes /api/config/ping.
- */
 
 import {
   isDevHostProcessAlive,
@@ -12,7 +8,6 @@ import { readSessionTokenFile } from '../server/runtime/session-token.js';
 import { resolveMinnowPort } from '../server/constants/minnow-port.js';
 
 /**
- * Token for /api/* health probes: explicit option, env, then file written at server boot.
  * @param {{ token?: string | null }} [options]
  * @returns {string}
  */
@@ -92,7 +87,6 @@ export async function waitForMinnowDev(options = {}) {
       return { origin: direct, port };
     }
 
-    // Vite may have auto-incremented by one when strictPort is false.
     const bumped = await tryPort(preferred + 1, token);
     if (bumped) {
       const port = Number(new URL(`${bumped}/`).port) || preferred + 1;

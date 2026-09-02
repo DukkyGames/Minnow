@@ -16,7 +16,6 @@ const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 
 describe('P4-E no engine-bundle (MIN-717)', () => {
   it('server/session/ is gone', () => {
-    // The directory existed only to hold engine-bundle/; both must stay deleted.
     assert.equal(
       fs.existsSync(path.join(PROJECT_ROOT, 'server', 'session')),
       false,

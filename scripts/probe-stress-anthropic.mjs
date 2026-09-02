@@ -1,6 +1,3 @@
-/**
- * Stress probe: 93 tools, 32768 max tokens, large system prompt.
- */
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';

@@ -1,7 +1,3 @@
-/**
- * Strip inline thinking and interleaved originals from editor AI model output.
- */
-
 import { extractInlineThinkingFromContent } from '../api/inline-thinking';
 
 const RT = 'redacted_thinking';
@@ -25,10 +21,7 @@ function stripInlineThinkingTags(text: string): string {
   return value;
 }
 
-/**
- * Drop consecutive lines that exactly match the original selection when the model
- * interleaves stale and revised lines (common on thinking-capable models).
- */
+/** Drop consecutive lines that exactly match the original selection when the model interleaves stale and revised lines (common on thinking-capable models). */
 export function stripInterleavedOriginalLines(output: string, originalText: string): string {
   const originalLines = new Set(
     originalText
@@ -69,27 +62,15 @@ function firstNonEmptyLine(text: string): string {
   return '';
 }
 
-/**
- * True when text looks like model reasoning, not insertable code.
- *
- * Only the opening line is judged, and a stray `=` or `()` no longer buys an
- * exemption: reasoning chains quote code constantly, so a whole-text token test
- * let entire monologues through as ghost text.
- */
+/** True when text looks like model reasoning, not insertable code. */
 function looksLikeReasoningMonologue(text: string): boolean {
   const first = firstNonEmptyLine(text);
   if (!first) return false;
   if (!REASONING_MONOLOGUE_RE.test(first)) return false;
-  // `let me = 1;` opens with a keyword but is code; prose that merely mentions
-  // code is still prose, so require the line to close like a statement.
   return !/[;{}]\s*$/.test(first);
 }
 
-/**
- * Sentence-shaped line — prose, even when it name-drops code.
- * `validate(form)` inside a reasoning sentence satisfies {@link CODE_LINE_RE},
- * so the code test alone cannot tell narration from a statement.
- */
+/** Sentence-shaped line — prose, even when it name-drops code. */
 function looksLikeProseLine(line: string): boolean {
   const trimmed = line.trim();
   if (!/[.!?]$/.test(trimmed)) return false;
@@ -119,10 +100,8 @@ export function stripEditorModelOutput(
   const split = extractInlineThinkingFromContent(raw);
   let text: string;
   if (split.thinking.length > 0 && split.reply.trim()) {
-    // Keep reply indentation — only drop trailing whitespace on the block.
     text = split.reply.replace(/\s+$/, '');
   } else if (split.thinking.length > 0 && !split.reply.trim()) {
-    // Thinking block still open or reasoning-only — nothing to insert yet.
     return '';
   } else {
     text = stripInlineThinkingTags(raw).replace(/\s+$/, '');
@@ -151,9 +130,6 @@ export function extractEditorCodeFromReasoning(reasoning: string): string {
     }
   }
 
-  // Only accept the whole reasoning body when it is code end to end. Anything
-  // with narration in it is a thinking chain, and painting that as ghost text is
-  // worse than showing nothing.
   const stripped = stripEditorModelOutput(trimmed);
   if (stripped && !looksLikeReasoningMonologue(stripped) && isEntirelyCodeLike(stripped)) {
     return stripped;

@@ -1,10 +1,7 @@
-/**
- * Client for backend-owned LLM generations (/api/generations).
- * Main chat uses persist:true; headless callers use persist:false (30s eviction).
- */
-
 import { parseSseEventBlock } from './sse-parse';
 import type { ChatCompletionChunk } from '../types';
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 /** Terminal SSE payload from the server `event: end` sentinel. */
 export interface GenerationEndEvent {
@@ -83,6 +80,8 @@ export interface CreateGenerationOptions {
   chatId?: string;
 }
 
+// ── Create ───────────────────────────────────────────────────────────────────
+
 /**
  * Start a backend-owned completion; returns immediately with a generation id.
  */
@@ -117,10 +116,6 @@ export async function createGeneration(
   return { generationId };
 }
 
-/**
- * After this many `\n\n` SSE blocks from one `read()`, yield so input can run
- * (MIN-729). Events are not dropped — remaining blocks process after the yield.
- */
 export const SSE_BLOCKS_PER_YIELD = 8;
 
 type SchedulerWithYield = { yield: () => Promise<void> };
@@ -144,11 +139,6 @@ export function yieldForSseBurst(): Promise<void> {
   });
 }
 
-/**
- * Walk `\n\n`-delimited SSE blocks in `buffer`, yielding every
- * {@link SSE_BLOCKS_PER_YIELD} non-empty blocks. Returns `'stop'` when
- * `onBlock` says so (terminal `event: end`).
- */
 async function consumeSseBlocks(
   bufferRef: { value: string },
   cancelled: () => boolean,
@@ -166,8 +156,6 @@ async function consumeSseBlocks(
       sinceYield += 1;
       if (sinceYield >= SSE_BLOCKS_PER_YIELD) {
         sinceYield = 0;
-        // Skip the yield when this read's buffer is already drained — the next
-        // `reader.read()` awaits on its own.
         if (bufferRef.value.indexOf('\n\n') >= 0) {
           await yieldForSseBurst();
         }
@@ -187,10 +175,8 @@ export interface SubscribeToGenerationOptions {
   onAbort?: () => void;
 }
 
-/**
- * Subscribe to a generation stream (replay from zero, then live tail).
- * Parses upstream `data:` SSE lines via {@link parseSsePayloads}; terminal `event: end` is handled here.
- */
+// ── Subscribe ────────────────────────────────────────────────────────────────
+
 export function subscribeToGeneration(
   generationId: string,
   options: SubscribeToGenerationOptions,
@@ -335,10 +321,6 @@ export function subscribeToGenerationRaw(
             return 'stop';
           }
           if (block.trim()) {
-            // Preserve SSE event boundaries (`\n\n`). The inner runner's
-            // feedSseEventBuffer will not parse a `data:` line until the blank
-            // line arrives — a single trailing newline left tool_streaming
-            // stuck until the generation ended (P6-D).
             const framed = `${block.replace(/\n+$/, '')}\n\n`;
             handlers.onChunk(framed);
           }
@@ -372,6 +354,8 @@ export function subscribeToGenerationRaw(
     controller.abort();
   };
 }
+
+// ── Cancel ───────────────────────────────────────────────────────────────────
 
 /** Cancel upstream generation (Stop button). */
 export async function cancelGeneration(generationId: string): Promise<void> {

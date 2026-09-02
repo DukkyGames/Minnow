@@ -136,6 +136,8 @@ import {
 import { getBeforeAfterPairs } from '../design/before-after-integration';
 import { renderBeforeAfterCard } from '../design/before-after-card';
 
+// ── Pending ──────────────────────────────────────────────────────────────────
+
 /** Parse stored tool `arguments` JSON for display in the args <details> block. */
 function parseToolArgsForDisplay(raw: string): Record<string, unknown> {
   const trimmed = raw.trim();
@@ -190,13 +192,8 @@ function buildChatHistoryPendingMarker(): HTMLElement {
   return root;
 }
 
-/**
- * Clear the transcript mount and show a pending marker synchronously so a switch
- * never leaves another chat's bubbles visible during the history GET.
- */
+/** Clear the transcript mount and show a pending marker synchronously so a switch never leaves another chat's bubbles visible during the history GET. */
 export function paintChatTranscriptHistoryPending(mount?: string | HTMLElement): void {
-  // An open board chat owns the pending marker too, or the previous task's
-  // transcript lingers in `.ob-main` during the history GET.
   const boardChatHost =
     mount == null && isBoardChatEmbedOpenForChat(getActiveChat().id)
       ? queryBoardChatTranscriptHost()
@@ -204,7 +201,6 @@ export function paintChatTranscriptHistoryPending(mount?: string | HTMLElement):
   const area = boardChatHost ?? resolveChatMount(mount);
   const codeMount = boardChatHost != null || isCodeChatMount(mount);
 
-  // Full-column overlays own #chatArea — same guard as renderChatFromHistory.
   if (codeMount && !boardChatHost && isMainColumnOverlaySuppressingChatDom()) {
     return;
   }
@@ -242,6 +238,8 @@ export function paintChatHistoryPendingInForegroundShell(): void {
   paintChatTranscriptHistoryPending();
 }
 
+// ── Transcript ───────────────────────────────────────────────────────────────
+
 export function renderStatsForChat(chat: Chat): void {
   refreshMetricsStripForChat(chat);
   refreshContextUsageRing();
@@ -267,11 +265,6 @@ function buildBoardChatEmptyState(): HTMLElement {
 }
 
 export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement): void {
-  /*
-   * Board chats are not listed in the chats panel, so they never paint over the
-   * column. When one is open from the Orchestrate screen it paints inside
-   * `.ob-main`, beside the rail that lists it.
-   */
   const boardChatHost =
     mount == null && isBoardChatEmbedOpenForChat(chat.id)
       ? queryBoardChatTranscriptHost()
@@ -280,21 +273,10 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   const codeMount = boardChatHost != null || isCodeChatMount(mount);
   const scrollAnchor = captureChatScrollAnchor();
 
-  /*
-   * The Super Plan surface suppresses transcript DOM like every other
-   * full-column overlay, but unlike them it is bound to a chat. A paint for a
-   * different chat is navigation away from it, so drop it first rather than
-   * letting the guard below turn the navigation into a no-op.
-   */
   if (codeMount && isSuperPlanScreenMountedForOtherChat(chat.id)) {
     teardownOrchestratePlanScreen();
   }
 
-  /*
-   * Code overview / code map / Issues embed own #chatArea — do not repaint
-   * underneath. Orchestrate is on that list too (`chat-area--orchestrate`), but
-   * a board chat paints *inside* it rather than over it, so the embed is exempt.
-   */
   if (codeMount && !boardChatHost && isMainColumnOverlaySuppressingChatDom()) {
     return;
   }
@@ -302,8 +284,6 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   runWithChatMount(area, () => {
   suppressBubbleScroll = true;
   try {
-  // Skipped for the embed: stripping overlay classes would take
-  // `chat-area--orchestrate` off #chatArea and collapse the page around it.
   if (codeMount && !boardChatHost) {
     teardownCodeBrainMapBeforeChatPaint();
     teardownIssuesEmbedBeforeChatPaint();
@@ -316,12 +296,6 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   if (codeMount) {
     restoreOrchestratePlanScreenSessionFromChat(chat);
   }
-  /*
-   * Super Plan is a screen, not a conversation. Its chat carries the pipeline's
-   * tool calls, which the surface already reports as stages, artifacts and a
-   * ledger — so a super-plan chat always paints the planning surface and never
-   * falls through to the transcript beneath it.
-   */
   if (codeMount && normalizeModeId(chat.modeId) === 'super-plan') {
     if (isSuperPlanScreenShowingChat(chat.id)) return;
     teardownHub();
@@ -329,8 +303,6 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     reopenSuperPlanScreenForChat(chat);
     return;
   }
-  // Suspended plan session: keep the resume banner but still render the
-  // transcript beneath it (a banner-only page reads as a blank/lost chat).
   const suspendedPlanChat = codeMount && isOrchestratePlanScreenSuspendedForChat(chat);
   if (suspendedPlanChat) {
     teardownHub();
@@ -342,8 +314,6 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
       return;
     }
   } else if (codeMount && !isOrchestratePlanScreenSessionActive(chat)) {
-    // Another chat may be foreground while Super Plan grill questions stay parked
-    // in the composer for the planning chat — do not cancel that session.
     const foreignSuspendedPlan = (() => {
       const session = getOrchestratePlanScreenSession();
       return Boolean(
@@ -353,8 +323,6 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     if (!foreignSuspendedPlan) {
       teardownOrchestratePlanScreen();
     } else {
-      // Banner is pinned on .chat-viewport (not #chatArea) — clear it when foregrounding
-      // another chat while a Super Plan session stays suspended in the background.
       removeOrchestratePlanScreenSuspendedBanner();
     }
   } else if (codeMount && isOrchestratePlanScreenMounted()) {
@@ -363,22 +331,13 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   const boardGroup = codeMount && !boardChatHost ? getActiveBoardGroup() : null;
   if (boardGroup?.viewMode === 'board') {
     teardownHub();
-    // Hide the Code composer before the board module finishes loading — the
-    // kanban import is async and used to leave `.input-bar` on screen.
     syncBoardViewChrome();
     void import('./orchestrate-board-setup-banner').then((m) => m.removeBoardSetupReturnBanner());
     void import('../os/router').then((m) => m.navigateToCodeBoards());
     return;
   }
-  /*
-   * A board chat with no board on screen would be a transcript with no home:
-   * it has no row in the chats panel to navigate back from. Reopen the board
-   * that owns it instead. Placed after the board branch above so the reopen
-   * (which activates the planner, itself a board chat) settles rather than loops.
-   */
   if (codeMount && !boardChatHost && isBoardOwnedChat(chat)) {
     const owner = getBoardGroupForChat(chat);
-    // Respect explicit chat view — only reopen the board when the folder is in board mode.
     if (owner?.viewMode === 'board') {
       void import('../state/chat-groups').then((m) => m.openBoardGroup(owner.id));
       return;
@@ -388,12 +347,9 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   clearSubAgentCardDomRegistry();
   if (!chat.history.length) {
     if (boardChatHost) {
-      // renderHub replaces all of #chatArea, which here is the Orchestrate page.
-      // An unstarted task gets a line of its own instead.
       area.replaceChildren(buildBoardChatEmptyState());
     } else if (codeMount) {
       renderHub(chat);
-      // Sub-agent cards mount in the transcript only (see sub-agent-cards.ts).
     } else {
       area.innerHTML = '';
       renderPersistedSubAgentCardsForChat(chat);
@@ -528,7 +484,6 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
         });
       }
 
-      // Before/after diff card (MIN-370 P1): mount under the turn whose file save(s) produced it.
       for (const pair of getBeforeAfterPairs(chat.id)) {
         if (pair.turnId !== String(i)) continue;
         area.appendChild(renderBeforeAfterCard(pair));
@@ -543,7 +498,6 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
       withThinking.thinking != null && withThinking.thinking.length > 0
         ? withThinking.thinking
         : undefined;
-    // Repair already-saved sessions where thinking leaked into `content` without `thinking`.
     if (!thinkingSegments?.length && trimmed) {
       const split = extractInlineThinkingFromContent(text);
       if (split.thinking.length > 0 && split.reply.trim()) {
@@ -573,7 +527,6 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     if (withThinking.failed) {
       const tailFailed = indexOfLastFailedAssistantAtTail(chat.history);
       const fork = indexOfUserBeforeBlock(chat.history, i);
-      // Recovery stays on the tail failed row so Continue/Clear survive a re-render.
       markMessageFailed(
         wrap,
         tailFailed === i && fork >= 0
@@ -596,12 +549,10 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   }
   renderPersistedSubAgentCardsForChat(chat);
   syncThoughtsCaretPulse(area);
-  // Re-paint queued follow-ups after history wipe so they are not lost on chat switch.
   syncComposerMessageQueue();
   restoreChatScrollAnchor(scrollAnchor);
   refreshContextUsageRing();
   if (isChatStreaming(chat.id) && isStreamDomVisible(chat.id)) {
-    // Lazy import breaks a circular dependency with stream-chat-dom.ts (appendStreamingAssistantRow).
     void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chat.id));
   }
   } finally {
@@ -640,10 +591,10 @@ export interface AppendUserBubbleOptions extends UserBubbleRenderOptions {
   renderFromHistory?: boolean;
 }
 
+// ── Notices ──────────────────────────────────────────────────────────────────
+
 /** True when board view should suppress chat bubbles (user can jump to Chat view). */
 function shouldStubOrchestrateBoardStreamDom(chat: Chat): boolean {
-  // The embed paints *inside* the board page, not over it — board view stays
-  // "active" the whole time it is open (see openBoardChatInOrchestrate).
   if (isBoardChatEmbedOpenForChat(chat.id)) return false;
   return isBoardViewActive();
 }
@@ -822,8 +773,6 @@ export function appendInjectionNoticesDom(
   if (shouldStubOrchestrateStreamDom(chat)) return;
   const mount = getActiveChatMountElement();
   clearTranscriptEmptyState(mount);
-  // Live tool-loop path mounts the streaming assistant row before injection resolves;
-  // keep injection chips on the user turn (above the in-flight assistant row).
   const insertBefore = mount.querySelector('.msg.assistant.msg--awaiting-prose');
   let index = startHistoryIndex;
   for (const notice of notices) {
@@ -832,6 +781,8 @@ export function appendInjectionNoticesDom(
   }
   scrollChatIfPinned();
 }
+
+// ── Bubbles ──────────────────────────────────────────────────────────────────
 
 export function appendBubble(
   role: 'user' | 'assistant',
@@ -907,10 +858,7 @@ export interface AssistantErrorRecoveryOptions {
   onRecover?: () => void;
 }
 
-/**
- * Error bubble with Continue + Clear when history could not be auto-rolled back.
- * Continue retries with the visible transcript; Clear drops only the failed assistant output.
- */
+/** Error bubble with Continue + Clear when history could not be auto-rolled back. */
 export function setAssistantErrorBubbleWithRecovery(
   bubble: HTMLDivElement,
   message: string,
@@ -961,10 +909,9 @@ export function setStreamingRowPhase(wrap: HTMLElement, phase: StreamPhase): voi
   wrap.dataset.streamPhase = phase;
 }
 
-/**
- * Create an assistant message shell for SSE streaming without showing an empty bubble.
- * Thought bubbles attach to `wrap`; call {@link revealAssistantProseBubble} on first prose delta.
- */
+// ── Streaming ────────────────────────────────────────────────────────────────
+
+/** Create an assistant message shell for SSE streaming without showing an empty bubble. */
 /** Stub row when the stream targets a chat that is not visible in #chatArea. */
 function streamingAssistantRowStub(): StreamingAssistantRow {
   const stub = document.createElement('div');
@@ -986,7 +933,6 @@ function streamingAssistantRowStub(): StreamingAssistantRow {
 /** Drop orphaned in-flight assistant shells before mounting a fresh stream row. */
 function removeStaleLiveStreamingRows(mount: HTMLElement): void {
   for (const row of mount.querySelectorAll('.msg.assistant')) {
-    // Revealed rows still holding a caret are live shells, not settled messages.
     const isAwaiting = row.classList.contains('msg--awaiting-prose');
     const hasLiveCaret = Boolean(row.querySelector(STREAMING_CARET_SELECTOR));
     if (isAwaiting || hasLiveCaret) {
@@ -1036,7 +982,6 @@ export function appendStreamingAssistantRow(forChatId?: string): StreamingAssist
   wrap.appendChild(bubble);
   bubble.appendChild(cursor);
   appendChatTranscriptNode(wrap, mount);
-  // Respect scroll pin: only follow the tail when the user is already near bottom.
   scrollChatIfPinned();
   return { wrap, bubble, cursor, streamStatus };
 }
@@ -1061,10 +1006,7 @@ export function assistantProseHasVisibleContent(
   return trimmed.length > 0 || hasThinking;
 }
 
-/**
- * Remove a live streaming assistant shell that would show an empty bubble
- * (tool-only turns, cancelled streams, or turn end with no prose).
- */
+/** Remove a live streaming assistant shell that would show an empty bubble (tool-only turns, cancelled streams, or turn end with no prose). */
 export function removeOrphanStreamingRow(
   wrap: HTMLElement,
   streamStatus?: StreamingStatusHandle,
@@ -1081,10 +1023,7 @@ export interface AnchorPersistedThoughtsOptions {
   streamStatus?: StreamingStatusHandle;
 }
 
-/**
- * Pin a completed thinking block on an assistant row at the response that produced it.
- * When there is no prose, drops the empty streaming bubble and status chrome.
- */
+/** Pin a completed thinking block on an assistant row at the response that produced it. */
 export function anchorPersistedThoughtsOnRow(
   wrap: HTMLElement,
   segments: string[],
@@ -1099,6 +1038,8 @@ export function anchorPersistedThoughtsOnRow(
   wrap.querySelector('.stream-status')?.remove();
   wrap.classList.remove('msg--awaiting-prose');
 }
+
+// ── Stats ────────────────────────────────────────────────────────────────────
 
 /** Add per-turn metric chips under an assistant bubble. */
 export function appendStats(
@@ -1117,8 +1058,6 @@ export function appendStats(
     ['g', s.time_to_first_token != null, `TTFT <span>${s.time_to_first_token?.toFixed(3)}s</span>`],
     ['y', s.generation_time != null, `gen <span>${s.generation_time?.toFixed(3)}s</span>`],
     ['r', u.total_tokens != null, `<span>${u.total_tokens}</span> tokens`],
-    // llama.cpp-only: prefill throughput, and how much of the draft the target model
-    // kept. Acceptance is the only honest read on whether spec decoding is helping.
     [
       'b',
       s.prompt_tokens_per_second != null,

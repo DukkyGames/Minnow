@@ -1,7 +1,3 @@
-/**
- * Per-turn goal evaluation and auto-continuation after goal-driven turns settle.
- */
-
 import {
   ensureChatHistoryLoaded,
   getActiveGoal,
@@ -47,10 +43,6 @@ export function setGoalEvalImplForTests(
   goalEvalImpl = impl ?? runGoalEvalRequest;
 }
 
-/**
- * Programmatic gates that block rubber-stamp YES verdicts.
- * Exported for unit tests.
- */
 export function enforceGoalPassGates(
   parsed: ParsedGoalEvalResponse,
   goal: ActiveGoalState,
@@ -103,10 +95,6 @@ async function runGoalEvalRequest(
   return gated;
 }
 
-/**
- * True when a completed turn should run the goal evaluator.
- * Covers persisted /goal loops after reload (goalDriven flag is in-memory only).
- */
 export function shouldEvaluateGoalAfterTurn(chat: Chat, goalDriven: boolean): boolean {
   return goalDriven || isGoalLoopActive(chat);
 }
@@ -164,10 +152,6 @@ export async function recordGoalAchieved(chat: Chat, reason: string): Promise<vo
   scrollChatIfPinned();
 }
 
-/**
- * After a goal-driven turn completes normally, run the evaluator and either clear
- * the loop (achieved) or resume with evaluator guidance.
- */
 export async function maybeContinueGoalAfterTurn(chat: Chat): Promise<void> {
   if (!isGoalLoopActive(chat)) return;
 

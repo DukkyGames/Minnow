@@ -1,7 +1,3 @@
-/**
- * Stage documentation and push to the GitHub Wiki git repository.
- * Requires a one-time "Home" page created in the GitHub UI so Minnow.wiki.git exists.
- */
 import { execFileSync, execSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const wikiRemote = 'https://github.com/HenriGrimm/Minnow.wiki.git';
 
-/** Resolve a token for wiki git HTTPS (WIKI_SYNC_TOKEN or `gh auth token`). */
 function resolveWikiToken() {
   if (process.env.WIKI_SYNC_TOKEN?.trim()) return process.env.WIKI_SYNC_TOKEN.trim();
   try {
@@ -20,7 +15,6 @@ function resolveWikiToken() {
   }
 }
 
-/** Run a git command and return stdout. */
 function git(cwd, args) {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 }

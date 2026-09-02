@@ -1,7 +1,3 @@
-/**
- * Board onboarding loader hero, status copy, git prompt shell, and cancel handler.
- */
-
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import {
   notifyAskQuestionDisplayContextChanged,
@@ -93,6 +89,8 @@ let statusRotateIndex = 0;
 let statusRotatePhase: BoardOnboardingBusyPhase = 'idle';
 let onboardingStateUnsubscribe: (() => void) | null = null;
 let askQuestionDisplayUnsubscribe: (() => void) | null = null;
+
+// ── Busy status ──────────────────────────────────────────────────────────────
 
 function clearStatusRotateTimer(): void {
   if (statusRotateTimer) {
@@ -211,6 +209,8 @@ export function createBoardOnboardingHeroIcon(): HTMLElement {
   return hero;
 }
 
+// ── Git prompt ───────────────────────────────────────────────────────────────
+
 /** Inline git setup question (replaces ask_question during board kickoff). */
 export function createBoardGitSetupPrompt(): HTMLElement {
   const panel = document.createElement('div');
@@ -312,6 +312,8 @@ function startStatusRotation(
   }, 2800);
 }
 
+// ── Busy UI ──────────────────────────────────────────────────────────────────
+
 /** Sync hero loader, headline, status copy, git prompt, and footer actions. */
 export function syncBoardOnboardingBusyUI(
   wrap: HTMLElement,
@@ -329,8 +331,6 @@ export function syncBoardOnboardingBusyUI(
   const planSelect = wrap.querySelector('#boardOnboardingPlanSelect') as HTMLSelectElement | null;
 
   const busy = phase !== 'idle';
-  // Presence of the embedded panel is enough — do not also require the modal
-  // open flag (chat-id mismatch left the spinner stacked on the cards).
   const questionsActive = Boolean(
     wrap.querySelector(`#${BOARD_ONBOARDING_QUESTIONS_ID} .question-cards-panel`),
   );
@@ -409,6 +409,8 @@ export function cancelBoardOnboardingSetup(chatId?: string): void {
   void refreshBoardOnboardingIfMounted();
 }
 
+// ── Wiring ───────────────────────────────────────────────────────────────────
+
 /** Wire git prompt buttons, cancel, and jump-to-chat once per mounted panel. */
 export function wireBoardOnboardingInteractions(
   wrap: HTMLElement,
@@ -435,7 +437,6 @@ export function wireBoardOnboardingInteractions(
     refreshOnboarding();
     notifyAskQuestionDisplayContextChanged();
   });
-  // Hide the git-setup spinner as soon as ask_question cards mount in this panel.
   askQuestionDisplayUnsubscribe = subscribeAskQuestionDisplayContext(refreshOnboarding);
 }
 

@@ -38,6 +38,8 @@ export {
 
 export type FileTreeMutationOp = 'delete' | 'rename' | 'move' | 'create';
 
+// ── Tools ────────────────────────────────────────────────────────────────────
+
 /** Run a server file tool and surface status for the file tree UI. */
 export async function runFileTreeTool(
   name: string,
@@ -146,6 +148,8 @@ export function syncViewerAfterPathChange(
   })();
 }
 
+// ── Confirm ──────────────────────────────────────────────────────────────────
+
 async function finishMutation(
   oldPath: string | null,
   newPath: string | null,
@@ -183,6 +187,8 @@ async function confirmDelete(path: string, kind: FileTreeEntryKind): Promise<boo
   }
   return await appConfirm(`Delete "${basename(path)}"?`);
 }
+
+// ── Mutations ────────────────────────────────────────────────────────────────
 
 /** Delete a file or directory via delete_path. */
 export async function deletePath(path: string, kind: FileTreeEntryKind): Promise<boolean> {
@@ -310,6 +316,8 @@ export async function commitCreate(
   await finishMutation(null, null, 'create');
   return true;
 }
+
+// ── Clipboard ────────────────────────────────────────────────────────────────
 
 /** Copy path to in-memory clipboard. */
 export function copyPathToClipboard(path: string): void {

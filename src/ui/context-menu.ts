@@ -1,18 +1,3 @@
-/**
- * Shared floating context menu for the whole shell.
- *
- * Generalized from the Issues row menu, which was already the only
- * implementation in the repo with real `role=menu` semantics, roving focus,
- * viewport clamping, and focus restore — and was blocked from being reused only
- * by a hardcoded aria-label and CSS class. The other ~13 surfaces each grew
- * their own `div` of buttons; they can now contribute items instead.
- *
- * What is new here rather than lifted: nested submenus that are actual nested
- * menus (Issues faked them by reopening the root menu at an x/y offset, which
- * left no parent relationship for the keyboard or a screen reader), item
- * grouping, checkbox items, and typeahead.
- */
-
 import '../styles/context-menu.css';
 
 /** A selectable row. */
@@ -68,10 +53,7 @@ export interface OpenContextMenuOptions {
   /** Viewport coordinates for a pointer-opened menu. */
   clientX?: number;
   clientY?: number;
-  /**
-   * Anchor element to align under, for menus opened from a control rather than
-   * a right-click (inline property editing on a list row). Wins over x/y.
-   */
+  /** Anchor element to align under, for menus opened from a control rather than a right-click (inline property editing on a list row). */
   anchor?: HTMLElement | null;
   /** Accessible name for the menu. */
   label?: string;
@@ -234,10 +216,7 @@ function buildRow(item: MenuActionItem | MenuSubmenuItem): HTMLButtonElement {
   return btn;
 }
 
-/**
- * Render one menu level. Headings open a `role=group` that owns the rows after
- * them, so the grouping is announced rather than being a visual-only divider.
- */
+/** Render one menu level. */
 function buildLevel(
   items: MenuItem[],
   label: string,
@@ -282,8 +261,6 @@ function buildLevel(
     rows.push(row);
 
     if (isSubmenu(item)) {
-      // Keyboard ArrowRight needs the definition back from the element; stash it
-      // here rather than threading a parallel array through every nested level.
       (row as SubmenuRow).__menuItem = item;
       row.addEventListener('click', (event) => {
         event.stopPropagation();
@@ -466,9 +443,6 @@ function runTypeahead(level: MenuLevel, char: string, from: number): boolean {
 
 function onKeyDown(event: KeyboardEvent): void {
   if (levels.length === 0) return;
-  // Identity against the level's own rows rather than `instanceof
-  // HTMLButtonElement`: the constructor is realm-bound, so that check throws
-  // outright where the DOM globals are not installed on globalThis.
   const active = document.activeElement as HTMLElement | null;
   const levelIndex = Math.max(0, levelIndexForNode(active));
   const level = levels[levelIndex] ?? levels[levels.length - 1];
@@ -529,7 +503,6 @@ function onKeyDown(event: KeyboardEvent): void {
       return;
     }
     case 'Tab': {
-      // Tabbing away from a menu dismisses it rather than escaping into the page.
       event.preventDefault();
       closeContextMenu();
       return;
@@ -555,7 +528,6 @@ function onPointerDown(event: PointerEvent): void {
 }
 
 function onWindowChange(event: Event): void {
-  // A tall menu scrolls its own list; only outside movement invalidates position.
   if (event.type === 'scroll' && levelIndexForNode(event.target as Node) >= 0) return;
   closeContextMenu();
 }
@@ -578,10 +550,6 @@ function unbindGlobalListeners(): void {
   window.removeEventListener('scroll', onWindowChange, true);
 }
 
-/**
- * Open a context menu at pointer coordinates or under an anchor element.
- * Replaces any menu already open.
- */
 export function openContextMenu(options: OpenContextMenuOptions): ContextMenuHandle {
   closeContextMenu({ restoreFocus: false });
 

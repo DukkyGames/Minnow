@@ -1,14 +1,3 @@
-/**
- * Commit history graph for the git source control panel (MIN-198 P2).
- *
- * Two view modes, toggled from a header row and persisted in localStorage:
- * - Expanded: commits laid out on vertical lanes (columns), one per concurrent
- *   branch. Each row renders an SVG with continuous rails for every active
- *   lane plus rounded curve connectors at fork/merge points.
- * - Collapsed (default): only mainline commits as rows; branch work is
- *   summarized as small sub-dots on the main commit it forks from.
- */
-
 import { gitLog, type GitCommitEntry } from '../state/git-api';
 
 const LOG_COUNT = 200;
@@ -53,11 +42,7 @@ export interface GraphRail {
   kind: 'through' | 'up' | 'down';
 }
 
-/**
- * Rounded connector between lanes.
- * `in`: a line arriving from the row above at `fromLane` bends into the dot at `toLane`.
- * `out`: an edge leaves the dot at `fromLane` and straightens into `toLane` below.
- */
+/** Rounded connector between lanes. */
 export interface GraphCurve {
   kind: 'in' | 'out';
   fromLane: number;
@@ -97,6 +82,8 @@ export interface CollapsedRow {
   /** Commits in clusters beyond MAX_SUBDOTS, shown as +N. */
   extraCount: number;
 }
+
+// ── Refs ─────────────────────────────────────────────────────────────────────
 
 function commitIsHead(refs: string[]): boolean {
   return refs.some((r) => /\bHEAD\b/.test(r));
@@ -152,6 +139,8 @@ function extractBranchRefs(refs: string[]): string[] {
   return names;
 }
 
+// ── Layout ───────────────────────────────────────────────────────────────────
+
 /** Prefer `main`, then `master`, otherwise the branch at HEAD. */
 export function detectTrunkBranch(commits: GitCommitEntry[]): string {
   for (const trunk of ['main', 'master']) {
@@ -182,10 +171,7 @@ export function buildMainlineSet(commits: GitCommitEntry[], trunkBranch: string)
   return mainline;
 }
 
-/**
- * Assign each commit a branch key and dot color.
- * Mainline commits use the accent color; side branches cycle the lane palette.
- */
+/** Assign each commit a branch key and dot color. */
 export function assignCommitVisuals(
   commits: GitCommitEntry[],
   trunkBranch = detectTrunkBranch(commits),
@@ -198,7 +184,6 @@ export function assignCommitVisuals(
   for (let i = 0; i < commits.length; i++) {
     const commit = commits[i];
 
-    // Decorator refs beat mainline — merged branches still show on their lane.
     const namedRefs = extractBranchRefs(commit.refs).filter((name) => name !== trunkBranch);
     if (namedRefs.length > 0) {
       assigned.set(commit.hash, namedRefs[0]);
@@ -253,15 +238,7 @@ export function assignCommitVisuals(
 /** Squash-merge PR subjects: "PR title (#123)". */
 const SQUASH_SUFFIX = /\s*\(#\d+\)$/;
 
-/**
- * Heuristic links from squash-merge commits to the branch they merged.
- *
- * Git records no edge between a squash commit and its PR branch. But with
- * GitHub squash merges the commit subject is the PR title, and the branch
- * contains a commit titled exactly that (PR titles default to the branch's
- * first commit subject). Returns squash hash → newest commit of the matched
- * branch displayed below the squash, so the pair renders like a merge.
- */
+/** Heuristic links from squash-merge commits to the branch they merged. */
 export function computeSquashLinks(visuals: CommitVisual[]): Map<string, string> {
   const links = new Map<string, string>();
   const linkedBranches = new Set<string>();
@@ -283,7 +260,6 @@ export function computeSquashLinks(visuals: CommitVisual[]): Map<string, string>
     const title = subject.replace(SQUASH_SUFFIX, '').trim().toLowerCase();
     for (const candidate of branchBySubject.get(title) ?? []) {
       if (linkedBranches.has(candidate.branchKey)) continue;
-      // Link the branch's newest commit below the squash (its state at merge).
       const target = visuals.find(
         (v, i) => i > index && !v.isMain && v.branchKey === candidate.branchKey,
       );
@@ -303,24 +279,7 @@ interface ActiveLane {
   colorIndex: number;
 }
 
-/**
- * Assign lanes and per-row rails/curves by walking commits in display order.
- *
- * Each active lane tracks the parent hash its edge is heading toward. A commit
- * lands on the leftmost lane expecting it (other expectant lanes curve into
- * its dot), or opens a new lane when none does. First-parent edges continue
- * down the same lane in the commit's color; extra merge parents swing out into
- * their own lane, reusing one that already expects the same parent.
- *
- * Squash-merge simplification: when a branch bottoms out on the mainline (its
- * oldest shown commit sits directly on a mainline commit), the edge bends into
- * the live mainline lane at that row instead of running a rail down to the
- * fork commit — which is often dozens of rows away and drags a lane through
- * the whole graph.
- *
- * `squashLinks` (from computeSquashLinks) are drawn as phantom merge edges so
- * squashed PR branches visually close into the commit that merged them.
- */
+/** Assign lanes and per-row rails/curves by walking commits in display order. */
 export function computeGraphLayout(
   visuals: CommitVisual[],
   squashLinks: Map<string, string> = new Map(),
@@ -376,8 +335,6 @@ export function computeGraphLayout(
           ? lanes.findIndex((l) => l !== null && isMainByHash.get(l.expecting) === true)
           : -1;
       if (mainlineLane >= 0) {
-        // Branch bottoms out on the mainline: bend from the branch dot into
-        // main's lane at dot height (mirror of a merge-row out, joins: true).
         curves.push({
           kind: 'out',
           fromLane: lane,
@@ -455,12 +412,7 @@ export function graphMarkerWidthPx(
   return Math.max(laneWidth, subdotWidth);
 }
 
-/**
- * Collapsed view model: mainline rows with branch commits clustered onto the
- * mainline commit that squash-merged them (via squashLinks), falling back to
- * the mainline commit their first-parent chain forks from. Branch commits
- * whose base falls outside the fetched log are omitted from clusters.
- */
+/** Collapsed view model: mainline rows with branch commits clustered onto the mainline commit that squash-merged them (via squashLinks), falling back to the mainline commit their first-parent chain forks from. */
 export function computeCollapsedRows(
   visuals: CommitVisual[],
   squashLinks: Map<string, string> = new Map(),
@@ -521,10 +473,7 @@ export function computeCollapsedRows(
     });
 }
 
-/**
- * Collapsed history: one vertical lane on the mainline only.
- * Full graph layout is skipped so hidden branch lanes cannot spill into the text column.
- */
+/** Collapsed history: one vertical lane on the mainline only. */
 export function computeCollapsedMainlineLayout(visuals: CommitVisual[]): CommitVisual[] {
   const count = visuals.length;
   if (count === 0) return [];
@@ -546,6 +495,8 @@ export function computeCollapsedMainlineLayout(visuals: CommitVisual[]): CommitV
     return { ...visual, lane: 0, rails, curves: [] };
   });
 }
+
+// ── Geometry ─────────────────────────────────────────────────────────────────
 
 /** Lane center spacing; shrinks when the graph is wider than MAX_FULL_LANES. */
 function laneStep(laneCount: number): number {
@@ -594,11 +545,8 @@ function appendCurve(svg: SVGSVGElement, curve: GraphCurve, step: number): void 
   const path = document.createElementNS(SVG_NS, 'path');
 
   if (curve.kind === 'in') {
-    // Arrive from the row above, bend horizontally into the dot.
     path.setAttribute('d', `M ${from} 0 Q ${from} ${DOT_CENTER_Y} ${to} ${DOT_CENTER_Y}`);
   } else {
-    // Leave the dot sideways and straighten downward. When the target lane has
-    // its own rail this row the curve bends into it at dot height only.
     const endY = curve.joins ? DOT_CENTER_Y : DOT_CENTER_Y + CURVE_DROP;
     path.setAttribute('d', `M ${from} ${DOT_CENTER_Y} Q ${to} ${DOT_CENTER_Y} ${to} ${endY}`);
     if (!curve.joins) {
@@ -610,6 +558,8 @@ function appendCurve(svg: SVGSVGElement, curve: GraphCurve, step: number): void 
   svg.appendChild(path);
 }
 
+// ── Rows ─────────────────────────────────────────────────────────────────────
+
 function renderRails(visual: CommitVisual, step: number): SVGSVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('class', 'git-graph__rails');
@@ -617,7 +567,6 @@ function renderRails(visual: CommitVisual, step: number): SVGSVGElement {
   svg.setAttribute('height', '100%');
   svg.setAttribute('aria-hidden', 'true');
 
-  // Curves render after rails so junctions sit on top of passing lines.
   for (const rail of visual.rails) appendRail(svg, rail, step);
   for (const curve of visual.curves) appendCurve(svg, curve, step);
   return svg;
@@ -788,6 +737,8 @@ function renderToggleRow(
   return btn;
 }
 
+// ── Prefs ────────────────────────────────────────────────────────────────────
+
 function loadCollapsedPref(): boolean {
   try {
     return (globalThis.localStorage?.getItem(COLLAPSED_PREF_KEY) ?? '1') === '1';
@@ -800,7 +751,6 @@ function saveCollapsedPref(collapsed: boolean): void {
   try {
     globalThis.localStorage?.setItem(COLLAPSED_PREF_KEY, collapsed ? '1' : '0');
   } catch {
-    // localStorage unavailable; keep in-memory state only.
   }
 }
 
@@ -812,6 +762,8 @@ function renderEmpty(host: HTMLElement, message: string): void {
   empty.textContent = message;
   host.appendChild(empty);
 }
+
+// ── Render ───────────────────────────────────────────────────────────────────
 
 function appendExpandedRows(
   list: HTMLElement,
@@ -837,7 +789,6 @@ function appendCollapsedRows(
 ): void {
   const rows = computeCollapsedRows(visuals, squashLinks);
   if (rows.length === 0) {
-    // No mainline detected (e.g. detached history) — nothing to collapse onto.
     appendExpandedRows(list, visuals, squashLinks, ctx);
     return;
   }
@@ -846,7 +797,6 @@ function appendCollapsedRows(
 
   laidOut.forEach((visual, index) => {
     const { clusters, extraCount } = rows[index];
-    // Re-attach the original commit so callbacks see the true parent list.
     const restored = { ...visual, commit: rows[index].visual.commit };
     list.appendChild(
       renderRow(restored, LANE_STEP, { ...ctx, clusters, extraCount, onExpand }),
@@ -882,11 +832,7 @@ function renderGraph(
   host.appendChild(list);
 }
 
-/**
- * Render commit history into `host`.
- * Fetches up to 200 commits via `gitLog`; call `refresh` after cwd changes.
- * The collapse toggle re-renders from cached commits without refetching.
- */
+/** Render commit history into `host`. */
 export function renderGitGraph(
   host: HTMLElement,
   options: GitGraphOptions = {},

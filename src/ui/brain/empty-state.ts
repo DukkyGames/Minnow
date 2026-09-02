@@ -1,7 +1,3 @@
-/**
- * Shared empty / loading / offline blocks for Brain app sections.
- */
-
 import { iconHtml, type IconName } from '../icon';
 
 export type BrainEmptyIcon = 'inbox' | 'search' | 'graph' | 'file' | 'sparkle' | 'offline';

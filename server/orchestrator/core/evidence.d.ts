@@ -20,7 +20,6 @@ export function bundleAbandonmentEvidence(
 
 export function abandonmentEvidenceIsComplete(evidence: unknown): boolean;
 
-/** Reconstruct abandonments from journal events alone (PRD §11). */
 export function queryAbandonments(
   events: Iterable<unknown>,
 ): Array<{ taskId: string; reason: unknown; evidence: Evidence }>;

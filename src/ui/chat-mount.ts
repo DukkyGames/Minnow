@@ -1,7 +1,3 @@
-/**
- * Chat transcript mount resolution for Code (#chatArea) vs Chat app vs desktop chat.
- */
-
 import { getForegroundAppId } from '../os/instances';
 import { getOrchestrateChatMountElement } from './orchestrate-board-init-split';
 import {
@@ -17,7 +13,6 @@ export function shouldPaintDesktopChatSurface(): boolean {
 /** True when desktop chat or the legacy Chat app is the active UI. */
 export function isChatAppForeground(): boolean {
   const foregroundAppId = getForegroundAppId();
-  // Code fullscreen keeps desktop chat state for return navigation, but Code owns the UI.
   if (foregroundAppId === 'code') return false;
   if (foregroundAppId != null) return false;
   return document.getElementById('chatView')?.classList.contains('is-open') ?? false;
@@ -32,11 +27,6 @@ export function isEmailAssistantForeground(): boolean {
 
 let mountOverride: HTMLElement | null = null;
 
-/**
- * Mount pinned at the start of the active chat's async turn.
- * Only the active-chat turn (useActiveChatDom) sets this. Prevents mid-turn
- * navigation (e.g. launch_minnow_app routing to Code) from re-routing stream output.
- */
 let turnMount: HTMLElement | null = null;
 
 /** Pin the stream mount for the active chat's turn. Pass null to release. */
@@ -66,10 +56,7 @@ function getChatAppMessageCol(): HTMLElement | null {
   return document.getElementById('chatAppMessageCol');
 }
 
-/**
- * Column shell for inset overlays (sub-agent drawer, goal eval) on the active chat surface.
- * Code uses #mainColumn; desktop chat and the Chat app use their own shells — not #mainColumn.
- */
+/** Column shell for inset overlays (sub-agent drawer, goal eval) on the active chat surface. */
 export function resolveSubAgentOverlayMount(): HTMLElement | null {
   if (shouldPaintDesktopChatSurface()) {
     return (
@@ -89,15 +76,6 @@ export function resolveSubAgentOverlayMount(): HTMLElement | null {
 /** Active transcript root: override, desktop column, Chat app column, or Code orchestrate mount. */
 export function getActiveChatMountElement(): HTMLElement {
   if (mountOverride) return mountOverride;
-  /*
-   * A board chat open in the Orchestrate screen owns the transcript, and it wins
-   * over `turnMount`: the common case is opening a task chat whose turn is
-   * already in flight, which pinned #chatArea before `.ob-chat` existed. Without
-   * this the stream keeps appending off-screen and the embed looks frozen.
-   *
-   * Flag before query — this runs per stream token, and the DOM lookup is only
-   * worth paying for while the embed is actually open.
-   */
   const boardChatHost = isBoardChatEmbedOpen() ? queryBoardChatTranscriptHost() : null;
   if (boardChatHost) return boardChatHost;
   if (turnMount) return turnMount;
@@ -114,16 +92,10 @@ export function getActiveChatMountElement(): HTMLElement {
   return getOrchestrateChatMountElement();
 }
 
-/**
- * Host for composer-queued follow-up bubbles (MIN-647). Live transcript rows
- * insert *before* this node so queued items stay at the tail until they start.
- */
+/** Host for composer-queued follow-up bubbles (MIN-647). */
 export const QUEUED_TRANSCRIPT_ID = 'queuedTranscript';
 
-/**
- * Append a transcript node above the queued-follow-up cluster.
- * Falls through to a normal append when nothing is queued.
- */
+/** Append a transcript node above the queued-follow-up cluster. */
 export function appendChatTranscriptNode(node: Node, mount?: HTMLElement | null): void {
   const host = mount ?? getActiveChatMountElement();
   if (!host) return;

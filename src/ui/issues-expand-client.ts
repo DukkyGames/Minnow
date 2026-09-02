@@ -1,9 +1,3 @@
-/**
- * Streams an expanded issue title + description via /api/generations.
- * Utility role, persist: false — expansion never lands in chat history.
- * Uses the prompt-expander model binding so Settings → Model routing applies.
- */
-
 import { applyUtilityThinkingOff } from '../agents/merge-thinking-body';
 import {
   cancelGeneration,
@@ -191,7 +185,6 @@ export async function fetchExpandedIssue(
       () => {
         unsubscribe();
         void cancelGeneration(generationId).catch(() => {
-          /* best-effort, matches composer expand */
         });
         finish(null);
       },

@@ -1,7 +1,3 @@
-/**
- * Bounded parallel + sequential execution for one assistant tool_calls batch.
- */
-
 import { runWithConcurrency } from '../lib/concurrency-pool.ts';
 import type { ToolCall, ToolExecutionResult } from '../types.ts';
 import {
@@ -40,9 +36,6 @@ async function runSingleToolCall(
     constrained: options.constrained,
   });
 
-  // onToolDone is what appends the `tool` history row, so an aborted call still
-  // has to route through it — otherwise the assistant tool_call is left orphaned
-  // and every later send 400s on the unpaired tool_call_id.
   if (options.signal?.aborted) {
     const stopped: ToolCallOutcome = {
       toolCall: tc,
@@ -69,15 +62,6 @@ async function runSingleToolCall(
   return outcome;
 }
 
-/**
- * Execute tool calls with parallel segments for read-only tools and sequential
- * segments for mutating / interactive tools. Outcomes are in original order.
- *
- * Invariant: every call in `toolCalls` produces exactly one `onToolDone`, even
- * when the batch is aborted. Callers append the `tool` history row from that
- * callback, so a skipped call would orphan its assistant `tool_call_id` and make
- * every subsequent request to the provider fail.
- */
 export async function executeToolCallBatch(
   options: ExecuteToolBatchOptions,
 ): Promise<ToolCallOutcome[]> {
@@ -114,8 +98,6 @@ export async function executeToolCallBatch(
           break;
         }
       }
-      // Sequential segments hold one call today, but the break above would
-      // otherwise silently drop the tail if that ever changes.
       fillStopped(segment.calls);
       continue;
     }
@@ -138,9 +120,6 @@ export async function executeToolCallBatch(
       outcomeById.set(outcome.toolCall.id, outcome);
     }
 
-    // With more parallel-safe calls than pool workers, an abort leaves calls the
-    // pool never picked up. Fill them here rather than after every segment so the
-    // emitted rows stay in call order.
     if (segmentRun.aborted) {
       fillStopped(segment.calls);
     }

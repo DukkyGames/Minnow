@@ -245,9 +245,7 @@ function parseToolArgs(raw: string): Record<string, unknown> {
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       return parsed as Record<string, unknown>;
     }
-  } catch {
-    /* invalid JSON */
-  }
+  } catch {}
   return {};
 }
 

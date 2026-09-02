@@ -1,7 +1,3 @@
-/**
- * Model download job store, progress SSE, and cancellation.
- */
-
 import crypto from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -20,27 +16,19 @@ import { getDownloadsIndexPath, repoDownloadDir } from './paths.js';
 import { validateJobId, validateRepoId } from './validate.js';
 import { invalidateCachedModelsCache } from './cached.js';
 
-/** Minimum free bytes required before starting a download (500 MB). */
 const MIN_FREE_BYTES = 500 * 1024 * 1024;
 
-/** Cap download SSE frequency — per-chunk progress can arrive thousands of times per second. */
 const DOWNLOAD_PROGRESS_EMIT_MS = 200;
 
-/** Two jobs across repos; a third waits in `queued`. */
 const MAX_CONCURRENT_DOWNLOADS = 2;
 
-/** Smooth per-tick speed; 0.2 weights new samples without chasing single-chunk spikes. */
 const SPEED_EWMA_ALPHA = 0.2;
 
-/** Error message for jobs left active when the tool server restarts. */
 const INTERRUPTED_DOWNLOAD_ERROR = 'Download interrupted (server restarted)';
 
 /** @typedef {'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'} DownloadStatus */
 
 /**
- * `gguf` fetches one file to `destPath`; `mlx` fetches a whole repo snapshot
- * into `destPath` as a directory. Jobs persisted before MLX support have no
- * `format` field, so everything treats a missing value as `gguf`.
  * @typedef {'gguf' | 'mlx'} DownloadFormat
  */
 
@@ -50,7 +38,7 @@ const INTERRUPTED_DOWNLOAD_ERROR = 'Download interrupted (server restarted)';
  * @property {string} repoId
  * @property {string} filename
  * @property {string} repoFilePath
- * @property {string[]} [repoFilePaths] Every GGUF shard; destPath / `-m` is shard 1.
+ * @property {string[]} [repoFilePaths]
  * @property {string} quant
  * @property {DownloadFormat} [format]
  * @property {DownloadStatus} status
@@ -60,10 +48,10 @@ const INTERRUPTED_DOWNLOAD_ERROR = 'Download interrupted (server restarted)';
  * @property {string} [error]
  * @property {number} createdAt
  * @property {number} [finishedAt]
- * @property {number} [resumeAt] Byte offset to resume from (`.partial` size).
- * @property {number} [bytesPerSec] EWMA download speed.
- * @property {number | null} [etaMs] Remaining time from EWMA speed.
- * @property {boolean} [interrupted] True after a tool-server restart requeue.
+ * @property {number} [resumeAt]
+ * @property {number} [bytesPerSec]
+ * @property {number | null} [etaMs]
+ * @property {boolean} [interrupted]
  */
 
 /** @type {Map<string, AbortController>} */
@@ -77,6 +65,8 @@ let jobsCache = [];
 
 let loaded = false;
 
+// ── Job state ────────────────────────────────────────────────────────────────
+
 function emit(jobId, event) {
   const set = listenersByJob.get(jobId);
   if (!set) return;
@@ -84,12 +74,10 @@ function emit(jobId, event) {
     try {
       listener(event);
     } catch {
-      /* ignore listener errors */
     }
   }
 }
 
-/** SSE / subscribe payload — includes ETA fields so Discover can paint them. */
 function snapshot(job) {
   return {
     jobId: job.id,
@@ -115,21 +103,10 @@ async function loadJobs() {
     jobsCache = [];
   }
   await reconcileInterruptedJobs();
-  // Resume anything left `queued` after reconcile (including fresh requeues).
   pumpDownloadQueue();
 }
 
 /**
- * Remove artifacts for a *cancelled* job only.
- *
- * The format check is load-bearing. An MLX job's `destPath` is a *directory*,
- * and `fsp.rm` without `recursive: true` silently no-ops on one — leaving a
- * half-downloaded repo that the library scanner then lists as servable and that
- * fails at load time. Partials live inside the directory for MLX, so removing
- * the directory takes them with it and there is no `.partial` sibling.
- *
- * Failed and interrupted jobs keep `.partial` / dest so the next attempt can
- * resume with Range rather than restarting at byte 0.
  * @param {DownloadJob} job
  */
 async function cleanupJobArtifacts(job) {
@@ -140,7 +117,6 @@ async function cleanupJobArtifacts(job) {
   }
   await fsp.rm(job.destPath, { force: true }).catch(() => {});
   await fsp.rm(`${job.destPath}.partial`, { force: true }).catch(() => {});
-  // Split shards sit beside destPath (shard 1); cancel drops those too.
   if (Array.isArray(job.repoFilePaths)) {
     const dir = path.dirname(job.destPath);
     for (const file of job.repoFilePaths) {
@@ -153,7 +129,6 @@ async function cleanupJobArtifacts(job) {
 }
 
 /**
- * `.partial` size for a GGUF dest (shard 1). MLX dest is a directory — skip.
  * @param {DownloadJob} job
  */
 async function partialSizeForJob(job) {
@@ -166,10 +141,6 @@ async function partialSizeForJob(job) {
   }
 }
 
-/**
- * Mark queued/running jobs from a previous server process as interrupted,
- * keep artifacts, then requeue so the pump actually resumes them.
- */
 async function reconcileInterruptedJobs() {
   let changed = false;
   for (const job of jobsCache) {
@@ -185,8 +156,6 @@ async function reconcileInterruptedJobs() {
   if (!changed) return;
   for (const job of jobsCache) {
     if (job.status !== 'interrupted') continue;
-    // Durable `interrupted` is already on disk conceptually; immediately
-    // enqueue so the user does not have to click Download again.
     job.status = 'queued';
     job.error = undefined;
     delete job.finishedAt;
@@ -222,7 +191,6 @@ function findJob(jobId) {
 }
 
 /**
- * Best-effort free disk space check for the models directory parent.
  * @param {number} requiredBytes
  */
 async function assertDiskSpace(requiredBytes) {
@@ -240,14 +208,9 @@ async function assertDiskSpace(requiredBytes) {
     }
   } catch (err) {
     if (err && err.message?.includes('Not enough disk space')) throw err;
-    /* statfs unavailable — skip strict check */
   }
 }
 
-/**
- * Claim a slot if fewer than 2 jobs are running globally and none share repoId.
- * Claiming `running` is synchronous so two pumps cannot double-start.
- */
 function pumpDownloadQueue() {
   const running = jobsCache.filter((job) => job.status === 'running');
   const queued = jobsCache
@@ -264,7 +227,6 @@ function pumpDownloadQueue() {
 }
 
 /**
- * EWMA of instantaneous B/s on throttled progress ticks.
  * @param {DownloadJob} job
  */
 function createSpeedTracker(job) {
@@ -272,7 +234,10 @@ function createSpeedTracker(job) {
   let lastBytes = job.bytesReceived || 0;
   let ewma = 0;
   return {
-    /** @param {number} bytes @param {number | null} total */
+    /**
+     * @param {number} bytes
+     * @param {number | null} total
+     */
     tick(bytes, total) {
       const now = Date.now();
       if (lastAt > 0) {
@@ -292,8 +257,6 @@ function createSpeedTracker(job) {
 }
 
 /**
- * Persist `.partial` size after a non-cancel failure so the next attempt knows
- * where to send Range.
  * @param {DownloadJob} job
  */
 async function recordResumeOffset(job) {
@@ -302,9 +265,9 @@ async function recordResumeOffset(job) {
   if (size > 0) job.bytesReceived = size;
 }
 
+// ── Download ─────────────────────────────────────────────────────────────────
+
 /**
- * Download every GGUF listed on the job (one shard, or all split siblings).
- * destPath stays shard 1; completed dest files are skipped by downloadHfFile.
  * @param {DownloadJob} job
  * @param {AbortSignal} signal
  * @param {(bytes: number, total: number | null) => void} onProgress
@@ -353,8 +316,6 @@ async function runDownloadJob(job) {
   await saveJobs();
   emit(job.id, snapshot(job));
 
-  // Identical shape for both formats, so the SSE payload and subscribeDownload
-  // need no MLX-specific handling.
   let lastProgressEmitAt = 0;
   const speed = createSpeedTracker(job);
   const onProgress = (bytes, total) => {
@@ -374,8 +335,6 @@ async function runDownloadJob(job) {
             repoId: job.repoId,
             destDir: job.destPath,
             signal: controller.signal,
-            // MLX repos routinely ship the original fp16 weights beside the
-            // quantized ones; fetching both would roughly double the transfer.
             exclude: MLX_SNAPSHOT_EXCLUDE,
             onProgress,
           })
@@ -385,7 +344,6 @@ async function runDownloadJob(job) {
     job.status = 'completed';
     job.etaMs = 0;
     job.finishedAt = Date.now();
-    // New artifacts must show up on the next library / /v1/models scan.
     invalidateCachedModelsCache();
     emit(job.id, snapshot(job));
   } catch (err) {
@@ -406,12 +364,9 @@ async function runDownloadJob(job) {
   }
 }
 
+// ── Public jobs ──────────────────────────────────────────────────────────────
+
 /**
- * Queue a download.
- *
- * `sizeBytes` lets the caller pass the repo size the Hub already reported
- * (`safetensors.total` from search), so the MLX path can precheck disk space
- * without a per-file HEAD sweep.
  * @param {{ repoId: string, filename?: string, quant?: string, catalogName?: string, format?: string, sizeBytes?: number }} body
  */
 export async function startDownload(body) {
@@ -430,7 +385,6 @@ export async function startDownload(body) {
     const job = /** @type {DownloadJob} */ ({
       id: crypto.randomUUID(),
       repoId,
-      // The repo is the artifact; there is no single file to name.
       filename: '',
       repoFilePath: '',
       quant: typeof body.quant === 'string' ? body.quant.trim() : '',
@@ -463,7 +417,6 @@ export async function startDownload(body) {
     try {
       totalBytes = await fetchRemoteSize(repoId, files[0]);
     } catch {
-      /* size unknown until stream starts */
     }
   } else {
     const listed = await listRepoFilesRecursive(repoId);
@@ -483,7 +436,6 @@ export async function startDownload(body) {
       try {
         totalBytes = await fetchRemoteSize(repoId, files[0]);
       } catch {
-        /* size unknown until stream starts */
       }
     }
   }
@@ -491,7 +443,6 @@ export async function startDownload(body) {
   const destDir = repoDownloadDir(repoId);
   const repoFilePath = files[0];
   const localFilename = path.basename(repoFilePath);
-  // llama.cpp `-m` always points at shard 00001 (or the sole file).
   const destPath = path.join(destDir, localFilename);
 
   if (totalBytes != null) {
@@ -595,28 +546,23 @@ export function subscribeDownload(jobId, listener) {
   };
 }
 
-/** Test helper — reset module state and wipe the on-disk index. */
 export async function resetDownloadsForTests() {
   for (const controller of abortByJob.values()) {
     try {
       controller.abort();
     } catch {
-      /* ignore */
     }
   }
   jobsCache = [];
   loaded = false;
   abortByJob.clear();
   listenersByJob.clear();
-  // Wipe the index so the next loadJobs() does not resurrect aborted jobs.
-  // Only when MINNOW_HOME is set — otherwise getModelsRoot() is the real ~/.minnow.
   if (!process.env.MINNOW_HOME) return;
   try {
     const indexPath = getDownloadsIndexPath();
     await fsp.mkdir(path.dirname(indexPath), { recursive: true });
     await fsp.writeFile(indexPath, `${JSON.stringify({ version: 1, jobs: [] }, null, 2)}\n`);
   } catch {
-    /* ignore */
   }
 }
 

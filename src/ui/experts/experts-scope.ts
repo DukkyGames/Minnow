@@ -1,7 +1,3 @@
-/**
- * Expert-scoped chat shell: sidebar persona header and active expert id.
- */
-
 import { getExpert } from '../../chat/experts/registry';
 import type { ExpertAccent, ExpertMeta } from '../../chat/experts/types';
 import { bootGenerationResumeForChat } from '../../chat/generation-resume';
@@ -123,7 +119,6 @@ export async function openExpertChatInShell(chat: Chat): Promise<void> {
   const { abandonExpertsHubSavedChat } = await import('./experts-hub');
   abandonExpertsHubSavedChat();
 
-  // Await history hydrate so expert threads opened after a lazy boot are not empty.
   await activateChatById(chat.id);
   recordChatOpened(chat.id);
   syncModelSelectForActiveChat();

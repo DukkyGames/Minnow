@@ -1,8 +1,3 @@
-/**
- * Composer prompt history (ArrowUp/ArrowDown), shell-style recall of prior user messages.
- * Per-chat in normal chat view; workspace-wide on the Vibe hub (empty active chat).
- */
-
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Message, SessionState } from '../types';
 import { stripSkillTagFromHistory } from '../skills/history-content';
@@ -124,10 +119,7 @@ export function __resetComposerPromptHistoryForTests(): void {
   historyIndex = 0;
 }
 
-/**
- * Navigate prior user prompts when ArrowUp/Down are pressed at the composer edges.
- * Returns true when the key was consumed.
- */
+/** Navigate prior user prompts when ArrowUp/Down are pressed at the composer edges. */
 export function handleComposerPromptHistoryKeydown(
   e: KeyboardEvent,
   input: HTMLTextAreaElement,

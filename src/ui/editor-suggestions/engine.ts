@@ -1,10 +1,3 @@
-/**
- * The single suggestion engine: one debounce timer, one AbortController, and
- * one place that decides whether the cursor wants a completion or an intent
- * resolve. Idling on an intent line proposes for it and Mod+Enter forces one;
- * the extra line-leave/blur resolve is gated by `autoResolveOnLineLeave`.
- */
-
 import type { EditorState, Transaction } from '@codemirror/state';
 import { EditorView, type ViewUpdate } from '@codemirror/view';
 import { pickedCompletion } from '@codemirror/autocomplete';
@@ -227,12 +220,8 @@ export class SuggestionEnginePlugin {
     }
     this.opts.onStatus?.(null);
 
-    // Scheduled after the cancellations above, which would otherwise clear the
-    // line-leave timer in the very update that set it.
     this.trackIntentLineLeave(update);
 
-    // Idling on an intent line proposes for that line — the behaviour Settings
-    // describes. `autoResolveOnLineLeave` gates only the leave/blur resolves.
     if (this.wantsIntent(state)) {
       this.scheduleIntent(this.anchorAtCursor(state), false);
       return;
@@ -262,10 +251,7 @@ export class SuggestionEnginePlugin {
     this.scheduleCompletion(state.selection.main.head);
   }
 
-  /**
-   * Track the line the cursor sits on and, when `autoResolveOnLineLeave` is set,
-   * queue a resolve for the line it just left.
-   */
+  /** Track the line the cursor sits on and, when `autoResolveOnLineLeave` is set, queue a resolve for the line it just left. */
   private trackIntentLineLeave(update: ViewUpdate): void {
     const { state } = update;
     if (!isIntentEnabled(state)) return;
@@ -409,10 +395,7 @@ export class SuggestionEnginePlugin {
     return head >= anchor.from && head <= anchor.to;
   }
 
-  /**
-   * Paint an intent proposal after re-checking every guard. A line-leave resolve
-   * is for the line the cursor just left, so it does not require the cursor.
-   */
+  /** Paint an intent proposal after re-checking every guard. */
   private showIntent(
     anchor: IntentAnchor,
     text: string,
@@ -471,7 +454,6 @@ export class SuggestionEnginePlugin {
     if (requireCursorInside && !this.cursorInsideAnchor(anchor)) return;
     if (!anchor.intentText.trim()) return;
 
-    // A settled proposal for this exact anchor is already on screen.
     const existing = getIntentSuggestion(state);
     if (
       !force &&
@@ -504,8 +486,6 @@ export class SuggestionEnginePlugin {
       lineNumber,
       intentConfig.contextWindow,
     );
-    // Anchor prefix at the line start and suffix at the line end so the intent
-    // text is not duplicated into both halves of the context.
     const { prefix } = extractPrefixSuffix(state.doc, anchor.from, config);
     const { suffix } = extractPrefixSuffix(state.doc, anchor.to, config);
     const resolveFn = this.opts.resolveIntentFn ?? resolveIntentSuggestion;

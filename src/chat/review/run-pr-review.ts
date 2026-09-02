@@ -1,8 +1,3 @@
-/**
- * Start a dedicated pr-reviewer sub-agent in a background chat.
- * Does not steal focus (MIN-637): the caller stays on Issues or Source Control.
- */
-
 import {
   getSubAgentRun,
   spawnSubAgent,

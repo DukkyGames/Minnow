@@ -116,9 +116,6 @@ describe('P4-B no renderer lifecycle-repair (MIN-714)', () => {
   });
 
   it('no src/ module subscribes to visibility or power events for board reasons', () => {
-    // Overview, preview, notifications, and OS chrome still listen to
-    // visibility for UI pause — that is fine. A *board* must not: the
-    // engine is `derive(journal)` on the server (P1-G).
     const visOrPower =
       /addEventListener\s*\(\s*['"]visibilitychange['"]|power-state|getBattery/;
 
@@ -138,7 +135,6 @@ describe('P4-B no renderer lifecycle-repair (MIN-714)', () => {
       }
     }
 
-    // Boot may park animations on hide (render-idle) but must not reconcile boards.
     for (const file of walkSourceFiles(path.join(SRC_DIR, 'boot'))) {
       const source = fs.readFileSync(file.path, 'utf8');
       if (file.rel.endsWith('boot/render-idle.ts')) continue;

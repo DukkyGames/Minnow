@@ -1,11 +1,3 @@
-/**
- * Renderer `RunnerDeps` for the shared turn loop (MIN-698 / P6-A).
- *
- * Completions go through HTTP `/api/generations` (`postChatCompletions`).
- * Do not import `server/runner/node.js` or `tool-dispatch.js` from here —
- * Vite would pull the tool server into the client bundle.
- */
-
 import { postChatCompletions } from '../providers/fetch-chat';
 import { runHeadlessToolBatch } from '../tools/headless-tool-batch';
 import { resolveProvider } from '../providers/store';
@@ -36,7 +28,6 @@ import type {
   RunnerProvider,
 } from '../../server/runner/adapters';
 
-/** Model context window from the cached catalog row, if any. */
 function resolveModelContextLimit(modelId: string): number | null {
   const id = modelId.trim();
   if (!id) return null;
@@ -45,12 +36,6 @@ function resolveModelContextLimit(modelId: string): number | null {
   return contextLengthFromModelRow(cached) ?? null;
 }
 
-/**
- * Injected I/O the isomorphic runner needs in the Vite renderer.
- *
- * @param transcriptStore defaults to the session-store wrapper. Chat may pass a
- *   turn-local wrap so `append` does not splice an isolated seed into history.
- */
 export function createRendererRunnerDeps(
   transcriptStore: TranscriptStore = createSessionTranscriptStore(),
 ): RunnerDeps {

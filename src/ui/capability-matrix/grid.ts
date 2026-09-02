@@ -1,7 +1,3 @@
-/**
- * Capability matrix — scrollable verdict grid with glyphs and conflict hatch.
- */
-
 import type { BenchmarkCampaign } from '../../benchmark/campaign-types.ts';
 import type { MatrixCurrentProbe } from '../../benchmark/capabilities/matrix-run-controller.ts';
 import {

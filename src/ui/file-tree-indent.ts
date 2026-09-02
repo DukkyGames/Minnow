@@ -1,8 +1,3 @@
-/**
- * File tree row indent constants (shared by tree UI and layout tests).
- */
-
-/** Horizontal indent per tree depth level (px). */
 export const FILE_TREE_DEPTH_INDENT_PX = 12;
 
 /** Base paddingLeft for directory rows (expand chevron column). */

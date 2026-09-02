@@ -1,13 +1,4 @@
 #!/usr/bin/env node
-/**
- * P2-A — convert the mapped runner closure to `server/runner/*.js` + `.d.ts`.
- *
- * One-shot extract (not a production build step). The server still ships the
- * resulting plain JS; this script is how the TS sources were moved.
- *
- * Usage:
- *   node scripts/extract-runner-modules.mjs
- */
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,7 +10,8 @@ import { SLICE_SOURCES, mapRunnerImports, resolveSpecifier } from './map-runner-
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_DIR = path.join(ROOT, 'server', 'runner');
 
-/** Already exist as dual-environment JS under `server/` — import those, do not fork. */
+// ── Paths ────────────────────────────────────────────────────────────────────
+
 const SERVER_EQUIVALENT = {
   'src/providers/sanitize-completion-body.ts': '../providers/sanitize-completion-body.js',
   'src/providers/provider-host.ts': '../providers/provider-host.js',
@@ -71,6 +63,8 @@ function preprocess(rel, source) {
   return next;
 }
 
+// ── Rewrite ──────────────────────────────────────────────────────────────────
+
 function rewriteSpecifier(fromAbs, specifier, pathMap) {
   if (!specifier.startsWith('.')) return specifier;
   const resolved = resolveSpecifier(fromAbs, specifier);
@@ -78,7 +72,6 @@ function rewriteSpecifier(fromAbs, specifier, pathMap) {
   if (SERVER_EQUIVALENT[resolved]) return SERVER_EQUIVALENT[resolved];
   if (pathMap.has(resolved)) return './' + pathMap.get(resolved);
   if (resolved.startsWith('src/')) {
-    // Type-only leftovers that survived transpile — point at the original.
     const fromDest = path.join(OUT_DIR, 'dummy.js');
     const target = path.join(ROOT, resolved);
     let rel = path.relative(path.dirname(fromDest), target).split(path.sep).join('/');
@@ -106,9 +99,11 @@ function srcReexportPath(srcRel, destJs) {
   return rel;
 }
 
+// ── Main ─────────────────────────────────────────────────────────────────────
+
 async function main() {
   const map = mapRunnerImports();
-  /** @type {Map<string, string>} */
+/** @type {Map<string, string>} */
   const pathMap = new Map();
   const toMove = map.runtimeClosure.filter((rel) => !SKIP.has(rel) && !SLICE_SOURCES.includes(rel));
   for (const rel of toMove) {
@@ -128,7 +123,6 @@ async function main() {
       sourcefile: abs,
     });
     let js = rewriteImports(transpiled.code, abs, pathMap);
-    // Ban leftover .ts extensions in emitted JS.
     js = js.replace(/from\s*(['"])(\.[^'"]+)\.ts\1/g, 'from $1$2.js$1');
     const outJs = path.join(OUT_DIR, pathMap.get(rel));
     fs.writeFileSync(outJs, js);

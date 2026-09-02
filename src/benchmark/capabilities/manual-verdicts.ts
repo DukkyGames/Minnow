@@ -116,7 +116,5 @@ export async function clearManualVerdicts(): Promise<void> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ verdicts: [] }),
     });
-  } catch {
-    /* local already cleared */
-  }
+  } catch {}
 }

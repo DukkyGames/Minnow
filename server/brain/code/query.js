@@ -47,6 +47,7 @@ export function resolveRepoKey(repoParam) {
 /**
  * Warm a cold code index (shared by repo_map tool and /api/brain/code/repo-map).
  * Cascade runs only when the requested repo matches the active workspace key.
+ * A cold index takes minutes; start it and return what exists now.
  * @param {string} [repo]
  * @returns {Promise<{ repo: string, symbolCount: number }>}
  */
@@ -58,8 +59,6 @@ export async function ensureWarmCodeIndex(repo) {
     return { repo: key, symbolCount: stats.symbolCount ?? 0, warming: false };
   }
 
-  // A cold index takes minutes to build. Kick the job off and answer from what exists now
-  // rather than holding the caller open until it finishes.
   const job = startReindexJob({ trigger: 'manual', force: true });
   return {
     repo: key,

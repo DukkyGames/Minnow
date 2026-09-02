@@ -1,8 +1,3 @@
-/**
- * Settings → General → App updates (MIN-384): status strip, version/check KV rows,
- * channel toggle, and manual check/restart actions wired to the Electron updater bridge.
- */
-
 import {
   describeUpdaterStrip,
   formatLastChecked,
@@ -73,7 +68,6 @@ export function renderAppUpdatesSettings(mount: HTMLElement): void {
 
   const head = el('div', 'settings-updates__head');
 
-  // Status strip — focal instrumentation, same vocabulary as the menubar pill.
   const strip = el('div', 'settings-updates-strip');
   strip.setAttribute('role', 'status');
   strip.setAttribute('aria-live', 'polite');
@@ -228,8 +222,6 @@ export function renderAppUpdatesSettings(mount: HTMLElement): void {
     }
   }
 
-  // Settings re-renders replace the mount wholesale; drop the subscription once
-  // this render leaves the document.
   const stop = watchUpdaterStatus((status) => {
     if (!section.isConnected) {
       stop();

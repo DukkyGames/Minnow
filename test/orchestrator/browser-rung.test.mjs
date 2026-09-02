@@ -153,6 +153,8 @@ function fakeApp(url = 'http://127.0.0.1:5173/') {
   };
 }
 
+// ── Derivation ───────────────────────────────────────────────────────────────
+
 describe('P5-C derivation — assertions come from the plan, never from a guess', () => {
   test('an Accept criterion with quoted on-screen text becomes a text assertion', () => {
     const compiled = compileAcceptCriterion('the /dashboard page shows "Weekly totals"');
@@ -171,9 +173,6 @@ describe('P5-C derivation — assertions come from the plan, never from a guess'
   });
 
   test('the Planner prompt\'s own example compiles to an HTTP status assertion', () => {
-    // src/chat/prompts/work-agents/planner/agent.full.md ships this sentence as
-    // the model of a good Accept criterion. If it stops compiling, the rung has
-    // drifted from the prompt that feeds it.
     const compiled = compileAcceptCriterion('the /foo route returns 200 with field bar');
     assert.deepEqual(compiled, {
       kind: 'http-status',
@@ -220,8 +219,6 @@ describe('P5-C derivation — assertions come from the plan, never from a guess'
       derived.assertions.map((a) => a.source),
       ['accept', 'accept', 'checklist'],
     );
-    // T3's criterion is real and good — it is simply not something a browser
-    // can observe. It is reported, not silently dropped, and not guessed at.
     assert.deepEqual(derived.notObservable, [
       {
         taskId: 'T3',
@@ -258,6 +255,8 @@ describe('P5-C derivation — assertions come from the plan, never from a guess'
     assert.equal(JSON.stringify(a), JSON.stringify(b));
   });
 });
+
+// ── Evidence readers ─────────────────────────────────────────────────────────
 
 describe('P5-C evidence readers', () => {
   test('the page-read header cannot satisfy an assertion about the body', () => {
@@ -300,6 +299,8 @@ describe('P5-C evidence readers', () => {
   });
 });
 
+// ── Blocked ──────────────────────────────────────────────────────────────────
+
 describe('P5-C blocked is not fail', () => {
   test('a plan with no observable criterion blocks; it does not pass silently', async () => {
     const result = await runBrowserRung({
@@ -334,10 +335,7 @@ describe('P5-C blocked is not fail', () => {
     assert.equal(result.status, 'blocked');
     assert.equal(result.reason, 'browser-unavailable');
     assert.equal(result.assertions.every((a) => a.outcome === 'blocked'), true);
-    // One navigation attempt, not one per page: being told there is no browser
-    // nine more times is not more information.
     assert.equal(tools.calls.filter((c) => c.name === 'browser_drive_navigate').length, 1);
-    // The app it started is still torn down.
     assert.deepEqual(app.log, ['start', 'stop']);
   });
 
@@ -420,6 +418,8 @@ describe('P5-C blocked is not fail', () => {
   });
 });
 
+// ── Fail ─────────────────────────────────────────────────────────────────────
+
 describe('P5-C fail is specific and reproducible', () => {
   test('a broken UI fails with the criterion, the url, and what was observed', async () => {
     const result = await runBrowserRung({
@@ -494,6 +494,8 @@ describe('P5-C fail is specific and reproducible', () => {
     assert.equal(result.assertions.length, 3);
   });
 });
+
+// ── Teardown ─────────────────────────────────────────────────────────────────
 
 describe('P5-C teardown', () => {
   test('the browser and the app are torn down on every path, including a throw', async () => {
@@ -575,8 +577,6 @@ describe('P5-C the pinned port is not shared with a dying predecessor', () => {
   });
 
   test('an occupied pinned port blocks the rung rather than verifying a stranger', async () => {
-    // The real `defaultAppControl` refuses this case; the seam here proves the
-    // rung reports it as `blocked` — the app it would verify is not ours.
     const result = await runBrowserRung({
       cwd: 'C:\repo',
       planMarkdown: PLAN,
@@ -604,12 +604,9 @@ describe('P5-C the pinned port is not shared with a dying predecessor', () => {
   });
 });
 
+// ── Quoted identifiers ───────────────────────────────────────────────────────
+
 describe('P5-C a quoted identifier is not a page assertion', () => {
-  // The failure this guards against is not a missed assertion, which is
-  // harmless — it is a *fabricated* one, which fails against a working app and
-  // reports a regression that does not exist. Found by deriving assertions from
-  // a realistic 18-task non-UI plan: eight quoted identifiers, eight false
-  // assertions, all of which would have failed.
   const NON_UI = [
     'the observe catalogue module exports "JOURNAL_EVENT_TYPES" and it is sorted.',
     'renderRunReport output contains a "What did not ship" section.',
@@ -681,6 +678,8 @@ describe('P5-C a quoted identifier is not a page assertion', () => {
   });
 });
 
+// ── Static ladder ────────────────────────────────────────────────────────────
+
 describe('P5-C the static ladder gates the browser rung', () => {
   /**
    * @param {string} dir
@@ -723,8 +722,6 @@ describe('P5-C the static ladder gates the browser rung', () => {
     assert.equal(result.outcome, 'fail');
     assert.equal(result.evidence.failedRung, 'typecheck');
     assert.equal(launched, 0, 'the browser rung must not run behind a red static ladder');
-    // No browser verdict at all — not even a blocked one. The gate is not a
-    // blocked reason; the rung was never reached.
     assert.equal(result.evidence.browser, null);
     assert.equal(result.evidence.rungs.some((r) => r.id === 'browser'), false);
     await fsp.rm(dir, { recursive: true, force: true });
@@ -789,7 +786,6 @@ describe('P5-C the static ladder gates the browser rung', () => {
     assert.equal(result.evidence.blockedRung, 'browser');
     assert.equal(result.evidence.browser.status, 'blocked');
     assert.equal(result.evidence.browser.reason, 'browser-unavailable');
-    // `ran` is what ran. A blocked rung did not run.
     assert.deepEqual(result.evidence.ran, ['typecheck', 'lint', 'unit', 'build']);
     assert.equal(result.evidence.rungs.at(-1).outcome, 'blocked');
     await fsp.rm(dir, { recursive: true, force: true });
@@ -860,6 +856,8 @@ describe('P5-C the static ladder gates the browser rung', () => {
   });
 });
 
+// ── Determinism ──────────────────────────────────────────────────────────────
+
 describe('P5-C determinism', () => {
   test('ten runs against one unchanged scripted app give one verdict', async () => {
     const verdicts = new Set();
@@ -895,6 +893,8 @@ describe('P5-C determinism', () => {
   });
 });
 
+// ── Port pinning ─────────────────────────────────────────────────────────────
+
 describe('P5-C port pinning', () => {
   test('strictPort is added beside an existing --port and is idempotent', () => {
     assert.equal(
@@ -918,6 +918,8 @@ describe('P5-C port pinning', () => {
     );
   });
 });
+
+// ── P5-B sync ────────────────────────────────────────────────────────────────
 
 describe('P5-C stays in sync with P5-B', () => {
   test('the degradation prefixes match the tool surface exactly', async () => {

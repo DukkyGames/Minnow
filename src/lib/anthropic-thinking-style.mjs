@@ -156,7 +156,6 @@ export function adjustAnthropicRequestForGateway(baseUrl, body) {
     delete anthropic.structuredOutputMode;
     delete anthropic.disableParallelToolUse;
     anthropic.toolStreaming = false;
-    // Gateways behind Console/Bedrock reject disable_parallel_tool_use in tool_choice.
     delete next.thinking;
   }
 

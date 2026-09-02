@@ -210,6 +210,7 @@ function classifySdkError(err) {
 }
 
 /**
+ * Drop response_format — the v1 bridge does not map structured output yet.
  * @param {Buffer} requestBody
  * @returns {Record<string, unknown>}
  */
@@ -218,7 +219,6 @@ function parseOpenAiRequestBody(requestBody) {
   if (!parsed || typeof parsed !== 'object') {
     throw new Error('Invalid chat completion request body');
   }
-  // v1 bridge does not map structured output yet.
   if ('response_format' in parsed) {
     const { response_format: _ignored, ...rest } = /** @type {Record<string, unknown>} */ (parsed);
     return rest;
@@ -227,7 +227,7 @@ function parseOpenAiRequestBody(requestBody) {
 }
 
 /**
- * Pump an Anthropic Messages upstream via the AI SDK and buffer OpenAI-shaped SSE.
+ * retrySameCandidate is false after a stall so we do not spend the full timeout budget twice.
  *
  * @param {{
  *   state: import('../store.js').GenerationState,
@@ -435,7 +435,6 @@ export async function pumpAnthropicUpstream({
     if (timeoutKind) {
       const message = generationTimeoutMessage({ idleMs, maxMs }, timeoutKind);
       if (!bytesEmitted) {
-        // Same-candidate retry after a stall costs the full timeout budget again.
         return { outcome: 'retry', message, retrySameCandidate: false, hostSuspect: true };
       }
       return { outcome: 'fatal', message };

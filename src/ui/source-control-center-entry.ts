@@ -1,11 +1,3 @@
-/**
- * Entry point for the Source Control Center.
- *
- * Lives apart from `source-control-center.ts` so the center can dynamically
- * import `git-panel` (for worktree sync) without a static import cycle back
- * through the button that opens it.
- */
-
 const OPEN_BUTTON_ID = 'btnGitCenter';
 
 let bound = false;

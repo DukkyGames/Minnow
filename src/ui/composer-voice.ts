@@ -1,7 +1,3 @@
-/**
- * Composer microphone button — batch provider STT or live local Whisper streaming.
- */
-
 import { autoResizeDesktopComposer } from '../os/desktop-composer-resize';
 import { getActiveComposerSurface } from './composer-surface';
 import { autoResize } from './input';
@@ -49,6 +45,8 @@ const MIC_BUTTON_MARKUP =
   '</span>' +
   iconHtml('mic', { className: 'composer-mic-btn__icon' }) +
   '<span class="composer-mic-btn__spinner" aria-hidden="true"></span>';
+
+// ── Input ────────────────────────────────────────────────────────────────────
 
 function resizeComposerInput(input: HTMLTextAreaElement): void {
   if (input.id === 'desktopInput') {
@@ -111,6 +109,8 @@ function flashMicError(): void {
     clearMicErrorFlash();
   }, 2_500);
 }
+
+// ── Mic ──────────────────────────────────────────────────────────────────────
 
 /** Sync visual classes and ARIA on every composer mic button. */
 function setMicButtonsState(state: MicState): void {
@@ -237,6 +237,8 @@ function armRecordingTimer(): void {
   }, 500);
 }
 
+// ── Transcribe ───────────────────────────────────────────────────────────────
+
 async function transcribeBlob(blob: Blob): Promise<string> {
   const wavBlob = await recordedBlobToWav(blob);
   const form = new FormData();
@@ -349,6 +351,8 @@ async function handleStreamingRecordingStop(): Promise<void> {
     inputEl?.focus();
   }
 }
+
+// ── Start ────────────────────────────────────────────────────────────────────
 
 async function startStreamingRecording(): Promise<void> {
   const inputEl = resolveDictationInput();
@@ -542,6 +546,8 @@ export function stopRecording(): void {
   clearRecordingTimer();
 }
 
+// ── Init ─────────────────────────────────────────────────────────────────────
+
 function onMicClick(): void {
   if (micState === 'recording') {
     stopRecording();
@@ -615,7 +621,6 @@ export function initComposerVoice(): void {
         silenceTimeoutSeconds = Math.max(0, Math.min(30, silence));
       }
     } catch {
-      /* keep defaults */
     }
     try {
       const res = await fetch('/api/config/meta', { cache: 'no-store' });
@@ -649,11 +654,9 @@ export function initComposerVoice(): void {
         autoGainControl = audio.autoGainControl;
       }
     } catch {
-      /* keep default */
     }
   })();
 }
-
 
 export function getMicState(): MicState {
   return micState;

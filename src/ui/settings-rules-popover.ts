@@ -1,7 +1,3 @@
-/**
- * Anchored popover for adding and editing user rules (Settings → Rules).
- */
-
 import type { UserRuleGroup, UserRuleItem } from '../config/user-rules';
 import {
   computeUserRulesTotalBytes,
@@ -32,6 +28,8 @@ let open = false;
 let outsidePointerHandler: ((e: PointerEvent) => void) | null = null;
 let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
 
+// ── Close ────────────────────────────────────────────────────────────────────
+
 function detachGlobalListeners(): void {
   if (outsidePointerHandler) {
     document.removeEventListener('pointerdown', outsidePointerHandler, true);
@@ -58,6 +56,8 @@ export function closeUserRulePopover(): void {
 export function isUserRulePopoverOpen(): boolean {
   return open;
 }
+
+// ── Position ─────────────────────────────────────────────────────────────────
 
 function positionPopover(anchor: HTMLElement, popover: HTMLElement): void {
   const rect = anchor.getBoundingClientRect();
@@ -129,6 +129,8 @@ function estimateDraftBytes(
     rules: nextRules,
   });
 }
+
+// ── Open ─────────────────────────────────────────────────────────────────────
 
 /** Open a small popover to name a new rule group. */
 export function openUserRuleGroupPopover(options: {

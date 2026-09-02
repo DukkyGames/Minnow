@@ -1,17 +1,3 @@
-/**
- * Design Mode toggle & overlay framework (MIN-365).
- *
- * Enabling Design Mode for a preview instance mounts a transparent SVG overlay
- * (src/design/overlay.ts) plus a slim tool strip as siblings inside the host element (the same
- * element the guest's native/iframe bounds are read from — #previewBody for the workspace
- * instance) and leaves the guest itself untouched. The overlay tracks the guest rect for free
- * via its own ResizeObserver; nothing here needs to duplicate that.
- *
- * Pointer events pass through to the guest (scroll/click/nav/auto-reload keep working) unless a
- * DesignTool is armed, in which case a dedicated capture layer intercepts pointer events and
- * dispatches them to the armed tool in host-space coordinates.
- */
-
 import { createAnnotationOverlay, type AnnotationOverlay } from './overlay';
 import {
   getDesignTool,
@@ -40,6 +26,8 @@ import {
 } from '../config/design-meta';
 import { createIcon, type IconName } from '../ui/icon';
 
+// ── Session ──────────────────────────────────────────────────────────────────
+
 const STRIP_CLASS = 'mn-design-strip';
 const CAPTURE_CLASS = 'mn-design-capture';
 const VIEWPORT_CLASS_PREFIX = 'mn-design-viewport--';
@@ -56,28 +44,11 @@ export interface DesignModeMountOptions {
   instanceId: string;
   /** Host element the overlay/strip mount into — must be the guest's bounds-source element. */
   host: HTMLElement;
-  /**
-   * @deprecated Strip relocation is handled by preview-panel (`relocateDesignModeStrip`).
-   * The strip always mounts in `host` first.
-   */
+  /** @deprecated Use relocateDesignModeStrip; the strip always mounts in `host` first. */
   chromeHost?: HTMLElement;
-  /** Keyboard-shortcut scope; defaults to `host` when omitted. */
   paneElement?: HTMLElement;
-  /**
-   * Called when the user exits Design Mode from the strip's close button. Hosts that own extra
-   * teardown (toolbar toggle state, Electron guest swap) pass their own toggle here; when
-   * omitted the strip falls back to disableDesignMode(instanceId).
-   */
   onExit?: () => void;
-  /**
-   * Called with the newly-armed tool id (or null on disarm) whenever the armed tool changes.
-   * The Electron host uses this to pick the guest strategy on cross-origin previews: element
-   * Select needs the native WebContentsView visible for CDP inspect, while Draw/Comment want
-   * the iframe guest so their DOM overlay stacks on top. Fired on both user arms and the
-   * persisted-tool restore during enable.
-   */
   onArmedToolChange?: (toolId: string | null) => void | Promise<void>;
-  /** Called after the strip's Clear all button wipes marks on the current page (host refreshes panel). */
   onClearAll?: () => void;
 }
 
@@ -115,10 +86,6 @@ export function getDesignModeSession(instanceId: string): DesignModeSession | un
   return sessions.get(instanceId);
 }
 
-/**
- * Re-bind the Select tool's picker after the preview guest reloads or swaps between the iframe
- * and native WebContentsView (workspace HTML auto-reload, arming Select on a cross-origin URL).
- */
 export function refreshDesignModeArmedToolGuest(instanceId: string): void {
   const session = sessions.get(instanceId);
   if (!session || session.armedToolId !== 'select' || !session.armedTool) return;
@@ -149,11 +116,6 @@ function toToolEvent(host: HTMLElement, ev: PointerEvent): DesignToolPointerEven
   return { x, y, raw: ev };
 }
 
-/**
- * Pass-through unless a capture-mode tool is armed — this is the whole "leave the guest
- * untouched" contract. Passthrough tools (Select) keep the guest interactive: their picker
- * listens inside the guest document and would never see a click this layer swallowed.
- */
 function applyCaptureMode(session: InternalSession): void {
   const captures = Boolean(session.armedTool) && session.armedTool?.pointerMode !== 'passthrough';
   session.captureLayer.style.pointerEvents = captures ? 'auto' : 'none';
@@ -166,14 +128,10 @@ function buildCaptureLayer(host: HTMLElement, session: InternalSession): HTMLEle
   layer.style.cssText = 'position:absolute;inset:0;z-index:3;pointer-events:none;';
 
   const onPointerDown = (ev: PointerEvent): void => {
-    // Keep the drag alive when the pointer leaves the host mid-stroke; without capture the
-    // pointerup lands elsewhere and the tool's drag state sticks.
     if (typeof layer.setPointerCapture === 'function') {
       try {
         layer.setPointerCapture(ev.pointerId);
-      } catch {
-        /* pointer may already be gone */
-      }
+      } catch {}
     }
     session.armedTool?.onPointerDown?.(toToolEvent(host, ev));
   };
@@ -184,9 +142,7 @@ function buildCaptureLayer(host: HTMLElement, session: InternalSession): HTMLEle
     if (typeof layer.releasePointerCapture === 'function') {
       try {
         layer.releasePointerCapture(ev.pointerId);
-      } catch {
-        /* not captured */
-      }
+      } catch {}
     }
     session.armedTool?.onPointerUp?.(toToolEvent(host, ev));
   };
@@ -199,6 +155,8 @@ function buildCaptureLayer(host: HTMLElement, session: InternalSession): HTMLEle
   host.appendChild(layer);
   return layer;
 }
+
+// ── Strip ────────────────────────────────────────────────────────────────────
 
 /** Tool ids the strip renders buttons for. Inspect stays registry-only until it does something. */
 const STRIP_TOOL_IDS = ['select', 'draw', 'comment'] as const satisfies readonly BuiltinDesignToolId[];
@@ -342,7 +300,6 @@ function buildStrip(session: InternalSession): HTMLElement {
   });
   row.appendChild(exitBtn);
 
-  // Draw sub-tools (shape kind + undo) — only visible while the Draw tool is armed.
   const sub = document.createElement('div');
   sub.className = `${STRIP_CLASS}__sub`;
   sub.hidden = true;
@@ -406,9 +363,6 @@ function isTypingTarget(target: EventTarget | null): boolean {
 function onKeyDown(session: InternalSession, paneElement: HTMLElement, ev: KeyboardEvent): void {
   if (!isDesignModeEnabled(session.instanceId)) return;
   if (isTypingTarget(ev.target)) return;
-  // Keydown targets the focused element. Clicking the preview leaves focus on <body>
-  // (nothing there is focusable), so treat body/root-targeted keys as in-scope; only
-  // ignore keys clearly focused into another widget outside the pane.
   const target = ev.target as Node | null;
   const atDocumentRoot =
     !target || target === document.body || target === document.documentElement;
@@ -429,13 +383,13 @@ function onKeyDown(session: InternalSession, paneElement: HTMLElement, ev: Keybo
   }
 }
 
+// ── Enable ───────────────────────────────────────────────────────────────────
+
 /** Enable Design Mode for an instance: mounts overlay + strip, applies persisted prefs. */
 export async function enableDesignMode(options: DesignModeMountOptions): Promise<DesignModeSession> {
   const existing = sessions.get(options.instanceId);
   if (existing) return existing;
 
-  // Real Select/Draw/Comment tools (MIN-366/MIN-367); re-registering per enable gives each
-  // session a fresh picker/shape/pin closure. Placeholder below fills inspect (future P) only.
   registerDesignTool(createSelectDesignTool());
   registerDesignTool(createDrawDesignTool());
   registerDesignTool(createCommentDesignTool());
@@ -446,7 +400,6 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
 
   const overlay = createAnnotationOverlay({ host });
 
-  // Build session shell first so closures (buildStrip, buildCaptureLayer) can reference it.
   const session = {
     instanceId,
     host,
@@ -461,8 +414,6 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
     const tool = getDesignTool(id);
     if (!tool) return;
     if (session.armedTool && session.armedTool !== tool) session.armedTool.disarm();
-    // Guest routing (preview-panel) keys off the armed tool id — set it before sync so
-    // cross-origin Select can reveal the native WebContentsView before the picker binds.
     session.armedToolId = id;
     await options.onArmedToolChange?.(id);
     session.armedTool = tool;
@@ -505,8 +456,6 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
   const setDarkModeEmulationInternal = (on: boolean, persist: boolean): void => {
     darkModeEmulation = on;
     host.classList.toggle(DARK_EMULATION_CLASS, on);
-    // Best-effort real emulation: flip the guest document's color-scheme so pages that
-    // honor `color-scheme` / `prefers-color-scheme`-driven variables actually re-render.
     try {
       const transport = createPickerTransport(instanceId);
       void transport
@@ -514,9 +463,7 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
           `(() => { document.documentElement.style.colorScheme = ${on ? "'dark'" : "''"}; return true; })()`,
         )
         .catch(() => {});
-    } catch {
-      /* guest unavailable — frame indicator still shows the toggle state */
-    }
+    } catch {}
     syncStripState(session);
     if (persist) void saveDesignInstanceMeta(instanceId, { darkModeEmulation: on });
   };
@@ -552,11 +499,8 @@ export async function enableDesignMode(options: DesignModeMountOptions): Promise
 
   sessions.set(instanceId, session);
 
-  // Apply persisted prefs (viewport/dark mode/tool) once loaded, without re-persisting the same
-  // values we just read. When no tool was persisted, default to Select so element picking is
-  // ready immediately.
   const meta = await loadDesignInstanceMeta(instanceId);
-  if (sessions.get(instanceId) !== session) return session; // torn down while awaiting
+  if (sessions.get(instanceId) !== session) return session;
   setViewportPresetInternal(meta.viewportPreset, false);
   setDarkModeEmulationInternal(meta.darkModeEmulation, false);
   if (meta.tool) await armToolInternal(meta.tool, false);

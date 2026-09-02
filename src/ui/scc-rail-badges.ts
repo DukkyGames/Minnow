@@ -1,7 +1,3 @@
-/**
- * Eager rail badge updates — counts and state dots without opening each section.
- */
-
 import { gitStashList, type GitOpResult } from '../state/git-api';
 import { prList, runList, type ForgeStatus } from '../state/forge-api';
 import { getWorkspacePath } from '../state/workspace';

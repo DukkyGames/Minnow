@@ -1,14 +1,3 @@
-/**
- * mlx-lm managed server provisioner — standalone Python + venv + mlx_lm.server.
- *
- * Unlike llama.cpp, this is one long-lived process that hosts *any* MLX model:
- * `mlx_lm.server` defaults `--model` to None and loads whatever each request's
- * `model` field names, caching it until the key changes. So Minnow starts it
- * once and "loading a model" is provider model-selection, not a spawn. Switching
- * models costs a request instead of a process restart, and the prompt cache
- * survives the switch.
- */
-
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
@@ -25,33 +14,11 @@ import { ensureStandalonePython } from './searxng.js';
 
 const SERVER_ID = 'mlx-lm';
 
-/**
- * Pinned mlx-lm release. To bump: raise this, delete ~/.minnow/servers/mlx-lm,
- * and reinstall from Settings → Servers. There is no in-place upgrade path —
- * pip resolves `mlx` transitively and a partial upgrade leaves a venv that
- * imports but cannot run Metal kernels.
- */
 export const MLX_LM_VERSION = '0.31.3';
 
-/**
- * Shown wherever MLX is refused: the install prompt, the download route, and
- * provision() itself. One string so the three never drift apart.
- */
 export const MLX_UNSUPPORTED_MESSAGE =
   'MLX runs only on Apple Silicon Macs (macOS 13 or later). Use GGUF weights with llama.cpp on this machine.';
 
-/**
- * Apple Silicon gate.
- *
- * This has to be ours: `pip install mlx-lm` *succeeds* on Linux and Windows
- * because `mlx` is declared `platform_system == "Darwin"`, so pip quietly omits
- * the one dependency that matters and the failure surfaces later as an
- * ImportError at first inference.
- *
- * Darwin 22 is macOS 13. mlx wheels want 13.5+, but Darwin's minor version does
- * not track macOS's, so major-only is the honest check — a 13.0–13.4 machine
- * gets past this and fails at pip with a wheel-compatibility error instead.
- */
 export function isMlxSupported() {
   if (process.platform !== 'darwin' || process.arch !== 'arm64') return false;
   const major = Number.parseInt(os.release().split('.')[0] ?? '', 10);
@@ -91,7 +58,6 @@ async function dirSizeBytes(root) {
         try {
           total += (await fsp.stat(full)).size;
         } catch {
-          /* vanished mid-walk */
         }
       }
     }
@@ -131,17 +97,11 @@ export async function provision(onProgress) {
   return { version: MLX_LM_VERSION, sizeBytes };
 }
 
-/**
- * `installed` needs both a healthy venv *and* a completed-install marker: the
- * venv exists from the moment ensureHealthyVenv runs, long before pip finishes,
- * so venv-only would report a half-installed runtime as ready.
- */
 export async function getInstallStatus() {
   const meta = await readMeta();
   const venvDir = getServerVenvDir(SERVER_ID);
   const installed = Boolean(meta?.installedAt) && (await isVenvHealthy(venvDir));
   const supported = isMlxSupported();
-  // Same string Settings shows when Install is hidden off Apple Silicon.
   const reason = supported ? null : MLX_UNSUPPORTED_MESSAGE;
   if (!installed) {
     return {
@@ -164,9 +124,6 @@ export async function getInstallStatus() {
 }
 
 /**
- * Argument list for the managed process. Exported separately from getSpawnSpec
- * so the two load-bearing choices below stay testable on any platform, without
- * a provisioned venv.
  * @param {number} port
  * @returns {string[]}
  */
@@ -178,20 +135,12 @@ export function buildMlxServerArgs(port) {
     '127.0.0.1',
     '--port',
     String(port),
-    // Upstream defaults this to "*" and states the server "is not recommended
-    // for production as it only implements basic security checks". Requests come
-    // from Minnow's Node process, which sends no Origin header, so naming one
-    // concrete origin costs nothing and closes the wildcard.
     '--allowed-origins',
     'http://127.0.0.1',
   ];
-  // Deliberately no --model: this process hosts every MLX model, loading
-  // whichever one each request names. Pinning one here would turn every model
-  // switch back into a process restart.
 }
 
 /**
- * Environment variables for the managed mlx-lm process (exported for tests).
  * @returns {Promise<Record<string, string>>}
  */
 export async function buildMlxServerEnv() {
@@ -236,7 +185,6 @@ export async function uninstall() {
   return { ok: true };
 }
 
-/** Extended status for the Settings → Servers panel. */
 export async function getExtendedStatus() {
   const status = await getInstallStatus();
   const venvDir = getServerVenvDir(SERVER_ID);

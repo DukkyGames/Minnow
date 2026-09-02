@@ -1,14 +1,3 @@
-/**
- * Models — confirm an inference runtime install before loading weights.
- *
- * A modal is right here: this downloads a binary or a Python environment, so it
- * needs an explicit yes before anything happens.
- *
- * One dialog serves both llama.cpp and mlx-lm. They differ only in copy, size,
- * and which install call they make — giving each its own modal is how two
- * versions of the same decision end up looking different.
- */
-
 import {
   fetchLlamaRuntime,
   fetchRuntimes,
@@ -151,12 +140,7 @@ function openServersSettings(): void {
   void import('../settings-page').then(({ openSettings }) => openSettings('servers'));
 }
 
-/* --------------------------------- llama.cpp -------------------------------- */
-
-/**
- * Resolves true when llama-server is available (already installed, or the user
- * approved and the install succeeded), false when cancelled or failed.
- */
+/** Resolves true when llama-server is available (already installed, or the user approved and the install succeeded), false when cancelled or failed. */
 export async function ensureLlamaRuntimeInstalled(): Promise<boolean> {
   const runtime = await fetchLlamaRuntime();
   if (runtime.path) return true;
@@ -205,17 +189,9 @@ export function promptLlamaInstall(runtime: LlamaRuntimeStatus): Promise<boolean
   });
 }
 
-/* ----------------------------------- MLX ------------------------------------ */
-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/**
- * Drive the managed mlx-lm install and follow its job to completion.
- *
- * The manager reports a flat 50% for the whole pip phase, which would park a
- * progress bar mid-track for minutes. The message carries the real detail, so
- * the bar stays indeterminate until the job is done.
- */
+/** Drive the managed mlx-lm install and follow its job to completion. */
 async function installMlxRuntime(onProgress: ProgressFn): Promise<boolean> {
   const kick = await installManagedServer('mlx-lm');
   if (!kick.ok) throw new Error(kick.error);
@@ -248,10 +224,7 @@ async function installMlxRuntime(onProgress: ProgressFn): Promise<boolean> {
   throw new Error('The MLX runtime install timed out. Check Settings → Servers.');
 }
 
-/**
- * Resolves true when mlx-lm is ready to serve, false when the user cancelled,
- * the install failed, or this machine cannot run MLX at all.
- */
+/** Resolves true when mlx-lm is ready to serve, false when the user cancelled, the install failed, or this machine cannot run MLX at all. */
 export async function ensureMlxRuntimeInstalled(): Promise<boolean> {
   const runtimes = await fetchRuntimes();
   const mlx = runtimes.mlxLm;
@@ -288,14 +261,7 @@ export async function ensureMlxRuntimeInstalled(): Promise<boolean> {
   });
 }
 
-/* --------------------------------- dispatch --------------------------------- */
-
-/**
- * Ensure whatever runtime this row needs is installed, prompting if not.
- *
- * Single entry point so My Models and the inspector cannot drift on which
- * format maps to which runtime.
- */
+/** Ensure whatever runtime this row needs is installed, prompting if not. */
 export async function ensureRuntimeForModel(model: LibraryModel): Promise<boolean> {
   if (model.source === 'ollama') return true;
   if (model.format === 'MLX') return ensureMlxRuntimeInstalled();

@@ -1,7 +1,3 @@
-/**
- * In-app workspace folder browser (replaces native OS picker for "Open new workspace…").
- */
-
 import {
   browseWorkspaceFolders,
   createWorkspaceSubfolder,
@@ -404,7 +400,6 @@ function wireShellListeners(): void {
     }
   });
 
-  // Keep pointer/focus on the name field (matches file-tree-create inline inputs).
   for (const eventName of ['mousedown', 'click', 'dblclick'] as const) {
     newFolderInput?.addEventListener(eventName, (event) => {
       event.stopPropagation();

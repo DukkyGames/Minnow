@@ -1,12 +1,9 @@
-/**
- * Built-in tool catalog for LM Studio function calling.
- * Browser-native tools run in TS; server-required tools proxy to /api/tools.
- */
-
 import {
   ASK_QUESTION_TOOL_DESCRIPTION,
 } from './ask-question-schema';
 import type { AppId } from '../os/types';
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 /** Tool grouping for settings UI and documentation. */
 export type ToolCategory =
@@ -49,6 +46,8 @@ export interface ToolDefinition {
   definition: OpenAIFunctionDefinition;
 }
 
+// ── Schema ───────────────────────────────────────────────────────────────────
+
 /** Builds a function schema; `name` matches the executor entry point. */
 function toolSchema(
   name: string,
@@ -81,12 +80,9 @@ function withFullResult(properties: Record<string, unknown>): Record<string, unk
   return { ...properties, full_result: FULL_RESULT_PROPERTY };
 }
 
-/**
- * All built-in tools: browser-routed handlers plus server-required tools (see `serverRequired` flags).
- * Function `name` in each schema matches execution routing (browser or server).
- */
+// ── Catalog ──────────────────────────────────────────────────────────────────
+
 export const BUILT_IN_TOOLS: ToolDefinition[] = [
-  // --- Browser-native (serverRequired: false) ---
   {
     id: 'get_datetime',
     label: 'Date & time',
@@ -362,7 +358,8 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
 
-  // --- Server-required (serverRequired: true) ---
+// ── Files ────────────────────────────────────────────────────────────────────
+
   {
     id: 'list_directory',
     label: 'List directory',
@@ -754,6 +751,9 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       ['path', 'sections'],
     ),
   },
+
+// ── Git ──────────────────────────────────────────────────────────────────────
+
   {
     id: 'git_status',
     label: 'Git status',
@@ -871,6 +871,9 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       },
     ),
   },
+
+// ── Code ─────────────────────────────────────────────────────────────────────
+
   {
     id: 'execute_command',
     label: 'Run command',
@@ -1045,7 +1048,9 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       ['code'],
     ),
   },
-  // --- Sub-agents (browser orchestrator, Step 09) ---
+
+// ── Agents ───────────────────────────────────────────────────────────────────
+
   {
     id: 'spawn_sub_agent',
     label: 'Spawn sub-agent',
@@ -1431,7 +1436,9 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       ['run_id'],
     ),
   },
-  // --- Built-in preview browser (Electron WebContentsView) ---
+
+// ── Browser ──────────────────────────────────────────────────────────────────
+
   {
     id: 'browser_list',
     label: 'Browser list tabs',
@@ -2450,6 +2457,9 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       ['action'],
     ),
   },
+
+// ── LSP ──────────────────────────────────────────────────────────────────────
+
   {
     id: 'get_lsp_diagnostics',
     label: 'LSP diagnostics',
@@ -2481,6 +2491,8 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     ),
   },
 ];
+
+// ── Lookup ───────────────────────────────────────────────────────────────────
 
 /** Look up a catalog entry by stable tool id. */
 export function getToolById(id: string): ToolDefinition | undefined {

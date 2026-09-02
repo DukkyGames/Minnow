@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Stop Minnow processes that lock release/win-unpacked (Windows packaging).
- * Never matches generic "electron" — that would kill Cursor and other Electron apps.
- */
 
 import { execSync, spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -11,7 +7,6 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
- * Substrings that identify Minnow packaged or dev binaries (normalized slashes).
  * @param {string} root
  * @returns {string[]}
  */
@@ -27,7 +22,6 @@ export function minnowProcessMatchSubstrings(root) {
 }
 
 /**
- * True when a process command line is a Minnow app we own (not Cursor / random Electron).
  * @param {string} commandLine
  * @param {string} [root]
  */
@@ -40,7 +34,6 @@ function tryExec(cmd) {
   try {
     execSync(cmd, { stdio: 'ignore' });
   } catch {
-    // Process not running or command unavailable.
   }
 }
 
@@ -49,7 +42,7 @@ function listUnixProcesses() {
   const result = spawnSync('ps', ['-eo', 'pid=,command='], { encoding: 'utf8' });
   if (result.status !== 0) return [];
 
-  /** @type {{ pid: number; command: string }[]} */
+/** @type {{ pid: number; command: string }[]} */
   const rows = [];
   for (const raw of result.stdout.split('\n')) {
     const trimmed = raw.trim();
@@ -69,7 +62,6 @@ function killUnixMinnowProcesses() {
     try {
       process.kill(pid, 'SIGTERM');
     } catch {
-      // Already exited or permission denied.
     }
   }
 }
@@ -77,10 +69,10 @@ function killUnixMinnowProcesses() {
 const isMain =
   process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
+// Packaged installer binary only — do not taskkill every electron.exe.
 export function stopMinnowProcessesForPackaging() {
   const isWin = process.platform === 'win32';
   if (isWin) {
-    // Packaged installer binary only — do not taskkill every electron.exe (other dev tools).
     tryExec('taskkill /F /IM Minnow.exe /T');
   } else {
     killUnixMinnowProcesses();

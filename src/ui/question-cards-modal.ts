@@ -1,7 +1,3 @@
-/**
- * Bottom strip UI for the `ask_question` tool: one question per card, carousel, Other row, submit on last card only.
- */
-
 import { getChatAbort } from '../app-state';
 import {
   isAskQuestionDomVisible,
@@ -263,10 +259,7 @@ export function syncAskQuestionModalOnDisplayContextChange(): void {
   if (!state.parked) parkActiveQuestionModal();
 }
 
-/**
- * Move the active question strip to another host (plan screen ↔ composer)
- * without cancelling the pending tool call.
- */
+/** Move the active question strip to another host (plan screen ↔ composer) without cancelling the pending tool call. */
 export function migrateActiveQuestionModalToHost(newHost: HTMLElement): boolean {
   if (!activeQuestionModal || !requestQuestionCardsCancel) return false;
   const state = activeQuestionModal;
@@ -500,7 +493,6 @@ export function showQuestionCardsModal(
     footer.append(validation, btnSubmit, hints);
     panel.append(header, cardBody, footer);
     host.appendChild(panel);
-    // Board onboarding hides its loader while this panel is in the DOM.
     notifyAskQuestionDisplayContextChanged();
 
     let settled = false;
@@ -605,7 +597,6 @@ export function showQuestionCardsModal(
 
       const list = document.createElement('div');
       list.className = 'question-cards-options';
-      // +1 for the synthetic Other row; drives grid layout for short option sets.
       list.dataset.optionCount = String(q.options.length + 1);
       list.setAttribute('role', isAskQuestionMultiSelect(q) ? 'group' : 'radiogroup');
       list.setAttribute(

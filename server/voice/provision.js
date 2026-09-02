@@ -1,7 +1,3 @@
-/**
- * Voice Python runtime provisioner — shared standalone Python + venv + ML deps.
- */
-
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -10,12 +6,10 @@ import { ensureStandalonePython } from '../servers/searxng.js';
 import { detectHardware } from '../system/hardware.js';
 import { getVoiceMetaPath, getVoiceRoot, getVoiceVenvDir } from './paths.js';
 
-/** PyTorch wheel indexes — CUDA build bundles its own runtime (driver 550+ for cu124). */
 const TORCH_CUDA_INDEX = 'https://download.pytorch.org/whl/cu124';
 const TORCH_CPU_INDEX = 'https://download.pytorch.org/whl/cpu';
 
 /**
- * Resolve pip torch package for the current machine.
  * @param {boolean} cudaAvailable
  * @returns {{ label: string, variant: 'cpu' | 'cuda', args: string[] }}
  */
@@ -67,7 +61,6 @@ function metaHasCpuTorch(meta) {
 }
 
 /**
- * Drop CPU-only torch before installing the CUDA build (pip cannot swap indexes in-place).
  * @param {string} venvPython
  * @param {boolean} cudaAvailable
  * @param {Record<string, unknown> | null} meta
@@ -83,12 +76,10 @@ async function maybeUninstallCpuTorch(venvPython, cudaAvailable, meta, onProgres
       pipSpawnOptions(),
     );
   } catch {
-    /* torch may already be absent */
   }
 }
 
 /**
- * Locate qwen_tts under a voice venv site-packages (Windows + Unix layouts).
  * @param {string} venvDir
  * @returns {string | null}
  */
@@ -108,10 +99,8 @@ export function resolveQwenTtsPackageDir(venvDir) {
 }
 
 /**
- * transformers 5.x raises when `config.pad_token_id` is missing on Qwen3TTSTalkerConfig;
- * 4.57.x returns None. Use getattr so TTS loads on both stacks.
  * @param {string} venvDir
- * @returns {Promise<number>} files patched (0 when qwen-tts is not installed)
+ * @returns {Promise<number>}
  */
 export async function patchQwenTtsPadTokenIdInVenv(venvDir) {
   const root = resolveQwenTtsPackageDir(venvDir);
@@ -142,10 +131,8 @@ export async function patchQwenTtsPadTokenId(venvPython, onProgress) {
 }
 
 /**
- * qwen-tts ships `@check_model_inputs()`; transformers 4.57.3 requires the call form.
- * Older Minnow provisioners stripped `()` for transformers 5.x (MIN-170) — restore for 4.57.3.
  * @param {string} venvDir
- * @returns {Promise<number>} files patched (0 when qwen-tts is not installed)
+ * @returns {Promise<number>}
  */
 export async function patchQwenTtsCheckModelInputsInVenv(venvDir) {
   const root = resolveQwenTtsPackageDir(venvDir);
@@ -185,7 +172,6 @@ export async function patchQwenTtsCheckModelInputs(venvPython, onProgress) {
 }
 
 /**
- * qwen-tts can pull a PyPI torchaudio that does not match our torch build — re-pin both.
  * @param {string} venvPython
  * @param {boolean} cudaAvailable
  * @param {(message: string) => void} [onProgress]
@@ -221,7 +207,6 @@ function corePackagesFor(cudaAvailable) {
   const torchPkg = buildTorchPackage(cudaAvailable);
   return [
     { label: torchPkg.label, args: torchPkg.args },
-    // qwen-tts 0.1.1 targets transformers 4.57.3; 5.x breaks pad_token_id on talker config.
     { label: 'transformers==4.57.3', args: ['transformers==4.57.3'] },
     { label: 'faster-whisper', args: ['faster-whisper'] },
     { label: 'accelerate', args: ['accelerate'] },
@@ -229,20 +214,10 @@ function corePackagesFor(cudaAvailable) {
   ];
 }
 
-/**
- * Streaming-capable qwen-tts fork — PyPI qwen-tts lacks true PCM streaming APIs
- * (`stream_generate_*`, `enable_streaming_optimizations`).
- */
 const QWEN_TTS_STREAMING_SPEC =
   'git+https://github.com/xxddccaa/Qwen3-TTS-streaming.git';
 
-/**
- * Worker env `MINNOW_TTS_USE_COMPILE` (default true): set to `false` when the voice
- * worker serves concurrent TTS streams — disables torch.compile to avoid CUDA graph
- * conflicts across threads. Applied in `server/voice/python/worker.py` on TTS load.
- */
 
-/** Optional packages — install continues when unavailable (CI / platform quirks). */
 const OPTIONAL_PACKAGES = [
   { label: 'qwen-tts (streaming fork)', args: [QWEN_TTS_STREAMING_SPEC] },
   { label: 'imageio-ffmpeg', args: ['imageio-ffmpeg'] },
@@ -276,7 +251,6 @@ async function writeMeta(meta) {
 }
 
 /**
- * Upgrade pip tooling inside the voice venv.
  * @param {string} venvPython
  * @param {(message: string) => void} [onProgress]
  */
@@ -292,7 +266,6 @@ async function ensurePip(venvPython, onProgress) {
 }
 
 /**
- * Install one pip package spec; optional packages log a warning instead of failing.
  * @param {string} venvPython
  * @param {{ label: string, args: string[], optional?: boolean }} pkg
  * @param {(message: string) => void} [onProgress]
@@ -317,7 +290,6 @@ async function pipInstallPackage(venvPython, pkg, onProgress) {
 }
 
 /**
- * Optional flash-attn on CUDA hosts — speeds attention when the wheel builds cleanly.
  * @param {string} venvPython
  * @param {boolean} cudaAvailable
  * @param {(message: string) => void} [onProgress]
@@ -385,7 +357,6 @@ export async function provision(onProgress) {
     else skippedPackages.push(pkg.label);
   }
 
-  // Always attempt — idempotent; restores decorator + pad_token_id for pinned transformers 4.57.3.
   await patchQwenTtsCheckModelInputs(venvPython, progress);
   await patchQwenTtsPadTokenId(venvPython, progress);
 
@@ -428,7 +399,6 @@ export async function provision(onProgress) {
 export async function getInstallStatus() {
   const venvPython = venvPythonPath(getVoiceVenvDir());
   const meta = await readMeta();
-  // Require meta.installedAt — venv may exist mid-provision before pip/deps finish.
   const installed = fs.existsSync(venvPython) && Boolean(meta?.installedAt);
   const torchVariant =
     meta?.torchVariant === 'cuda' || meta?.torchVariant === 'cpu' ? meta.torchVariant : null;

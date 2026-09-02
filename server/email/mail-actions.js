@@ -83,7 +83,6 @@ export async function bulkMessageAction(accountId, input) {
 
   const results = [];
 
-  // Resolve junk once for the whole batch (provider special-use / name heuristics).
   let junkFolder = '';
   if (action === 'spam') {
     const folders = await listFoldersCached(accountId);

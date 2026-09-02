@@ -1,7 +1,3 @@
-/**
- * Split a multi-file unified diff into per-file patch blocks for commit review.
- */
-
 export interface GitPatchFileEntry {
   /** Path after the change (b/ side). */
   path: string;

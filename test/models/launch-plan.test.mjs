@@ -87,6 +87,8 @@ function estimatePlan(geometry, weightsBytes, plan, variant) {
   });
 }
 
+// ── launch-plan constants ────────────────────────────────────────────────────
+
 describe('launch-plan constants', () => {
   it('keeps the deprecated 125k export unchanged so Discover ranking does not move', () => {
     assert.equal(DEFAULT_CONTEXT_TOKENS, 125000);
@@ -99,6 +101,8 @@ describe('launch-plan constants', () => {
     ]);
   });
 });
+
+// ── launchBudgetBytes ────────────────────────────────────────────────────────
 
 describe('launchBudgetBytes', () => {
   it('reserves 0.9 GiB on small NVIDIA cards because 8% of 6 GB is not enough WDDM headroom', () => {
@@ -118,6 +122,8 @@ describe('launchBudgetBytes', () => {
   });
 });
 
+// ── snapContextToLadder ──────────────────────────────────────────────────────
+
 describe('snapContextToLadder', () => {
   it('picks the largest rung that still fits, including non-pot values', () => {
     assert.equal(snapContextToLadder(4096), 4096);
@@ -134,6 +140,8 @@ describe('snapContextToLadder', () => {
     assert.equal(snapContextToLadder(0), 0);
   });
 });
+
+// ── planLlamaLaunch 8B dense ─────────────────────────────────────────────────
 
 describe('planLlamaLaunch 8B dense × VRAM', () => {
   // Locked 2026-08-16 from planLlamaLaunch + weightsBytesFor(8, 'Q4_K_M').
@@ -190,6 +198,8 @@ describe('planLlamaLaunch 8B dense × VRAM', () => {
   });
 });
 
+// ── planLlamaLaunch 30B-A3B MoE ──────────────────────────────────────────────
+
 describe('planLlamaLaunch 30B-A3B MoE × VRAM', () => {
   it('resolved the shipped Qwen3-MoE 30B geometry (family source, expert bank present)', () => {
     assert.equal(MOE_30B_A3B.source, 'family');
@@ -222,6 +232,8 @@ describe('planLlamaLaunch 30B-A3B MoE × VRAM', () => {
   });
 });
 
+// ── planLlamaLaunch Gemma-style ──────────────────────────────────────────────
+
 describe('planLlamaLaunch Gemma-style SWA × VRAM', () => {
   // Same 8B Q4_K_M file size as the dense fixture so the extra context at 8 GB is SWA, not weights.
   const EXPECTED = {
@@ -248,6 +260,8 @@ describe('planLlamaLaunch Gemma-style SWA × VRAM', () => {
   });
 });
 
+// ── planLlamaLaunch budget ───────────────────────────────────────────────────
+
 describe('planLlamaLaunch budget invariant', () => {
   it('keeps estimateRunMemory(plan) inside the launch budget whenever fits is true', () => {
     const cases = [
@@ -269,6 +283,8 @@ describe('planLlamaLaunch budget invariant', () => {
     }
   });
 });
+
+// ── planLlamaLaunch ceilings ─────────────────────────────────────────────────
 
 describe('planLlamaLaunch ceilings and parallel', () => {
   it('never plans above trainCtx=8192 even on a 96 GB card', () => {
@@ -316,6 +332,8 @@ describe('planLlamaLaunch ceilings and parallel', () => {
   });
 });
 
+// ── planLlamaLaunch variant ──────────────────────────────────────────────────
+
 describe('planLlamaLaunch variant policy', () => {
   it('leaves n_gpu_layers null on GPU auto so llama.cpp --fit can pick the split', () => {
     const plan = planCuda(DENSE_8B, WEIGHTS_8B_Q4_KM, 24);
@@ -354,6 +372,8 @@ describe('planLlamaLaunch variant policy', () => {
     assert.equal(planLlamaLaunch({ geometry: DENSE_8B, weightsBytes: WEIGHTS_8B_Q4_KM, trainCtx: TRAIN_CTX, hardware: hw, variant: 'cpu' }).flash_attn, 'auto');
   });
 });
+
+// ── planLlamaLaunch KV ───────────────────────────────────────────────────────
 
 describe('planLlamaLaunch KV degradation', () => {
   it('quantizes KV under pressure before giving up, and still fits when q4_0 saves enough', () => {

@@ -1,8 +1,3 @@
-/**
- * Lightweight epoch counters for outbound prompt token estimate memoization.
- * Bumped when tool or prompt configuration changes — never use deep equality on config blobs.
- */
-
 let toolConfigEpoch = 0;
 let promptConfigEpoch = 0;
 

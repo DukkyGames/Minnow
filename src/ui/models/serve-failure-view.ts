@@ -1,15 +1,7 @@
-/**
- * Failure copy for Local Server, inspector Load, and failed-load cards.
- * Title + cause + what to do — no grepped llama.cpp log as the headline.
- */
-
 import type { ServeRecord } from '../../models/api-client';
 import { el } from './dom';
 
-/**
- * Title / remediation block. Full border + danger wash (no side stripe).
- * @returns null when there is nothing classified to show.
- */
+/** Title / remediation block. */
 export function serveFailureBlock(serve: ServeRecord): HTMLElement | null {
   const failure = serve.failure;
   const title =

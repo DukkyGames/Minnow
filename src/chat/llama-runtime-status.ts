@@ -1,18 +1,3 @@
-/**
- * Live runtime detail for a local llama.cpp stream.
- *
- * Two facts arrive on the wire that Minnow used to drop on the floor:
- *
- * - `prompt_progress` (opted into with `return_progress`) carries `total` from the very
- *   first chunk, so prefill genuinely has a percentage. This is the *only* place one
- *   exists — `/slots` reports the same running number as both the part and the whole,
- *   which is why the Loaded Models card shows a token count instead.
- * - `timings` (opted into with `timings_per_token`) carries `predicted_n`, the tokens
- *   generated so far.
- *
- * Pure, so the phrasing is testable without a stream.
- */
-
 import type { LlamaPromptProgress, LlamaTimings } from '../types';
 
 export interface LlamaRuntimeStatusView {
@@ -37,8 +22,6 @@ export function llamaRuntimeStatusView(
 
   const progress = meta.prompt_progress;
   if (!hasOutput && progress && progress.total > 0 && progress.processed < progress.total) {
-    // A cached prefix legitimately starts the bar near full. Saying so is friendlier
-    // than a bar that appears stuck at 99% for a fraction of a second.
     if (progress.cache > 0 && progress.cache >= progress.processed) {
       return {
         phase: 'prompt_processing',

@@ -1,15 +1,3 @@
-/**
- * P5-A — Server-side browser driver, live browser (MIN-719).
- *
- * These tests launch a real Chromium. On a machine without one they **skip**
- * rather than fail, which is the same degradation the Final Tester ladder does
- * — if this file ever starts failing on an absent browser, the ladder is
- * broken too.
- *
- * Nothing here asserts on a screenshot. The known hazard is that screenshot
- * round-trips hang, so every assertion reads the DOM, the accessibility tree,
- * or the console.
- */
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -42,11 +30,10 @@ const PAGE_HTML = `<!doctype html>
   </script>
 </body></html>`;
 
-/** Fixture origin. `/hang` accepts the connection and never answers. */
 function startFixtureServer() {
   const server = http.createServer((req, res) => {
     const url = String(req.url ?? '/');
-    if (url.startsWith('/hang')) return; // deliberately never responds
+    if (url.startsWith('/hang')) return;
     if (url.startsWith('/probe')) {
       res.setHeader('content-type', 'text/html');
       res.end(
@@ -69,7 +56,6 @@ function startFixtureServer() {
   });
 }
 
-/** External kill — the browser dying without the driver asking. */
 function killExternally(pid) {
   if (process.platform === 'win32') {
     spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], {
@@ -84,7 +70,6 @@ function killExternally(pid) {
     try {
       process.kill(pid, 'SIGKILL');
     } catch {
-      /* already gone */
     }
   }
 }
@@ -101,7 +86,6 @@ function waitUntil(predicate, timeoutMs = 10_000, stepMs = 50) {
   });
 }
 
-/** Teardown finishes after the session reports dead, so poll the filesystem. */
 async function waitForGone(target, timeoutMs = 15_000, stepMs = 100) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -115,8 +99,6 @@ async function waitForGone(target, timeoutMs = 15_000, stepMs = 100) {
   }
 }
 
-// Setup runs at module scope, not in `before`: node:test evaluates a suite's
-// `skip` option when the suite is *defined*, which is earlier than any hook.
 const previousHome = process.env.MINNOW_HOME;
 const homeDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mn-driver-live-'));
 process.env.MINNOW_HOME = homeDir;
@@ -156,8 +138,6 @@ describe('browser driver — live', { skip: skipReason }, () => {
       assert.ok(pid > 0);
       assert.ok(isPidAlive(pid), 'the browser process should be running');
       assert.match(session.status().browserVersion, /\//, 'expected a browser version string');
-      // The orphan drain that runs on host exit reads this registry, so a live
-      // browser missing from it would be a browser nothing could clean up.
       assert.ok(
         trackedBrowserPids().includes(pid),
         'a live browser must be registered for the host-exit drain',
@@ -213,8 +193,6 @@ describe('browser driver — live', { skip: skipReason }, () => {
     assert.equal(status.endedReason, 'external');
     assert.match(String(status.endedDetail), /exited unexpectedly/);
 
-    // Every later call fails fast and typed — it must never wait on a socket
-    // that will never answer.
     const startedAt = Date.now();
     await assert.rejects(
       () => session.text(),
@@ -222,11 +200,9 @@ describe('browser driver — live', { skip: skipReason }, () => {
     );
     assert.ok(Date.now() - startedAt < 2_000, 'a dead session must reject immediately');
 
-    // close() on an already-dead browser still tears the profile down.
     await session.close();
     assert.ok(await waitForGone(profileDir), 'close() must tear down the profile of a dead browser');
 
-    // And the host is unaffected: a fresh session works straight after.
     const next = await launchOrFail();
     try {
       const nav = await next.navigate(`${fixture.origin}/`);
@@ -246,8 +222,6 @@ describe('browser driver — live', { skip: skipReason }, () => {
       assert.equal(nav.outcome, 'timeout');
       assert.ok(elapsed < 15_000, `navigate should return near its deadline, took ${elapsed}ms`);
 
-      // The browser itself was healthy, so the session is deliberately kept —
-      // a slow page is not a dead browser. It must still answer.
       assert.equal(session.status().alive, true);
       assert.equal(await session.isResponsive(), true);
       assert.equal(await session.evaluate('1 + 1'), 2);
@@ -280,7 +254,6 @@ describe('browser driver — live', { skip: skipReason }, () => {
         () => session.navigate('https://example.com/'),
         (err) => err instanceof BrowserDriverError && err.code === 'allowlist',
       );
-      // …and the session is untouched by the refusal.
       assert.equal(session.status().alive, true);
       const nav = await session.navigate(`${fixture.origin}/`);
       assert.equal(nav.outcome, 'loaded');
@@ -296,7 +269,6 @@ describe('browser driver — live', { skip: skipReason }, () => {
       firstProfile = first.status().profileDir;
       const nav = await first.navigate(`${fixture.origin}/`);
       assert.equal(nav.outcome, 'loaded');
-      // The fixture page writes both on load; prove they landed.
       assert.equal(await first.evaluate('localStorage.getItem("mn-driver")'), 'seen');
       assert.match(String(await first.evaluate('document.cookie')), /mn-driver=seen/);
     } finally {

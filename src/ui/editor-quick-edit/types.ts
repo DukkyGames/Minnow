@@ -1,7 +1,3 @@
-/**
- * Shared types for editor Quick Edit (Mod-K, Phase 4).
- */
-
 export interface QuickEditSelectionRange {
   from: number;
   to: number;

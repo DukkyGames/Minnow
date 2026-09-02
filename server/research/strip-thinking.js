@@ -1,22 +1,13 @@
-/**
- * Strip reasoning/thinking blocks from research LLM output and filter low-quality summaries.
- * Think-block stripping for research output (prose=false, prompt_echo=true).
- */
-
 /** @typedef {'think' | 'thinking' | 'thought'} ThinkTagName */
 
 const THINK_TAG_NAME = '(?:think(?:ing)?|thought)';
 
-/** Closed reasoning blocks — multi-pass handles nested tags. */
 const THINK_CLOSED_RE = new RegExp(
   `<${THINK_TAG_NAME}(?:\\s+[^>]*)?>[\\s\\S]*?</${THINK_TAG_NAME}>\\s*`,
   'gi',
 );
-/** Orphan opening or closing tags after the closed-pass. */
 const THINK_TAG_RE = new RegExp(`</?${THINK_TAG_NAME}[^>]*>\\s*`, 'gi');
-/** Dangling opener with no closer — strip from tag to end of string. */
 const THINK_OPEN_RE = new RegExp(`<${THINK_TAG_NAME}(?:\\s+[^>]*)?>[\\s\\S]*$`, 'i');
-/** Streaming models may emit `<thinking time="0.42">`-style attributes. */
 const THINK_ATTR_RE = new RegExp(`<${THINK_TAG_NAME}\\s+[^>]*>`, 'gi');
 const THINK_ATTR_CLOSE_RE = new RegExp(`</${THINK_TAG_NAME}\\s+[^>]*>`, 'gi');
 const GEMMA_THOUGHT_OPEN_RE = /<\|channel>thought\s*\n?[\s\S]*$/i;
@@ -27,7 +18,6 @@ const THOUGHT_TAG_OPEN_RE = /<thought(\s+[^>]*)?>/gi;
 const THOUGHT_TAG_CLOSE_RE = /<\/thought>/gi;
 const GEMMA_THOUGHT_CHANNEL_CAPTURE_RE =
   /<\|channel>thought\s*\n?([\s\S]*?)<channel\|>\s*/gi;
-/** Split before markdown headings, bold lines, or common email / reply openings. */
 const REPLY_BODY_START =
   '(?:#|\\*\\*|Dear |Hi[,! ]|Hello |Thanks|Thank you |Best[, ]|Regards|Sincerely|I hope|Looking forward|Sounds good)';
 const QWEN_THINKING_RE = new RegExp(
@@ -40,8 +30,6 @@ const PROMPT_ECHO_RES = [
 ];
 
 /**
- * Markers indicating extracted content is boilerplate, error text, or empty.
- * If any marker is found (case-insensitive), the content is filtered out.
  * @type {readonly string[]}
  */
 export const LOW_QUALITY_MARKERS = Object.freeze([
@@ -64,7 +52,6 @@ export const LOW_QUALITY_MARKERS = Object.freeze([
 ]);
 
 /**
- * Canonicalize supported thinking wrappers to `<think>` markup.
  * @param {string} text
  * @returns {string}
  */
@@ -86,7 +73,6 @@ export function normalizeThinkingMarkup(text) {
 }
 
 /**
- * Core think-block stripper (research path: prose=false, prompt_echo=true).
  * @param {string} text
  * @param {{ prose?: boolean, promptEcho?: boolean }} [options]
  * @returns {string}
@@ -125,7 +111,6 @@ export function stripThink(text, options = {}) {
 }
 
 /**
- * Strip only a leading contiguous run of untagged reasoning paragraphs.
  * @param {string} text
  * @returns {string}
  */
@@ -157,7 +142,6 @@ function stripReasoningProse(text) {
 }
 
 /**
- * Strip thinking blocks from model output. Preserves null/undefined passthrough.
  * @param {string | null | undefined} text
  * @returns {string | null | undefined}
  */
@@ -169,8 +153,6 @@ export function stripThinking(text) {
 }
 
 /**
- * Strip reasoning from short-form model output (email drafts, compose rewrites).
- * Enables prose heuristics in addition to tagged thinking blocks.
  * @param {string | null | undefined} text
  * @returns {string | null | undefined}
  */
@@ -182,7 +164,6 @@ export function stripDraftOutput(text) {
 }
 
 /**
- * Check if a finding summary indicates useless or irrelevant content.
  * @param {unknown} summary
  * @returns {boolean}
  */
@@ -198,12 +179,9 @@ export function isLowQuality(summary) {
   }
 }
 
-/** Strip leading markdown/quotes before checking YES/NO. */
 const STOP_ANSWER_PREFIX_RE = /^[\s*_`"'#>-]+/;
 
 /**
- * Parse an LLM stop decision after stripping thinking blocks.
- * Defaults to continue (false) on empty or malformed answers.
  * @param {string | null | undefined} response
  * @returns {boolean}
  */

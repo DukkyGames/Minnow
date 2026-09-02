@@ -1,10 +1,3 @@
-/**
- * P0-D — the pure scheduler.
- *
- * Table-driven rather than example-driven: the matrix over cap, ready-count,
- * touches overlap, and merge-in-flight is the point. The one named example is
- * the sequential deadlock that froze V1, kept as a regression.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { derive } from '../../server/orchestrator/core/derive.js';
@@ -28,16 +21,10 @@ import {
   touchesOverlap,
 } from '../../server/orchestrator/core/plan.js';
 
-// ---------------------------------------------------------------------------
-// Builders
-// ---------------------------------------------------------------------------
-
 let seq = 0;
 const stamp = (e) => ({ ...e, seq: (seq += 1), ts: seq });
 
 /**
- * Build a board state from a task spec list plus a tail of events.
- *
  * @param {{ tasks: Array<object>, concurrency?: number, running?: boolean }} setup
  * @param {...object} tail
  */
@@ -87,7 +74,7 @@ const merged = (taskId, sha) => [
 
 const nonMerge = (desires) => desires.filter((d) => d.role !== 'merge');
 
-// ---------------------------------------------------------------------------
+// ── Six rules ────────────────────────────────────────────────────────────────
 
 describe('plan — the six rules', () => {
   it('rule 6: a board that is not running desires nothing', () => {
@@ -100,7 +87,6 @@ describe('plan — the six rules', () => {
     );
     assert.deepEqual(plan(stopped), []);
 
-    // Even mid-flight, and even with a merge queued.
     const stoppedMidRun = boardOf(
       { tasks: [task('A'), task('B')], concurrency: 4 },
       started('A', 'a1', 'builder'),
@@ -161,7 +147,6 @@ describe('plan — the six rules', () => {
     ];
     const state = boardOf({ tasks, concurrency: 2 });
     assert.deepEqual(nonMerge(plan(state)).map((d) => d.taskId), ['A', 'B']);
-    // A file that appeared after board.created is irrelevant: plan() never re-walks.
     assert.equal(
       footprintsClash(
         { touches: ['src/a/**'], touchesExpanded: ['src/a/one.ts'] },
@@ -211,8 +196,6 @@ describe('plan — the six rules', () => {
   });
 
   it('rule 5: the merge head is desired even when the cap is full', () => {
-    // Integration is the bottleneck the whole run funnels through. Letting the
-    // cap starve it would deadlock a full board.
     const state = boardOf(
       { tasks: [task('A'), task('B')], concurrency: 1 },
       makeEvent('merge.enqueued', { taskId: 'A' }),
@@ -224,7 +207,7 @@ describe('plan — the six rules', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Matrix ───────────────────────────────────────────────────────────────────
 
 describe('plan — the matrix', () => {
   const CAPS = [1, 2, 4];
@@ -232,7 +215,6 @@ describe('plan — the matrix', () => {
   const OVERLAP = ['none', 'partial', 'total'];
   const MERGE = [true, false];
 
-  /** Touch globs for `n` tasks under an overlap regime. */
   const touchesFor = (n, overlap) =>
     Array.from({ length: n }, (_, i) => {
       if (overlap === 'total') return ['src/shared/**'];
@@ -250,7 +232,6 @@ describe('plan — the matrix', () => {
             const tasks = Array.from({ length: readyCount }, (_, i) =>
               task(`T${i}`, { touches: globs[i] }),
             );
-            // A merge in flight needs a task of its own that is already past testing.
             const tail = [];
             if (mergeInFlight) {
               tasks.push(task('M', { touches: ['src/m/**'] }));
@@ -261,9 +242,7 @@ describe('plan — the matrix', () => {
             const state = boardOf({ tasks, concurrency: cap }, ...tail);
             const desires = plan(state);
 
-            // Rule 4.
             assert.ok(nonMerge(desires).length <= cap, `${label}: cap exceeded`);
-            // Rule 5.
             assert.ok(
               desires.filter((d) => d.role === 'merge').length <= 1,
               `${label}: more than one merge`,
@@ -273,10 +252,8 @@ describe('plan — the matrix', () => {
               mergeInFlight ? 1 : 0,
               `${label}: merge desire mismatch`,
             );
-            // Rule 2.
             const ids = nonMerge(desires).map((d) => d.taskId);
             assert.equal(new Set(ids).size, ids.length, `${label}: duplicate task`);
-            // Rule 3.
             for (let i = 0; i < ids.length; i += 1) {
               for (let j = i + 1; j < ids.length; j += 1) {
                 assert.equal(
@@ -286,10 +263,8 @@ describe('plan — the matrix', () => {
                 );
               }
             }
-            // Idempotency.
             assert.deepEqual(plan(state), desires, `${label}: not idempotent`);
 
-            // And the expected count, which the rules above only bound.
             if (overlap === 'total' && readyCount > 0) {
               assert.equal(ids.length, 1, `${label}: total overlap must serialise`);
             } else if (overlap === 'none') {
@@ -302,13 +277,10 @@ describe('plan — the matrix', () => {
   }
 });
 
-// ---------------------------------------------------------------------------
+// ── Deadlock ─────────────────────────────────────────────────────────────────
 
 describe('plan — the sequential deadlock regression', () => {
   it('yields the tester desire on the very next call at N = 1', () => {
-    // V1's confirmed failure: the env-fixer pre-reserved the tester's slot while
-    // the concurrency check counted that reservation, and the board froze
-    // permanently. `plan()` holds no reservations, so there is nothing to leak.
     const state = boardOf(
       { tasks: [task('A')], concurrency: 1 },
       ...attempt('A', 'a1', 'builder', 'pass'),
@@ -342,8 +314,6 @@ describe('plan — the sequential deadlock regression', () => {
   });
 
   it('a failed final test does not re-desire builders, testers, or merges', () => {
-    // Guessing which task broke the ladder is a V1 sin. Failure journals
-    // and reports; plan() must not reopen work.
     const state = boardOf(
       { tasks: [task('A'), task('B')], concurrency: 4 },
       ...merged('A', 's1'),
@@ -360,7 +330,6 @@ describe('plan — the sequential deadlock regression', () => {
   });
 
   it('recovers a slot the moment a blocked builder is retried, with the same worktree', () => {
-    // The env-fixer's replacement. Same agent, same worktree, repair seed.
     const state = boardOf(
       { tasks: [task('A'), task('B', { touches: ['src/b/**'] })], concurrency: 1 },
       ...attempt('A', 'a1', 'builder', 'blocked'),
@@ -371,7 +340,7 @@ describe('plan — the sequential deadlock regression', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Determinism ──────────────────────────────────────────────────────────────
 
 describe('plan — determinism and totality', () => {
   const tasks = [
@@ -390,7 +359,6 @@ describe('plan — determinism and totality', () => {
     const state = boardOf({ tasks, concurrency: 2 });
     const first = plan(state);
     for (let i = 0; i < 10; i += 1) assert.deepEqual(plan(state), first);
-    // Same order, not merely the same set.
     assert.deepEqual(first.map((d) => d.taskId), plan(state).map((d) => d.taskId));
   });
 
@@ -426,7 +394,6 @@ describe('plan — determinism and totality', () => {
       makeEvent('task.skipped', { taskId: 'B', blockedBy: 'A' }),
       ...merged('C', 's'),
     );
-    // What is left is the board-level verification of what did merge.
     assert.deepEqual(plan(state), [
       { taskId: null, role: 'final', seedKind: 'initial', sameWorktree: false },
     ]);
@@ -469,14 +436,10 @@ describe('plan — determinism and totality', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── In-flight attempts ───────────────────────────────────────────────────────
 
 describe('plan — in-flight attempts', () => {
   it('describes a resumed repair attempt the way the decision that made it did', () => {
-    // Defaulting `sameWorktree` to false meant a repair attempt came back as a
-    // fresh-worktree one, so an effector diffing on more than { taskId, role }
-    // would restart it in the wrong place — the env-fixer bug class the
-    // `blocked` row exists to kill.
     const state = boardOf(
       { tasks: [task('A')], concurrency: 1 },
       ...attempt('A', 'a1', 'builder', 'blocked'),
@@ -499,8 +462,6 @@ describe('plan — in-flight attempts', () => {
   });
 
   it('lets running work continue when the cap is lowered beneath it', () => {
-    // The cap gates starting, not continuing. Killing a builder mid-edit to
-    // enforce a number the user changed afterwards throws away real work.
     const state = boardOf(
       { tasks: [task('A'), task('B'), task('C')], concurrency: 3 },
       started('A', 'a1', 'builder'),
@@ -509,7 +470,6 @@ describe('plan — in-flight attempts', () => {
     state.concurrency = 1;
     const desires = nonMerge(plan(state));
     assert.deepEqual(desires.map((d) => d.taskId), ['A', 'B'], 'running work was killed');
-    // But nothing new is picked up while the cap is exceeded.
     assert.equal(desires.some((d) => d.taskId === 'C'), false);
   });
 
@@ -526,7 +486,6 @@ describe('plan — in-flight attempts', () => {
       started('A', 'a1', 'builder'),
     );
     const desires = nonMerge(plan(state));
-    // B is disjoint and starts; C overlaps the running A and does not.
     assert.deepEqual(desires.map((d) => d.taskId), ['A', 'B']);
   });
 });
@@ -548,7 +507,6 @@ describe('pendingSkips — dead ends never stall the run', () => {
       { taskId: 'B', blockedBy: 'A' },
       { taskId: 'C', blockedBy: 'A' },
     ]);
-    // And the independent task keeps going — the whole point.
     assert.deepEqual(nonMerge(plan(state)).map((d) => d.taskId), ['D']);
   });
 
@@ -576,9 +534,6 @@ describe('pendingSkips — dead ends never stall the run', () => {
   });
 
   it('closes out a dependency cycle rather than stalling forever', () => {
-    // parsePlan rejects cycles, so this can only reach the journal by hand — but
-    // the failure mode is the worst kind: plan() returns nothing and the board
-    // sits idle with work outstanding and no explanation.
     const cyclic = [
       task('A', { dependsOn: ['B'] }),
       task('B', { dependsOn: ['A'] }),
@@ -623,6 +578,8 @@ describe('pendingSkips — dead ends never stall the run', () => {
   });
 });
 
+// ── Next action ──────────────────────────────────────────────────────────────
+
 describe('nextAction — the single policy call site', () => {
   it('starts a builder on a task with no history', () => {
     const state = boardOf({ tasks: [task('A')], concurrency: 1 });
@@ -648,8 +605,6 @@ describe('nextAction — the single policy call site', () => {
   });
 
   it('gives fail two more tries and blocked one, then abandons', () => {
-    // The `attempts` column counts tries finished *before* the one being
-    // decided, so `fail | < 2` is two retries and `blocked | < 1` is one.
     const fails = (n) =>
       boardOf(
         { tasks: [task('A')], concurrency: 1 },
@@ -686,7 +641,6 @@ describe('nextAction — the single policy call site', () => {
     assert.deepEqual(pendingAbandonments(state), [
       { taskId: 'A', reason: 'builder-failed', evidence: next.evidence },
     ]);
-    // And the scheduler starts nothing for it.
     assert.deepEqual(plan(state), []);
   });
 
@@ -702,7 +656,6 @@ describe('nextAction — the single policy call site', () => {
   });
 
   it('re-opens the owning task with a rebase seed on a merge conflict', () => {
-    // No merge-fixer agent. The agent that wrote the code has the context.
     const state = boardOf(
       { tasks: [task('A')], concurrency: 1 },
       ...attempt('A', 'a1', 'builder', 'pass'),
@@ -740,7 +693,7 @@ describe('nextAction — the single policy call site', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Touches overlap ──────────────────────────────────────────────────────────
 
 describe('touchesOverlap — pure glob-set intersection', () => {
   const overlaps = [
@@ -784,9 +737,6 @@ describe('touchesOverlap — pure glob-set intersection', () => {
   }
 
   it('understands character classes, which parsePlan admits', () => {
-    // Treating `[ab]` as three literal characters made `src/[ab]x.ts` and
-    // `src/ax.ts` read as disjoint — two tasks writing one file, scheduled
-    // concurrently, from a plan the parser accepted.
     assert.equal(globsIntersect('src/[ab]x.ts', 'src/ax.ts'), true);
     assert.equal(globsIntersect('src/[ab]x.ts', 'src/bx.ts'), true);
     assert.equal(globsIntersect('src/[ab]x.ts', 'src/cx.ts'), false);
@@ -834,7 +784,7 @@ describe('touchesOverlap — pure glob-set intersection', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ── Manual mode ──────────────────────────────────────────────────────────────
 
 describe('plan — rule 6 and Manual mode', () => {
   it('desires nothing on a stopped board with nothing hand-started', () => {
@@ -868,8 +818,6 @@ describe('plan — rule 6 and Manual mode', () => {
   });
 
   it('never advances a stopped board past the attempt it was given', () => {
-    // A passing builder becomes a tester only under the scheduler. Manual mode
-    // means the user drives each step.
     const state = boardOf(
       { tasks: [task('A')], running: false },
       ...attempt('A', 'a1', 'builder', 'pass'),
@@ -877,6 +825,8 @@ describe('plan — rule 6 and Manual mode', () => {
     assert.deepEqual(plan(state), []);
   });
 });
+
+// ── Manual start ─────────────────────────────────────────────────────────────
 
 describe('manualStart — outside the cap, and nothing else', () => {
   it('starts a ready task on a stopped board', () => {
@@ -890,9 +840,6 @@ describe('manualStart — outside the cap, and nothing else', () => {
   });
 
   it('refuses a task whose dependencies have not merged — rule 1', () => {
-    // Building against an integration base that is missing its prerequisites is
-    // wrong however loudly it was asked for. The conformance suite's
-    // perturbation dimension found this one.
     const state = boardOf({
       tasks: [task('A'), task('B', { dependsOn: ['A'] })],
       running: false,
@@ -925,7 +872,6 @@ describe('manualStart — outside the cap, and nothing else', () => {
       manualStart(state, 'B', [{ taskId: 'A', role: 'builder' }]),
       { kind: 'none' },
     );
-    // A disjoint footprint is fine.
     const disjoint = boardOf({ tasks: [task('A'), task('B')], running: false });
     assert.equal(manualStart(disjoint, 'B', [{ taskId: 'A', role: 'builder' }]).kind, 'start');
   });
@@ -945,6 +891,8 @@ describe('manualStart — outside the cap, and nothing else', () => {
     assert.deepEqual(manualStart(state, 'nope', []), { kind: 'none' });
   });
 });
+
+// ── Reopen ───────────────────────────────────────────────────────────────────
 
 describe('plan — reopen', () => {
   it('reopenTargets closes over skipped dependents', () => {

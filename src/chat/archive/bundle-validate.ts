@@ -1,7 +1,3 @@
-/**
- * Validate archive bundle facts — every sourceQuote must be a literal substring (MIN-139).
- */
-
 import type { ApiMessage } from '../../types';
 import { apiMessageContentToText } from '../../api/message-content';
 import type { ArchiveBundlePayload, ArchiveFact } from './types';
@@ -34,10 +30,6 @@ export interface BundleValidationResult {
   errors: string[];
 }
 
-/**
- * Assert each fact's sourceQuote appears verbatim in its source turn.
- * Rejects bundles with zero anchored facts.
- */
 export function validateArchiveBundle(
   bundle: ArchiveBundlePayload,
   turns: ApiMessage[],

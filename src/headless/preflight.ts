@@ -33,9 +33,7 @@ export async function waitForServer(options: WaitForServerOptions): Promise<bool
       if (configOk && toolsOk) {
         return true;
       }
-    } catch {
-      /* retry */
-    }
+    } catch {}
     await new Promise((r) => setTimeout(r, 250));
   }
   log(`Timed out after ${options.timeoutSec}s waiting for ${base}`);

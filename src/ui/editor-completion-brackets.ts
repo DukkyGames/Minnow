@@ -1,9 +1,3 @@
-/**
- * Bracket alignment for inline AI completions — stack from document prefix,
- * trim duplicate closers already in the suffix, append missing closers when the
- * rest of the line is blank, and reject heavily unbalanced inserts.
- */
-
 const OPENERS = new Set(['(', '[', '{']);
 const CLOSER_FOR: Record<string, string> = {
   '(': ')',

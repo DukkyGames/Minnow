@@ -1,8 +1,3 @@
-/**
- * Side-effecting Git actions for Issues detail (MIN-261 Phase 4).
- * Uses /api/git, /api/worktree open_workspace_pr, and execute_command for grep/gh detect.
- */
-
 import { appendIssueLinks } from '../../state/issues-store.ts';
 import { gitCheckout, gitPush, gitRemoteUrl } from '../../state/git-api.ts';
 import { forgeStatus } from '../../state/forge-api.ts';
@@ -37,6 +32,8 @@ export function resetGhAvailableCache(): void {
   ghAvailableCache = null;
 }
 
+// ── Detect ───────────────────────────────────────────────────────────────────
+
 /** Detect GitHub CLI once; hide PR actions when false. */
 export async function detectGhAvailable(force = false): Promise<boolean> {
   if (!force && ghAvailableCache != null) return ghAvailableCache;
@@ -49,13 +46,14 @@ export async function detectGhAvailable(force = false): Promise<boolean> {
   return ghAvailableCache;
 }
 
+// ── Branch ───────────────────────────────────────────────────────────────────
+
 /** Create/checkout `issue/iss-n-<slug>` and append a branch git link. */
 export async function createBranchFromIssue(issue: IssueCard): Promise<IssueGitActionResult> {
   const branch = resolveIssueBranchName(issue);
   const existing = (issue.gitLinks ?? []).some((l) => l.kind === 'branch' && l.ref === branch);
   const result = await gitCheckout({ branch, create: !existing });
   if (!result.ok) {
-    // Branch may already exist — retry checkout without create.
     if (!existing) {
       const retry = await gitCheckout({ branch, create: false });
       if (!retry.ok) {
@@ -151,6 +149,8 @@ export async function listIssueCommits(issue: IssueCard): Promise<{
   return { ok: true, commits: [...bySha.values()] };
 }
 
+// ── PR ───────────────────────────────────────────────────────────────────────
+
 /**
  * Checkout the issue branch (create if needed), push, then `gh pr create` via openWorkspacePr.
  */
@@ -166,7 +166,6 @@ export async function createPrFromIssue(issue: IssueCard): Promise<IssueGitActio
   const push = await gitPush({ setUpstream: true });
   if (!push.ok) {
     const still = push.error ?? 'Push failed';
-    // Hard-fail when there is clearly no remote / server; otherwise let gh report.
     if (/server_off|no.?remote|does not appear to be a git|not a git repository/i.test(still)) {
       return { ok: false, error: still };
     }
@@ -200,10 +199,6 @@ export interface ResolvedIssuePr {
   repo: string;
 }
 
-/**
- * Resolve the PR for an issue: stored git link / agent slot first, then
- * `gh pr list --head <issue branch>`. A gh hit is remembered as a git link.
- */
 export async function resolveIssuePrNumber(issue: IssueCard): Promise<ResolvedIssuePr | null> {
   const stored = resolveIssuePrRef(issue);
   if (stored) {
@@ -288,6 +283,8 @@ export async function resolveGitLinkOpenUrl(link: IssueGitLink): Promise<string 
   if (link.kind === 'github-issue') return githubIssueWebUrl(remote.url, link.ref);
   return null;
 }
+
+// ── Open ─────────────────────────────────────────────────────────────────────
 
 /** Open commit in the Code git side panel + commit diff (existing graph UX). */
 export async function openIssueCommitInGitUi(sha: string, subject?: string): Promise<void> {

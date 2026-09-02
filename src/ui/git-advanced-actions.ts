@@ -32,6 +32,8 @@ function gitErrorChatContext(ctx: AdvancedGitContext): GitErrorChatContext {
   return { cwd: ctx.cwd, branch: ctx.branch };
 }
 
+// ── Alerts ───────────────────────────────────────────────────────────────────
+
 /** Show inline conflict alert with abort/continue actions. */
 export function renderConflictAlert(
   host: HTMLElement,
@@ -116,6 +118,8 @@ export function renderMergeErrorAlert(
   host.appendChild(alert);
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 async function runAdvancedOp(
   fn: () => Promise<GitOpResult>,
   ctx: AdvancedGitContext,
@@ -143,6 +147,8 @@ async function pickBranch(branches: string[], prompt: string): Promise<string | 
   const trimmed = value.trim();
   return trimmed || null;
 }
+
+// ── Dialogs ──────────────────────────────────────────────────────────────────
 
 /** Open merge target picker and run merge. */
 export async function openMergeDialog(

@@ -15,6 +15,8 @@ import type { AppDefinition } from './app-registry';
 import { closeUnavailableAppSurfaces } from './app-surface-cleanup';
 import type { AppId } from './types';
 
+// ── Storage ──────────────────────────────────────────────────────────────────
+
 const STORAGE_KEY = 'minnow.os.disabledApps';
 
 type AppPreferencesListener = () => void;
@@ -33,17 +35,13 @@ function readStorage(): string | null {
 function writeStorage(value: string): void {
   try {
     localStorage.setItem(STORAGE_KEY, value);
-  } catch {
-    /* private mode */
-  }
+  } catch {}
 }
 
 function removeStorage(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    /* private mode */
-  }
+  } catch {}
 }
 
 /** Normalize persisted disabled ids: only optional released apps may be disabled. */
@@ -56,7 +54,6 @@ export function normalizeDisabledAppIds(raw: unknown): AppId[] {
     if (typeof item !== 'string') continue;
     const id = item as AppId;
     if (!allowed.has(id) || seen.has(id)) continue;
-    // Core and developer-hidden apps are never stored as disabled.
     if (isCoreApp(id) || !isDeveloperReleased(id)) continue;
     seen.add(id);
     out.push(id);
@@ -85,9 +82,7 @@ function emitAppPreferences(): void {
   for (const fn of listeners) {
     try {
       fn();
-    } catch {
-      /* ignore subscriber errors */
-    }
+    } catch {}
   }
 }
 
@@ -95,15 +90,15 @@ function persistDisabled(ids: readonly AppId[]): void {
   const normalized = normalizeDisabledAppIds(ids);
   cachedDisabled = new Set(normalized);
   if (normalized.length === 0) {
-    // Prefer absent key so existing installs keep the "all enabled" default semantics.
     removeStorage();
   } else {
     writeStorage(JSON.stringify(normalized));
   }
   emitAppPreferences();
-  // Close running surfaces for apps that just became unavailable.
   closeUnavailableAppSurfaces();
 }
+
+// ── Enable ───────────────────────────────────────────────────────────────────
 
 /** Persist the full disabled-optional set and notify subscribers. */
 export function saveDisabledAppIds(ids: readonly AppId[]): void {
@@ -161,6 +156,8 @@ export function getAppUnavailableReason(
 export function listAvailableApps(): AppDefinition[] {
   return listReleasedApps().filter((app) => isAppEnabled(app.id));
 }
+
+// ── Lists ────────────────────────────────────────────────────────────────────
 
 /** Fixed roster for the left app rail. */
 const RAIL_PRIMARY_APP_IDS: AppId[] = [

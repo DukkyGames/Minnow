@@ -1,14 +1,8 @@
-/**
- * llama.cpp prebuilt variant selection — CPU, CUDA, Vulkan, Metal.
- * Maps host GPU probes to release asset names from ggml-org/llama.cpp.
- */
-
 import { LLAMA_CPP_RELEASE_TAG } from './llama-runtime.js';
 import { detectHardware } from '../system/hardware.js';
 
 /** @typedef {'cpu' | 'cuda-12.4' | 'cuda-13' | 'vulkan' | 'metal' | 'rocm'} LlamaVariant */
 
-/** Human labels for UI pickers. */
 export const LLAMA_VARIANT_LABELS = {
   cpu: 'CPU',
   'cuda-12.4': 'CUDA 12.4',
@@ -18,7 +12,6 @@ export const LLAMA_VARIANT_LABELS = {
   rocm: 'ROCm (Linux)',
 };
 
-/** Platform suffix for release asset names. */
 function platformArchSuffix() {
   const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
   if (process.platform === 'win32') return { platform: 'win', arch, ext: 'zip' };
@@ -28,7 +21,6 @@ function platformArchSuffix() {
 }
 
 /**
- * Build expected asset name patterns for a variant on this host.
  * @param {LlamaVariant} variant
  * @param {string} tag
  * @returns {{ main: string, companion?: string }}
@@ -50,7 +42,6 @@ export function expectedAssetNames(variant, tag = LLAMA_CPP_RELEASE_TAG) {
     if (platform === 'win') {
       return {
         main: `llama-${tag}-bin-win-cuda-12.4-${arch}.zip`,
-        // cudart zips omit the release tag in upstream manifests.
         companion: `cudart-llama-bin-win-cuda-12.4-${arch}.zip`,
       };
     }
@@ -91,13 +82,11 @@ export function expectedAssetNames(variant, tag = LLAMA_CPP_RELEASE_TAG) {
   throw new Error(`Unknown llama variant: ${variant}`);
 }
 
-/** Arch token ggml-org uses in release asset names. */
 function hostArchToken() {
   return process.arch === 'arm64' ? 'arm64' : 'x64';
 }
 
 /**
- * Platform token from a ggml-org asset name (`win` / `ubuntu` / `macos`).
  * @param {string} name
  * @returns {'win' | 'macos' | 'ubuntu' | null}
  */
@@ -109,7 +98,6 @@ function llamaAssetPlatform(name) {
 }
 
 /**
- * `x64` / `arm64` as a filename token. `arm64` is not a match for `x64`.
  * @param {string} name
  * @returns {'arm64' | 'x64' | null}
  */
@@ -120,9 +108,6 @@ function llamaAssetArch(name) {
 }
 
 /**
- * True when `name` is for the same OS + CPU as `pattern` (the expected host zip).
- * Without this, "newest cuda-13*" on b10448 picks win-cuda-13.4-arm64 over
- * win-cuda-13.3-x64, and llama-server.exe cannot run on AMD64 Windows.
  * @param {string} name
  * @param {string} pattern
  */
@@ -134,7 +119,6 @@ export function assetMatchesExpectedHost(name, pattern) {
   return true;
 }
 
-/** Sort key so cuda-13.10 beats cuda-13.9 (string sort does the opposite). */
 function cudaVersionScore(name) {
   const match = String(name).match(/cuda-(\d+)(?:\.(\d+))?/i);
   if (!match) return 0;
@@ -142,8 +126,7 @@ function cudaVersionScore(name) {
 }
 
 /**
- * Pick the best matching asset from a release manifest.
- * @param {string} pattern — substring or exact name
+ * @param {string} pattern
  * @param {Array<{ name: string }>} assets
  * @returns {string | null}
  */
@@ -151,9 +134,6 @@ function findAsset(pattern, assets) {
   const exact = assets.find((a) => a.name === pattern);
   if (exact) return exact.name;
 
-  // cuda-13.x: pick newest cuda-13* asset when exact name differs (e.g. cuda-13.3).
-  // Must stay on this host's platform + arch — b10448 shipped 13.4 only for
-  // Windows ARM64, and a global sort() took that zip on AMD64 PCs.
   if (pattern.includes('cuda-13')) {
     const isCudart = pattern.startsWith('cudart-');
     const cuda13 = assets
@@ -177,7 +157,6 @@ function findAsset(pattern, assets) {
 }
 
 /**
- * Match Windows cudart companion to the CUDA version in the main llama zip.
  * @param {string} mainZip
  * @param {Array<{ name: string }>} assets
  */
@@ -201,7 +180,6 @@ function findCudartCompanion(mainZip, assets) {
 }
 
 /**
- * Resolve main (+ optional companion) zip names for a variant.
  * @param {{ variant: LlamaVariant, tag?: string, assets: Array<{ name: string, browser_download_url?: string }> }} opts
  * @returns {{ mainZip: string, companionZip?: string, assetNames: string[] }}
  */
@@ -217,8 +195,6 @@ export function resolveLlamaAssets({ variant, tag = LLAMA_CPP_RELEASE_TAG, asset
 
   let companionZip;
   if (expected.companion) {
-    // Pair cudart to the CUDA patch we actually picked (13.3-x64 with 13.3-x64),
-    // not the newest cuda-13* cudart on the release (which may be another arch).
     companionZip = findCudartCompanion(mainZip, assets) ?? findAsset(expected.companion, assets) ?? undefined;
   }
 
@@ -227,7 +203,6 @@ export function resolveLlamaAssets({ variant, tag = LLAMA_CPP_RELEASE_TAG, asset
 }
 
 /**
- * Variants that have matching assets in the given release manifest for this host.
  * @param {Array<{ name: string }>} assets
  * @returns {LlamaVariant[]}
  */
@@ -247,21 +222,18 @@ export function listInstallableVariants(assets) {
       resolveLlamaAssets({ variant, assets });
       out.push(variant);
     } catch {
-      /* not published for this platform */
     }
   }
   return out;
 }
 
 /**
- * Prefer CUDA when nvidia-smi works, else Vulkan when installable, else Metal on Apple Silicon, else CPU.
  * @param {Record<string, unknown>} [hardware]
  * @param {Array<{ name: string }>} [releaseAssets]
  * @returns {Promise<LlamaVariant>}
  */
 export async function detectPreferredLlamaVariant(hardware, releaseAssets) {
   const hw = hardware ?? (await detectHardware());
-  // detectHardware() exposes `backend`; legacy probes may use gpu_backend.
   const gpuBackend = String(
     hw.gpu_backend ?? hw.gpuBackend ?? hw.backend ?? '',
   ).toLowerCase();
@@ -283,7 +255,6 @@ export async function detectPreferredLlamaVariant(hardware, releaseAssets) {
   return 'cpu';
 }
 
-/** Cached release asset list for variant probing. */
 let releaseAssetsCache = { tag: '', at: 0, assets: [] };
 const RELEASE_CACHE_MS = 60 * 60 * 1000;
 
@@ -328,12 +299,10 @@ export async function fetchReleaseAssetList(tag = LLAMA_CPP_RELEASE_TAG) {
   return assets;
 }
 
-/** Whether a variant can use the GPU (not CPU-only). */
 export function isGpuCapableVariant(variant) {
   return variant !== 'cpu';
 }
 
-/** Test helper — clear release asset cache. */
 export function resetLlamaVariantCacheForTests() {
   releaseAssetsCache = { tag: '', at: 0, assets: [] };
 }

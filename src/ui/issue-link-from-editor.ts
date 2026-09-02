@@ -1,7 +1,3 @@
-/**
- * Editor selection → IssueCodeRef via context menu "Link to issue…" (MIN-261).
- */
-
 import {
   appendIssueLinks,
   collectIssues,
@@ -13,10 +9,7 @@ import { getWorkspacePath } from '../state/workspace';
 import type { IssueCodeRef } from '../types';
 import { appPrompt } from './app-dialog';
 
-/**
- * Prompt for an issue id (lists recent open issues) and append a code ref.
- * Returns true when a link was added.
- */
+/** Prompt for an issue id (lists recent open issues) and append a code ref. */
 export async function linkSelectionToIssue(input: {
   path: string;
   startLine: number;
@@ -58,7 +51,6 @@ export async function linkSelectionToIssue(input: {
   appendIssueLinks(issue.id, { codeRefs: [ref] });
   void import('./toast').then((m) => m.showToast(`Linked to ${issue.id}`, 'success'));
 
-  // Refresh Issues detail if that app is open.
   void import('./issues-detail').then((m) => m.refreshIssueDetailIfOpen());
   return true;
 }

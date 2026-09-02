@@ -1,8 +1,3 @@
-/**
- * List-view column sorting for the Issues app.
- * Pure helpers so UI and tests share the same compare rules.
- */
-
 import type { IssueCard } from '../types';
 import { issueIdKeyPrefix, issueIdNumericSuffix } from '../issues/project-key';
 import {
@@ -36,15 +31,7 @@ export const DEFAULT_ISSUES_LIST_SORT: IssuesListSort = {
   direction: 'desc',
 };
 
-/**
- * Rank lookups for the taxonomy columns.
- *
- * These used to be object literals keyed on the seed ids, which meant any
- * status, type, or priority the user added in Settings resolved to `undefined`
- * and every comparison involving it evaluated to `NaN` — a sort that silently
- * scrambled rather than failing. Ranks now come from the catalog's own `order`,
- * which is the field Settings already edits.
- */
+/** Rank lookups for the taxonomy columns. */
 export interface IssuesSortRanks {
   status: ReadonlyMap<string, number>;
   priority: ReadonlyMap<string, number>;
@@ -61,20 +48,12 @@ function rankMap(items: readonly { id: string }[]): Map<string, number> {
 export function buildIssuesSortRanks(taxonomy: IssuesTaxonomy): IssuesSortRanks {
   return {
     status: rankMap(sortedStatuses(taxonomy)),
-    // Priority is authored most-severe-first, and `desc` must put urgent on top,
-    // so the rank is inverted here rather than at every comparison site.
     priority: rankMap([...sortedPriorities(taxonomy)].reverse()),
     type: rankMap(sortedTypes(taxonomy)),
   };
 }
 
-/**
- * Ranks used when no taxonomy is supplied.
- *
- * The seed catalog, not an empty map: callers that predate the taxonomy
- * argument must keep sorting by workflow order rather than falling back to
- * alphabetical. Built once, lazily, so importing this module stays free.
- */
+/** Ranks used when no taxonomy is supplied. */
 let seedRanks: IssuesSortRanks | null = null;
 
 function defaultRanks(): IssuesSortRanks {
@@ -82,18 +61,11 @@ function defaultRanks(): IssuesSortRanks {
   return seedRanks;
 }
 
-/**
- * Rank an id, sorting anything the catalog has since dropped to the end
- * rather than into the middle on a `NaN`.
- */
 function rankOf(ranks: ReadonlyMap<string, number>, id: string): number {
   return ranks.get(id) ?? Number.MAX_SAFE_INTEGER;
 }
 
-/**
- * First click on a column uses a sensible direction:
- * text/id/status → A→Z / workflow; priority/updated → high/newest first.
- */
+/** First click on a column uses a sensible direction: text/id/status → A→Z / workflow; priority/updated → high/newest first. */
 export function defaultDirectionForSortKey(key: IssuesSortKey): IssuesSortDirection {
   if (key === 'priority' || key === 'updated') return 'desc';
   return 'asc';

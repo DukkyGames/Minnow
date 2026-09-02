@@ -1,7 +1,3 @@
-/**
- * Compact subsystem health strip — server, tools, LSP, PTY, Electron.
- */
-
 export type HealthComponentState = {
   ok: boolean | null;
   label: string;
@@ -94,10 +90,6 @@ export function healthRowsFromPayload(payload: DiagnosticsHealthPayload | null):
   return rows;
 }
 
-/**
- * Render a horizontal health strip into `host`.
- * `onErrorClick` opens diagnostics when the user clicks last-error link.
- */
 export function renderHealthStrip(
   host: HTMLElement,
   payload: DiagnosticsHealthPayload | null,

@@ -1,7 +1,3 @@
-/**
- * Resolve shipped builtin baselines for file-backed Settings editors (API + bundle fallback).
- */
-
 import {
   fetchWorkAgentBuiltinBaseline,
   type WorkAgentPromptProfile,

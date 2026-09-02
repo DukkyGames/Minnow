@@ -1,7 +1,3 @@
-/**
- * Settings → Sampler — global defaults (emphasis panels, responsive field grid).
- */
-
 import '../styles/settings-general.css';
 import '../styles/settings-sampler.css';
 

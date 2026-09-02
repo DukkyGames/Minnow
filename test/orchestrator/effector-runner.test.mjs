@@ -1,9 +1,3 @@
-/**
- * P2-F — runner effector: real attempts with typed exits (MIN-703).
- *
- * Fake model host only — zero real LLM. The engine is the Phase 1 engine;
- * this file must not require engine.js logic changes.
- */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -96,9 +90,8 @@ function functionCallChunks(name, args, toolCallId = 'call_report') {
   ];
 }
 
-/** Many token deltas, then a report — journal must stay bounded by outcomes. */
 function longThenReportChunks(payload) {
-  /** @type {string[]} */
+/** @type {string[]} */
   const chunks = [];
   for (let i = 0; i < 40; i += 1) {
     chunks.push(`data: ${JSON.stringify({ choices: [{ delta: { content: `tok${i} ` } }] })}\n\n`);
@@ -197,9 +190,8 @@ function makeEffector(opts = {}) {
   });
 }
 
-/** Hang the upstream SSE so stop / timeout / kill can be observed. */
 function createHangServer() {
-  /** @type {import('http').ServerResponse[]} */
+/** @type {import('http').ServerResponse[]} */
   const open = [];
   const server = http.createServer((req, res) => {
     if (req.method === 'POST') {
@@ -225,16 +217,12 @@ function createHangServer() {
     kill() {
       for (const res of open) {
         try {
-          // Error the stream so pumpUpstream marks the generation failed
-          // instead of retrying a dropped keep-alive as a transient blip.
           res.write('event: end\ndata: {"status":"error","errorMessage":"model host killed"}\n\n');
         } catch {
-          /* already gone */
         }
         try {
           res.destroy();
         } catch {
-          /* ignore */
         }
       }
       if (typeof server.closeAllConnections === 'function') {
@@ -266,8 +254,6 @@ function streamingCount() {
     (state) => state.status === 'pending' || state.status === 'streaming',
   ).length;
 }
-
-// ---------------------------------------------------------------------------
 
 describe('P2-F source contract', () => {
   test('engine.js is untouched by this task', () => {
@@ -319,11 +305,11 @@ describe('runner effector', { concurrency: false }, () => {
       { match: { nth: 1 }, emit: functionCallChunks(REPORT_TOOL_NAME, TESTER_PASS) },
     ],
   });
-  /** @type {string} */
+/** @type {string} */
   let homeDir = '';
-  /** @type {string} */
+/** @type {string} */
   let cwd = '';
-  /** @type {string} */
+/** @type {string} */
   let fakeBase = '';
 
   before(async () => {
@@ -440,7 +426,7 @@ describe('runner effector', { concurrency: false }, () => {
     const boardId = 'p2f-crash';
     const journal = await openBoard(boardId);
     const state = await journal.loadState(boardId);
-    /** @type {((err: Error) => void) | null} */
+/** @type {((err: Error) => void) | null} */
     let explode = null;
     const deps = stubDeps();
     deps.postChatCompletions = (_provider, _body, signal) =>
@@ -453,7 +439,7 @@ describe('runner effector', { concurrency: false }, () => {
         );
       });
     const effector = makeEffector({ boardId, journal, cwd, getState: () => state, deps });
-    /** @type {import('../../server/orchestrator/engine.js').AttemptEnd | null} */
+/** @type {import('../../server/orchestrator/engine.js').AttemptEnd | null} */
     let end = null;
     effector.onEnd((payload) => {
       end = payload;
@@ -486,7 +472,7 @@ describe('runner effector', { concurrency: false }, () => {
       getState: () => state,
       limits: { wallClockMs: 1000, maxTurns: 40 },
     });
-    /** @type {string | null} */
+/** @type {string | null} */
     let outcome = null;
     effector.onEnd((payload) => {
       outcome = payload.outcome;
@@ -515,7 +501,7 @@ describe('runner effector', { concurrency: false }, () => {
     const journal = await openBoard(boardId);
     const state = await journal.loadState(boardId);
     const effector = makeEffector({ boardId, journal, cwd, getState: () => state });
-    /** @type {string | null} */
+/** @type {string | null} */
     let outcome = null;
     effector.onEnd((payload) => {
       outcome = payload.outcome;
@@ -621,9 +607,6 @@ describe('runner effector', { concurrency: false }, () => {
       cwd,
       getState: () => box.engine.getState(),
     });
-    // Merge/final would also run; stop after the builder ends by not starting the board
-    // through completion — drive a single start via startTask on a started board
-    // and then stop after one ended attempt.
     const engine = createEngine({ boardId, effector, journal, tickMs: 100_000 });
     box.engine = engine;
     await engine.load();
@@ -636,7 +619,6 @@ describe('runner effector', { concurrency: false }, () => {
       const events = journal.readEventsSync(boardId);
       const ended = events.filter((event) => event.type === 'task.attempt.ended');
       assert.ok(ended.length >= 1);
-      // Tokens must not appear as journal types or as huge string fields.
       for (const event of events) {
         assert.notEqual(event.type, 'delta');
         assert.notEqual(event.type, 'token');
@@ -659,8 +641,10 @@ describe('runner effector', { concurrency: false }, () => {
   test('P6-B: start() injects ask: null on the real runTurn options', { timeout: 20_000 }, async () => {
     const boardId = 'p2f-ask-null';
     const journal = await openBoard(boardId);
-    /** @type {unknown[]} */
+/** @type {unknown[]} */
     const seenAsk = [];
+/** @type {boolean[]} */
+    const seenFinalize = [];
     const box = { engine: /** @type {ReturnType<typeof createEngine> | null} */ (null) };
     const effector = makeEffector({
       boardId,
@@ -669,6 +653,7 @@ describe('runner effector', { concurrency: false }, () => {
       getState: () => box.engine.getState(),
       runTurn: async (options) => {
         seenAsk.push(options.ask);
+        seenFinalize.push(options.finalizeStructuredOutcome);
         return { outcome: 'pass', summary: 'ok', evidence: [] };
       },
     });
@@ -679,6 +664,7 @@ describe('runner effector', { concurrency: false }, () => {
       await engine.startBoard(1);
       await waitFor(() => seenAsk.length >= 1, 10_000);
       assert.equal(seenAsk[0], null);
+      assert.equal(seenFinalize[0], false);
     } finally {
       engine.dispose();
     }

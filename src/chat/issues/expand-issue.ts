@@ -1,11 +1,3 @@
-/**
- * Prompt + parser for the Issues sparkles expander (MIN-635).
- *
- * A one-shot rewrite of the card's current title/description — same idea as
- * the composer prompt expander, using the issue-writer's writing shape
- * (crisp title, structured markdown) without tools or workspace research.
- */
-
 import { extractInlineThinkingFromContent } from '../../api/inline-thinking';
 import { wrapUntrusted } from '../../lib/untrusted.mjs';
 import type { ApiMessage, IssueCard } from '../../types';
@@ -79,10 +71,8 @@ function expandSystemPrompt(hasDetails: boolean): string {
   ].join('\n');
 }
 
-/**
- * System + user messages for a one-shot issue expansion.
- * Card fields are untrusted material: a stub title is not an instruction to follow.
- */
+// ── Prompt ───────────────────────────────────────────────────────────────────
+
 export function buildExpandIssueMessages(issue: IssueExpandSource): ApiMessage[] {
   const hasDetails = issueHasDetails(issue);
   const user = [
@@ -138,7 +128,6 @@ export function sanitizeExpandedIssueRaw(
   const body = reply.trim();
   if (!body) return '';
 
-  // Preamble first so a lead-in wrapping a fenced XML body can still unwrap.
   return stripWrappingQuotes(stripWrappingFence(body.replace(PREAMBLE_RE, '').trim()));
 }
 
@@ -158,7 +147,6 @@ function parseXmlDraft(text: string, partial: boolean): ExpandedIssueDraft | nul
   let title = titleClosed ? decodeXmlText(titleClosed[1] ?? '') : '';
   let description = descClosed ? decodeXmlText(descClosed[1] ?? '') : '';
 
-  // Mid-stream: take an open <description> so the overlay fills as tokens arrive.
   if (!description && partial) {
     const descOpen = /<description>\s*([\s\S]*)$/i.exec(text);
     if (descOpen && !/<\/description>/i.test(text)) {
@@ -225,11 +213,8 @@ function parseFirstLineDraft(text: string): ExpandedIssueDraft | null {
   return { title, description };
 }
 
-/**
- * Reduce model output to a title + description draft.
- * XML is the contracted format; JSON, labels, and first-line fallbacks cover local models.
- * Partial streams skip the first-line fallback so a half-written XML tag does not flicker.
- */
+// ── Parse ────────────────────────────────────────────────────────────────────
+
 export function parseExpandedIssue(
   raw: string,
   options: { partial?: boolean } = {},
@@ -254,10 +239,8 @@ export function parseExpandedIssue(
   return parseFirstLineDraft(text);
 }
 
-/**
- * Apply a proposal without wiping fields the model left blank.
- * An empty proposed description keeps the original so a title-only reply cannot blank the body.
- */
+// ── Merge ────────────────────────────────────────────────────────────────────
+
 export function mergeExpandedIssue(
   original: { title: string; description: string },
   draft: ExpandedIssueDraft,

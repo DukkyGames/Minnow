@@ -1,11 +1,3 @@
-/**
- * Strip `image_url` content parts from an outbound request.
- *
- * Used as the recovery half of Minnow's optimistic vision bet: attached pixels
- * go out to any model not proven text-only, and a rejection is answered by
- * resending the same turn without them rather than failing the user's message.
- */
-
 import type { ApiMessage, ApiMessageContent, ContentPart } from '../types';
 
 /** Replaces dropped pixels so the model knows an image existed and was withheld. */
@@ -42,11 +34,6 @@ function contentWithoutImages(content: ApiMessageContent): ApiMessageContent {
   return [text, notes].filter(Boolean).join('\n\n');
 }
 
-/**
- * Copy of `messages` with every image part replaced by a short note.
- * Drops tool-screenshot follow-up rows entirely — those carry nothing but the
- * pixels, so a text-only copy would just be noise before the next tool call.
- */
 export function messagesWithoutImageParts(messages: readonly ApiMessage[]): ApiMessage[] {
   const out: ApiMessage[] = [];
   for (const m of messages) {

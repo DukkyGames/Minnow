@@ -54,11 +54,8 @@ export function markBootPhase(phase: BootPhase): void {
   if (typeof performance === 'undefined' || typeof performance.mark !== 'function') return;
   try {
     performance.mark(bootPhaseMarkName(phase));
-  } catch {
-    /* mark may throw if the name collides in some environments */
-  }
+  } catch {}
 
-  // interactiveMs is the number the app previously lacked — record when init finishes.
   if (phase === 'interactive') {
     const nowMs = performance.now();
     const bootOriginMs = readBootOriginMs(nowMs);
@@ -84,9 +81,7 @@ export function measureBootPhase(name: string, from: BootPhase, to: BootPhase): 
   if (typeof performance === 'undefined' || typeof performance.measure !== 'function') return;
   try {
     performance.measure(name, bootPhaseMarkName(from), bootPhaseMarkName(to));
-  } catch {
-    /* missing marks — skip quietly */
-  }
+  } catch {}
 }
 
 /** Record shell-ready timing and expose it on window for diagnostics. */
@@ -130,9 +125,7 @@ export function resetBootMetricsForTests(): void {
       ] as BootPhase[]) {
         performance.clearMarks(bootPhaseMarkName(phase));
       }
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   }
 }
 

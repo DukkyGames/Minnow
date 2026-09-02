@@ -1,9 +1,3 @@
-/**
- * Orchestrate mode: separate Chat / Board view toggles.
- * Board → composer controls trail; Chat → board header controls.
- * Board state lives on sidebar folders ({@link ChatGroup}).
- */
-
 import { normalizeModeId } from '../chat/modes/types';
 import { isChatStreaming } from '../chat/streaming-state';
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
@@ -79,7 +73,6 @@ export function syncBoardViewChrome(): void {
   const was = mainColumn.classList.contains('main-column--board-view');
   mainColumn.classList.toggle('main-column--board-view', next);
   if (was !== next) {
-    // Chats in the view bar mirrors stage-view hiding; preview guests need a relayout.
     emitChatSidebarChanged();
     void import('./preview-electron-visibility').then((m) => {
       m.scheduleElectronPreviewHostLayoutSync();
@@ -290,10 +283,6 @@ function createBoardChatViewToggleButton(): HTMLButtonElement {
   return btn;
 }
 
-/**
- * Ensure the chat-view toggle exists in board header controls and handles clicks.
- * Called on header build and on live board refresh (in-place kanban updates).
- */
 export function ensureBoardChatViewToggle(controls: HTMLElement): void {
   let btn = controls.querySelector(
     `#${CHAT_TOGGLE_ID}`,

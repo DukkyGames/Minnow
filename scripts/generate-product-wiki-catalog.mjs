@@ -7,7 +7,6 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const documentationRoot = path.join(repositoryRoot, 'documentation');
 const outputPath = path.join(repositoryRoot, 'server', 'product-wiki', 'catalog.json');
 
-/** Generate the committed catalog used by packaged and development runtimes. */
 async function main() {
   const catalog = await buildProductWikiCatalog(documentationRoot);
   await mkdir(path.dirname(outputPath), { recursive: true });

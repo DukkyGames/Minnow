@@ -1,33 +1,3 @@
-/**
- * P8-C — the sub-agent policy table. One place that decides what happens next.
- *
- * ```
- * | outcome            | attempts | action                                      |
- * | ------------------ | -------- | ------------------------------------------- |
- * | pass               | —        | deliver (P8-E journals result.delivered)    |
- * | fail               | < 2      | retry, continue seed                        |
- * | fail               | —        | abandon with full evidence                  |
- * | blocked            | < 1      | retry, continue seed                        |
- * | blocked            | —        | abandon                                     |
- * | no_report          | < 1      | retry, continue seed                        |
- * | no_report          | —        | abandon                                     |
- * | crashed or timeout | < 2      | retry, continue seed                        |
- * | crashed or timeout | —        | abandon                                     |
- * | cancel             | —        | done (terminal, not a failure)              |
- * ```
- *
- * `crashed` / `timeout` / `no_report` retry with a continue seed so the next
- * attempt sees the transcript rather than starting cold. Unbounded retry would
- * stall a generated crashed-forever history and an overnight run; the bounds
- * above are data in the table, not a counter field on the run.
- *
- * `decide()` is last-attempt-only. The caller attaches the evidence bundle —
- * the same split as P0-E / P3-H.
- *
- * Cancel is a journaled `run.cancelled`, not an attempt outcome. The row exists
- * so a caller that asks anyway gets "done", never a retry or a failure reason.
- */
-
 const retry = () => /** @type {const} */ ({ kind: 'retry', seedKind: 'continue' });
 
 /**
@@ -60,14 +30,9 @@ export const POLICY_TABLE = /** @type {const} */ ([
 ]);
 
 /**
- * What happens next.
- *
  * @param {{
  *   outcome: string,
  *   attemptCount: number,
- *     Attempts that had already finished *before* the one being decided.
- *     Counting the just-ended attempt would make the `under: 1` rows
- *     unreachable — the same reading P0-E documents.
  *   summary?: string | null,
  *   evidence?: Record<string, unknown> | null,
  * }} input

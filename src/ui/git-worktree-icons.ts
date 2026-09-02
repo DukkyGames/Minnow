@@ -1,8 +1,3 @@
-/**
- * Shared git / worktree Uicons glyphs — MIN-276.
- * Used in composer run-target controls, git panel, board, and sidebar.
- */
-
 import { createIcon, type IconName } from './icon';
 
 export type GitWorktreeIconKind = 'local' | 'branch' | 'worktree';

@@ -1,7 +1,3 @@
-/**
- * Models → My Models — every set of weights on this machine, in one table.
- */
-
 import {
   cycleLibraryListSort,
   DEFAULT_LIBRARY_LIST_SORT,
@@ -248,9 +244,6 @@ function startLoad(model: LibraryModel, trigger: HTMLButtonElement): void {
         trigger.disabled = false;
         return;
       }
-      // Same payload as inspector Load — settingsFor is {} until a control is
-      // touched, then the saved/manual draft. A classified failure attaches
-      // suggestedSettings (lower ctx / --no-mmap) and forces fit_mode manual.
       const serve = serveForModel(model);
       const settings =
         serve && isRetryableServeStatus(serve.status)
@@ -494,8 +487,6 @@ export function render(): void {
   const installable = loadableLibrary(state.library, { backend: state.hardware?.backend });
 
   if (!installable.length) {
-    // MLX only appears in this list on Metal hardware, so the explanation of
-    // what is hidden has to match the machine it is being read on.
     const hiddenFormatsBody =
       state.hardware?.backend === 'metal'
         ? 'This list shows GGUF weights Minnow can serve with llama-server, plus MLX repos it can serve with mlx-lm. Plain SafeTensors, Ollama-managed models, and other formats are hidden.'
@@ -559,7 +550,6 @@ export function render(): void {
   const refocusSearch = isModelsSearchInputFocused();
   host.replaceChildren(fragment);
 
-  // The table head sticks below the toolbar, which wraps at narrow widths.
   const toolbar = host.querySelector<HTMLElement>('.models-toolbar');
   if (toolbar) host.style.setProperty('--models-toolbar-h', `${toolbar.offsetHeight}px`);
 

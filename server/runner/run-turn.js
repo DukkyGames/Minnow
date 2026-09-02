@@ -1,50 +1,3 @@
-/**
- * P2-B — board-agnostic `runTurn()` (PRD §9 / MIN-699).
- *
- * Wraps the P2-A loop. Completions and tool dispatch stay injected so P2-C / P2-D
- * can swap adapters without touching this signature.
- *
- * **Any change to `runTurn({ chatId, seed, tools, model, onEvent, … })` is a
- * Phase 6 finding and must be recorded as one.** Phase 6 is "all chat eventually";
- * baking a domain concept into this entry point would force a rewrite.
- *
- * P6-A (MIN-723) did not edit this file. P6-B (MIN-724) adds `ask` on options
- * — the PRD §9 injected-capability finding. P6-C (MIN-725) adds history
- * continuation (`messages` / `seedKind: 'continue'`), optional report-tool
- * injection, and gates for the inner tool-use nudge + structured-outcome
- * finalization. There is still no board-vs-chat branch: the caller supplies
- * flags, not a product name.
- *
- * P6-D (MIN-726): `onLiveActivity.currentToolName` is forwarded as
- * `TurnEvent.tool_streaming`. The inner loop already parsed the name from SSE
- * (`onToolCallDelta`); this wrapper was dropping it. Chat paints
- * "Calling {tool}…" from that event — not a second stream parser. Boards that
- * omit `onEvent` are unchanged.
- *
- * P10-B (MIN-767): forward inner `phase` (was discarded), plus `onTurnEvent`
- * (`round_start` / `round_end` / `reasoning_end` / `stream_meta`). `tool_result`
- * moved onto `onToolDone` so parseError / abort fills still emit. There is
- * still no board-vs-chat branch.
- *
- * P10-C (MIN-768): continue turns persist on every settled `onMessagesChange`
- * via a monotonic `persistCursor`. `finally` is an idempotent backstop for
- * abort/throw. Isolated persist is unchanged. There is still no board-vs-chat
- * branch.
- *
- * P10-I (MIN-774): `onRoundBoundary` is consulted at each tool-loop boundary.
- * Return rows to splice, or null. Same injection shape as `ask` — chat
- * implements steer here; board / sub-agent callers omit the hook. There is
- * still no board-vs-chat branch.
- *
- * Outcomes: `pass` / `fail` / `blocked` come only from a successful report-tool
- * call. This file never imports the sub-agent prose JSON parser — if the tool
- * was not called, the answer is `no_report`, not a guess from assistant text.
- *
- * P2-E: a malformed report is rejected at execute-time (tool result = error
- * the model can act on) so the agent can retry inside the turn. That rejection
- * is not `no_report`.
- */
-
 import { sumUsageSegments } from './stats-math.js';
 import { createSubAgentRunner } from './sub-agent-runner.js';
 import { buildOpeningTranscript } from './opening-messages.js';
@@ -61,7 +14,6 @@ import {
   withAskQuestionTool,
 } from './ask-question-tool.js';
 
-/** Default injected report tool. Generic on purpose — P2-E owns real schemas. */
 export const DEFAULT_REPORT_TOOL_NAME = 'report_outcome';
 
 export {
@@ -73,12 +25,11 @@ export {
 
 const AGENT_OUTCOMES = new Set(['pass', 'fail', 'blocked']);
 
-/** Distinguishes a captured report from a real failure when unwinding the loop. */
 const TURN_REPORTED = Symbol('turn-reported');
-/** Distinguishes maxTurns / wall-clock abort from a provider crash. */
 const TURN_TIMEOUT = Symbol('turn-timeout');
-/** Distinguishes the interactive-ask watchdog from composer Stop / wall-clock. */
 const ASK_TIMEOUT = Symbol('ask-timeout');
+
+// ── Parse ────────────────────────────────────────────────────────────────────
 
 /**
  * @param {unknown} value
@@ -91,13 +42,6 @@ function asStringArray(value) {
 }
 
 /**
- * Default report parser. Lenient on purpose: this package does not know
- * Builder vs Tester. Role-specific schemas are injected via `parseReport`
- * (P2-E) so a rejected call can name the missing field and the model can retry.
- *
- * A failed parse is **not** `no_report`. `no_report` means the tool was never
- * called successfully at all.
- *
  * @param {unknown} raw
  * @returns {import('./run-turn').ParseReportResult}
  */
@@ -179,10 +123,6 @@ function inspectToolCall(toolCall) {
 }
 
 /**
- * Run an injected parser, or the default, without letting a throw become a
- * crashed turn. A parser bug should look like a rejected tool call so the
- * model can retry, not like a runner crash.
- *
  * @param {unknown} raw
  * @param {import('./run-turn').ParseReport | undefined} parseReport
  * @returns {import('./run-turn').ParseReportResult}
@@ -209,6 +149,8 @@ function runParseReport(raw, parseReport) {
     };
   }
 }
+
+// ── Tools ────────────────────────────────────────────────────────────────────
 
 /**
  * @param {string} name
@@ -237,9 +179,6 @@ function defaultReportTool(name) {
 }
 
 /**
- * Ensure the report tool is on the wire. Callers (P2-E) may pass a real schema
- * under the same name; we do not replace it.
- *
  * @param {import('./run-turn').TurnToolDefinition[] | undefined} tools
  * @param {string} reportToolName
  */
@@ -251,11 +190,6 @@ function withReportTool(tools, reportToolName) {
 }
 
 /**
- * Whether this caller wants a report tool on the wire. Default is inject-on
- * so board-shaped callers stay unchanged. `reportToolName: null` or
- * `injectReportTool: false` omits it. Injection is a caller flag, not a
- * product-shaped branch.
- *
  * @param {{ reportToolName?: string | null, injectReportTool?: boolean }} [options]
  * @returns {{ inject: boolean, reportToolName: string | null }}
  */
@@ -271,10 +205,6 @@ function resolveReportInjection(options = {}) {
 }
 
 /**
- * Resolve the tool list the model actually sees. `ask_question` is added or
- * stripped here from the capability, then the report tool is ensured unless
- * the caller opted out.
- *
  * @param {import('./run-turn').TurnToolDefinition[] | undefined} tools
  * @param {{ reportToolName?: string | null, injectReportTool?: boolean, ask?: unknown }} [options]
  * @returns {import('./run-turn').TurnToolDefinition[]}
@@ -287,6 +217,8 @@ export function resolveTurnTools(tools, options = {}) {
 }
 
 export { buildOpeningMessages, buildOpeningTranscript } from './opening-messages.js';
+
+// ── Abort ────────────────────────────────────────────────────────────────────
 
 /**
  * @param {AbortSignal[]} signals
@@ -312,8 +244,6 @@ function isAbortError(err) {
 }
 
 /**
- * Reject when `signal` aborts so a hanging `ask()` cannot stall the race.
- *
  * @param {AbortSignal} signal
  * @returns {Promise<never>}
  */
@@ -333,10 +263,9 @@ function waitForAbort(signal) {
   });
 }
 
+// ── Ask ──────────────────────────────────────────────────────────────────────
+
 /**
- * Route `ask_question` through the injected capability (or fail immediately).
- * The unattended path never waits on `askTimeoutMs`.
- *
  * @param {unknown} rawArgs
  * @param {{
  *   ask: unknown,
@@ -385,7 +314,6 @@ async function runAskCapability(rawArgs, opts) {
       if (isAbortError(err)) throw err;
       return `Error: ask_question failed (${errorMessage(err)}).`;
     } finally {
-      // The loser of the race must not become an unhandledRejection later.
       askPromise.catch(() => {});
       abortPromise.catch(() => {});
     }
@@ -399,8 +327,9 @@ function errorMessage(err) {
   return String(err ?? 'unknown error');
 }
 
+// ── Turn events ──────────────────────────────────────────────────────────────
+
 /**
- * Presentation callback failures must not change the turn outcome.
  * @param {((event: import('./run-turn').TurnEvent) => void) | undefined} onEvent
  * @param {import('./run-turn').TurnEvent} event
  */
@@ -409,14 +338,10 @@ function emit(onEvent, event) {
   try {
     onEvent(event);
   } catch {
-    // Swallow: onEvent is a view seam, not part of the result contract.
   }
 }
 
 /**
- * Build a `tool_result` from a batch outcome. parseError and abort fills never
- * call `execute`, so this is the only place those rows can be emitted.
- *
  * @param {unknown} outcome
  * @returns {import('./run-turn').TurnEvent | null}
  */
@@ -449,11 +374,6 @@ function toolResultEventFromOutcome(outcome) {
 }
 
 /**
- * Keep only well-formed transcript rows from a round-boundary hook.
- * Product flags like `steer` stay on the caller's persisted history; the
- * wire transcript is role + content (+ tool ids) so providers do not see
- * unknown fields.
- *
  * @param {unknown} raw
  * @returns {import('./transcript-store').TranscriptMessage[]}
  */
@@ -474,21 +394,6 @@ function normalizeRoundBoundaryRows(raw) {
 }
 
 /**
- * Persist only the new tail. The inner loop owns the in-memory transcript;
- * this store is the durable seam for callers (and P2-F).
- *
- * Isolated turns persist every inner row (including the leading system) and
- * re-derive the anchor from the store each time, so appending is self-aligning.
- *
- * Continue turns pass `from` — first `buildOpeningTranscript().persistFrom`,
- * then a monotonic `persistCursor` advanced after each settled snapshot. That
- * is the only honest anchor: the opening is not `store.load().messages.length + 1`
- * whenever the fold collapses a leading assistant greeting into the system row
- * (expert chats), nor when the opening appends a seed row the store lacks.
- * Deriving it from `have` drops this turn's first rows in the first case and
- * skips the seed row in the second. Re-running with the same `from` after the
- * cursor has caught up is a no-op (`messages.length <= aligned`).
- *
  * @param {import('./transcript-store').TranscriptStore} store
  * @param {string} chatId
  * @param {unknown[]} messages
@@ -505,9 +410,9 @@ function persistNewMessages(store, chatId, messages, opts = {}) {
   }
 }
 
+// ── Run turn ─────────────────────────────────────────────────────────────────
+
 /**
- * Board-agnostic turn entry (PRD §9).
- *
  * @param {import('./run-turn').RunTurnOptions} options
  * @returns {Promise<import('./run-turn').TurnResult>}
  */
@@ -530,8 +435,6 @@ export async function runTurn(options) {
 
   const injection = resolveReportInjection(options);
   const reportToolName = injection.reportToolName;
-  // P6-B: capability injection, not list-presence, decides ask_question.
-  // P6-C: report-tool injection is optional (chat omits; board default stays on).
   const tools = resolveTurnTools(options.tools, {
     reportToolName: options.reportToolName,
     injectReportTool: options.injectReportTool,
@@ -542,8 +445,6 @@ export async function runTurn(options) {
   const transcript = options.transcript ?? deps.transcriptStore;
   const onEvent = options.onEvent;
   const cwd = options.cwd;
-  // Continue vs isolated: explicit `messages` wins; `seedKind: 'continue'`
-  // loads the store. Board callers that pass only `seed` stay isolated.
   /** @type {unknown[] | undefined} */
   let priorMessages;
   if (Array.isArray(options.messages)) {
@@ -551,12 +452,7 @@ export async function runTurn(options) {
   } else if (options.seedKind === 'continue') {
     priorMessages = transcript.load(chatId)?.messages ?? [];
   }
-  // Continue turns suffix an existing product transcript; isolated turns own theirs.
   const isContinueTurn = priorMessages !== undefined;
-  // Phase 6 finding: optional `systemPrompt` so a caller can inject Builder /
-  // Tester instructions without the runner knowing what a role is. Default
-  // stays domain-free. When the report tool is omitted, do not tell the model
-  // to call it. Recorded in orchestrator-v2-implementation.md.
   const systemPrompt =
     typeof options.systemPrompt === 'string' && options.systemPrompt.trim()
       ? options.systemPrompt
@@ -564,12 +460,6 @@ export async function runTurn(options) {
         ? 'When you have a result, call the report tool. Do not put the outcome only in assistant text.'
         : 'You are a helpful assistant.';
 
-  // Continue-mode persist anchor. `buildOpeningTranscript` is pure and the
-  // inner runner opens with exactly these arguments (`task: seed`,
-  // `systemPrompt`, `priorMessages`), so recomputing it here yields the same
-  // boundary the loop started from. It beats `have + 1`, which the fold (rows
-  // removed) and the appended seed row (a row added) both invalidate.
-  // P10-C: this is the start of a monotonic cursor, not a once-at-end index.
   const continuePersistFrom =
     priorMessages === undefined
       ? 0
@@ -591,10 +481,6 @@ export async function runTurn(options) {
     [options.signal, timeoutCtrl.signal].filter(Boolean),
   );
 
-  /**
-   * Count each provider call so `maxTurns` is a real cap, including the inner
-   * loop's structured-outcome finalization (which this wrapper otherwise ignores).
-   */
   const countedPost = async (provider, body, signal, postOptions) => {
     if (typeof limits.maxTurns === 'number' && completionCount >= limits.maxTurns) {
       timeoutCtrl.abort(TURN_TIMEOUT);
@@ -619,10 +505,6 @@ export async function runTurn(options) {
       });
     }
 
-    // Report + ask_question are owned here, not forwarded to `execute`.
-    // Both are renderer-only ("Not implemented" on the server). A fabricated
-    // ask_question with no capability must error immediately — never hang on
-    // in-process dispatch or a missing modal.
     /** @type {Array<{ toolCall: unknown, result: { content: string } }>} */
     const outcomes = [];
     /** @type {unknown[]} */
@@ -663,8 +545,6 @@ export async function runTurn(options) {
         });
         outcomes.push({ toolCall, result: { content } });
       } else {
-        // Reject at execute-time so the agent can retry *inside* this turn.
-        // This is not `no_report` — the tool was called, the payload was wrong.
         emit(onEvent, {
           type: 'tool_result',
           name: reportToolName,
@@ -676,8 +556,6 @@ export async function runTurn(options) {
       }
     }
 
-    // A valid report ends the turn immediately so the inner loop cannot fall
-    // through to prose-JSON finalization and rewrite the outcome.
     if (captured) {
       const err = new Error('turn reported');
       err[TURN_REPORTED] = captured;
@@ -686,9 +564,6 @@ export async function runTurn(options) {
 
     if (otherCalls.length === 0) return outcomes;
 
-    // Execute no longer emits: parseError and abort fills never reach execute.
-    // `onToolDone` fires once per call (execute-tool-batch invariant). Stubs
-    // that skip the hook still emit from the returned outcomes, de-duplicated.
     const execute = async (name, args, ctx) => {
       if (typeof options.execute === 'function') {
         return options.execute(name, args, {
@@ -754,36 +629,16 @@ export async function runTurn(options) {
   let lastStreamingTool = '';
   /** @type {string | null} */
   let lastPhase = null;
-  /** Last settled onMessagesChange snapshot — continue persist suffixes from it. */
   let lastSnapshot = null;
 
   const runner = createSubAgentRunner(wrappedDeps);
 
-  /**
-   * Token usage for this turn: every completion the inner runner made,
-   * including the tool loop and any finalization.
-   *
-   * Collected through `onUsage` rather than from `runner.run()`'s return,
-   * because the return is the path this wrapper takes least. A successful
-   * attempt ends when `report_outcome` throws to unwind the loop, and a
-   * timed-out or aborted one throws too — in all three cases the runner's own
-   * total never comes back. Segments as they land is the only accounting that
-   * survives every exit.
-   *
-   * Without this there is no answer to "what did the run cost", which P5-D must
-   * report and which is the only way to weigh a correctness gain against price.
-   *
-   * @type {Array<Record<string, number>>}
-   */
+  /** @type {Array<Record<string, number>>} */
   const usageSegments = [];
   /** @type {Record<string, number> | undefined} */
   let usage;
 
   /**
-   * Attach the turn's usage to whatever outcome the turn produced. Every return
-   * path goes through here so a crashed or timed-out attempt still reports the
-   * tokens it burned — those are exactly the attempts worth costing.
-   *
    * @param {import('./run-turn').TurnResult} result
    * @returns {import('./run-turn').TurnResult}
    */
@@ -806,11 +661,10 @@ export async function runTurn(options) {
       modelContextLimit: limits.modelContextLimit,
       signal: combinedSignal,
       toolExecuteContext: { chatId, cwd },
-      // P6-C: prior transcript + nudge/finalization gates. Omitted = isolated
-      // start with today's sub-agent nudge and structured-outcome pass.
       priorMessages,
       nudgeToolUse: options.nudgeToolUse,
       finalizeStructuredOutcome: options.finalizeStructuredOutcome,
+      reportToolName: injection.inject ? reportToolName : null,
       summarySchema: options.summarySchema,
       executeTool: async (name, args, ctx) => {
         if (typeof options.execute === 'function') {
@@ -823,15 +677,9 @@ export async function runTurn(options) {
         return { content: '' };
       },
       onMessagesChange: (messages, meta) => {
-        // Isolated turns persist live (board default), including throttled
-        // clones — leave that path exactly as it is.
         if (!isContinueTurn) {
           persistNewMessages(transcript, chatId, messages);
         } else if (meta?.settled === true && Array.isArray(messages)) {
-          // Continue: persist only settled snapshots (real messages.push).
-          // persistCursor makes a later finally-pass a no-op when nothing new
-          // landed. Unsettled clones carry a synthetic partial assistant and
-          // must not be appended (P10-E owns stopped/failed presentation).
           persistNewMessages(transcript, chatId, messages, { from: persistCursor });
           persistCursor = messages.length;
           lastSnapshot = messages;
@@ -847,8 +695,6 @@ export async function runTurn(options) {
       onTurnEvent: (event) => {
         emit(onEvent, event);
       },
-      // P10-I: injected like AskCapability. Chat's consumePendingSteer already
-      // wrote the product row; continue persist must not suffix it again.
       onRoundBoundary:
         typeof options.onRoundBoundary === 'function'
           ? () => {
@@ -858,7 +704,6 @@ export async function runTurn(options) {
                 if (isContinueTurn) persistCursor += spliced.length;
                 return spliced;
               } catch {
-                // Caller seam — a throw must not crash the turn.
                 return null;
               }
             }
@@ -880,8 +725,6 @@ export async function runTurn(options) {
           lastThinking = thinking;
           emit(onEvent, { type: 'thinking', text: thinking });
         }
-        // Inner `onToolCallDelta` already named the tool; chat paints the
-        // "Calling {tool}…" indicator from this event (P6-D overlay).
         const toolName =
           typeof activity?.currentToolName === 'string'
             ? activity.currentToolName.trim()
@@ -892,8 +735,6 @@ export async function runTurn(options) {
         }
       },
     });
-    // Prefer the runner's own sum when the turn returned normally; the
-    // segments are the fallback for every path that throws.
     if (ran?.usage) usage = ran.usage;
   } catch (err) {
     if (captured) return withUsage(captured);
@@ -907,8 +748,6 @@ export async function runTurn(options) {
     return withUsage({ outcome: 'crashed', error: errorMessage(err) });
   } finally {
     if (isContinueTurn && lastSnapshot) {
-      // Idempotent backstop for abort/throw: persistCursor already sits at
-      // last settled length after incremental persist, so this appends nothing.
       persistNewMessages(transcript, chatId, lastSnapshot, {
         from: persistCursor,
       });
@@ -918,7 +757,5 @@ export async function runTurn(options) {
 
   if (captured) return withUsage(captured);
   if (timeoutCtrl.signal.aborted) return withUsage({ outcome: 'timeout' });
-  // Inner loop may have parsed assistant JSON. That path is a different product
-  // (normal sub-agents). This wrapper does not read it.
   return withUsage({ outcome: 'no_report' });
 }

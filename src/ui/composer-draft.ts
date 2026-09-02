@@ -1,7 +1,3 @@
-/**
- * Persist unsent composer text on the active chat as a sidebar draft row.
- */
-
 import {
   getActiveChat,
   getChatMessageCount,
@@ -23,13 +19,12 @@ let draftRestoreSuspended = false;
 let draftSidebarLabelTimer: ReturnType<typeof setTimeout> | null = null;
 const DRAFT_SIDEBAR_LABEL_DEBOUNCE_MS = 200;
 
-/**
- * Session PATCH after a typing pause stringified the whole chat (and in DEV every
- * chat) on the main thread — glyphs froze, then caught up. Flush on idle / blur / switch.
- */
+/** Session PATCH after a typing pause stringified the whole chat (and in DEV every chat) on the main thread — glyphs froze, then caught up. */
 const DRAFT_SESSION_SAVE_IDLE_MS = 2500;
 let draftSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let draftSaveChatId: string | null = null;
+
+// ── Persist ──────────────────────────────────────────────────────────────────
 
 function scheduleComposerDraftSidebarLabelSync(chat: Chat): void {
   if (getChatMessageCount(chat) !== 0 || !hasComposerDraft(chat)) return;
@@ -78,6 +73,8 @@ function scheduleIdleComposerDraftSave(chatId: string): void {
     if (id) scheduleSaveSessions({ chatId: id });
   }, DRAFT_SESSION_SAVE_IDLE_MS);
 }
+
+// ── Clear ────────────────────────────────────────────────────────────────────
 
 /** Remove persisted draft text after a user message is committed. */
 export function clearComposerDraftOnChat(chat: Chat): void {
@@ -134,6 +131,8 @@ export function applyComposerDraftForChat(chat: Chat): void {
   draftRestoreSuspended = false;
 }
 
+// ── Input ────────────────────────────────────────────────────────────────────
+
 /** Track draft edits on the active chat and refresh sidebar when visibility changes. */
 export function handleComposerDraftInput(): void {
   const active = sessionState;
@@ -147,9 +146,6 @@ export function handleComposerDraftInput(): void {
 
   scheduleIdleComposerDraftSave(chat.id);
 
-  // Rebuilding the sidebar on every keystroke made typing feel stuck once a draft
-  // existed (`hasComposerDraft` stayed true). Full rebuild only when a row appears
-  // or disappears; draft-only titles get a cheap debounced label sync.
   if (visibilityChanged) {
     void import('./sidebar').then((m) => m.renderSidebar());
     void import('./chat-app').then((m) => m.refreshChatAppSessionRail());
@@ -202,6 +198,8 @@ export function initComposerDraftListener(inputEl?: HTMLTextAreaElement | null):
     });
   }
 }
+
+// ── Switch ───────────────────────────────────────────────────────────────────
 
 /** Flush the active composer, then clear it for a fresh ephemeral chat. */
 export function flushActiveComposerDraftBeforeNewChat(): void {

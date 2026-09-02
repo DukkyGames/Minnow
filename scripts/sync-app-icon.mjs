@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-/**
- * Build build/icon.ico and build/tray/* from Minnow logo assets.
- */
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -32,7 +29,6 @@ fs.mkdirSync(path.dirname(dest), { recursive: true });
 fs.writeFileSync(dest, buf);
 console.log(`[sync-app-icon] Wrote ${dest} (${buf.length} bytes)`);
 
-/** Render monochrome glyph PNGs for macOS template tray and Linux panel icons. */
 async function writeTrayPng(outName, size) {
   const outPath = path.join(trayDir, outName);
   await sharp(glyphSvg, { density: 300 })

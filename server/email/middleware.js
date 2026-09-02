@@ -1,7 +1,3 @@
-/**
- * Email REST API middleware (/api/email/*).
- */
-
 import { ensureMinnowLayout } from '../config/home.js';
 import {
   createEmailAccount,
@@ -122,7 +118,6 @@ function parseQuery(url) {
 }
 
 /**
- * Match `/api/email/accounts/:id/...` segments.
  * @param {string} url
  */
 function parseAccountPath(url) {
@@ -160,8 +155,6 @@ export function createEmailMiddleware() {
         return;
       }
 
-      // Remote images are fetched server-side so the renderer never contacts
-      // the sender's host directly (no Referer, no cookies, no fingerprint).
       if (url === '/api/email/image-proxy' && req.method === 'GET') {
         const params = parseQuery(req.url ?? '');
         const target = String(params.get('url') ?? '');
@@ -223,8 +216,6 @@ export function createEmailMiddleware() {
         return;
       }
 
-      // Dry-run previews an unsaved rule against the store; must be matched
-      // before the `/automations/:id` catch so "dry-run" is not read as an id.
       if (url === '/api/email/automations/dry-run' && req.method === 'POST') {
         const body = await readJsonBody(req);
         const accountId = String(body.accountId ?? body.rule?.accountId ?? '').trim();
@@ -285,8 +276,6 @@ export function createEmailMiddleware() {
         const perAccount = await Promise.all(
           accountIds.map(async (id) => {
             const result = await searchCachedMessages(id, { query, folder, offset, limit });
-            // Semantic rerank applies within one account (scores are not
-            // comparable across stores); multi-account results merge by date.
             const messages =
               accountIds.length === 1
                 ? await semanticRerankMessages(id, query, result.messages)
@@ -296,8 +285,6 @@ export function createEmailMiddleware() {
         );
 
         const flat = perAccount.flat();
-        // Single-account results are already relevance-ordered by the rerank;
-        // only the multi-account merge needs an ordering imposed.
         const merged =
           accountIds.length === 1
             ? flat
@@ -376,7 +363,6 @@ export function createEmailMiddleware() {
           return;
         }
 
-        // Mark every unread message in a folder (optional FTS query) as read.
         if (tail === 'messages/mark-all-read' && req.method === 'POST') {
           const body = await readJsonBody(req);
           const result = await markAllMessagesRead(accountId, {
@@ -390,9 +376,6 @@ export function createEmailMiddleware() {
         if (tail === 'summary' && req.method === 'GET') {
           const summary = await getOrBuildInboxSummary(accountId);
           const unreadByFolder = await getFolderUnreadCounts(accountId);
-          // The narrative digest, review queue and "Waiting on" ride along so
-          // the dashboard paints in one round trip. A stale narrative kicks a
-          // background regeneration that lands later via `digest_updated`.
           const digest = await getCachedDigest(accountId);
           maybeRefreshDigestInBackground(accountId);
           const pendingActions = await listPendingActions(accountId);
@@ -433,8 +416,6 @@ export function createEmailMiddleware() {
           const verb = pendingMatch[2];
           if (verb === 'apply') {
             const body = await readJsonBody(req);
-            // "Always allow" is granted at apply time — the click that applies
-            // the batch is the same click that extends trust to the rule.
             if (body.alwaysAllow === true) {
               const current = (await listPendingActions(accountId)).find(
                 (row) => row.id === pendingId,
@@ -472,7 +453,6 @@ export function createEmailMiddleware() {
             String(body.sender ?? ''),
             String(body.level ?? ''),
           );
-          // Rebuild so the dashboard reflects the correction immediately.
           await buildInboxSummary(accountId);
           sendJson(res, 200, result);
           return;
@@ -579,7 +559,6 @@ export function createEmailMiddleware() {
             query: params.get('query') ?? undefined,
             category: params.get('category') ?? undefined,
           });
-          // Badge counts only on the first page so paging stays cheap.
           if (params.get('categoryCounts') === '1' && offset === 0) {
             result.categoryCounts = await getCategoryUnreadCounts(accountId, {
               folder: params.get('folder') ?? undefined,
@@ -636,8 +615,6 @@ export function createEmailMiddleware() {
         return;
       }
 
-      // Attachment bytes are streamed straight from the server; they are never
-      // mirrored into the store, so this re-fetches the message source.
       const attachmentMatch = url.match(
         /^\/api\/email\/messages\/([^/]+)\/attachments\/([^/]+)$/,
       );
@@ -651,13 +628,11 @@ export function createEmailMiddleware() {
           return;
         }
 
-        // `cid:<id>` addresses an inline part; a bare integer is a part index.
         const selector = selectorRaw.startsWith('cid:')
           ? { contentId: selectorRaw.slice(4) }
           : { index: Number(selectorRaw) };
         const attachment = await fetchMessageAttachment(accountId, messageKey, selector);
 
-        // Inline parts render inside the body iframe; everything else downloads.
         const disposition = params.get('inline') === '1' ? 'inline' : 'attachment';
         res.statusCode = 200;
         res.setHeader('Content-Type', attachment.contentType);
@@ -666,7 +641,6 @@ export function createEmailMiddleware() {
           'Content-Disposition',
           `${disposition}; filename="${attachment.filename}"; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`,
         );
-        // Mail parts are untrusted bytes: never let one execute as a document.
         res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('Cache-Control', 'private, max-age=600');
@@ -714,7 +688,6 @@ export function createEmailMiddleware() {
           sendJson(res, 400, { error: 'accountId is required' });
           return;
         }
-        // An empty `until` un-snoozes, so the same route serves both directions.
         const message = await setMessageSnooze(accountId, messageKey, String(body.until ?? ''));
         sendJson(res, 200, { message });
         return;
@@ -806,8 +779,6 @@ export function createEmailMiddleware() {
         return;
       }
 
-      // Drafts are keyed by account, which rides in the query/body rather than
-      // the path so the route matches the shape of the other message routes.
       if (url === '/api/email/drafts' && req.method === 'GET') {
         const params = parseQuery(req.url ?? '');
         const accountId = String(params.get('accountId') ?? '').trim();
@@ -832,8 +803,6 @@ export function createEmailMiddleware() {
         }
         const draft = await saveDraft(accountId, body);
 
-        // Mirroring to IMAP is opt-in per request: autosave ticks stay local,
-        // and only an explicit "keep in Drafts" pays the round trip.
         let imap;
         if (body.syncToImap === true) {
           imap = await syncDraftToImap(accountId, draft.id);
@@ -895,8 +864,6 @@ export function createEmailMiddleware() {
         return;
       }
 
-      // Send queues into the outbox rather than delivering inline; the undo
-      // window is the send gate. Returns the queued entry, not a receipt.
       if (url === '/api/email/send' && req.method === 'POST') {
         const body = await readJsonBody(req);
         const entry = enqueueSend(body);
@@ -919,8 +886,6 @@ export function createEmailMiddleware() {
       sendJson(res, 404, { error: 'Not found' });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Email request failed';
-      // Rate limiting reports 429 so the client can distinguish "slow down"
-      // from "malformed request".
       const status = Number(/** @type {{ status?: number }} */ (err)?.status) || 400;
       if (status === 429) {
         const retryAfterMs = Number(/** @type {{ retryAfterMs?: number }} */ (err)?.retryAfterMs);

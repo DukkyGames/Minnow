@@ -1,7 +1,3 @@
-/**
- * Composer hint when another chat is streaming while the user works in the active chat.
- */
-
 import { getStreamingChatId, isActiveChatStreaming } from '../chat/streaming-state';
 import { findChatById } from '../state/sessions';
 import { isChatAppForeground } from './chat-mount';

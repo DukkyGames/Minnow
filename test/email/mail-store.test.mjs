@@ -88,6 +88,8 @@ beforeEach(async () => {
   await writeMessageCache(ACCOUNT_ID, { messages: [], folderCursors: {} });
 });
 
+// ── mail store identity ──────────────────────────────────────────────────────
+
 describe('mail store identity', () => {
   test('assigns folder:uid ids and keeps them stable across a move', async () => {
     await mergeMessagesIntoCache(ACCOUNT_ID, [message()], 'INBOX', 1);
@@ -136,6 +138,8 @@ describe('mail store identity', () => {
     assert.equal(row.replyVariants[0].label, 'Brief yes');
   });
 });
+
+// ── mail store queries ───────────────────────────────────────────────────────
 
 describe('mail store queries', () => {
   test('FTS search matches body text, not just subject and sender (D10)', async () => {
@@ -348,6 +352,8 @@ describe('mail store queries', () => {
   });
 });
 
+// ── sync state and reconcile ─────────────────────────────────────────────────
+
 describe('sync state and reconcile', () => {
   test('merge advances the folder cursor monotonically', async () => {
     await mergeMessagesIntoCache(ACCOUNT_ID, [message({ uid: '9' })], 'INBOX', 9);
@@ -407,6 +413,8 @@ describe('sync state and reconcile', () => {
   });
 });
 
+// ── concurrent writers ───────────────────────────────────────────────────────
+
 describe('concurrent writers', () => {
   test('interleaved flag and triage writes both survive (D5)', async () => {
     await mergeMessagesIntoCache(ACCOUNT_ID, [message()], 'INBOX', 1);
@@ -450,6 +458,8 @@ describe('concurrent writers', () => {
     );
   });
 });
+
+// ── json migration ───────────────────────────────────────────────────────────
 
 describe('json migration', () => {
   test('imports a legacy messages.json once and retires the file', async () => {
@@ -503,6 +513,8 @@ describe('json migration', () => {
   });
 });
 
+// ── deletes ──────────────────────────────────────────────────────────────────
+
 describe('deletes', () => {
   test('removing a message drops its FTS entry and thread rollup', async () => {
     await mergeMessagesIntoCache(ACCOUNT_ID, [message()], 'INBOX', 1);
@@ -515,6 +527,8 @@ describe('deletes', () => {
     await assert.rejects(() => removeMessageFromCache(ACCOUNT_ID, 'INBOX:1'), /not found/i);
   });
 });
+
+// ── inbox categories ─────────────────────────────────────────────────────────
 
 describe('inbox categories', () => {
   test('mixed-category thread rollup takes primary; a new primary promotes the thread', async () => {

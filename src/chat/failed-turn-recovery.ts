@@ -1,8 +1,3 @@
-/**
- * Failed-turn recovery (MIN-666): Continue retries with full history;
- * Clear drops only the failed assistant output and keeps the user prompt.
- */
-
 import { parseSkillTagFromHistory } from '../skills/history-content';
 import { parseSlashCommand } from '../skills/parse-slash';
 import { isChatStreaming } from './streaming-state';
@@ -34,10 +29,6 @@ export async function continueFailedTurn(chatId: string): Promise<void> {
     return;
   }
 
-  /*
-   * Absolute indices and outbound replay both need the full transcript.
-   * Continue after a lazy boot used to send an empty placeholder (MIN-641).
-   */
   try {
     await ensureChatHistoryLoaded(chatId);
   } catch {
@@ -49,8 +40,6 @@ export async function continueFailedTurn(chatId: string): Promise<void> {
   const last = chat.history[chat.history.length - 1];
   const lastIsUser = last?.role === 'user';
 
-  // Unanswered prompt: reuse the last user row. Failed assistant: keep it in
-  // context and send an ephemeral continue line (not stored in history).
   let skillId: string | null = null;
   let rawText = '';
   let userText = '';
@@ -115,7 +104,6 @@ export async function clearFailedAssistantTurn(
     scheduleSaveSessions();
   }
 
-  // Re-render even when history was unchanged so a UI-only error bubble goes away.
   const { renderChatFromHistory } = await import('../ui/messages');
   renderChatFromHistory(chat);
 }

@@ -90,9 +90,7 @@ async function parseChatsWorkspaceApiError(res: Response): Promise<string> {
   try {
     const data = (await res.json()) as { error?: string };
     if (data?.error) return data.error;
-  } catch {
-    /* fall through */
-  }
+  } catch {}
   return res.statusText || `HTTP ${res.status}`;
 }
 

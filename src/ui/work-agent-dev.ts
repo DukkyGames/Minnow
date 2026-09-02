@@ -1,7 +1,3 @@
-/**
- * Minimal Work Agent selector (dev / ?dev=1 until Step 20).
- */
-
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { listWorkAgents } from '../agents/work-agent-registry';
 import {

@@ -1,13 +1,3 @@
-/**
- * The Email spine rail (MIN-358 Direction A).
- *
- * One navigation spine that absorbs what used to be the top tabs *and* the
- * three-pane folder column: the account switcher, Compose, the agent Views
- * (Needs attention, Waiting on, ...), the IMAP folders, and Automations /
- * Settings at the foot. It owns no data — it renders from a model and reports
- * intent through callbacks, so the panel stays the single source of truth.
- */
-
 import type { EmailAccount } from '../../email/client';
 import { EMAIL_ICONS } from './email-icons';
 import {
@@ -102,7 +92,6 @@ export function createEmailRail(options: EmailRailOptions): EmailRailHandle {
   const root = el('aside', 'email-rail');
   root.setAttribute('aria-label', 'Email navigation');
 
-  // ---- Account switcher ------------------------------------------------
   const accountBtn = el('button', 'email-rail-account') as HTMLButtonElement;
   accountBtn.type = 'button';
   accountBtn.setAttribute('aria-haspopup', 'true');
@@ -193,14 +182,12 @@ export function createEmailRail(options: EmailRailOptions): EmailRailHandle {
     }
   });
 
-  // ---- Compose ---------------------------------------------------------
   const composeBtn = el('button', 'email-rail-compose') as HTMLButtonElement;
   composeBtn.type = 'button';
   composeBtn.innerHTML = `${EMAIL_ICONS.compose}<span>Compose</span>`;
   composeBtn.setAttribute('aria-label', 'Compose new message');
   composeBtn.addEventListener('click', () => options.onCompose());
 
-  // ---- Navigation ------------------------------------------------------
   const nav = el('nav', 'email-rail-nav');
 
   /** Every nav button, keyed by its nav id, for active + count updates. */
@@ -228,8 +215,6 @@ export function createEmailRail(options: EmailRailOptions): EmailRailHandle {
     const count = el('span', 'email-rail-item-count');
     btn.appendChild(count);
     btn.addEventListener('click', opts.onActivate ?? (() => options.onSelectNav(navId)));
-    // Foot buttons (Automations, Settings) route to their own surfaces and are
-    // not part of the inbox nav's active/count tracking.
     if (opts.track !== false) navItems.set(navId, btn);
     return btn;
   };
@@ -249,7 +234,6 @@ export function createEmailRail(options: EmailRailOptions): EmailRailHandle {
 
   nav.append(viewsGroup, foldersGroup);
 
-  // ---- Bottom stack: utilities, then mailbox sync ----------------------
   const bottom = el('div', 'email-rail-bottom');
 
   const foot = el('div', 'email-rail-foot');
@@ -309,7 +293,6 @@ export function createEmailRail(options: EmailRailOptions): EmailRailHandle {
 
   const setFolders = (folders: RailFolder[]): void => {
     foldersItems.replaceChildren();
-    // Drop stale folder entries from the nav map before rebuilding.
     for (const key of [...navItems.keys()]) {
       if (key.startsWith('folder:')) navItems.delete(key);
     }
@@ -317,7 +300,6 @@ export function createEmailRail(options: EmailRailOptions): EmailRailHandle {
       const btn = mkItem(`folder:${folder.path}`, folder.label, {
         icon: EMAIL_ICONS.folder,
       });
-      // Folders accept Minnow Email drag payloads when the account matches.
       btn.addEventListener('dragenter', (event) => {
         if (!options.onThreadsDrop || unified) return;
         event.preventDefault();

@@ -1,7 +1,3 @@
-/**
- * Appearance: applies palette themes, hljs, CodeMirror, and xterm sync.
- */
-
 import hljsDarkStylesheetUrl from 'highlight.js/styles/github-dark.min.css?url';
 import { refreshHljsInDocument } from '../markdown/highlighter';
 import {
@@ -88,7 +84,6 @@ function wireAppearanceListeners(): void {
   appearanceUnsubs = [
     subscribeCustomThemeChanges(() => {
       if (!isCustomThemeEnabled()) applyResolvedTheme(getStoredTheme());
-      // When enabled, applyCustomTheme() already applied tokens before emitting — no re-call needed.
     }),
     subscribeAppearanceFonts(() => {
       void applyAppearanceFonts();

@@ -1,7 +1,3 @@
-/**
- * Bootstrap Work Agent registry (built-in glob + server overrides).
- */
-
 import { BUILTIN_RAW } from '../chat/prompts/builtin-globs';
 import registryIndex from '../chat/prompts/work-agents/registry.json';
 import {
@@ -12,7 +8,6 @@ import {
 } from './work-agent-registry';
 import type { WorkAgentDefinition, WorkAgentUserOverride } from './work-agent-types';
 
-/** Load built-ins and optional ~/.minnow overrides from API. */
 export async function initWorkAgentSystem(): Promise<void> {
   setWorkAgentRegistryIndex(registryIndex as { ids: string[] });
 
@@ -37,7 +32,5 @@ export async function initWorkAgentSystem(): Promise<void> {
     if (body.overrides) {
       setUserWorkAgentOverrides(body.overrides);
     }
-  } catch {
-    /* Vite-only: built-ins from glob only */
-  }
+  } catch {}
 }

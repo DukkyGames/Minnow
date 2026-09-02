@@ -316,7 +316,6 @@ export class ResearchProgressPanel {
     if (el) {
       el.textContent = formatClock(this.getElapsedMs());
     }
-    // Rotate early-phase hints while the run is still in planning/probing.
     if (
       this.status === 'running' &&
       (this.currentPhase === 'probing' || this.currentPhase === 'planning') &&
@@ -535,7 +534,6 @@ export class ResearchProgressPanel {
       ${feedHtml}
     `;
 
-    // Keep the newest source in view as the feed grows during a run.
     const feed = this.root.querySelector('.dr-feed');
     if (feed) {
       feed.scrollTop = feed.scrollHeight;

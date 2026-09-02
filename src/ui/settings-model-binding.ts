@@ -1,11 +1,7 @@
-/**
- * Shared provider/model &lt;select&gt; helpers for Settings (work agents, sub-agents, model routing).
- */
-
 import { isServerStorageMode } from '../config/storage-mode';
 import { formatModelLabel } from '../lib/format-model-label';
 import {
-  dedupLlamaCppModelsAgainstLibrary,
+  omitLocalRuntimeCatalogModels,
   fetchLibraryModelSelectMerge,
   LIBRARY_MODEL_OPTGROUP_LABEL,
   LIBRARY_MODEL_PROVIDER_ID,
@@ -34,17 +30,18 @@ export interface CatalogRosterTarget {
   modelId: string;
 }
 
+// ── Catalog ──────────────────────────────────────────────────────────────────
+
 /** Load every catalog model (registry providers + My Models library rows). */
 export async function fetchAllCatalogRosterTargets(): Promise<CatalogRosterTarget[]> {
   const { providers } = await listProviders();
   const enabled = providers.filter((p) => p.enabled !== false);
   const controller = new AbortController();
   let results = await fetchModelsForAllProviders(enabled, controller.signal);
+  // Roster export matches the picker: no llama.cpp / mlx-lm catalog duplicates.
+  results = omitLocalRuntimeCatalogModels(results);
 
   const merge = await fetchLibraryModelSelectMerge().catch(() => null);
-  if (merge?.library.length) {
-    results = dedupLlamaCppModelsAgainstLibrary(results, merge.library, merge.serves);
-  }
 
   const out: CatalogRosterTarget[] = [];
   for (const result of results) {
@@ -60,6 +57,8 @@ export async function fetchAllCatalogRosterTargets(): Promise<CatalogRosterTarge
   }
   return out;
 }
+
+// ── Fill ─────────────────────────────────────────────────────────────────────
 
 async function fillLibraryModelSelect(
   select: HTMLSelectElement,
@@ -251,6 +250,8 @@ export async function fillProviderSelect(
   }
   select.disabled = false;
 }
+
+// ── Fields ───────────────────────────────────────────────────────────────────
 
 /** Append labeled provider + model selects; returns handles for wiring save handlers. */
 export function appendProviderModelFields(

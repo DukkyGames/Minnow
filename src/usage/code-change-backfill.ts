@@ -183,7 +183,6 @@ export async function rebuildCodeChangeTotalsFromHistory(
 export async function runSessionCodeChangeBackfill(state: SessionState): Promise<void> {
   const workspaces = new Set<string>();
   for (const chat of state.chats) {
-    // Lazy boot: skip unloaded chats (empty placeholder history is not the corpus).
     if (chat.historyLoaded === false) {
       workspaces.add(chat.workspacePath ?? '');
       continue;

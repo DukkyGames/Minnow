@@ -1,7 +1,3 @@
-/**
- * Preload script: exposes a narrow typed API on window.minnow (contextBridge).
- */
-
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import * as channels from './ipc-channels.js';
 import type { CdpPickedElement } from './preview-cdp-adapt.js';
@@ -9,7 +5,8 @@ import type { PreviewContextMenuOpenPayload } from './preview-context-menu.js';
 import type { PreviewContextMenuRole } from './preview-context-menu-items.js';
 import type { UpdaterChannel, UpdaterStatus } from './updater-core.js';
 
-/** Preview bounds in CSS pixels relative to the host window content area. */
+// ── Types ────────────────────────────────────────────────────────────────────
+
 export interface PreviewBounds {
   x: number;
   y: number;
@@ -57,10 +54,9 @@ export interface PreviewTabInfo {
   active: boolean;
 }
 
+// ── Preview API ──────────────────────────────────────────────────────────────
+
 const preview = {
-  // Every method below takes an optional trailing `instanceId` (MIN-364). Omitting it — as every
-  // pre-MIN-364 call site does — targets the default 'workspace-preview' instance, preserving the
-  // single-surface behavior that shipped before named instances existed.
   show: (bounds?: PreviewBounds, tabId?: string, instanceId?: string): Promise<void> =>
     ipcRenderer.invoke(channels.PREVIEW_SHOW, bounds, tabId, instanceId),
   hide: (tabId?: string, instanceId?: string): Promise<void> =>
@@ -106,7 +102,6 @@ const preview = {
     list: (instanceId?: string): Promise<PreviewTabInfo[]> =>
       ipcRenderer.invoke(channels.PREVIEW_TAB_LIST, instanceId),
   },
-  /** Named preview instance lifecycle (MIN-364) — see electron/preview-instance-registry.ts. */
   instances: {
     create: (instanceId?: string): Promise<string> =>
       ipcRenderer.invoke(channels.PREVIEW_INSTANCE_CREATE, instanceId),
@@ -114,7 +109,6 @@ const preview = {
       ipcRenderer.invoke(channels.PREVIEW_INSTANCE_DESTROY, instanceId),
     list: (): Promise<string[]> => ipcRenderer.invoke(channels.PREVIEW_INSTANCE_LIST),
   },
-  /** Docked Chromium DevTools for the preview guest (MIN-177). Electron only. */
   devtools: {
     toggle: (tabId?: string, instanceId?: string): Promise<{ open: boolean }> =>
       ipcRenderer.invoke(channels.PREVIEW_DEVTOOLS_TOGGLE, tabId, instanceId),
@@ -139,10 +133,6 @@ const preview = {
       };
     },
   },
-  /**
-   * CDP-backed element picking for cross-origin guests (MIN-370): native hover/click via
-   * `webContents.debugger`, no script injected into the page. Electron only.
-   */
   cdpPicker: {
     enable: (tabId?: string, instanceId?: string): Promise<{ ok: boolean; error?: string }> =>
       ipcRenderer.invoke(channels.PREVIEW_CDP_PICK_ENABLE, tabId, instanceId),
@@ -177,7 +167,6 @@ const preview = {
       };
     },
   },
-  /** Right-click menu for the preview guest (Electron WebContentsView only). */
   contextMenu: {
     onOpen: (callback: (payload: PreviewContextMenuOpenPayload) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, payload: PreviewContextMenuOpenPayload) => {
@@ -317,6 +306,8 @@ const preview = {
     };
   },
 };
+
+// ── Bridge ───────────────────────────────────────────────────────────────────
 
 const minnowBridge = {
   preview,

@@ -55,7 +55,6 @@ export const emailStep: OnboardingStep = {
   id: 'email',
   title: 'Email',
   canSkip: true,
-  // Skip when the Email app is off (Choose your apps / Settings → Apps).
   isApplicable: (ctx) => ctx.serverAvailable && isAppEnabled('email'),
 
   render(container, _ctx, actions) {

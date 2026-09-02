@@ -1,11 +1,3 @@
-/**
- * Vertical two-slot split inside the Code workspace right column.
- *
- * Each slot is an independent editor group: it owns its tab list (see
- * right-pane-slot-tabs) and renders that list's active tab into its own pane.
- * The focused slot is the one global commands (open, save, close) act on.
- */
-
 import {
   EMPTY_SLOT_PANE_TABS,
   getFilePanelState,
@@ -108,13 +100,7 @@ function slotElements(slot: PaneSlotId): {
   };
 }
 
-/**
- * Which surface the single (un-split) primary slot should show.
- *
- * `rightPaneMode` is the source of truth. Preview tabs stay in the unified strip
- * with `activePreviewTab` still set while the user is looking at a file — treating
- * that leftover id as "show preview" hid the editor behind an empty guest pane.
- */
+/** Which surface the single (un-split) primary slot should show. */
 function defaultPrimarySlotContent(): SlotContent {
   const state = getFilePanelState();
   if (state.rightPaneMode === 'preview') {
@@ -122,7 +108,6 @@ function defaultPrimarySlotContent(): SlotContent {
   }
   const path = state.activeViewerTab ?? getActiveViewerTabPath();
   if (path) return { kind: 'viewer', tabPath: path };
-  // No file tab: fall back to a leftover browser tab (close-last-file → preview).
   if (state.activePreviewTab) {
     return { kind: 'preview', tabId: state.activePreviewTab };
   }
@@ -133,7 +118,6 @@ function syncSlotPaneVisibility(slot: PaneSlotId, content: SlotContent): void {
   const { slotEl, viewerPane, previewPane } = slotElements(slot);
   if (!slotEl) return;
 
-  // A slot with no tabs still shows its (empty) viewer pane so the pane is not a void.
   const showPreview = content.kind === 'preview';
   const showViewer = !showPreview;
 
@@ -196,10 +180,7 @@ export function applyRightPaneSplitDom(): void {
   void import('./unified-right-tabs').then((m) => m.refreshUnifiedRightTabs());
 }
 
-/**
- * Move split focus. The global active viewer/preview pointers follow focus so that
- * save, close, and "open file" act on the pane the user is actually looking at.
- */
+/** Move split focus. */
 export function focusPaneSlot(slot: PaneSlotId): void {
   if (!isRightPaneSplitLayoutEnabled()) return;
   const split = getFilePanelState().rightPaneSplit;
@@ -207,7 +188,6 @@ export function focusPaneSlot(slot: PaneSlotId): void {
     patchFilePanelState({ rightPaneSplit: { ...split, focusedSlot: slot } });
   }
   adoptActiveViewerTabPath(activeViewerPathForSlot(slot));
-  // Only move the global preview pointer when this group is actually showing a browser.
   if (getSlotPaneTabs(slot).surface === 'preview') {
     const previewId = activePreviewIdForSlot(slot);
     if (previewId) activatePreviewTab(previewId);
@@ -237,14 +217,7 @@ function ownerOfContent(content: SlotContent): PaneSlotId | null {
   return null;
 }
 
-/**
- * Move a tab into `target`, unless that would leave its current group with nothing.
- *
- * One rule for every split entry point: a group never empties by giving up its last
- * tab — the new group just opens blank, and the next file the user picks lands in it.
- * (A path can only live in one group: two CodeMirror views over one tab model would
- * fight over the dirty flag and cached buffer.)
- */
+/** Move a tab into `target`, unless that would leave its current group with nothing. */
 function moveContentToSlot(content: SlotContent, target: PaneSlotId): void {
   if (content.kind === 'none') return;
   const owner = ownerOfContent(content);
@@ -257,10 +230,7 @@ function moveContentToSlot(content: SlotContent, target: PaneSlotId): void {
   }
 }
 
-/**
- * Enable the split: the primary group adopts every open tab, then `secondary`
- * (when given) moves across under {@link moveContentToSlot}'s rule.
- */
+/** Enable the split: the primary group adopts every open tab, then `secondary` (when given) moves across under {@link moveContentToSlot}'s rule. */
 export function enableRightPaneSplit(secondary?: SlotContent): void {
   if (isMobileLayout() || isDesktopWorkspaceHostingSurface()) return;
 
@@ -319,8 +289,6 @@ export function closeRightPaneSplit(): void {
   if (!split.enabled) return;
 
   const merged = mergeSecondarySlotTabsIntoPrimary();
-  // Fall back to the slot contents when the lists are empty (prefs written before the
-  // per-slot tab model, or a split enabled without a bootstrap pass).
   const fromTabs = slotContentFromTabs(merged);
   const primary =
     fromTabs.kind !== 'none'
@@ -365,10 +333,7 @@ export function closeRightPaneSplit(): void {
   });
 }
 
-/**
- * Collapse the split once a group runs out of tabs — an editor group with no tabs is
- * dead space, and its surviving sibling merges back into a single full-width pane.
- */
+/** Collapse the split once a group runs out of tabs — an editor group with no tabs is dead space, and its surviving sibling merges back into a single full-width pane. */
 export function collapseEmptySlots(): void {
   if (!getFilePanelState().rightPaneSplit.enabled) return;
   reconcileSlotTabsWithStores();

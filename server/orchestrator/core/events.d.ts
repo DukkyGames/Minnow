@@ -33,8 +33,7 @@ export const EVENT_TYPES: string[];
 export function isKnownEventType(type: unknown): boolean;
 
 /**
- * Validate one raw journal line. Rejects malformed *known* events; tolerates
- * unknown types and future envelope versions.
+ * Validate one raw journal line.
  */
 export function validateEvent(raw: unknown): ValidationResult;
 

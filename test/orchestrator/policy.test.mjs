@@ -1,10 +1,3 @@
-/**
- * P0-E — the policy table.
- *
- * Exhaustive, not by example. The point of collapsing V1's six call sites and
- * six counters into one table is that the table can be enumerated; a test that
- * checked a handful of interesting cases would give that up.
- */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { ATTEMPT_OUTCOMES, ROLES, makeEvent } from '../../server/orchestrator/core/events.js';
@@ -17,11 +10,9 @@ import {
   wantsSameWorktree,
 } from '../../server/orchestrator/core/policy.js';
 
-/** Every outcome the table can be asked about — the six-way union plus merge's. */
 const OUTCOMES = [...ATTEMPT_OUTCOMES, 'conflicted'];
 const ATTEMPTS = [0, 1, 2, 3, 4, 5];
 
-/** The full input space. */
 function* space() {
   for (const role of ROLES) {
     for (const outcome of OUTCOMES) {
@@ -29,6 +20,8 @@ function* space() {
     }
   }
 }
+
+// ── Totality ─────────────────────────────────────────────────────────────────
 
 describe('decide — totality', () => {
   it('returns a defined action for every cell of role × outcome × attempts', () => {
@@ -74,6 +67,8 @@ describe('decide — totality', () => {
   });
 });
 
+// ── Documented rows ──────────────────────────────────────────────────────────
+
 describe('decide — the documented rows, cell for cell', () => {
   it('matches the table in the issue', () => {
     const rows = [
@@ -112,9 +107,6 @@ describe('decide — the documented rows, cell for cell', () => {
   });
 
   it('renders cell for cell as the whole table, with nothing hidden', () => {
-    // Generated from POLICY_TABLE and compared against the literal expected
-    // table, so a row that is added, removed, reordered, or silently retuned
-    // fails here rather than in a run six hours deep.
     assert.equal(
       formatPolicyTable(),
       [
@@ -156,9 +148,10 @@ describe('decide — the documented rows, cell for cell', () => {
   });
 });
 
+// ── Invariants ───────────────────────────────────────────────────────────────
+
 describe('decide — structural invariants', () => {
   it('every retry targets the builder', () => {
-    // One forward edge (builder → tester) and one backward target (builder).
     for (const input of space()) {
       const action = decide(input);
       if (action.kind === 'retry') {
@@ -254,10 +247,6 @@ describe('decide — structural invariants', () => {
   });
 
   it('terminates under a mixed sequence of outcomes, not just a repeated one', () => {
-    // A run does not fail the same way twice in a row. Walk pseudo-random
-    // outcome sequences and assert every one reaches a terminal action within a
-    // bounded number of attempts — the property that stops a task looping
-    // forever on an alternating blocked/crashed/fail pattern.
     let seed = 12345;
     const next = () => {
       seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
@@ -265,8 +254,6 @@ describe('decide — structural invariants', () => {
     };
     for (let trial = 0; trial < 500; trial += 1) {
       for (const role of ROLES) {
-        // Counts are per role, and every retry targets the builder, so the bound
-        // that matters is on the role whose attempts are accumulating.
         let attemptCount = 0;
         let steps = 0;
         let terminal = null;
@@ -287,9 +274,6 @@ describe('decide — structural invariants', () => {
   });
 
   it('bounds every role at three attempts, whatever happens', () => {
-    // Stated explicitly because reading `fail | < 2 -> retry` as "two builder
-    // runs" is the natural mistake: the column counts tries finished *before*
-    // this one, so the budget is three.
     for (const role of ROLES) {
       for (const outcome of OUTCOMES) {
         assert.notEqual(decide({ role, outcome, attemptCount: 2 }).kind, 'retry',
@@ -320,29 +304,22 @@ describe('decide — structural invariants', () => {
       );
       reached.add(index);
     }
-    // The final catch-all is reachable only by inputs outside the declared space,
-    // which the totality test above covers.
     const unreachable = POLICY_TABLE.map((_, i) => i)
       .filter((i) => !reached.has(i) && i !== POLICY_TABLE.length - 1);
     assert.deepEqual(unreachable, []);
   });
 });
 
+// ── Absences ─────────────────────────────────────────────────────────────────
+
 describe('decide — what is deliberately absent', () => {
   it('is a pure function of its arguments', () => {
-    // A model call in the control plane would forfeit replay, which is the
-    // mechanism the whole engine depends on. Rather than grep the source for
-    // "await" — which any legitimate refactor would break — assert the property
-    // that a model call would violate: the same input always gives the same
-    // answer, synchronously, with nothing read from anywhere else.
     for (const input of space()) {
       const first = decide(input);
       assert.equal(typeof first.then, 'undefined', 'decide() must be synchronous');
       for (let i = 0; i < 5; i += 1) assert.deepEqual(decide(input), first);
     }
 
-    // And it reads only the fields it was given: an input carrying extra state
-    // the table might be tempted to consult changes nothing.
     const base = { role: 'builder', outcome: 'fail', attemptCount: 1 };
     assert.deepEqual(
       decide({ ...base, taskId: 'W1-A', wave: 3, elapsedMs: 99999, boardHealth: 'bad' }),
@@ -355,12 +332,13 @@ describe('decide — what is deliberately absent', () => {
       assert.doesNotMatch(row.role, /fixer/);
       if (row.action.kind === 'retry') assert.doesNotMatch(row.action.role, /fixer/);
     }
-    // `blocked` repairs in the builder's own worktree instead.
     const repair = decide({ role: 'builder', outcome: 'blocked', attemptCount: 0 });
     assert.equal(repair.seedKind, 'repair');
     assert.equal(repair.sameWorktree, true);
   });
 });
+
+// ── Same worktree ────────────────────────────────────────────────────────────
 
 describe('wantsSameWorktree — MIN-705 / MIN-707 mapping', () => {
   it('reuses for repair, continue, and rebase; fresh for failure-aware and fix', () => {
@@ -385,6 +363,8 @@ describe('wantsSameWorktree — MIN-705 / MIN-707 mapping', () => {
     }
   });
 });
+
+// ── Retired attempts ─────────────────────────────────────────────────────────
 
 describe('retired attempts restore the budget', () => {
   it('does not count retired attempts, so a twice-failed builder gets a full budget after reopen', () => {

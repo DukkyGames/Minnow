@@ -23,6 +23,8 @@ import {
   type RemoveChatResult,
 } from './sessions';
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 /** Persist a group mutation (marks dirtyGroupIds for B.2 PATCH upsert). */
 function persistGroupChange(groupId: string): void {
   markGroupDirty(groupId);
@@ -116,6 +118,8 @@ function sortBoardGroupMembers(group: ChatGroup, members: Chat[]): Chat[] {
   return planner ? [planner, ...rest] : rest;
 }
 
+// ── Sidebar ──────────────────────────────────────────────────────────────────
+
 /** Merge groups and ungrouped chats by newest activity (sidebar main list). */
 export function buildSortedWorkspaceSidebarEntries(
   groups: ChatGroup[],
@@ -158,6 +162,8 @@ export function getGroupsForWorkspace(workspacePath: string): ChatGroup[] {
     .filter((g) => normalizeWorkspacePath(g.workspacePath) === ws)
     .sort((a, b) => a.order - b.order || a.createdAt - b.createdAt);
 }
+
+// ── Group CRUD ───────────────────────────────────────────────────────────────
 
 /** Create a group at the end of the workspace list. */
 export function createGroup(name: string, workspacePath: string): ChatGroup {
@@ -223,8 +229,6 @@ function teardownBoardGroup(group: ChatGroup, chatIds: readonly string[]): void 
     setChatStopReason(chatId, 'system');
     getChatAbort(chatId)?.abort();
   }
-  // V1 isolation cleanup lived in the deleted engine. Leftover integration
-  // worktrees are orphaned directories; P4-C/P4-F do not revive that path.
 }
 
 /** Remove a plain group (ungroup chats) or a board folder (delete all member chats). */
@@ -261,7 +265,6 @@ export function deleteGroup(
         if (result.activeChanged) activeChanged = true;
       }
     }
-    // Group row is gone — PATCH must deleteGroupIds, not a dirty upsert of a missing id.
     markGroupDeleted(id);
     scheduleSaveSessions();
     return { ok: true, activeChanged, chatRemoval: lastRemoval };
@@ -315,6 +318,8 @@ export function toggleGroupCollapsed(id: string): void {
 export function findGroupById(id: string): ChatGroup | undefined {
   return (requireSession().groups ?? []).find((g) => g.id === id);
 }
+
+// ── Board folders ────────────────────────────────────────────────────────────
 
 /** Folder currently driving board view in #chatArea. */
 export function getActiveBoardGroup(): ChatGroup | undefined {
@@ -420,7 +425,6 @@ export function linkPlannerChatToBoardFolder(plannerChat: Chat, group: ChatGroup
   if (plannerChat.orchestratePlanPath && !group.orchestratePlanPath) {
     group.orchestratePlanPath = plannerChat.orchestratePlanPath;
   }
-  // Keep the sidebar on "Orchestrator - <plan>" until the user renames it.
   syncOrchestratorPlannerChatTitle(plannerChat);
   touchChat(plannerChat);
   persistGroupChange(group.id);
@@ -455,14 +459,10 @@ export function getPlannerChatForGroup(group: ChatGroup): Chat | undefined {
 function activateBoardGroupView(groupId: string, group: ChatGroup): void {
   const state = requireSession();
   state.activeBoardGroupId = groupId;
-  // Survives navigating away, so re-entering Orchestrator returns here.
   state.lastBoardGroupId = groupId;
   markSessionScalarsDirty();
   group.viewMode = 'board';
   persistGroupChange(groupId);
-  // Stamp board-view chrome now so the Code composer and session list hide
-  // before the async board module paints. Preference for the list stays put
-  // (Super Plan pattern) — CSS suppresses it while the board is up.
   void import('../ui/view-mode-toggle')
     .then((m) => m.syncBoardViewChrome())
     .catch((err) => reportBackgroundError('board-view-chrome-sync', err));
@@ -482,7 +482,6 @@ function activateBoardGroupView(groupId: string, group: ChatGroup): void {
     .then(({ dismissCodeOverviewForNavigation }) => {
       dismissCodeOverviewForNavigation();
       void import('../ui/sidebar').then((m) => m.renderSidebar());
-      // V1 kanban is gone — leftover board folders open the V2 Boards surface.
       void import('../os/router').then((m) => m.navigateToCodeBoards());
     })
     .catch((err) => reportBackgroundError('board-view-activate', err));

@@ -1,7 +1,3 @@
-/**
- * Recent workspaces popover — MRU folders anchored to #btnWorkspace.
- */
-
 import {
   fetchWorkspace,
   removeRecentWorkspace,

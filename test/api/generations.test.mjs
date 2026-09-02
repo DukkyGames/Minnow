@@ -268,6 +268,8 @@ after(async () => {
   await rmTestHome(homeDir);
 });
 
+// ── POST /api/generations + ──────────────────────────────────────────────────
+
 describe('POST /api/generations + GET status lifecycle', () => {
   it('creates generationId and transitions pending â†’ streaming â†’ complete', async () => {
     const generationId = await createGeneration(baseUrl);
@@ -308,6 +310,8 @@ describe('POST /api/generations + GET status lifecycle', () => {
   });
 });
 
+// ── parallel stream subscribers ──────────────────────────────────────────────
+
 describe('parallel stream subscribers', () => {
   it('two GET /stream clients receive identical replay + tail from mock upstream', async () => {
     const generationId = await createGeneration(baseUrl);
@@ -327,6 +331,8 @@ describe('parallel stream subscribers', () => {
     await waitForGenerationStatus(baseUrl, generationId, 'complete');
   });
 });
+
+// ── subscriber disconnect does ───────────────────────────────────────────────
 
 describe('subscriber disconnect does not cancel upstream', () => {
   it('closing one stream mid-flight leaves other complete and status streaming until upstream ends', async () => {
@@ -385,6 +391,8 @@ describe('subscriber disconnect does not cancel upstream', () => {
     await waitForGenerationStatus(baseUrl, generationId, 'complete');
   });
 });
+
+// ── POST /api/generations/:id/cancel ─────────────────────────────────────────
 
 describe('POST /api/generations/:id/cancel', () => {
   it('sets status to cancelled', async () => {

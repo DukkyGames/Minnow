@@ -1,7 +1,3 @@
-/**
- * Settings → Prompting: Minnow setup profiles (export/import/activate).
- */
-
 import {
   activateSetupProfile,
   captureSetupProfile,
@@ -370,7 +366,6 @@ export function mountSetupProfilesPanel(
         }
       }
     } catch {
-      /* ignore */
     }
   })();
 }

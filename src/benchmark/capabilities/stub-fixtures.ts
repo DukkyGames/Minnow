@@ -24,9 +24,6 @@ export const CAP_STUB_SUB_AGENT_ID = 'sub-agent-cap-42';
 export const CAP_STUB_THREAD_ID = 'thread-cap-9001';
 
 const STUB_BY_TOOL: Record<string, unknown> = {
-  // Two tabs, the newly opened one active: a listing that still showed only
-  // `about:blank` after the model had just opened a tab read as a broken environment,
-  // and models burned their answer explaining the contradiction.
   browser_list: {
     tabs: [
       { tabId: 'tab_1', url: 'about:blank', active: false },
@@ -35,8 +32,6 @@ const STUB_BY_TOOL: Record<string, unknown> = {
   },
   browser_snapshot: {
     url: 'https://example.com/',
-    // `text` mirrors what the real tool renders (`[uid] role "name"`), so the uid the
-    // model must pass back to browser_fill / browser_click is unmistakable.
     text: `[${CAP_STUB_SNAPSHOT_UIDS[0]}] textbox "Search"\n[${CAP_STUB_SNAPSHOT_UIDS[1]}] button "Submit"`,
     nodes: [
       { uid: CAP_STUB_SNAPSHOT_UIDS[0], role: 'textbox', name: 'Search' },

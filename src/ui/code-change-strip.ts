@@ -1,8 +1,3 @@
-/**
- * Composer strip: cumulative +/− line stats for the active chat.
- * Click opens a panel listing each touched file with per-file stats and diffs.
- */
-
 import type { Chat, ChatCodeChangeTotals } from '../types';
 import { basename } from './file-tree-path';
 import { renderUnifiedPromptDiff } from './prompt-diff-unified';
@@ -60,7 +55,6 @@ export function appendChatItemCodeChangeStats(
   chat: Chat,
   totals: ChatCodeChangeTotals,
 ): void {
-  // File count needs tool history; unloaded chats omit it and keep +/− from totals.
   const fileCount = getPerFileChangeSummary(chat).length;
   if (fileCount > 0) {
     const filesSpan = document.createElement('span');
@@ -76,7 +70,6 @@ export function appendChatItemCodeChangeStats(
 export function formatChatItemCodeChangeAria(chat: Chat): string {
   const totals = chat.codeChangeTotals;
   if (!hasCodeChangeTotals(totals) || !totals) return '';
-  // Unloaded chats skip file count (placeholder history has no tool rows).
   const fileCount = getPerFileChangeSummary(chat).length;
   const parts: string[] = [];
   if (fileCount > 0) {

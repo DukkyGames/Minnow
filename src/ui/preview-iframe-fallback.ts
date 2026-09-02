@@ -1,12 +1,3 @@
-/**
- * Browser (npm start) fallback preview host (MIN-364): one same-origin iframe per named
- * instance. preview-panel.ts keeps its own established per-tab iframe map for the default
- * 'workspace-preview' instance (unchanged, back-compat). This module is the reusable
- * counterpart for other named instances when no Electron WebContentsView bridge is available —
- * same "one guest surface per instance id" shape as the Electron instance registry in
- * electron/preview-instance-registry.ts, minus process isolation.
- */
-
 const framesByInstance = new Map<string, HTMLIFrameElement>();
 
 /** Get or create the same-origin iframe for a named instance, appended to `host`. */

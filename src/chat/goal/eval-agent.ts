@@ -1,7 +1,3 @@
-/**
- * Agentic goal evaluator — headless tool loop that independently verifies completion.
- */
-
 import { formatGenerationErrorMessage } from '../../api/generations';
 import { loadGoalEvalConfig } from '../../config/goal-eval-meta';
 import { sessionState } from '../../state/sessions';

@@ -1,7 +1,3 @@
-/**
- * In-memory cut/copy clipboard for the file tree (single item v1).
- */
-
 export interface FileTreeClipboard {
   mode: 'copy' | 'cut';
   paths: string[];

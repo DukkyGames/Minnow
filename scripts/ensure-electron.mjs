@@ -1,11 +1,3 @@
-/**
- * Eagerly downloads the Electron binary during npm install.
- * Electron 42+ no longer runs install.js automatically on package install.
- *
- * Env:
- *   MINNOW_SKIP_ELECTRON=1  — skip download (CI / headless)
- *   MINNOW_HEADLESS=1       — same as MINNOW_SKIP_ELECTRON
- */
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';

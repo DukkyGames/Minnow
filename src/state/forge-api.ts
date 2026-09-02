@@ -124,6 +124,8 @@ export interface ForgeResult {
   note?: string;
 }
 
+// ── Transport ────────────────────────────────────────────────────────────────
+
 async function postForge(
   op: string,
   args: Record<string, unknown> = {},
@@ -159,6 +161,8 @@ const UNAVAILABLE: ForgeStatus = {
   reason: 'The local server is not running.',
 };
 
+// ── Status ───────────────────────────────────────────────────────────────────
+
 /** Probe what the forge layer can do for this worktree. Never rejects. */
 export async function forgeStatus(cwd?: string): Promise<ForgeStatus> {
   const result = await postForge('forgeStatus', cwd ? { cwd } : {});
@@ -178,6 +182,8 @@ function normalizeStatus(result: ForgeResult): ForgeStatus {
   }
   return { ...UNAVAILABLE, ...raw } as ForgeStatus;
 }
+
+// ── Pull requests ────────────────────────────────────────────────────────────
 
 export function prList(input?: {
   cwd?: string;
@@ -231,6 +237,8 @@ export function prClose(input: {
 }): Promise<ForgeResult> {
   return postForge('prClose', input);
 }
+
+// ── Workflow runs ────────────────────────────────────────────────────────────
 
 export function runList(input?: {
   cwd?: string;

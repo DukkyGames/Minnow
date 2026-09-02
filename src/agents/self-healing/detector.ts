@@ -1,7 +1,3 @@
-/**
- * Pure repetition heuristics for sub-agent runs (Step 19).
- */
-
 export type RepetitionReason =
   | 'duplicate_tool'
   | 'same_error'
@@ -22,20 +18,11 @@ export interface DetectionResult {
 export interface DetectorThresholds {
   duplicateToolCallThreshold: number;
   sameErrorThreshold: number;
-  /**
-   * How many of the most recent calls to consider. Defaults to 4x the duplicate
-   * threshold (floor {@link MIN_REPETITION_WINDOW}).
-   */
   windowSize?: number;
 }
 
-/**
- * Smallest sliding window, so a low duplicate threshold still needs the repeats
- * to be genuinely close together.
- */
 export const MIN_REPETITION_WINDOW = 12;
 
-/** Sliding-window size for duplicate detection. */
 export function resolveRepetitionWindow(
   duplicateToolCallThreshold: number,
   windowSize?: number,
@@ -78,14 +65,6 @@ function normalizeArgsJson(argsJson: string): string {
   }
 }
 
-/**
- * Detect duplicate tool calls with identical normalized args.
- *
- * Only the most recent {@link resolveRepetitionWindow} calls are considered. Counting
- * over the whole run instead flags ordinary work — a reviewer that re-reads the same
- * plan file five times across a long run is not looping, but five identical calls
- * bunched together is.
- */
 export function detectRepetition(
   log: ToolCallLogEntry[],
   thresholds: DetectorThresholds,

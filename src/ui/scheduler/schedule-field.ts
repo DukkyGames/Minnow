@@ -1,7 +1,3 @@
-/**
- * Schedule editor: interval shorthand or friendly cron builder.
- */
-
 import {
   CRON_PATTERN_OPTIONS,
   SCHEDULE_KIND_OPTIONS,

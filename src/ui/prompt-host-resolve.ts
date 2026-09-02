@@ -1,8 +1,3 @@
-/**
- * Resolves visible hosts for tool approval and ask_question strips.
- * Mirrors composer-surface routing so prompts are not mounted in hidden shells.
- */
-
 import { getForegroundAppId } from '../os/instances';
 import { shouldPaintDesktopChatSurface } from './chat-mount';
 const GLOBAL_PROMPT_HOST_IDS = new Set(['globalToolApprovalHost', 'globalQuestionHost']);
@@ -16,10 +11,7 @@ export function isPromptHostVisible(host: HTMLElement | null): boolean {
   return true;
 }
 
-/**
- * True when the host's owning chat shell is on screen.
- * Ignores `host.hidden` — empty prompt slots stay hidden until a strip opens.
- */
+/** True when the host's owning chat shell is on screen. */
 export function isPromptHostShellVisible(host: HTMLElement): boolean {
   if (GLOBAL_PROMPT_HOST_IDS.has(host.id)) return true;
 

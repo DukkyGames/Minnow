@@ -1,7 +1,3 @@
-/**
- * Workspace-wide agent code change display (hub strip + optional hooks).
- */
-
 import { getWorkspacePath } from '../state/workspace';
 import { sessionState } from '../state/sessions';
 import {

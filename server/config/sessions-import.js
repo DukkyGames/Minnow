@@ -1,11 +1,3 @@
-/**
- * One-time JSON → SQLite import for sessions (Phase A.1).
- * Modelled on server/email/cache.js migrateJsonCacheIfNeeded.
- *
- * Triggered from getSessionsDb() immediately after initSchema — callers never
- * observe an un-imported handle. Upsert helpers are exportable for Phase A.2.
- */
-
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { validateSessionState } from './validators.js';
@@ -20,7 +12,6 @@ import {
   writeSessionMeta,
 } from './sessions-schema.js';
 
-/** Chat fields stored as real columns — everything else lands in meta_json. */
 const CHAT_HOT_KEYS = new Set([
   'id',
   'name',
@@ -42,30 +33,25 @@ const CHAT_HOT_KEYS = new Set([
   'unread',
   'turnError',
   'history',
-  // Client-only lazy-history markers / denormalized summary fields — not meta_json
   'historyLoaded',
   'messageCount',
   'lastMessagePreview',
   'sortIndex',
   'historyDigest',
-  // Child tables — excluded from meta_json
   'terminalHistory',
   'runs',
   'subAgentRuns',
   'activeLoops',
 ]);
 
-/** ISO timestamp for meta stamps. */
 function nowIso() {
   return new Date().toISOString();
 }
 
-/** SHA-256 hex of a string (row_hash / history_digest). */
 export function hashPayload(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
 }
 
-/** Flatten message.content to plain text for previews / FTS / text_len. */
 export function messageTextContent(message) {
   if (!message || typeof message !== 'object') return '';
   const content = message.content;
@@ -83,7 +69,6 @@ export function messageTextContent(message) {
 }
 
 /**
- * Upsert one chat row (hot columns + meta_json). Does not touch child tables.
  * @param {import('better-sqlite3').Database} db
  * @param {Record<string, any>} chat
  * @param {number} sortIndex
@@ -162,14 +147,12 @@ export function upsertChatRow(db, chat, sortIndex, derived) {
 }
 
 /**
- * Upsert one message row with verbatim payload_json + derived query columns + FTS.
  * @param {import('better-sqlite3').Database} db
  * @param {string} chatId
  * @param {number} seq
  * @param {Record<string, unknown>} message
  */
 export function upsertMessageRow(db, chatId, seq, message) {
-  // Verbatim serialization of the (validated) message object — do not split fields.
   const payloadJson = JSON.stringify(message);
   const rowHash = hashPayload(payloadJson);
   const text = messageTextContent(message);
@@ -207,7 +190,6 @@ export function upsertMessageRow(db, chatId, seq, message) {
     rowHash,
   );
 
-  // Keep FTS in the same logical write; delete-then-insert for the (chat_id, seq) key.
   db.prepare('DELETE FROM messages_fts WHERE chat_id = ? AND seq = ?').run(chatId, seq);
   db.prepare(
     `INSERT INTO messages_fts (chat_id, seq, role, body) VALUES (?, ?, ?, ?)`,
@@ -217,7 +199,6 @@ export function upsertMessageRow(db, chatId, seq, message) {
 }
 
 /**
- * Upsert TerminalRunRecord columns (closed interface — no payload_json).
  * @param {import('better-sqlite3').Database} db
  * @param {string} chatId
  * @param {number} seq
@@ -322,7 +303,6 @@ export function upsertChatLoopRow(db, chatId, loop) {
 }
 
 /**
- * Upsert a group + board_state payload (tasks/log stripped into child tables).
  * @param {import('better-sqlite3').Database} db
  * @param {Record<string, any>} group
  */
@@ -402,7 +382,6 @@ export function upsertBoardTaskRow(db, groupId, task) {
 }
 
 /**
- * Append a board log event (AUTOINCREMENT seq). Caller bounds the ring afterward.
  * @param {import('better-sqlite3').Database} db
  * @param {string} groupId
  * @param {Record<string, any>} event
@@ -423,7 +402,6 @@ export function insertBoardLogRow(db, groupId, event) {
   );
 }
 
-/** Trim board_log to the newest BOARD_LOG_MAX rows per group. */
 export function trimBoardLog(db, groupId) {
   db.prepare(
     `DELETE FROM board_log
@@ -435,7 +413,6 @@ export function trimBoardLog(db, groupId) {
 }
 
 /**
- * Write a validated SessionState into every table (one transaction, caller wraps).
  * @param {import('better-sqlite3').Database} db
  * @param {Record<string, any>} state
  */
@@ -480,7 +457,6 @@ export function writeValidatedSessionState(db, state) {
     const last = history.length ? history[history.length - 1] : null;
     const preview = last ? messageTextContent(last).slice(0, 240) : '';
 
-    // Parent row first — messages / child tables reference chats(id).
     upsertChatRow(db, chat, sortIndex, {
       messageCount: history.length,
       lastMessagePreview: preview,
@@ -492,7 +468,6 @@ export function writeValidatedSessionState(db, state) {
       rowHashes.push(upsertMessageRow(db, chat.id, seq, message));
     });
 
-    // Fill history_digest after row hashes are known (same hot columns, ON CONFLICT update).
     upsertChatRow(db, chat, sortIndex, {
       messageCount: history.length,
       lastMessagePreview: preview,
@@ -522,7 +497,6 @@ export function writeValidatedSessionState(db, state) {
 }
 
 /**
- * Read JSON from the first existing path in the list.
  * @param {string[]} candidates
  * @returns {{ path: string, raw: string } | { path: null, raw: null, enoent: true } | never}
  */
@@ -547,11 +521,8 @@ function readFirstJsonFile(candidates) {
 }
 
 /**
- * Import legacy state.json once. Idempotent via jsonImportedAt meta flag.
- *
  * @param {import('better-sqlite3').Database} db
  * @param {{ recovery?: boolean }} [options]
- *   recovery=true: after corrupt DB quarantine, prefer .migrated then .backup (never state.json).
  */
 export function importJsonSessionsIfNeeded(db, options = {}) {
   if (readSessionMeta(db, 'jsonImportedAt')) {
@@ -573,7 +544,6 @@ export function importJsonSessionsIfNeeded(db, options = {}) {
     filePath = result.path;
     raw = result.raw;
   } catch (err) {
-    // Unreadable but present — treat like validation failure (leave file, no imported flag).
     writeSessionMeta(db, 'jsonImportFailedAt', nowIso());
     writeSessionMeta(db, 'jsonImportFailedMessage', String(/** @type {Error} */ (err).message ?? err));
     return { migrated: false, reason: 'read_failed', error: String(err) };
@@ -590,12 +560,10 @@ export function importJsonSessionsIfNeeded(db, options = {}) {
 
   let state;
   try {
-    // v1→v6 ladder runs here via validateSessionState; DB always holds v6-normalized rows.
     state = validateSessionState(parsed);
   } catch (err) {
     writeSessionMeta(db, 'jsonImportFailedAt', nowIso());
     writeSessionMeta(db, 'jsonImportFailedMessage', String(/** @type {Error} */ (err).message ?? err));
-    // Leave JSON untouched; do NOT stamp jsonImportedAt so a later fix can retry.
     return { migrated: false, reason: 'validation_failed', error: String(err) };
   }
 
@@ -607,7 +575,6 @@ export function importJsonSessionsIfNeeded(db, options = {}) {
   const tx = db.transaction(() => {
     writeValidatedSessionState(db, state);
     writeSessionMeta(db, 'jsonImportedAt', nowIso());
-    // Clear any prior failure stamp on success.
     writeSessionMeta(db, 'jsonImportFailedAt', null);
     writeSessionMeta(db, 'jsonImportFailedMessage', null);
   });
@@ -616,13 +583,11 @@ export function importJsonSessionsIfNeeded(db, options = {}) {
   const chatCount = db.prepare('SELECT COUNT(*) AS n FROM chats').get()?.n ?? 0;
   const messageCount = db.prepare('SELECT COUNT(*) AS n FROM messages').get()?.n ?? 0;
 
-  // Integrity gate before retiring JSON — never delete, only rename after counts pass.
   if (chatCount >= expectedChats && messageCount >= expectedMessages) {
     if (filePath === sessionsJsonPath()) {
       try {
         fs.renameSync(filePath, sessionsJsonMigratedPath());
       } catch {
-        /* best-effort; rows are already durable */
       }
     }
   }

@@ -1,36 +1,3 @@
-/**
- * The selected task, in full.
- *
- * ## What this is for
- *
- * You open a card because it stopped being green. So the panel answers, in
- * order: what state is this in, what did it change, what was tried, and only
- * then what the plan asked for. The spec used to come first and took the whole
- * first screen; it is the thing you already know when a task fails.
- *
- * Three reading surfaces, each with the same shape as its neighbour elsewhere
- * in the app rather than a private one:
- *
- * - **Files** is the chat code-change list (`src/ui/code-change-strip.ts`): a
- *   chevron that opens the unified diff in place, a path that opens the editor,
- *   and `+N −N` in mono. Same affordance, same markup vocabulary, one thing to
- *   learn. Numbers come from git at `mergedSha`, never from the journal.
- * - **Attempts** is the run: one row per try, its outcome, its one-line summary,
- *   and its log underneath when you open it.
- * - **Spec** is markdown through the same renderer chat uses, collapsed once the
- *   task has run, so a fenced `package.json` reads as code instead of as forty
- *   lines of pre-wrap.
- *
- * ## The state rule still holds
- *
- * Nothing here writes board state. Files and transcripts are reads, and the only
- * mutations reachable from this panel are the callbacks in `BoardActions`. The
- * module-level `ui` object below holds *view* state only (which rows are open,
- * where the log is scrolled), because the surface calls `replaceChildren` on
- * every engine event and an expanded row would otherwise collapse under the
- * reader several times a minute.
- */
-
 import type { Attempt, BoardState, TaskState } from '../../server/orchestrator/core/types';
 import { COLUMNS, columnOf, type ColumnId } from './board-columns';
 import {
@@ -51,42 +18,29 @@ import { createIcon } from '../ui/icon';
 import { renderUnifiedPromptDiff } from '../ui/prompt-diff-unified';
 import { setAssistantBubbleContent } from '../markdown/renderer';
 
-/**
- * View state that has to survive a repaint.
- *
- * Not board state and never journaled: which disclosure is open and where a log
- * is scrolled are facts about this window, not about the run.
- */
 const ui = {
-  /** Log rows the reader expanded to full text, keyed `<attemptId>:<index>`. */
   expandedRows: new Set<string>(),
-  /** Attempt summaries the reader opened out past their clamp. */
   expandedSummaries: new Set<string>(),
-  /** Whether the log is pinned to its tail. Set false when the reader scrolls up. */
   followLog: true,
-  /** Last log scroll offset, so a repaint does not throw the reader to the top. */
   logScrollTop: 0,
-  /** Whether the spec disclosure is open, once the reader has said either way. */
   specOpen: null as boolean | null,
 };
 
-/** Forget the open log's row and scroll state. Called when a different log opens. */
+// ── Reset ────────────────────────────────────────────────────────────────────
+
 export function resetTaskDetailLogUi(): void {
   ui.expandedRows.clear();
   ui.followLog = true;
   ui.logScrollTop = 0;
 }
 
-/** Forget everything this panel remembers. Called when the selected task changes. */
 export function resetTaskDetailUi(): void {
   resetTaskDetailLogUi();
   ui.expandedSummaries.clear();
   ui.specOpen = null;
 }
 
-// ---------------------------------------------------------------------------
-// The panel
-// ---------------------------------------------------------------------------
+// ── Detail ───────────────────────────────────────────────────────────────────
 
 export function renderTaskDetail(
   state: BoardState,
@@ -96,7 +50,6 @@ export function renderTaskDetail(
 ): HTMLElement {
   const titleId = `ov2-detail-title-${task.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
 
-  // Scrim owns dismiss-on-outside; the dialog stops propagation so clicks inside stay open.
   const overlay = el('div', 'ov2-detail-overlay');
   overlay.dataset.focusKey = 'detail-overlay';
   overlay.addEventListener('click', () => actions.select(null));
@@ -107,8 +60,6 @@ export function renderTaskDetail(
   detail.setAttribute('aria-labelledby', titleId);
   detail.addEventListener('click', (event) => event.stopPropagation());
 
-  // Escape also bubbles from focus inside the dialog; boards-view adds a
-  // document capture listener so dismiss still works if focus drifts.
   const dismissOnEscape = (event: KeyboardEvent) => {
     if (event.key !== 'Escape') return;
     event.preventDefault();
@@ -132,9 +83,7 @@ export function renderTaskDetail(
   return overlay;
 }
 
-// ---------------------------------------------------------------------------
-// Head
-// ---------------------------------------------------------------------------
+// ── Head ─────────────────────────────────────────────────────────────────────
 
 function renderHead(
   state: BoardState,
@@ -185,7 +134,6 @@ function renderHead(
   return head;
 }
 
-/** One quiet line of status facts. Not a form, and not the reading surface. */
 function renderFacts(state: BoardState, task: TaskState): HTMLElement {
   const facts = el('dl', 'ov2-facts');
   const add = (label: string, value: string, mono = false) => {
@@ -203,16 +151,7 @@ function columnLabel(id: ColumnId): string {
   return COLUMNS.find((c) => c.id === id)?.label ?? id;
 }
 
-// ---------------------------------------------------------------------------
-// Alerts
-// ---------------------------------------------------------------------------
 
-/**
- * Why the card is not green, directly under the title.
- *
- * These used to sit below the spec, which meant the one thing worth reading was
- * a scroll away from the reason you opened the panel.
- */
 function renderAlerts(task: TaskState): HTMLElement[] {
   const alerts: HTMLElement[] = [];
   const add = (
@@ -236,7 +175,6 @@ function renderAlerts(task: TaskState): HTMLElement[] {
     );
   }
   if (task.skippedBy) {
-    // Skipped is not this task failing. It is waiting on one that did.
     add('warn', 'Skipped', `${task.skippedBy} failed, so this never ran. It did not fail itself.`);
   }
   if (task.mergeConflicts && task.mergeConflicts.length > 0) {
@@ -246,10 +184,6 @@ function renderAlerts(task: TaskState): HTMLElement[] {
     add('info', 'Wrote outside its footprint', overflow.actual.join(', '), true);
   }
   if (task.emptyTouchesGlobs && task.emptyTouchesGlobs.length > 0) {
-    // Informational, not a warning. The expansion is frozen at `board.created`,
-    // so a task whose whole job is to *create* these files always lands here,
-    // and colouring it amber next to a green diffstat says the opposite of what
-    // happened.
     add(
       'info',
       'Did not exist yet',
@@ -259,9 +193,6 @@ function renderAlerts(task: TaskState): HTMLElement[] {
   return alerts;
 }
 
-// ---------------------------------------------------------------------------
-// Files
-// ---------------------------------------------------------------------------
 
 function section(label: string, meta?: HTMLElement | null): HTMLElement {
   const wrap = el('section', 'ov2-panel');
@@ -272,7 +203,6 @@ function section(label: string, meta?: HTMLElement | null): HTMLElement {
   return wrap;
 }
 
-/** `3 files · +455 −0`, the same shape and order the composer strip uses. */
 function statsLine(files: number, additions: number, deletions: number): HTMLElement {
   const meta = el('div', 'ov2-panel__meta');
   meta.appendChild(el('span', 'ov2-panel__count', `${files} file${files === 1 ? '' : 's'}`));
@@ -281,6 +211,8 @@ function statsLine(files: number, additions: number, deletions: number): HTMLEle
   meta.appendChild(el('span', 'ov2-stat ov2-stat--del', `−${deletions}`));
   return meta;
 }
+
+// ── Files ────────────────────────────────────────────────────────────────────
 
 function renderFilesSection(
   task: TaskState,
@@ -312,8 +244,6 @@ function renderFilesSection(
     return wrap;
   }
 
-  // Not merged, or git could not answer. The declared footprint is the honest
-  // answer: it says what the task is allowed to touch, not what it touched.
   const planned = task.touchesExpanded?.length ? task.touchesExpanded : task.touches;
   if (planned.length === 0) {
     wrap.appendChild(empty('This task declared no file footprint.'));
@@ -334,7 +264,6 @@ function renderFilesSection(
   return wrap;
 }
 
-/** Directory quiet, filename legible, and the filename never truncates. */
 function pathLabel(path: string): HTMLElement {
   const wrap = el('span', 'ov2-file__path');
   const cut = path.lastIndexOf('/');
@@ -418,12 +347,10 @@ function renderFileDiff(diff: FileDiffView | undefined): HTMLElement {
   return host;
 }
 
-/** A declared path. No counts, because there is nothing yet to count. */
 function renderPlannedRow(path: string, actions: BoardActions): HTMLElement {
   const row = el('div', 'ov2-file ov2-file--planned');
   const header = el('div', 'ov2-file__header');
   header.appendChild(el('span', 'ov2-file__toggle-spacer'));
-  // A glob has no file to open; a concrete path does.
   if (/[*?[\]]/.test(path)) {
     const label = el('span', 'ov2-file__open ov2-file__open--static');
     label.title = path;
@@ -443,15 +370,14 @@ function renderPlannedRow(path: string, actions: BoardActions): HTMLElement {
   return row;
 }
 
-// ---------------------------------------------------------------------------
-// Attempts
-// ---------------------------------------------------------------------------
 
 const ROLE_ICON = {
   builder: 'boardBuild',
   tester: 'boardTest',
   merge: 'boardGroup',
 } as const;
+
+// ── Attempts ─────────────────────────────────────────────────────────────────
 
 function renderAttemptsSection(
   task: TaskState,
@@ -478,8 +404,6 @@ function renderAttempt(
   options: BoardViewOptions,
 ): HTMLElement {
   const item = el('li', 'ov2-attempt');
-  // Merge attempts are synthesised by the fold and never ran an agent, so there
-  // is nothing to read for them.
   const readable = attempt.role === 'builder' || attempt.role === 'tester';
   const open = readable && options.transcript?.attemptId === attempt.attemptId;
   item.classList.toggle('is-open', open);
@@ -522,12 +446,6 @@ function renderAttempt(
   }
   item.appendChild(header);
 
-  // The summary is the answer to "what happened", so it reads without opening
-  // anything. The log is for when the summary is not enough.
-  //
-  // Clamped, because agents write paragraphs: an unclamped run of four attempts
-  // is eight hundred words between the file list and the log, which is the wall
-  // this panel exists to not be. The first three lines are the answer.
   if (attempt.summary) {
     const key = `summary:${attempt.attemptId}`;
     const open = ui.expandedSummaries.has(key);
@@ -556,17 +474,7 @@ function renderAttempt(
   return item;
 }
 
-// ---------------------------------------------------------------------------
-// The log
-// ---------------------------------------------------------------------------
 
-/**
- * Gutter wording per event type.
- *
- * The raw `type` strings are the runner's vocabulary, not a reader's. `delta`
- * never reaches disk, and `thinking` is coalesced by the recorder, so this list
- * is short by construction.
- */
 const LOG_LABEL: Record<string, string> = {
   thinking: 'Thought',
   tool_call: 'Tool',
@@ -579,11 +487,8 @@ const LOG_LABEL: Record<string, string> = {
 interface LogRow {
   kind: 'thought' | 'tool' | 'result' | 'end' | 'error' | 'plain';
   label: string;
-  /** Shown collapsed. Mono for tools and results, prose for reasoning. */
   lead: string;
-  /** Secondary text on the same row, muted. */
   trail?: string;
-  /** Full text behind the disclosure, when there is more than the lead shows. */
   full?: string;
   tone?: 'good' | 'bad' | 'warn';
 }
@@ -598,7 +503,6 @@ function asText(value: unknown): string {
   }
 }
 
-/** A tool call's arguments as one scannable line: the values, not the schema. */
 function summariseArgs(value: unknown): string {
   if (value === undefined || value === null) return '';
   let parsed: unknown = value;
@@ -624,6 +528,8 @@ function firstLine(text: string, max = 140): string {
   const line = text.replace(/\s+/g, ' ').trim();
   return line.length > max ? `${line.slice(0, max)}…` : line;
 }
+
+// ── Log ──────────────────────────────────────────────────────────────────────
 
 function toLogRow(event: Record<string, unknown>): LogRow | null {
   const type = typeof event.type === 'string' ? event.type : '';
@@ -687,13 +593,6 @@ function toLogRow(event: Record<string, unknown>): LogRow | null {
   };
 }
 
-/**
- * One attempt's log.
- *
- * Reasoning renders as prose in the UI font and tool traffic renders in mono,
- * because they are different kinds of text and the old three-column mono grid
- * made every line look like the same line.
- */
 function renderLog(view: TranscriptView, live: boolean): HTMLElement {
   const wrap = el('div', 'ov2-log');
 
@@ -740,9 +639,6 @@ function renderLog(view: TranscriptView, live: boolean): HTMLElement {
   rows.forEach((row, index) => list.appendChild(renderLogRow(row, view.attemptId, index)));
   scroller.appendChild(list);
 
-  // Follow the tail while the reader is at the bottom, and stop the moment they
-  // scroll away. `scroll` fires after the assignment below, so the flag is only
-  // ever cleared by a real gesture.
   scroller.addEventListener('scroll', () => {
     const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
     ui.followLog = distance <= 24;
@@ -750,11 +646,6 @@ function renderLog(view: TranscriptView, live: boolean): HTMLElement {
   });
   wrap.appendChild(scroller);
 
-  // The surface rebuilds this element on every engine event, so the offset is
-  // reapplied here rather than kept by the DOM.
-  //
-  // Only a *live* log follows its tail. A finished attempt is a document, and
-  // opening a document at its last line is the wrong end to start reading from.
   queueMicrotask(() => {
     if (!scroller.isConnected) return;
     scroller.scrollTop = live && ui.followLog ? scroller.scrollHeight : ui.logScrollTop;
@@ -780,8 +671,6 @@ function renderLogRow(row: LogRow, attemptId: string, index: number): HTMLElemen
     const text = el('p', 'ov2-log__thought', row.lead);
     if (expanded) text.classList.add('is-expanded');
     content.appendChild(text);
-    // Long reasoning is clamped rather than hidden: the first lines are usually
-    // the plan, and the rest is why.
     if (row.lead.length > 220) {
       content.appendChild(
         expandToggle(key, expanded, ['Show all', 'Show less'], () => {
@@ -794,8 +683,6 @@ function renderLogRow(row: LogRow, attemptId: string, index: number): HTMLElemen
     line.appendChild(el('span', 'ov2-log__lead', row.lead));
     if (row.trail) line.appendChild(el('span', 'ov2-log__trail', row.trail));
     content.appendChild(line);
-    // Only offer to expand when there is materially more to see. `{"path":"."}`
-    // behind a "Show" button next to `path: .` is a control that does nothing.
     const hasMore = Boolean(row.full && row.full.length > (row.trail?.length ?? 0) + 40);
     if (hasMore) {
       const body = el('pre', 'ov2-log__body', row.full);
@@ -812,12 +699,6 @@ function renderLogRow(row: LogRow, attemptId: string, index: number): HTMLElemen
   return item;
 }
 
-/**
- * A disclosure that survives the next repaint.
- *
- * The open set is read when the row is built and written when it is clicked, so
- * a log the reader has opened up stays open while the attempt keeps streaming.
- */
 function expandToggle(
   key: string,
   expanded: boolean,
@@ -839,18 +720,8 @@ function expandToggle(
   return toggle;
 }
 
-// ---------------------------------------------------------------------------
-// Spec
-// ---------------------------------------------------------------------------
+// ── Spec ─────────────────────────────────────────────────────────────────────
 
-/**
- * What the plan asked for, last and folded away once the task has run.
- *
- * Rendered through the same markdown pipeline as chat, which is the whole point:
- * a plan's build step is markdown, and as raw pre-wrap text its bullets, its
- * backticked constants and its fenced JSON all render as one undifferentiated
- * paragraph. That was most of what made this panel a wall.
- */
 function renderSpecSection(task: TaskState): HTMLElement | null {
   const parts: Array<[string, string]> = [];
   for (const [label, value] of [
@@ -863,7 +734,6 @@ function renderSpecSection(task: TaskState): HTMLElement | null {
   if (parts.length === 0) return null;
 
   const details = el('details', 'ov2-spec');
-  // A task that has not run is a task whose spec you are here to read.
   details.open = ui.specOpen ?? task.attempts.length === 0;
   details.addEventListener('toggle', () => {
     ui.specOpen = details.open;

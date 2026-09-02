@@ -1,12 +1,5 @@
 /**
- * The production **board** graph injected into `createEngine`.
- *
- * P8-B: the reconcile loop must not statically import `core/plan.js` or
- * `core/derive.js`. Board-only predicates (merge enqueue, final test, worktree
- * reclaim, touches overflow, the end-of-run report) live here so a second
- * graph can supply no-ops — and the engine does not care.
- *
- * `BoardState`, the event envelope, and the policy table are untouched.
+ * The production **board** graph injected into `createEngine`.: the reconcile loop must not statically import `core/plan.js` or.
  */
 
 import {
@@ -40,10 +33,6 @@ import {
 
 /**
  * Roles the engine journals as task attempts.
- *
- * `merge` and `final` are engine-driven and have their own vocabulary, so they
- * never produce `task.attempt.*` lines.
- *
  * @param {string} role
  * @returns {boolean}
  */
@@ -53,10 +42,6 @@ export function isBoardAgentRole(role) {
 
 /**
  * A one-line description of how the run went, for `run.finished`.
- *
- * Deliberately mechanical. The narrative report is P3-G's stateless LLM call;
- * nothing in the control plane writes prose.
- *
  * @param {import('./core/types').BoardState} state
  * @returns {string}
  */
@@ -167,9 +152,6 @@ export function boardReapVanished(state, live, buffered) {
  * @returns {Record<string, unknown>[]}
  */
 export function boardEventsForStart(want, handle) {
-  // Merge/final starts are not `task.attempt.*` lines. The original engine
-  // returned before recording discarded/gitInitialized from those starts, so
-  // this hook does too — a behaviour change here would desync replay.
   if (!isBoardAgentRole(want.role)) return [];
   /** @type {Record<string, unknown>[]} */
   const events = [];
@@ -344,9 +326,7 @@ export async function boardWriteReport(ctx) {
 }
 
 /**
- * Production graph: boards. `createEngine` defaults to this so existing
- * callers (tests, `getEngine`) keep working with no options change.
- *
+ * Production graph: boards.
  * @type {import('./engine.js').Graph}
  */
 export const boardGraph = {
@@ -365,9 +345,6 @@ export const boardGraph = {
   writeReport: boardWriteReport,
   reportEventType: REPORT_EVENT_TYPE,
   hasReport: journalHasReport,
-  // Mechanical fallback for `createEngine` without `complete`. Production
-  // `getEngine` still passes `defaultComplete` (the LLM writer) explicitly —
-  // swapping those would send the conformance suite through a model call.
   formatReport: formatMechanicalReport,
   manualStart,
   reopenTargets,

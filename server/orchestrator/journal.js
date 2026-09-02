@@ -1,16 +1,4 @@
-/**
- * P1-A — the **boards** journal binding.
- *
- * The generic store lives in {@link ./journal-store.js}. This module keeps the
- * Phase 1–5 exported names (`boardDir`, `journalPath`, `createBoard`,
- * `loadState`, …) as a thin binding onto namespace `'boards'`, so a board
- * created before P8-B still loads from exactly
- * `~/.minnow/boards/<id>/journal.jsonl`. Changing that path is not free: the
- * journal is the only record of every run to date.
- *
- * Fold and validation stay the board graph (`derive` / `validateEvent`) here.
- * A second graph passes its own fold into `createJournalStore`.
- */
+/** Boards journal binding onto namespace boards. */
 
 import { derive } from './core/derive.js';
 import { queryAbandonments } from './core/evidence.js';
@@ -26,8 +14,6 @@ import { BOARDS_NAMESPACE, createJournalStore } from './journal-store.js';
 
 const boards = createJournalStore({
   namespace: BOARDS_NAMESPACE,
-  // Keep the historical error text (`invalid board id`) — tests and HTTP 400s
-  // quote it, and a rename would look like a behaviour change.
   idKind: 'board',
   fold: derive,
   foldFrom: deriveFrom,

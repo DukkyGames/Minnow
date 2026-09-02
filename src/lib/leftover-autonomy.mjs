@@ -15,7 +15,6 @@
  */
 export function foldLeftoverBoardAutonomy(board, raw) {
   const mode = typeof raw.executionMode === 'string' ? raw.executionMode.trim() : '';
-  // Sequential and manual were "one at a time". Junk modes must not invent N.
   if (mode === 'sequential' || mode === 'manual') {
     board.maxConcurrentTasks = 1;
   }
@@ -25,13 +24,11 @@ export function foldLeftoverBoardAutonomy(board, raw) {
     return;
   }
 
-  // Stopped wins: an explicit user/system stop or Manual mode.
   if (raw.userStopped === true || raw.systemPaused === true || mode === 'manual') {
     board.status = 'stopped';
     return;
   }
 
-  // AFK / auto-run / sequential-while-running all become Running unattended.
   if (
     raw.autoRunning === true ||
     raw.handsOff === true ||

@@ -104,6 +104,7 @@ function decodeDocumentHtmlRelativePath(pathname) {
 }
 
 /**
+ * Editor loads pass ?raw=1 so we never inject a base href (that would dirty saves).
  * @param {import('http').IncomingMessage} req
  * @param {import('http').ServerResponse} res
  * @param {string} pathname
@@ -235,8 +236,6 @@ export async function handlePreviewRequest(req, res, pathname, searchParams, dep
     const isHtml =
       contentType.startsWith('text/html') &&
       (relativePath.endsWith('.html') || relativePath.endsWith('.htm'));
-    // Editor loads pass ?raw=1 so we never inject <base> into the buffer (would
-    // false-dirty the viewer and corrupt saves). Browser preview omits raw.
     const wantRaw =
       searchParams?.get('raw') === '1' || searchParams?.get('raw') === 'true';
 

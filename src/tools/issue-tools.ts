@@ -1,8 +1,3 @@
-/**
- * Issues tools: issue_add, issue_update, issue_link, issue_get_state, issue_delete (MIN-261).
- * Not screen-gated — any chat/agent may file or update issues.
- */
-
 import {
   addIssue,
   appendIssueLinks,
@@ -45,6 +40,8 @@ export type ValidateIssueAddResult =
     }
   | { ok: false; error: string };
 
+// ── Add ──────────────────────────────────────────────────────────────────────
+
 /** Validate issue_add arguments (exported for tests). */
 export function validateIssueAddArgs(args: Record<string, unknown>): ValidateIssueAddResult {
   const title = typeof args.title === 'string' ? args.title.trim() : '';
@@ -77,6 +74,8 @@ export function validateIssueAddArgs(args: Record<string, unknown>): ValidateIss
 export type ValidateIssueUpdateResult =
   | { ok: true; issueId: string; patch: Parameters<typeof updateIssue>[1] }
   | { ok: false; error: string };
+
+// ── Update ───────────────────────────────────────────────────────────────────
 
 /** Validate issue_update arguments (exported for tests). */
 export function validateIssueUpdateArgs(args: Record<string, unknown>): ValidateIssueUpdateResult {
@@ -150,6 +149,8 @@ export function validateIssueUpdateArgs(args: Record<string, unknown>): Validate
 export type ValidateIssueDeleteResult =
   | { ok: true; issueIds: string[] }
   | { ok: false; error: string };
+
+// ── Delete ───────────────────────────────────────────────────────────────────
 
 /** Validate issue_delete arguments (exported for tests). */
 export function validateIssueDeleteArgs(args: Record<string, unknown>): ValidateIssueDeleteResult {
@@ -266,6 +267,8 @@ function countApplicableIssueRefs(sourceId: string, refs: IssueIssueRef[]): numb
   return count;
 }
 
+// ── Link ─────────────────────────────────────────────────────────────────────
+
 /** Validate issue_link arguments (append-only; exported for tests). */
 export function validateIssueLinkArgs(args: Record<string, unknown>): ValidateIssueLinkResult {
   const issueId =
@@ -380,6 +383,8 @@ export function validateIssueLinkArgs(args: Record<string, unknown>): ValidateIs
   };
 }
 
+// ── Execute ──────────────────────────────────────────────────────────────────
+
 /** Execute issue_add / issue_update / issue_link / issue_get_state / issue_delete. */
 export async function executeIssueTool(
   name: string,
@@ -392,9 +397,6 @@ export async function executeIssueTool(
       typeof args.issue_id === 'string' && args.issue_id.trim()
         ? args.issue_id.trim()
         : undefined;
-    // Sub-issues are in scope, so the tool has to be able to create them
-    // (§10). `addIssue` validates the parent and rejects a cycle or a second
-    // level, so an invalid parent surfaces as an error rather than a bad tree.
     const parentId = typeof args.parent_id === 'string' ? args.parent_id.trim() : '';
     const projectId = typeof args.project_id === 'string' ? args.project_id.trim() : '';
     let card;
@@ -407,7 +409,6 @@ export async function executeIssueTool(
           priority: validated.priority,
           labels: validated.labels,
           workspacePath: getWorkspacePath(),
-          // Agent-filed cards enter the Triage view until a human accepts or declines.
           source: 'agent',
           ...(parentId ? { parentId } : {}),
           ...(projectId ? { projectId } : {}),

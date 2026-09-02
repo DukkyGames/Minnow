@@ -1,7 +1,3 @@
-/**
- * Arrow-key focus moves between capability matrix cell buttons.
- */
-
 export type CapabilityGridCoord = { row: number; col: number };
 
 /** Next cell coordinates for arrow navigation; null when out of bounds or not an arrow key. */

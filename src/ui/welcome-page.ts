@@ -1,7 +1,3 @@
-/**
- * Workspace welcome screen — shown when the active workspace is still the app default.
- */
-
 import '../styles/workspace-welcome-page.css';
 
 import {
@@ -23,6 +19,8 @@ let wizardParentPath = '';
 let staticBindingsDone = false;
 let createPanelOpen = false;
 
+// ── DOM helpers ──────────────────────────────────────────────────────────────
+
 function getWelcomeRoot(): HTMLElement | null {
   return document.getElementById('welcomeView');
 }
@@ -34,6 +32,8 @@ function getChatShell(): HTMLElement | null {
 function getTopbar(): HTMLElement | null {
   return document.querySelector('header.topbar');
 }
+
+// ── Boot gates ───────────────────────────────────────────────────────────────
 
 /** True for full-page routes that should not auto-open welcome on boot. */
 export function isOtherFullPageHash(hash: string): boolean {
@@ -82,6 +82,8 @@ export function isWelcomePageOpen(): boolean {
 function setWelcomePending(pending: boolean): void {
   document.documentElement.classList.toggle('welcome-pending', pending);
 }
+
+// ── Workspace gate ───────────────────────────────────────────────────────────
 
 /** Sync banner + disabled state for open/create controls (call after detectLocalServer). */
 function syncServerAvailabilityUi(): void {
@@ -145,13 +147,11 @@ async function setWorkspaceGateOpening(opening: boolean): Promise<void> {
 async function completeWorkspaceActivation(): Promise<void> {
   if (isOsShellEnabled()) {
     const gate = await import('../os/workspace-gate');
-    // Menubar switch: Code already painted; do not hold for initApp (it already finished).
     if (gateSwitchMode) {
       gateSwitchMode = false;
       await gate.finishWorkspaceGateSwitch();
       return;
     }
-    // Cold pick: keep the gate up as a cover while Code chrome paints (opening = busy).
     await setWorkspaceGateOpening(true);
     await gate.onWorkspaceGateChosen();
     return;
@@ -178,6 +178,8 @@ export function onWorkspaceGateOpenedForSwitch(): void {
 export function resetWorkspaceGateSwitchMode(): void {
   gateSwitchMode = false;
 }
+
+// ── Create wizard ────────────────────────────────────────────────────────────
 
 function showCreatePanel(show: boolean): void {
   createPanelOpen = show;
@@ -224,6 +226,8 @@ async function loadWizardParentFromServer(): Promise<void> {
   }
   updateParentPathLabel();
 }
+
+// ── Recents ──────────────────────────────────────────────────────────────────
 
 function createRecentRow(item: WorkspaceRecentItem): HTMLLIElement {
   const li = document.createElement('li');
@@ -325,8 +329,6 @@ async function activateRecentWorkspace(absPath: string): Promise<void> {
     return;
   }
   setStatus('spin', 'Switching workspace…');
-  // Keep the gate clickable until confirm returns — opening (pointer-events:
-  // none) during the board-stop dialog made Confirm a no-op on Electron macOS.
   try {
     const info = await executeWorkspaceSwitch(absPath);
     if (!info) {
@@ -342,6 +344,8 @@ async function activateRecentWorkspace(absPath: string): Promise<void> {
     setStatus('err', message);
   }
 }
+
+// ── Open project ─────────────────────────────────────────────────────────────
 
 async function onOpenProject(): Promise<void> {
   if (!getLocalServerAvailable()) {
@@ -363,7 +367,6 @@ async function onOpenProject(): Promise<void> {
       setStatus('err', 'No folder selected');
       return;
     }
-    // Restore clicks for the board-stop confirm; dim again only after it proceeds.
     await setWorkspaceGateOpening(false);
     const info = await executeWorkspaceSwitch(result.path);
     if (!info) {
@@ -443,6 +446,8 @@ async function onCreateProjectSubmit(): Promise<void> {
   }
 }
 
+// ── Page lifecycle ───────────────────────────────────────────────────────────
+
 function closePeerFullPageViews(): void {
   void import('./settings-page').then((m) => {
     if (document.getElementById('settingsView')?.classList.contains('is-open')) {
@@ -484,7 +489,6 @@ export function openWelcome(options?: { skipHash?: boolean }): void {
 
   root.hidden = false;
   root.classList.add('is-open');
-  // Hide sidebar/chat shell so welcome fills the Code app (not only the main column).
   shell.classList.add('hidden');
   const topbar = getTopbar();
   if (isOsShellEnabled()) {
@@ -494,7 +498,6 @@ export function openWelcome(options?: { skipHash?: boolean }): void {
   }
   setWelcomePending(false);
 
-  // Re-probe in case welcome opened before initApp finished detectLocalServer (Minnow Code app).
   syncServerAvailabilityUi();
   void detectLocalServer().then(() => {
     syncServerAvailabilityUi();

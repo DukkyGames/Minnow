@@ -25,6 +25,8 @@ import {
   unregisterChromePopover,
 } from '../ui/preview-electron-visibility';
 
+// ── State ────────────────────────────────────────────────────────────────────
+
 let panelEl: HTMLDivElement | null = null;
 let listEl: HTMLUListElement | null = null;
 let emptyEl: HTMLElement | null = null;
@@ -177,6 +179,8 @@ function attachGlobalListeners(): void {
   document.addEventListener('keydown', escapeHandler, true);
 }
 
+// ── Panel ────────────────────────────────────────────────────────────────────
+
 function ensurePanel(): HTMLDivElement {
   if (panelEl) return panelEl;
 
@@ -275,6 +279,8 @@ function toggleMenu(): void {
   if (menuOpen) closeOsNotificationsMenu();
   else openMenu();
 }
+
+// ── Init ─────────────────────────────────────────────────────────────────────
 
 /** Wire the menubar bell to open the notifications popover. Returns cleanup. */
 export function initOsNotificationsMenu(bell: HTMLButtonElement): () => void {

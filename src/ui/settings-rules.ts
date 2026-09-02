@@ -1,7 +1,3 @@
-/**
- * Settings → Rules: grouped standing instructions with popover editor.
- */
-
 import {
   computeUserRulesTotalBytes,
   createUserRuleGroup,
@@ -47,6 +43,8 @@ function rulePreview(title: string, text: string, max = 120): string | null {
   return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
 }
 
+// ── Persist ──────────────────────────────────────────────────────────────────
+
 async function persistRules(
   settings: UserRulesSettings,
   setStatus: StatusFn,
@@ -68,6 +66,8 @@ async function persistRules(
     return false;
   }
 }
+
+// ── List ─────────────────────────────────────────────────────────────────────
 
 function renderRulesList(
   mount: HTMLElement,
@@ -122,8 +122,6 @@ function renderRulesList(
     });
     actions.appendChild(addBtn);
 
-    // Delete is hidden on the last remaining group: persist recreates General
-    // when groups is empty, so that delete would not stay gone after reload.
     if (settings.groups.length > 1) {
       const deleteBtn = document.createElement('button');
       deleteBtn.type = 'button';
@@ -167,10 +165,6 @@ function renderRulesList(
   }
 }
 
-/**
- * Delete a group from Settings → Rules after a confirm.
- * Non-empty groups are blocked with a message; other groups' rules are not rewritten.
- */
 async function deleteRuleGroup(
   group: UserRuleGroup,
   settings: UserRulesSettings,
@@ -194,8 +188,6 @@ async function deleteRuleGroup(
     return;
   }
 
-  // Re-read after the dialog so a concurrent edit cannot drop rules that landed
-  // in this group while the confirm was open.
   const result = removeUserRuleGroup(getUserRulesSync(), group.id);
   if (!result.ok) {
     setStatus('err', result.error);
@@ -207,6 +199,8 @@ async function deleteRuleGroup(
     onChange(result.settings);
   }
 }
+
+// ── Row ──────────────────────────────────────────────────────────────────────
 
 function renderRuleRow(
   rule: UserRuleItem,
@@ -360,10 +354,7 @@ function renderGroupToolbar(
 }
 
 /** Render user rules controls into a settings content mount. */
-/**
- * Prior-turn reasoning replay. Off by default: it costs tokens on every later turn,
- * and several providers reject the fields outright (handled per model on send).
- */
+/** Prior-turn reasoning replay. */
 async function renderReasoningReplaySection(
   mount: HTMLElement,
   setStatus: StatusFn,
@@ -398,6 +389,8 @@ async function renderReasoningReplaySection(
   });
   groupBody.appendChild(row);
 }
+
+// ── Render ───────────────────────────────────────────────────────────────────
 
 export async function renderRulesSettingsSection(
   mount: HTMLElement,

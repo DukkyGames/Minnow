@@ -61,6 +61,8 @@ async function brainFetch<T>(
   }
 }
 
+// ── Wiki ─────────────────────────────────────────────────────────────────────
+
 /** Ping brain API. */
 export async function pingBrainApi(): Promise<boolean> {
   const data = await brainFetch<{ ok: boolean }>('/api/brain/ping');
@@ -172,6 +174,8 @@ export async function pruneBrainWeakLinks(options?: {
   });
 }
 
+// ── Cleanup ──────────────────────────────────────────────────────────────────
+
 function summarizeCleanupPlan(
   summary: BrainCleanupPlanResult['plan']['summary'],
 ): BrainCleanupPlanResponse['summary'] {
@@ -235,6 +239,8 @@ export async function executeBrainWikiCleanup(input: {
 export async function fetchBrainUsage(): Promise<BrainUsageReport | null> {
   return brainFetch<BrainUsageReport>('/api/brain/usage');
 }
+
+// ── Code index ───────────────────────────────────────────────────────────────
 
 /** Code index status for the active workspace. */
 export async function fetchBrainCodeStatus(options?: {
@@ -438,6 +444,8 @@ export type BrainMutationResult = {
   archivePath?: string;
   workspaceKeys?: string[];
 };
+
+// ── Mutations ────────────────────────────────────────────────────────────────
 
 /** POST helper for destructive Brain APIs — surfaces server errors instead of silent null. */
 async function brainMutate<T extends Record<string, unknown>>(

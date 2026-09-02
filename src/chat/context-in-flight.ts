@@ -1,7 +1,3 @@
-/**
- * In-flight context overlay for BUG-019 — tokens not yet in chat.history during a turn.
- */
-
 import { estimateTokensFromText } from './prompts/token-estimate-core';
 
 /** Snapshot of outbound content still streaming or not yet pushed to history. */
@@ -22,10 +18,6 @@ export function setContextInFlightOverlay(overlay: ContextInFlightOverlay | null
   activeOverlay = overlay;
 }
 
-/**
- * In-flight overlay for the context ring (BUG-019 / P10-I).
- * Call from coalesced paint (once per rAF) and once per `tool_call` — never per token.
- */
 export function syncTurnContextUsage(overlay: ContextInFlightOverlay): void {
   setContextInFlightOverlay(overlay);
 }
@@ -53,13 +45,6 @@ export function getContextInFlightOverlay(
   };
 }
 
-/**
- * Heuristic token count for in-flight overlay fields.
- * Only unfinalized tool-call JSON counts toward the next prompt; streaming
- * completion prose and live reasoning are output channels, not prompt input.
- * Priced as payload — it lands in history as serialized `tool_calls`, which the
- * send-time budget measures the same way.
- */
 export function estimateInFlightOverlayTokens(
   overlay: Omit<ContextInFlightOverlay, 'chatId'> | undefined,
 ): number {

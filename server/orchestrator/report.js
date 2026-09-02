@@ -1,20 +1,4 @@
-/**
- * P3-G — the end-of-run report writer (MIN-711).
- *
- * This is the back boundary of the control plane. One stateless LLM call over
- * the finished journal produces the single report a set-and-forget run
- * delivers. The control plane (plan / derive / policy / merge-queue) never
- * imports this module and never reads what it writes.
- *
- * ```
- * input  = journal events + derived BoardState
- * output = markdown artifact at boards/<id>/report.md
- *          + opaque journal line `run.report.written` (not folded)
- * ```
- *
- * No conversation, no history, no follow-up turns. If the report needs more
- * than the journal holds, journal more (P3-H) — do not give the writer a chat.
- */
+/** End-of-run report writer. */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -79,10 +63,6 @@ export function journalHasReport(events) {
 
 /**
  * The slice of the journal after the last `board.reopened`.
- *
- * A second run must be able to write its own report; writes from the previous
- * finish live before that line and must not block it.
- *
  * @param {Iterable<{ type?: unknown }>} events
  * @returns {Array<{ type?: unknown }>}
  */
@@ -97,10 +77,6 @@ export function eventsSinceReopen(events) {
 
 /**
  * A concrete next step for an abandoned task, derived from its evidence bundle.
- *
- * The LLM is asked to keep this; the function exists so a stub model (and the
- * mechanical fallback) can name a next step without inventing one.
- *
  * @param {{ taskId?: unknown, reason?: unknown, evidence?: unknown }} abandonment
  * @returns {string}
  */
@@ -139,10 +115,6 @@ export function suggestedNextStep(abandonment) {
 
 /**
  * Shape the one payload the model is allowed to see.
- *
- * Pure. Same events + same state → structurally identical object. Tokens and
- * transcripts are not on the journal (P2-F) and are not added here.
- *
  * @param {Iterable<Record<string, unknown>>} events
  * @param {import('./core/types').BoardState} state
  * @returns {Record<string, unknown>}
@@ -240,9 +212,7 @@ export function buildReportMessages(input) {
 }
 
 /**
- * Markdown that does not need a model. Used when `complete()` fails, so a run
- * still leaves an artifact rather than a hole.
- *
+ * Markdown that does not need a model.
  * @param {Record<string, unknown>} input
  * @returns {string}
  */
@@ -377,7 +347,6 @@ export function extractAssistantText(raw) {
       const message = choice?.message?.content;
       if (typeof message === 'string') out += message;
     } catch {
-      // Non-JSON SSE lines are ignored.
     }
   }
   if (out.trim()) return out.trim();
@@ -386,7 +355,6 @@ export function extractAssistantText(raw) {
     const content = json?.choices?.[0]?.message?.content;
     if (typeof content === 'string' && content.trim()) return content.trim();
   } catch {
-    // Not a JSON body.
   }
   return text.trim();
 }
@@ -445,9 +413,6 @@ export async function readReport(boardId) {
 
 /**
  * One stateless call: build input, complete, persist.
- *
- * Holds no module-level conversation state. Tests inject `complete`.
- *
  * @param {{
  *   boardId: string,
  *   events: Iterable<Record<string, unknown>>,

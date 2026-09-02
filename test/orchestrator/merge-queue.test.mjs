@@ -219,6 +219,8 @@ function taskIdFromSeed(seed) {
   return match ? match[1] : '';
 }
 
+// ── P3-C merge-queue ─────────────────────────────────────────────────────────
+
 describe('P3-C merge-queue source contract', () => {
   test('imports reach neither a model, a generation, nor a runner', () => {
     const source = fs.readFileSync(MERGE_QUEUE_JS, 'utf8');
@@ -236,6 +238,8 @@ describe('P3-C merge-queue source contract', () => {
     assert.equal(/\bpostChatCompletions/.test(code), false, 'generation binding');
   });
 });
+
+// ── P3-C merge-queue ─────────────────────────────────────────────────────────
 
 describe('P3-C merge-queue (real git)', { concurrency: false }, () => {
   /** @type {string | undefined} */
@@ -366,12 +370,10 @@ describe('P3-C merge-queue (real git)', { concurrency: false }, () => {
     assert.equal(await headSha(intPath), before);
     assert.equal((await porcelain(intPath)).trim(), '');
     assert.equal(await revParse(intPath, 'MERGE_HEAD'), null);
-    // Rolled back: the task file must not remain on integration.
     try {
       await fsp.access(path.join(intPath, 'file-a.txt'));
       assert.fail('file-a.txt remained on integration after verify rollback');
     } catch {
-      // expected
     }
   });
 
@@ -388,7 +390,6 @@ describe('P3-C merge-queue (real git)', { concurrency: false }, () => {
     });
     assert.equal(mergedA.ok, true, mergedA.output);
 
-    // Leave a half-applied merge sitting (V1-style MERGE_HEAD).
     const half = await mergeIntoIntegration({
       boardId: h.boardId,
       fromBranch: b.branch,
@@ -413,7 +414,6 @@ describe('P3-C merge-queue (real git)', { concurrency: false }, () => {
       attemptId: 'm-b',
       state,
     });
-    // Rebase of B onto A conflicts — completed (conflicted), never half.
     assert.equal(end.outcome, 'conflicted');
     assert.ok(end.files.includes('shared.txt'));
     assert.equal(await revParse(intPath, 'MERGE_HEAD'), null);
@@ -433,7 +433,6 @@ describe('P3-C merge-queue (real git)', { concurrency: false }, () => {
     });
     assert.equal(first.outcome, 'pass', first.summary);
 
-    // Crash after git succeeded but before the engine journaled it: run again.
     const second = await runMerge({
       boardId: h.boardId,
       taskId: 'A',
@@ -455,6 +454,8 @@ describe('P3-C merge-queue (real git)', { concurrency: false }, () => {
     assert.equal(slotIdFromWorktreePath(h.boardId, a.wt), 'slot-a');
   });
 });
+
+// ── P3-C engine + ────────────────────────────────────────────────────────────
 
 describe('P3-C engine + merge queue', { concurrency: false }, () => {
   /** @type {string} */
@@ -533,10 +534,6 @@ describe('P3-C engine + merge queue', { concurrency: false }, () => {
           const isRebase =
             typeof opts.seed === 'string' && opts.seed.includes('## Integration conflict');
           if (isRebase) {
-            // Proof the owner still has the task commits — do not rewrite the
-            // unique file (the old test rewrote shared.txt every turn and
-            // passed on a fresh integration checkout). Probe first, then
-            // mark rebaseCwd so waitUntil cannot race an incomplete snapshot.
             try {
               rebaseUnique = await fsp.readFile(uniquePath, 'utf8');
               const { stdout } = await git(['rev-list', '--count', `${integrationRef}..HEAD`], opts.cwd);
@@ -546,8 +543,6 @@ describe('P3-C engine + merge queue', { concurrency: false }, () => {
               rebaseAhead = -1;
             }
             rebaseCwd = opts.cwd;
-            // After the proof snapshot, land the unique commits on integration
-            // so the follow-up merge is clean. Do not rewrite unique-from-builder.txt.
             await git(['reset', '--soft', integrationRef], opts.cwd);
             await fsp.writeFile(path.join(opts.cwd, 'shared.txt'), 'from-integration\n', 'utf8');
             return { outcome: 'pass', summary: 'ok', evidence: ['unique-from-builder.txt'] };
@@ -555,8 +550,6 @@ describe('P3-C engine + merge queue', { concurrency: false }, () => {
           try {
             await fsp.access(uniquePath);
           } catch {
-            // First builder only. Tester (same worktree, initial seed) must
-            // not rewrite the unique file.
             await fsp.writeFile(uniquePath, 'task-unique\n', 'utf8');
             await fsp.writeFile(path.join(opts.cwd, 'shared.txt'), 'from-agent\n', 'utf8');
             await fsp.writeFile(path.join(opts.cwd, 'from-a.txt'), 'ok\n', 'utf8');
@@ -728,8 +721,6 @@ describe('P3-C engine + merge queue', { concurrency: false }, () => {
           `inspect after conflict was ${JSON.stringify(live)}`,
         );
 
-        // plan() still wants builders while the merge is conflicted — the
-        // conflict emptied the merge queue, it did not freeze the board.
         const desired = plan(engine.getState());
         assert.equal(desired.some((d) => d.role === 'merge'), false);
         assert.ok(

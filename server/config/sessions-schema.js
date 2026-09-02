@@ -73,15 +73,16 @@ function createMessagesFtsTable(database) {
 
 /**
  * Future additive columns land here — never bump user_version for these.
+ * Empty at schema v1; call ensureColumn(...) here for later releases.
  * @param {import('better-sqlite3').Database} database
  */
 function migrateAddedColumns(database) {
-  // Intentionally empty at A.1 schema v1. Call ensureColumn(...) here for later releases.
   void database;
 }
 
 /**
  * Initialize tables + indices on a fresh or existing connection.
+ * Create FTS5 up front so user_version never moves solely for search.
  * @param {import('better-sqlite3').Database} database
  */
 export function initSessionsSchema(database) {
@@ -234,7 +235,6 @@ export function initSessionsSchema(database) {
       ON chat_loops(due_at) WHERE paused = 0;
   `);
 
-  // FTS5 created up front so user_version never moves solely for search.
   const ftsExists = database
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='messages_fts'")
     .get();

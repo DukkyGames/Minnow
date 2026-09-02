@@ -1,7 +1,3 @@
-/**
- * Persisted transcript rows for auto-trim / manual compress events.
- */
-
 import type { ContextEnforcementPolicy } from '../context-budget';
 import type { Chat, ContextNoticeMessage, Message } from '../../types';
 

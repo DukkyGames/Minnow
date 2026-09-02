@@ -277,6 +277,7 @@ export async function repairRuntime() {
 
 /**
  * Spawn the Python voice worker on a random localhost port.
+ * Warm STT/TTS from settings in the background; a preload failure must not block startup.
  */
 export async function startWorker() {
   const install = await getInstallStatus();
@@ -362,7 +363,6 @@ export async function startWorker() {
   workerState.phase = 'running';
   await patchMeta({ port, pid: child.pid ?? null });
 
-  // Warm STT/TTS models from settings without blocking startup on failure.
   void preloadVoiceModels().catch((err) => {
     const message = err instanceof Error ? err.message : String(err);
     console.warn(`[voice] preload failed: ${message}`);

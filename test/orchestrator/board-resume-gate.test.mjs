@@ -77,9 +77,6 @@ describe('board boot resume gate', () => {
     const engine = buildEngine(boardId);
     await engine.load();
     try {
-      // `load()` sets the flag; `getEngine` is what registers the pending entry
-      // (the decline path needs the built engine's `stopBoard`). This test drives
-      // `createEngine` directly, so it asserts the flag and registers by hand.
       assert.equal(engine.wasHeldAtLoad(), true, 'a running board must not self-resume');
       const { holdBoardResume } = await import('../../server/orchestrator/resume-gate.js');
       holdBoardResume({
@@ -125,7 +122,6 @@ describe('board boot resume gate', () => {
     let resumed = false;
     try {
       assert.equal(first.wasHeldAtLoad(), true);
-      // Stand in for the registration `getEngine` performs.
       resetBoardResumeGateForTests();
       armBoardResumeGate();
       const { holdBoardResume } = await import('../../server/orchestrator/resume-gate.js');
@@ -145,7 +141,6 @@ describe('board boot resume gate', () => {
       first.dispose();
     }
 
-    // The board was answered in this process; a later engine must not hold it.
     assert.equal(shouldHoldBoardResume(boardId), false);
     const second = buildEngine(boardId);
     await second.load();

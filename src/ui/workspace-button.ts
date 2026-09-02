@@ -79,7 +79,6 @@ export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
   const { teardownIssuesEmbedBeforeChatPaint } = await import('./issues-page');
   const closedIssuesEmbed = teardownIssuesEmbedBeforeChatPaint();
   const { syncFileTreeToPanelWorktree } = await import('./file-tree');
-  // Hydrate chat + file tree in parallel; tree refresh is owned here (not sidebar forceFileTree).
   await Promise.all([
     applyWorkspaceScopedSession(info.path, previousPath, { skipFileTreeSync: true }),
     syncFileTreeToPanelWorktree(undefined, { force: true }),
@@ -98,8 +97,6 @@ export async function applyWorkspaceSwitch(info: WorkspaceInfo): Promise<void> {
     refreshSuperPlanLibrary();
   }
 
-  // Git/SCC worktree chrome is per-workspace. skipFileTreeSync used to leave
-  // the previous repo's slots in the dropdown, including other-repo V2 trees.
   const { clearPanelCwdUserOverride, refreshGitPanel } = await import('./git-panel');
   clearPanelCwdUserOverride();
   const { resetRegisteredWorktreePathCache } = await import('../lib/worktree-allowlist-client');
@@ -157,7 +154,6 @@ async function onOpenNewWorkspace(): Promise<void> {
       return;
     }
 
-    // Picker is closed; confirm (if any) must stay clickable on Electron macOS.
     const info = await executeWorkspaceSwitch(result.path);
     if (!info) {
       setStatus('ok', 'Workspace unchanged');

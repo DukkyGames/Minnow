@@ -15,12 +15,10 @@ export async function ensureAppInitialized(appId: AppId): Promise<void> {
   if (initializedApps.has(appId)) return;
   const inflight = inflightInits.get(appId);
   if (inflight) return inflight;
-  // Do not lazy-init apps the user (or developer gate) has made unavailable.
   if (!isAppAvailable(appId)) return;
   const loader = APP_MODULE_LOADERS[appId];
   if (!loader) return;
 
-  // Mark in-flight before the first await so parallel openers share one init.
   const pending = (async () => {
     const mod = await loader();
     await mod.init();
@@ -40,8 +38,6 @@ function bootAppIdFromHash(hash: string): AppId | null {
 
 /** Initialize app modules required for the current hash route at cold boot. */
 export async function ensureBootAppsInitialized(): Promise<void> {
-  // Issues page + CSS chunk loads on demand (or after first paint) — only the
-  // hash-routed app must be ready before chrome reveal.
   const appId = bootAppIdFromHash(window.location.hash);
   if (appId && isAppAvailable(appId)) {
     await ensureAppInitialized(appId);

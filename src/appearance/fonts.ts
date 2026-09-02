@@ -65,18 +65,14 @@ function readStorage(key: string): string | null {
 function writeStorage(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
-  } catch {
-    /* private mode */
-  }
+  } catch {}
 }
 
 function emitChange(): void {
   for (const fn of listeners) {
     try {
       fn();
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   }
 }
 
@@ -159,9 +155,7 @@ async function ensureUploadFontLoaded(ref: FontRef & { kind: 'upload' }): Promis
     const loaded = await face.load();
     document.fonts.add(loaded);
     registeredUploadFonts.set(cacheKey, loaded);
-  } catch {
-    /* fall back to preset stack */
-  }
+  } catch {}
 }
 
 /** Apply --font-ui and --font-mono on documentElement. */
@@ -212,7 +206,5 @@ export function resetAppearanceFontsForTests(): void {
 function removeStorage(key: string): void {
   try {
     localStorage.removeItem(key);
-  } catch {
-    /* private mode */
-  }
+  } catch {}
 }

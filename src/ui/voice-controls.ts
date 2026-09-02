@@ -1,7 +1,3 @@
-/**
- * Voice playback helpers for assistant messages and shared TTS/STT API calls.
- */
-
 import { loadVoiceMeta } from '../config/voice-meta';
 import { AudioPlaybackQueue } from '../voice/audio-playback-queue';
 import { TtsStreamClient } from '../voice/tts-stream-client';
@@ -89,7 +85,6 @@ export function getCachedSttStatus(): SttStatus | null {
   return cachedSttStatus;
 }
 
-
 function stopCurrentPlayback(): void {
   currentTtsStreamClient?.cancel();
   currentTtsStreamClient = null;
@@ -107,12 +102,6 @@ function stopCurrentPlayback(): void {
   }
 }
 
-/**
- * Speak plain text via local streaming TTS (WebSocket PCM + Web Audio queue).
- * Hook for future chat integration — wiring into live assistant streams is deferred.
- * Use `playAssistantText` for read-aloud buttons; call this when you already have
- * finalized text and want streaming playback without UI chrome.
- */
 export async function speakStreamingText(text: string): Promise<void> {
   const plain = extractSpeechText(text);
   if (!plain) {
@@ -247,7 +236,6 @@ async function applyOutputDevice(audio: HTMLAudioElement): Promise<void> {
   try {
     await sinkable.setSinkId(cachedOutputDeviceId);
   } catch {
-    /* ignore sink routing errors */
   }
 }
 

@@ -1,7 +1,3 @@
-/**
- * Build validation context for resolveExpertChatSeed from live catalog state.
- */
-
 import { listModes } from '../modes/registry';
 import { normalizeModeId } from '../modes/types';
 import { getEnabledToolDefinitionsForMode } from '../../tools/client';

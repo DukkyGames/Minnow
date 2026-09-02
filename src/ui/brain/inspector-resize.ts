@@ -1,7 +1,3 @@
-/**
- * Drag the Brain inspector's left edge to resize width (persisted in localStorage).
- */
-
 const STORAGE_KEY = 'minnow-brain-inspector-width';
 const DEFAULT_WIDTH = 600;
 const MIN_WIDTH = 280;

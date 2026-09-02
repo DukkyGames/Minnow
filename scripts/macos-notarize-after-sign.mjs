@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 /**
- * electron-builder afterSign hook — notarizes the signed .app when credentials are configured.
  * @param {{ appOutDir: string; packager: { appInfo: { productFilename: string } } }} context
  */
 import path from 'node:path';

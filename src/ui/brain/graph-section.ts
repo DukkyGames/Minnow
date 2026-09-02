@@ -1,7 +1,3 @@
-/**
- * Brain graph home: tree panel, force canvas, toolbar, and inspector sync.
- */
-
 import { fetchBrainTree } from '../../brain/client';
 import type { BrainPageMeta } from '../../brain/types';
 import { scheduleAnimationFrame } from '../../lib/schedule-animation-frame';
@@ -14,6 +10,8 @@ import { initBrainGraphSidebarResize } from './graph-sidebar-resize';
 
 const SHOW_ARCHIVES_KEY = 'minnow.brain.showArchives';
 const READOUT_COLLAPSED_KEY = 'minnow.brain.readoutCollapsed';
+
+// ── Prefs ────────────────────────────────────────────────────────────────────
 
 function readShowArchivesPref(): boolean {
   try {
@@ -40,8 +38,7 @@ export function teardownGraphSection(): void {
   graphApi?.destroy();
   graphApi = null;
 }
-// Off by default: free-form tags connect almost every page to every other one,
-// which buries the real similarTo/wikilink structure. Toggle stays available.
+// Tags stay off by default so they do not bury wikilinks.
 let includeTags = false;
 let layoutMode: 'graph' | 'tree' = 'graph';
 let highlightOrphans = false;
@@ -53,6 +50,8 @@ let bindingsDone = false;
 let firstRunHint = true;
 let overlayOffsetObserver: ResizeObserver | null = null;
 let sidebarObserver: ResizeObserver | null = null;
+
+// ── Overlay ──────────────────────────────────────────────────────────────────
 
 /** Deferred layout sync for ResizeObserver callbacks (avoids observer feedback loops). */
 const scheduleGraphLayoutSync = scheduleAnimationFrame(() => {
@@ -73,10 +72,7 @@ function syncGraphOverlayOffsets(): void {
   syncGraphViewportInsets();
 }
 
-/**
- * Tell the renderer how much of the canvas the floating panels cover, so "Fit"
- * and node centering land in clear space instead of behind the inspector.
- */
+/** Tell the renderer how much of the canvas the floating panels cover, so "Fit" and node centering land in clear space instead of behind the inspector. */
 function syncGraphViewportInsets(): void {
   const canvas = document.getElementById('brainGraphCanvas');
   if (!canvas || !graphApi) return;
@@ -118,11 +114,7 @@ function bindSidebarObserver(): void {
   sidebarObserver.observe(sidebar);
 }
 
-/**
- * Lightweight selection path: reuses the existing simulation instead of rebuilding.
- * Falls back to a full `renderGraphSection()` when the graph is not yet mounted
- * or the page is not in the current catalog (e.g. navigating from Edit after a save).
- */
+/** Lightweight selection path: reuses the existing simulation instead of rebuilding. */
 function selectGraphPage(relPath: string): void {
   const inCatalog = catalogPages.some((p) => p.path === relPath);
   if (!graphApi || !inCatalog) {
@@ -156,10 +148,11 @@ export function setGraphSelectedPath(relPath: string | null): void {
 export function setGraphOrphanPaths(paths: string[]): void {
   orphanPaths = new Set(paths);
   highlightOrphans = paths.length > 0;
-  // Sync the toolbar toggle so the user can see and clear the highlight on arrival.
   const btn = document.getElementById('brainGraphOrphanToggle');
   if (btn) btn.setAttribute('aria-pressed', highlightOrphans ? 'true' : 'false');
 }
+
+// ── Toolbar ──────────────────────────────────────────────────────────────────
 
 function bindGraphToolbar(): void {
   if (bindingsDone) return;
@@ -210,7 +203,6 @@ function bindGraphToolbar(): void {
     try {
       localStorage.setItem(SHOW_ARCHIVES_KEY, next ? '1' : '0');
     } catch {
-      /* ignore */
     }
     const btn = document.getElementById('brainGraphArchiveToggle');
     btn?.setAttribute('aria-pressed', next ? 'true' : 'false');
@@ -220,7 +212,6 @@ function bindGraphToolbar(): void {
   const archiveBtn = document.getElementById('brainGraphArchiveToggle');
   archiveBtn?.setAttribute('aria-pressed', readShowArchivesPref() ? 'true' : 'false');
 
-  // Bind the first-run hint dismiss button once here so it never re-attaches.
   document.getElementById('brainGraphDismissHint')?.addEventListener('click', () => {
     const hint = document.getElementById('brainGraphFirstRun');
     if (hint) hint.classList.add('hidden');
@@ -260,24 +251,19 @@ function bindGraphToolbar(): void {
     try {
       localStorage.setItem(READOUT_COLLAPSED_KEY, collapsed ? '1' : '0');
     } catch {
-      /* ignore */
     }
     applyReadoutCollapsed(collapsed);
   });
   try {
     applyReadoutCollapsed(localStorage.getItem(READOUT_COLLAPSED_KEY) === '1');
   } catch {
-    /* ignore */
   }
 
   bindOverlayOffsetObserver();
   syncGraphOverlayOffsets();
 }
 
-/**
- * Tree layout hides the canvas and widens the left rail; the page tree in the
- * rail *is* the tree view, so there is only ever one tree rendered.
- */
+/** Tree layout hides the canvas and widens the left rail; the page tree in the rail *is* the tree view, so there is only ever one tree rendered. */
 function syncLayoutVisibility(): void {
   const canvasWrap = document.getElementById('brainGraphCanvasWrap');
   const stage = document.getElementById('brainGraphStage');
@@ -286,10 +272,11 @@ function syncLayoutVisibility(): void {
   canvasWrap?.classList.toggle('hidden', treeMode);
   canvasWrap?.setAttribute('aria-hidden', treeMode ? 'true' : 'false');
   stage?.classList.toggle('is-tree-layout', treeMode);
-  // A collapsed tree would leave tree layout showing nothing at all.
   if (treeMode) treePanel?.classList.remove('is-collapsed');
   syncGraphViewportInsets();
 }
+
+// ── Canvas ───────────────────────────────────────────────────────────────────
 
 async function refreshGraphCanvas(): Promise<void> {
   const canvas = document.getElementById('brainGraphCanvas') as HTMLCanvasElement | null;
@@ -307,7 +294,6 @@ async function refreshGraphCanvas(): Promise<void> {
       },
       onDoubleClick: (node) => {
         if (!node?.path) return;
-        // Focus-subtree: zoom to the node's neighborhood and make the highlight sticky.
         graphApi?.focusNode(node.id);
         selectedPath = node.path;
         syncTreeSelection();
@@ -317,7 +303,6 @@ async function refreshGraphCanvas(): Promise<void> {
         graphApi?.setHoverNode(node?.id ?? null);
       },
     });
-    // Resize is handled internally by the engine's ResizeObserver — no window listener needed.
   }
 
   const full = buildPageGraph(catalogPages, {
@@ -329,7 +314,6 @@ async function refreshGraphCanvas(): Promise<void> {
   graphApi.setData(data.nodes, data.edges);
   graphApi.setMutedKinds(mutedKinds);
 
-  // The toolbar readout only speaks up when a search is actually narrowing things.
   if (statsEl) {
     const narrowed = data.nodes.length !== full.nodes.length;
     statsEl.textContent = narrowed
@@ -346,7 +330,6 @@ async function refreshGraphCanvas(): Promise<void> {
     graphApi.selectNode(nodeId);
     syncTreeSelection();
   }
-  // Auto-fit is driven by the engine's pendingFit / simulation 'end' handler — no RAF needed.
 }
 
 /** Build one label/value cell for the readout metric grid. */
@@ -364,13 +347,7 @@ function buildMetricCell(label: string, value: string, tone?: 'warn'): HTMLEleme
   return cell;
 }
 
-/**
- * Structure readout: counts, weave density, the most connected pages, and
- * legend chips that fade a node class out of the canvas.
- *
- * Degree data only exists once the renderer has ingested the graph, so this
- * reads from the engine rather than recomputing over the node list.
- */
+/** Structure readout: counts, weave density, the most connected pages, and legend chips that fade a node class out of the canvas. */
 function syncGraphReadout(stats: ForceGraphStats): void {
   const body = document.getElementById('brainGraphReadoutBody');
   if (!body) return;
@@ -459,6 +436,8 @@ function syncGraphReadout(stats: ForceGraphStats): void {
   body.append(legend);
 }
 
+// ── Inspector ────────────────────────────────────────────────────────────────
+
 async function openInspector(relPath: string): Promise<void> {
   const inspector = document.getElementById('brainInspector');
   if (!inspector) return;
@@ -474,9 +453,10 @@ async function openInspector(relPath: string): Promise<void> {
       await renderGraphSection();
     },
   );
-  // The inspector just claimed canvas width — re-measure so fits avoid it.
   syncGraphViewportInsets();
 }
+
+// ── Tree ─────────────────────────────────────────────────────────────────────
 
 function renderGraphTree(mount: HTMLElement, tree: Record<string, unknown>): void {
   mount.replaceChildren();
@@ -550,7 +530,6 @@ function showFirstRunHint(): void {
     return;
   }
   hint.classList.remove('hidden');
-  // Dismiss button is wired once in bindGraphToolbar().
 }
 
 /** Render graph home section. */

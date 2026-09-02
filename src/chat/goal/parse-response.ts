@@ -1,7 +1,3 @@
-/**
- * Parse strict YES/NO + reason evaluator output for the /goal loop.
- */
-
 export interface ParsedGoalEvalResponse {
   met: boolean;
   reason: string;
@@ -150,10 +146,6 @@ export function tryParseGoalEvalVerdict(raw: string): ParsedGoalEvalResponse | n
   return null;
 }
 
-/**
- * Parse evaluator completion. Malformed output is treated as not met so the loop
- * can continue with guidance rather than falsely clearing the goal.
- */
 export function parseGoalEvalResponse(raw: string): ParsedGoalEvalResponse {
   const parsed = tryParseGoalEvalVerdict(raw);
   if (parsed) return parsed;

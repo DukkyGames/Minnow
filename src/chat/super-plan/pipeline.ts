@@ -1,15 +1,6 @@
-/**
- * Super Plan pipeline helpers — stage skipping and next-stage resolution from config.
- */
-
 import type { SuperPlanConfig } from '../../config/super-plan-meta';
 import { nextSuperPlanStage, type SuperPlanStageId } from './types';
 
-/**
- * Minimum reviewRounds required for a draft/review stage to run.
- * draft1 always runs; review1 + draft2 (the pass that applies review1's
- * critique) need at least 1 round; review2 needs 2.
- */
 function reviewStageIndex(stageId: SuperPlanStageId): number | null {
   if (stageId === 'review1' || stageId === 'draft2') return 1;
   if (stageId === 'review2') return 2;

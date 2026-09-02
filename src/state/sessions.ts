@@ -89,6 +89,8 @@ import type {
 } from '../types';
 import { SESSION_SCHEMA_VERSION } from '../types';
 
+// ── Dirty tracking ───────────────────────────────────────────────────────────
+
 const GENERATION_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -113,7 +115,6 @@ export function clearStaleGenerationIdsOnLoad(chats: Chat[]): void {
       continue;
     }
     chat.currentGenerationId = id;
-    // Unloaded histories are empty placeholders — do not treat that as "no assistant yet".
     if (chat.historyLoaded === false) continue;
     const last = chat.history[chat.history.length - 1];
     if (last?.role === 'assistant') {
@@ -197,7 +198,6 @@ let historyTrapForcedForTests = false;
 
 function isViteDevBuild(): boolean {
   try {
-    // Vite sets import.meta.env.DEV; Node/tsx tests leave it undefined.
     return Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
   } catch {
     return false;
@@ -270,7 +270,6 @@ export function markSessionScalarsDirty(): void {
 export function markGroupDirty(groupId: string): void {
   const id = typeof groupId === 'string' ? groupId.trim() : '';
   if (!id) return;
-  // A resurrected/upserted group is not a delete.
   deletedGroupIds.delete(id);
   dirtyGroupIds.add(id);
   bumpSessionDirtyEpoch();
@@ -307,7 +306,7 @@ function verifyDirtyChatTracking(state: SessionState): boolean {
   let missed = false;
   for (const chat of state.chats) {
     const prev = shadowById.get(chat.id);
-    if (prev === undefined) continue; // new chats are marked via touchChat on create
+    if (prev === undefined) continue;
     const next = JSON.stringify(chatForDirtyTrackingShadow(chat));
     if (prev !== next && !dirtyChatIds.has(chat.id)) {
       missed = true;
@@ -345,7 +344,6 @@ export function buildSessionsPatchDelta(state: SessionState): SessionsPatchDelta
     const byId = new Map(state.chats.map((c) => [c.id, c]));
     const chats: Chat[] = [];
     for (const id of dirtyChatIds) {
-      // Skip ids that were also deleted in the same window.
       if (deletedChatIds.has(id)) continue;
       const chat = byId.get(id);
       if (chat) chats.push(chatForSessionsWire(chat));
@@ -373,7 +371,6 @@ export function buildSessionsPatchDelta(state: SessionState): SessionsPatchDelta
   }
 
   if (sessionScalarsDirty) {
-    // Partial scalars — only keys we always track as a session-level bundle.
     const scalars: Record<string, unknown> = {
       version: state.version ?? SESSION_SCHEMA_VERSION,
       activeId: typeof state.activeId === 'string' ? state.activeId : '',
@@ -381,7 +378,6 @@ export function buildSessionsPatchDelta(state: SessionState): SessionsPatchDelta
       lastActiveChatIdByWorkspace: state.lastActiveChatIdByWorkspace ?? {},
       lastActiveChatIdByApp: state.lastActiveChatIdByApp ?? {},
     };
-    // Optional keys: send explicit null so PATCH can clear them.
     scalars.sidebarWidth = state.sidebarWidth ?? null;
     scalars.activeBoardGroupId = state.activeBoardGroupId ?? null;
     scalars.lastBoardGroupId = state.lastBoardGroupId ?? null;
@@ -459,6 +455,7 @@ export function captureDirtyTrackingShadowForTests(): void {
   captureDirtyTrackingShadow(sessionState);
 }
 
+// ── Session ready ────────────────────────────────────────────────────────────
 
 let sessionPersistenceShutdownRegistered = false;
 /** In-flight server PATCH/PUT so tests can await dirty-set clear after success. */
@@ -488,7 +485,6 @@ export function setSessionStateForTests(state: SessionState | null): void {
   if (state) {
     markSessionsReady();
     sessionsHydratedFromServer = true;
-    // Tests start past the post-load full-PUT baseline so PATCH can be exercised directly.
     sessionPatchDirtySetsReady = true;
   } else {
     sessionsHydratedFromServer = false;
@@ -511,7 +507,6 @@ export function resetSessionPersistenceForTests(): void {
   sessionSaveQueued = false;
   sessionDirtyEpoch = 0;
   historyLoadInflight.clear();
-  // Clear debounce timer so Node test runners can exit.
   if (saveTimer) {
     clearTimeout(saveTimer);
     setSaveTimer(null);
@@ -520,7 +515,6 @@ export function resetSessionPersistenceForTests(): void {
 
 /** Await the in-flight server PATCH/PUT started by {@link saveSessionsNow} (tests). */
 export async function waitForSessionSaveForTests(): Promise<void> {
-  // Drain follow-up flushes queued when dirty work landed mid-flight.
   for (let i = 0; i < 25; i++) {
     if (!inFlightSessionSave) {
       if (!sessionSaveQueued) return;
@@ -552,6 +546,8 @@ function requireSessionState(): SessionState {
   return sessionState;
 }
 
+// ── Chat objects ─────────────────────────────────────────────────────────────
+
 export function newChatId(): string {
   return randomUUID();
 }
@@ -570,7 +566,6 @@ export function createEmptyChatObject(modelId: string, workspacePath?: string): 
     workAgentId: null,
     workAgentAuto: true,
     history: [],
-    // Locally created chats own their (empty) transcript immediately.
     historyLoaded: true,
     lastStats: null,
     modelInfo: {},
@@ -610,7 +605,6 @@ export function requireHistory(chat: Chat): Message[] {
  * Spreads cold meta_json fields + non-message children from the summary payload (C.2).
  */
 export function chatSummaryToChat(summary: ChatSummary): Chat {
-  // Drop list-only wire keys except messageCount (needed for rail listing while unloaded).
   const {
     messageCount: rawMessageCount,
     lastMessagePreview: _lastMessagePreview,
@@ -635,7 +629,6 @@ export function chatSummaryToChat(summary: ChatSummary): Chat {
     modelId: summary.modelId ?? '',
     history: [],
     historyLoaded: false,
-    // Keep denormalized count so desktop/Code rails list chats before history hydrate.
     messageCount,
     lastStats: (cold as Partial<Chat>).lastStats ?? null,
     modelInfo: (cold as Partial<Chat>).modelInfo ?? {},
@@ -686,22 +679,17 @@ function installUnloadedHistoryTrap(chat: Chat): void {
 function materializeChatHistory(chat: Chat, messages: Message[]): void {
   const desc = Object.getOwnPropertyDescriptor(chat, 'history');
   if (desc && (desc.get || desc.set)) {
-    // Drop the dev trap getter so subsequent access is a plain data property.
     delete (chat as { history?: Message[] }).history;
   }
   const incoming = Array.isArray(messages) ? messages : [];
   const current = Array.isArray(chat.history) ? chat.history : [];
 
-  // The placeholder started empty, so anything in it now was appended during the
-  // fetch and belongs after the stored rows.
   chat.history = current.length > 0 ? [...incoming, ...current] : incoming;
   chat.historyLoaded = true;
   chat.messageCount = chat.history.length;
   if (current.length > 0) {
-    // Locally-appended rows are unsaved work — make sure the next flush carries them.
     touchChat(chat);
   }
-  // Server hydrate is not a local edit — refresh shadow so dirty verifier stays quiet.
   if (sessionState) {
     captureDirtyTrackingShadow(sessionState);
   }
@@ -720,7 +708,6 @@ function markAllHistoriesLoaded(chats: Chat[]): void {
  */
 function sessionStateFromSummaries(remote: SessionSummariesState): SessionState {
   const inflatedChats = remote.chats.map((summary) => chatSummaryToChat(summary));
-  // RawSessionJson is the wire shape; groups / totals are read via Partial<SessionState> inside parse.
   const raw = {
     version: remote.version ?? SESSION_SCHEMA_VERSION,
     activeId: remote.activeId,
@@ -735,7 +722,6 @@ function sessionStateFromSummaries(remote: SessionSummariesState): SessionState 
     codeChangeTotalsByWorkspace: remote.codeChangeTotalsByWorkspace,
   } as RawSessionJson;
   const state = parseSessionStateFromJson(raw);
-  // parse/ensureChatShape may drop historyLoaded / messageCount — re-apply from summaries.
   const summaryById = new Map(remote.chats.map((s) => [s.id, s]));
   for (const chat of state.chats) {
     const summary = summaryById.get(chat.id);
@@ -745,7 +731,6 @@ function sessionStateFromSummaries(remote: SessionSummariesState): SessionState 
     }
     chat.historyLoaded = false;
     if (!Array.isArray(chat.history)) chat.history = [];
-    // Keep denormalized count for sidebar listing / prune while history is unloaded.
     const count = summary.messageCount;
     chat.messageCount =
       typeof count === 'number' && Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
@@ -771,7 +756,6 @@ export async function ensureChatHistoryLoaded(chatId: string): Promise<void> {
 
   const loadPromise = (async () => {
     if (!isServerStorageMode()) {
-      // localStorage boot always has full history; treat as loaded.
       const local = findChatById(id);
       if (local) local.historyLoaded = true;
       return;
@@ -803,6 +787,8 @@ function ensureGroupsFromRaw(raw: unknown): ChatGroup[] {
 export function hydrateSessionGroupsForTests(raw: unknown): ChatGroup[] {
   return ensureGroupsFromRaw(raw);
 }
+
+// ── Migrations ───────────────────────────────────────────────────────────────
 
 /** Move legacy chat-owned boards onto sidebar folders (schema v4 → v5). */
 export function migrateSessionV4ToV5(state: SessionState): void {
@@ -955,7 +941,6 @@ export function migrateScratchWorkspacePathsForLoadedSession(scratchPath: string
 
 /** Coerce a chat row via the shared server/client schema (Phase B.1). */
 export function ensureChatShape(raw: Partial<Chat> | null | undefined): Chat {
-  // Shared allowlist — no client-only twin that can drift from validators.
   const chat = normalizeChatRow(raw) as Chat;
   ensureTokenLedger(chat);
   return chat;
@@ -1144,12 +1129,13 @@ function repairPlannerChatFolderMembership(state: SessionState): void {
   }
 }
 
+// ── Workspace apps ───────────────────────────────────────────────────────────
+
 /** When a foreground chat surface is active, persist its last active chat id per app. */
 function maybeRememberActiveChatForForegroundApp(
   state: SessionState,
   chat: Chat,
 ): void {
-  // Super Plan chats are pipeline transport — do not poison remembered foreground ids.
   if (normalizeModeId(chat.modeId) === 'super-plan') return;
   if (shouldPaintDesktopChatSurface()) {
     rememberActiveChatForAppInState(state, DESKTOP_APP_ID, chat.id);
@@ -1215,7 +1201,6 @@ function syncRememberedActiveChatAfterDelete(
   if (!state.lastActiveChatIdByWorkspace) {
     state.lastActiveChatIdByWorkspace = {};
   }
-  // Unassigned chats use workspacePath '' — still persist under that key.
   state.lastActiveChatIdByWorkspace[workspaceKey] = next.id;
   markSessionScalarsDirty();
 
@@ -1387,7 +1372,6 @@ export function activateDesktopAssistantChatForApp(desktopWorkspacePath: string)
     },
     DESKTOP_APP_ID,
   );
-  // Migrate legacy `lastActiveChatIdByApp.chat` entries that pointed at desktop threads.
   if (
     key &&
     !getLastActiveChatIdForApp(state, DESKTOP_APP_ID) &&
@@ -1462,7 +1446,6 @@ export async function onWorkspaceChanged(
   pruneEphemeralEmptyChats(state, nextId);
   rememberActiveChatForWorkspaceKey(normalizeWorkspacePath(newPath));
   scheduleSaveSessions();
-  // C.1: hydrate before callers paint — lazy-boot chats have empty history until this lands.
   await ensureChatHistoryLoaded(nextId);
   return { activeChat: getActiveChat(), activeChanged };
 }
@@ -1495,6 +1478,8 @@ function sessionStateCoversRemoteChats(
   return true;
 }
 
+// ── Load storage ─────────────────────────────────────────────────────────────
+
 /** Load sessions from API or localStorage (after detectConfigServer). */
 export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Promise<void> {
   if (sessionState && !options?.force) {
@@ -1504,7 +1489,6 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
     if (isServerStorageMode()) {
       try {
         if (sessionsLazyHistoryEnabled) {
-          // C.2: summaries first (meta + non-message children); history on demand.
           const remote = await getSessionSummaries();
           const parsed = sessionStateFromSummaries(remote);
           /*
@@ -1535,10 +1519,8 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
               }
             }
           }
-          // Code-change backfill only for chats whose history is already loaded.
           await runSessionCodeChangeBackfill(sessionState);
         } else {
-          // Flag off (tests): whole-blob GET — every chat is fully loaded.
           const remote = await getSessions();
           sessionState = parseSessionStateFromJson(remote);
           markAllHistoriesLoaded(sessionState.chats);
@@ -1550,12 +1532,9 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
         if (typeof document !== 'undefined') {
           setStatus('err', 'Could not load sessions from ~/.minnow');
         }
-        // Never fall through to localStorage when file-backed storage is active — that
-        // empty blob would later overwrite ~/.minnow on save (MIN-408).
         if (!sessionState) {
           sessionState = defaultSessionState();
           markAllHistoriesLoaded(sessionState.chats);
-          // Placeholder state, not the store: saving it must stay blocked.
           sessionsHydratedFromServer = false;
           sessionRevision = null;
         }
@@ -1580,12 +1559,13 @@ export async function loadSessionsFromStorage(options?: LoadSessionsOptions): Pr
     }
   } finally {
     clearSessionDirtySets();
-    // First save after load must full-PUT until a successful baseline flush.
     sessionPatchDirtySetsReady = false;
     captureDirtyTrackingShadow(sessionState);
     markSessionsReady();
   }
 }
+
+// ── Chat fields ──────────────────────────────────────────────────────────────
 
 /**
  * Resolve a chat by id when session state is available.
@@ -1612,7 +1592,6 @@ export function getActiveChat(): Chat {
 
 export function touchChat(chat: Chat): void {
   chat.updatedAt = Date.now();
-  // Entire-chat dirty marker for the next PATCH upsert.
   dirtyChatIds.add(chat.id);
   bumpSessionDirtyEpoch();
 }
@@ -1691,7 +1670,6 @@ function notifyLoopTickerScheduleChanged(): void {
   void import('../chat/loop/ticker')
     .then((mod) => mod.notifyLoopScheduleChanged())
     .catch(() => {
-      // Ticker not started yet (tests / headless) — ignore.
     });
 }
 
@@ -1788,7 +1766,6 @@ export function hasActiveLoops(chat: Chat): boolean {
 export function clearActiveLoops(chat: Chat): void {
   if (!chat.activeLoops?.length && chat.nextLoopId == null) return;
   chat.activeLoops = undefined;
-  // Keep nextLoopId so ids stay unique across clear/re-arm in the same chat
   touchChat(chat);
   scheduleSaveSessions();
 }
@@ -1797,7 +1774,6 @@ export function clearActiveLoops(chat: Chat): void {
 export function recordChatMessage(chat: Chat): void {
   const now = Date.now();
   chat.lastMessageAt = now;
-  // touchChat sets updatedAt + dirtyChatIds (do not bypass dirty tracking).
   touchChat(chat);
   chat.updatedAt = now;
 }
@@ -1827,6 +1803,8 @@ function markEveryChatDirty(state: SessionState): void {
   bumpSessionDirtyEpoch();
 }
 
+// ── Save ─────────────────────────────────────────────────────────────────────
+
 /**
  * Persist session state. In server mode (B.2):
  * - MIN-408: no network write until hydrated from ~/.minnow
@@ -1838,14 +1816,12 @@ function markEveryChatDirty(state: SessionState): void {
 export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResult {
   if (!sessionState) return 'ok';
 
-  // Detect unmarked chat mutations in DEV; a miss forces full-PUT fallback.
   const verifierMiss = verifyDirtyChatTracking(sessionState);
   if (verifierMiss) {
     sessionPatchDirtySetsReady = false;
   }
 
   if (isServerStorageMode()) {
-    // MIN-408: never PATCH/PUT before a successful server hydrate.
     if (!sessionsHydratedFromServer) {
       return 'ok';
     }
@@ -1866,7 +1842,6 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
     }
 
     if (usePatch && !hasSessionDirtyWork()) {
-      // Nothing changed since the last successful flush.
       sessionSaveQueued = false;
       captureDirtyTrackingShadow(sessionState);
       void import('../ui/hub').then((m) => m.refreshHubLiveData());
@@ -1874,7 +1849,6 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
     }
 
     if (options?.keepalive) {
-      // Shutdown: small PATCH delta → sendBeacon (POST alias); else keepalive whole-blob PUT.
       /*
        * No baseRevision on the shutdown path: a 409 here is unrecoverable (the beacon
        * is fire-and-forget and the page is going away), so a stale-but-landed write
@@ -1889,7 +1863,6 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
       });
       if (clearedOk) {
         clearSessionDirtySets();
-        // Keepalive PUT also re-establishes a trusted baseline when we were not patching.
         if (!usePatch) sessionPatchDirtySetsReady = true;
       }
       captureDirtyTrackingShadow(sessionState);
@@ -1897,7 +1870,6 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
       return 'ok';
     }
 
-    // One network write at a time — queue instead of overlapping PUT/PATCH (resurrects deletes).
     if (inFlightSessionSave) {
       sessionSaveQueued = true;
       return 'ok';
@@ -1929,12 +1901,9 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
       inFlightSessionSave = null;
       if (ok) {
         if (typeof revision === 'number') sessionRevision = revision;
-        // Only drop dirty markers when nothing newer landed during the request.
         if (sessionDirtyEpoch === epochAtStart) {
           clearSessionDirtySets();
         }
-        // A whole-state PATCH establishes the same trusted baseline a PUT would,
-        // so later saves can narrow back down to the chats that actually changed.
         if (!usePatch || patchCoversWholeState) sessionPatchDirtySetsReady = true;
         captureDirtyTrackingShadow(sessionState);
       }
@@ -1958,9 +1927,6 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
       return 'ok';
     }
 
-    // Full-PUT fallback (first save after load, verifier miss, or flag off).
-    // Capture wire body now; a follow-up flush re-reads sessionState if deletes race this PUT.
-    // Deletes travel as an explicit list: the server never infers them from absence.
     const wireState = sessionStateForSessionsWire(sessionState);
     inFlightSessionSave = putSessions(wireState, {
       deleteChatIds: [...deletedChatIds],
@@ -1992,7 +1958,6 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
 }
 
 export function scheduleSaveSessions(hint?: { chatId?: string; groupId?: string }): void {
-  // Opportunistic dirty hints for callers that know what changed.
   if (hint?.chatId?.trim()) {
     dirtyChatIds.add(hint.chatId.trim());
     bumpSessionDirtyEpoch();
@@ -2029,9 +1994,6 @@ export function registerSessionPersistenceShutdownHandler(): void {
   if (sessionPersistenceShutdownRegistered || typeof window === 'undefined') return;
   sessionPersistenceShutdownRegistered = true;
   window.addEventListener('pagehide', () => {
-    // Browser / renderer teardown: stamp in-flight chats before the keepalive flush.
-    // Electron also runs markInterruptedChatsForShutdown via __minnowPrepareForShutdown
-    // before generations are cancelled; this covers tab close and racey exits.
     if (sessionState) {
       for (const chat of sessionState.chats) {
         const inFlight =
@@ -2046,6 +2008,8 @@ export function registerSessionPersistenceShutdownHandler(): void {
     flushPendingSessionSaveOnShutdown();
   });
 }
+
+// ── Chat CRUD ────────────────────────────────────────────────────────────────
 
 /** Create a chat, make it active, and persist (debounced). */
 export function createAndActivateChat(modelId: string): Chat {
@@ -2136,7 +2100,6 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
   abortChatTitleGeneration(chatId);
   const wasActive = state.activeId === chatId;
 
-  // Planner deletion: keep plan path on the board folder so hub/sidebar boards survive.
   const boardGroup = (state.groups ?? []).find((g) => g.plannerChatId === chatId);
   if (boardGroup) {
     const planPath = normalizeOrchestratePlanPath(victim.orchestratePlanPath);
@@ -2155,7 +2118,6 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
 
   const victimWorkspace = normalizeWorkspacePath(victim.workspacePath ?? '');
   let activeChanged = wasActive;
-  // Defer remembered-id sync until after activeId may change below.
   if (state.chats.length === 0) {
     const fresh = createEmptyChatObject(fallbackModelId, victimWorkspace);
     state.chats.push(fresh);
@@ -2182,7 +2144,6 @@ export function removeChatById(chatId: string, fallbackModelId: string): RemoveC
   }
 
   syncRememberedActiveChatAfterDelete(state, victim, wasActive);
-  // Flush immediately so a delete is not lost behind a debounced / overlapping PUT.
   if (saveTimer) {
     clearTimeout(saveTimer);
     setSaveTimer(null);

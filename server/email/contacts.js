@@ -1,13 +1,3 @@
-/**
- * Contact harvesting and autocomplete.
- *
- * Addresses are learned from mail that already passed through the store, so the
- * suggestion list needs no address book, no sync, and no network access — and
- * it never leaves the machine. `seen_count` tracks how often an address appears
- * in received mail; `replied_count` tracks how often the user actually wrote to
- * it, which is the far stronger signal and dominates the ranking.
- */
-
 import { getMailDb } from './store.js';
 
 function nowIso() {
@@ -15,7 +5,6 @@ function nowIso() {
 }
 
 /**
- * Pull the display name out of a `Name <addr>` header, if there is one.
  * @param {string} header
  */
 export function splitAddressHeader(header) {
@@ -31,16 +20,12 @@ export function splitAddressHeader(header) {
 }
 
 /**
- * Record one address sighting. Runs inside the caller's transaction.
- *
  * @param {import('better-sqlite3').Database} db
- * @param {string} header — a raw `Name <addr>` header value
+ * @param {string} header
  * @param {{ replied?: boolean }} [options]
  */
 export function recordContact(db, header, options = {}) {
   const { name, address } = splitAddressHeader(header);
-  // A missing `@` means this was never an address (an empty header, a mangled
-  // group syntax); storing it would only pollute the suggestions.
   if (!address || !address.includes('@')) {
     return;
   }
@@ -62,7 +47,6 @@ export function recordContact(db, header, options = {}) {
 }
 
 /**
- * Harvest every address on one parsed message.
  * @param {import('better-sqlite3').Database} db
  * @param {Record<string, unknown>} message
  */
@@ -75,11 +59,8 @@ export function harvestMessageContacts(db, message) {
 }
 
 /**
- * Record that the user addressed these recipients — the strongest affinity
- * signal available, since it is an action rather than an arrival.
- *
  * @param {string} accountId
- * @param {string[]} headers — raw To/Cc/Bcc header values
+ * @param {string[]} headers
  */
 export async function recordSentRecipients(accountId, headers) {
   const db = getMailDb(accountId);
@@ -99,12 +80,6 @@ export async function recordSentRecipients(accountId, headers) {
 }
 
 /**
- * Autocomplete over harvested addresses.
- *
- * Ranking puts people the user has written to first, then frequently-seen
- * senders, then recency — so the top suggestion for a two-letter prefix is
- * usually the person actually meant.
- *
  * @param {string} accountId
  * @param {{ query?: string, limit?: number }} [options]
  */
@@ -113,7 +88,6 @@ export async function searchContacts(accountId, options = {}) {
   const limit = Math.min(50, Math.max(1, Number(options.limit) || 10));
   const query = String(options.query ?? '').trim().toLowerCase();
 
-  // LIKE with an escaped pattern: a user typing `%` must not match everything.
   const pattern = `%${query.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
 
   const rows = query
@@ -138,7 +112,6 @@ export async function searchContacts(accountId, options = {}) {
   return rows.map((row) => ({
     address: row.address,
     name: row.name ?? '',
-    // What the compose field should insert.
     header: row.name ? `${row.name} <${row.address}>` : row.address,
     seenCount: row.seen_count,
     repliedCount: row.replied_count,

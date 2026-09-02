@@ -53,9 +53,7 @@ export function installLongTaskObserver(): void {
       }
     });
     observer.observe({ entryTypes: ['longtask'] });
-  } catch {
-    /* longtask unsupported in this environment */
-  }
+  } catch {}
 }
 
 /** Disconnect observer (tests only). */

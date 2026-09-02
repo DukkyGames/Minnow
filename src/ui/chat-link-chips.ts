@@ -1,10 +1,3 @@
-/**
- * Standing file/URL chips on the chat composer (MIN-630).
- *
- * Same `.code-ref-link` family as selection chips in user bubbles. These are
- * pinned on the chat row (survive reload), not this-turn attachments.
- */
-
 import type { Chat, ChatLink } from '../types';
 import { listChatLinks, removeChatLink } from '../chat/links';
 import { getActiveChat } from '../state/sessions';

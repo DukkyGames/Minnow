@@ -1,7 +1,3 @@
-/**
- * Settings → About — local build info.
- */
-
 import '../styles/settings-general.css';
 import '../styles/settings-about.css';
 import { detectConfigServer } from '../config/storage-mode';

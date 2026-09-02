@@ -1,17 +1,3 @@
-/**
- * Server-side sub-agent config (P8-D / MIN-757).
- *
- * `src/agents/sub-agent-config.ts` is renderer TypeScript — the server ships
- * untranspiled JS and must not import it. Shipped defaults are JSON (safe to
- * read here) and user overrides live at `~/.minnow/sub-agents.json`. Merge
- * rules match the renderer file so a setting saved in the UI is what the
- * effector actually runs.
- *
- * Caps are **not** applied here. `plan()` already takes them as arguments;
- * this module only supplies type rows (tools, timeout, prompt, sampler) to
- * the effector.
- */
-
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 

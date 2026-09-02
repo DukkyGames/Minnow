@@ -65,6 +65,8 @@ import type {
   IssuesWorkspaceIdConfig,
 } from '../types.ts';
 
+// ── Status helpers ───────────────────────────────────────────────────────────
+
 const ISSUES_STORAGE_KEY = 'minnow-issues-v1';
 const BUGS_STORAGE_KEY = 'minnow-bugs-v1';
 
@@ -141,6 +143,8 @@ export function isBugSeverity(value: string): value is BugSeverity {
 export function defaultIssuePlanPath(issueId: string): string {
   return `documentation/plans/issues/${issueId}.md`;
 }
+
+// ── Workspace ids ────────────────────────────────────────────────────────────
 
 function defaultIssuesState(): IssuesState {
   return {
@@ -261,6 +265,8 @@ function requireIssuesState(): IssuesState {
   return issuesState;
 }
 
+// ── Bug mapping ──────────────────────────────────────────────────────────────
+
 /** Map legacy bug column → issue status via taxonomy roles. */
 export function bugColumnToIssueStatus(column: BugColumn): IssueStatus {
   const taxonomy = getIssuesTaxonomySync();
@@ -336,6 +342,8 @@ export function issuePriorityToBugSeverity(priority: IssuePriority): BugSeverity
   }
 }
 
+// ── Parse state ──────────────────────────────────────────────────────────────
+
 /**
  * Card keys this revision normalizes. Anything else on a card is copied through
  * untouched so a newer client's fields survive a round-trip by an older one.
@@ -362,10 +370,6 @@ const NORMALIZED_ISSUE_CARD_KEYS: ReadonlySet<string> = new Set([
   'notes',
   'legacyBugId',
   'severity',
-  // v3 fields this revision models. Anything else on a card (comments,
-  // activity, githubSync, future keys) still passes through
-  // preserveUnknownKeys — do not add those here unless ensureIssueCardShape
-  // parses them, or a save will strip them.
   'assignee',
   'agent',
   'parentId',
@@ -373,9 +377,7 @@ const NORMALIZED_ISSUE_CARD_KEYS: ReadonlySet<string> = new Set([
   'projectId',
   'source',
   'triagedAt',
-  // Phase 2: parsed by parseIssueAttachments, so safe to normalize.
   'attachments',
-  // Phase 4: parsed by parseIssueComments / parseIssueActivity.
   'comments',
   'activity',
   'githubSync',
@@ -655,8 +657,6 @@ function parseIssueActivity(raw: unknown): IssueActivityEntry[] | undefined {
     const entry = parseIssueActivityEntry(item);
     if (entry) out.push(entry);
   }
-  // Trim on read as well as on write: a file from a client with a larger cap
-  // must not grow this one's blob without bound.
   return out.slice(-ISSUE_ACTIVITY_CAP);
 }
 
@@ -888,7 +888,6 @@ export function parseIssuesState(raw: unknown): IssuesState {
   const projects = parseIssueProjects(row.projects);
   const views = parseIssueViews(row.views);
 
-  // Never write back a lower revision than the file already carried.
   const state: IssuesState = {
     version: ISSUES_COMPAT_VERSION,
     schemaRevision: Math.max(readRevision, ISSUES_SCHEMA_VERSION),
@@ -931,7 +930,6 @@ export function migrateBugCardToIssue(bug: BugCard, issueId: string): IssueCard 
   if (typeof bug.planRunId === 'string' && bug.planRunId.trim()) {
     card.planRunId = bug.planRunId.trim();
   }
-  // fixRunId is an orchestrate run id; store as boardChatId only when it looks like a chat id.
   if (typeof bug.fixRunId === 'string' && bug.fixRunId.trim()) {
     card.boardChatId = bug.fixRunId.trim();
   }
@@ -1015,9 +1013,7 @@ async function loadBugsForMigration(): Promise<BugCard[]> {
     try {
       const bugsState = await getBugs();
       return parseBugsArray(bugsState);
-    } catch {
-      /* fall through to localStorage */
-    }
+    } catch {}
   }
   try {
     const raw = localStorage.getItem(BUGS_STORAGE_KEY);
@@ -1027,6 +1023,8 @@ async function loadBugsForMigration(): Promise<BugCard[]> {
     return [];
   }
 }
+
+// ── Persistence ──────────────────────────────────────────────────────────────
 
 function touchIssuesStore(): void {
   scheduleSaveIssues();
@@ -1060,9 +1058,7 @@ export async function saveIssuesNow(): Promise<void> {
   }
   try {
     localStorage.setItem(ISSUES_STORAGE_KEY, JSON.stringify(issuesState));
-  } catch {
-    /* ignore quota */
-  }
+  } catch {}
 }
 
 /**
@@ -1086,7 +1082,6 @@ export async function migrateLegacyBugBoardsFromChats(chats: Chat[]): Promise<bo
     for (const bug of legacy) {
       const shaped = parseBugsArray({ bugs: [bug] })[0];
       if (!shaped) continue;
-      // Prefer workspace from the owning chat when the card omitted it.
       if (!shaped.workspacePath && chat.workspacePath) {
         shaped.workspacePath = normalizeWorkspacePath(chat.workspacePath);
       }
@@ -1120,7 +1115,6 @@ export async function loadIssuesFromStorage(): Promise<void> {
         issuesLoaded = true;
         return;
       }
-      // Missing issues resource → one-time migrate from bugs.
       const bugs = await loadBugsForMigration();
       issuesState = migrateBugsToIssuesState(bugs);
       issuesLoaded = true;
@@ -1154,6 +1148,8 @@ export async function loadIssuesFromStorage(): Promise<void> {
     issuesLoaded = true;
   }
 }
+
+// ── Issue CRUD ───────────────────────────────────────────────────────────────
 
 /** Allocate next KEY-n id for a workspace and bump its counter. */
 function allocateIssueId(workspacePath: string): string {
@@ -1211,9 +1207,6 @@ export function addIssue(input: AddIssueInput, issueId?: string): IssueCard {
     type: input.type ?? defaultIssueTypeId(taxonomy),
     title: input.title.trim(),
     description: (input.description ?? '').trim(),
-    // User-created issues go to the backlog-role status so they never enter
-    // the Triage view (that lane keys off source + triagedAt, but new work
-    // still should not look like an unreviewed crash).
     status: input.status ?? requireIssueStatusForRole('backlog'),
     priority: input.priority ?? defaultIssuePriorityId(taxonomy),
     labels: input.labels ? [...input.labels] : [],
@@ -1282,6 +1275,8 @@ export type UpdateIssuePatch = {
   /** Per-issue opt-in for GitHub sync while the mode is Link + push. */
   githubSync?: boolean;
 };
+
+// ── Links ────────────────────────────────────────────────────────────────────
 
 const ISSUE_RELATION_KINDS: readonly IssueRelationKind[] = [
   'related',
@@ -1497,7 +1492,6 @@ export function appendIssueLinks(
   }
 
   if (!changed) {
-    // Still return the card so tools can report a no-op success.
     return issue;
   }
   issue.updatedAt = issuesNowMs();
@@ -1637,8 +1631,6 @@ export function getIssuesSnapshot(): IssuesState {
         ]),
       )
     : {};
-  // Spread first: whatever a newer revision left on the state (projects, views,
-  // fields this build never modelled) has to survive the round-trip to disk.
   return {
     ...state,
     version: ISSUES_COMPAT_VERSION,
@@ -1700,6 +1692,8 @@ export function setWorkspaceProjectKey(
   touchIssuesStore();
   return { ok: true };
 }
+
+// ── Projects views ───────────────────────────────────────────────────────────
 
 function ensureProjectsList(state: IssuesState): IssueProject[] {
   if (!state.projects) state.projects = [];
@@ -1815,6 +1809,8 @@ export function issueProjectProgress(projectId: string): { done: number; total: 
   }
   return { done, total };
 }
+
+// ── Attachments ──────────────────────────────────────────────────────────────
 
 /**
  * Attach a stored file to an issue.
@@ -1941,6 +1937,8 @@ export function appendIssueActivity(
   touchIssuesStore();
   return record;
 }
+
+// ── Agent runs ───────────────────────────────────────────────────────────────
 
 /** Start (or restart) the agent slot on an issue. */
 export function startIssueAgentRun(

@@ -1,16 +1,3 @@
-/**
- * Operating mode segmented control (General / Build / Plan / Debug).
- *
- * Wide composer: four labelled segments. Compact composer (see
- * `composer-compact.ts`): a current-mode dropdown that opens the same
- * radiogroup as a list — the label is never clipped or icon-only.
- *
- * Plan is one plain segment. Super Plan used to hang off it behind a caret —
- * a disclosure menu inside a radio button, which is neither a radio nor a menu
- * and was invisible until hovered. It is a top-bar destination now (see
- * `super-plan-entry.ts`), so the strip is four equal segments again.
- */
-
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import { isComposerRecoveryBlocked } from './composer-send';
 import { getDefaultWorkAgentForMode } from '../agents/work-agent-registry';
@@ -238,10 +225,7 @@ function isBoardManagedChat(chat: ReturnType<typeof getActiveChat>): boolean {
   return Boolean(chat.boardGroupId?.trim() || chat.boardTaskId?.trim());
 }
 
-/**
- * Super Plan is not on the strip, but a Super Plan chat is still in the plan
- * family — keep Plan lit rather than showing four unselected segments.
- */
+/** Super Plan is not on the strip, but a Super Plan chat is still in the plan family — keep Plan lit rather than showing four unselected segments. */
 function isPlanFamilyMode(modeId: ModeId | string | null | undefined): boolean {
   const normalized = normalizeModeId(modeId ?? undefined);
   return normalized === 'plan' || normalized === 'super-plan';
@@ -332,7 +316,6 @@ export function setChatMode(modeId: ModeId): SetChatModeResult {
     };
   }
 
-  // Orchestrate opens the V2 Boards surface — it is not a chat mode (MIN-715).
   if (normalizeModeId(normalized) === 'orchestrate') {
     void import('./orchestrate-hub').then((m) => m.openOrchestrateLanding());
     const mode = listModes().find((m) => m.id === 'orchestrate');

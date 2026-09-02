@@ -1,7 +1,3 @@
-/**
- * Anchored icon picker popover for Settings → Issues type rows.
- */
-
 import {
   createIssueTypeIconElement,
   ISSUE_TYPE_ICON_PICKER,

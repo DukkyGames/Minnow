@@ -1,7 +1,3 @@
-/**
- * Shared expert tool policy — used by send path, token estimate, and replay.
- */
-
 import type { Chat } from '../../types';
 import { getEnabledToolDefinitionsForMode, getEnabledToolDefinitionsForChat } from '../../tools/client';
 import { resolveExpertToolNames } from './runtime-profile';

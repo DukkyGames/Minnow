@@ -39,8 +39,7 @@ export interface LadderRungResult {
 }
 
 /**
- * `evidence.browser` on `final.test.ended`. `null` when the browser rung never
- * ran because a static rung failed first — the gate, not a blocked verdict.
+ * `evidence.browser` on `final.test.ended`.
  */
 export interface BrowserRungEvidence {
   status: 'pass' | 'fail' | 'blocked';

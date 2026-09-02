@@ -100,6 +100,7 @@ function buildToolNameLookup(messages) {
 }
 
 /**
+ * AI SDK tool results must be structured ToolResultOutput, not a raw string.
  * @param {Record<string, unknown>} msg
  * @param {Map<string, string>} toolNames
  * @returns {ModelMessage}
@@ -183,7 +184,6 @@ function convertMessage(msg, toolNames) {
           type: 'tool-result',
           toolCallId,
           toolName,
-          // AI SDK ModelMessage schema requires structured ToolResultOutput, not a raw string.
           output: { type: 'text', value: outputText },
         },
       ],

@@ -1,11 +1,3 @@
-/**
- * Guest right-click context menu (main process).
- *
- * WebContentsView clicks never hit renderer DOM, so we intercept `context-menu`,
- * prevent the Chromium default menu, and forward a Minnow-styled menu payload
- * to the renderer. Actions return via IPC (inspect / resolve element / guest cmds).
- */
-
 import {
   BrowserWindow,
   clipboard,
@@ -27,10 +19,8 @@ import {
   type PreviewContextMenuRole,
 } from './preview-context-menu-items.js';
 
-/** Set when registerPreviewContextMenuIpc runs — needed for inspect / renderer dispatch. */
 let contextMenuHost: PreviewContextMenuHost | null = null;
 
-/** Minimal guest entry shape needed for context-menu + action handlers. */
 export interface PreviewContextMenuEntry {
   view: WebContentsView;
   visible: boolean;
@@ -38,7 +28,6 @@ export interface PreviewContextMenuEntry {
   devtoolsPopout: BrowserWindow | null;
 }
 
-/** Dependencies injected from preview-host (keeps entry maps private there). */
 export interface PreviewContextMenuHost {
   windowFromEvent(event: IpcMainInvokeEvent): BrowserWindow | null;
   getEntry(
@@ -58,7 +47,6 @@ export interface PreviewContextMenuHost {
 export interface PreviewContextMenuOpenPayload {
   tabId: string;
   instanceId: string;
-  /** Guest-local CSS coordinates from ContextMenuParams. */
   x: number;
   y: number;
   params: PreviewContextMenuParams;
@@ -67,6 +55,8 @@ export interface PreviewContextMenuOpenPayload {
   canGoForward: boolean;
   pageUrl: string;
 }
+
+// ── Serialize ────────────────────────────────────────────────────────────────
 
 function serializeParams(params: ContextMenuParams): PreviewContextMenuParams {
   return {
@@ -93,7 +83,6 @@ function sendToRenderer(win: BrowserWindow, channel: string, ...args: unknown[])
   win.webContents.send(channel, ...args);
 }
 
-/** Guest-local context-menu coords → window content coordinates for Menu.popup. */
 export function guestPointToWindowCoords(
   entry: PreviewContextMenuEntry,
   params: Pick<ContextMenuParams, 'x' | 'y'>,
@@ -104,6 +93,8 @@ export function guestPointToWindowCoords(
     y: Math.round(bounds.y + params.y),
   };
 }
+
+// ── Menu dispatch ────────────────────────────────────────────────────────────
 
 function buildElectronContextMenu(
   items: PreviewContextMenuItem[],
@@ -166,10 +157,8 @@ async function dispatchContextMenuRole(
   await runContextAction(entry, role, actionPayload);
 }
 
-/**
- * Intercept a guest context-menu event: suppress Chromium's menu and pop a native menu at the
- * click position. OS menus render above WebContentsView without hiding the preview guest.
- */
+// ── Guest handler ────────────────────────────────────────────────────────────
+
 export function handleGuestContextMenu(
   win: BrowserWindow,
   tabId: string,
@@ -178,7 +167,6 @@ export function handleGuestContextMenu(
   params: ContextMenuParams,
 ): void {
   const host = contextMenuHost;
-  // Hidden guests should not surface a menu (e.g. Design Mode iframe path owns the surface).
   if (!host || !entry.visible || win.isDestroyed()) return;
 
   const wc = entry.view.webContents;
@@ -220,6 +208,8 @@ export function handleGuestContextMenu(
   });
   menu.popup({ window: win, x, y });
 }
+
+// ── Context actions ──────────────────────────────────────────────────────────
 
 async function runContextAction(
   entry: PreviewContextMenuEntry,
@@ -323,7 +313,8 @@ async function runContextAction(
   }
 }
 
-/** Register inspect / resolve / action IPC handlers. Call once from registerPreviewHostIpc. */
+// ── IPC ──────────────────────────────────────────────────────────────────────
+
 export function registerPreviewContextMenuIpc(host: PreviewContextMenuHost): void {
   contextMenuHost = host;
 
@@ -346,7 +337,6 @@ export function registerPreviewContextMenuIpc(host: PreviewContextMenuHost): voi
         return { ok: false, error: 'Invalid inspect coordinates' };
       }
 
-      // Open DevTools when closed, then select the element under the click.
       if (!entry.devtools && !entry.devtoolsPopout) {
         host.openDevTools(win, tabId, entry, instanceId);
       }
@@ -404,7 +394,6 @@ export function registerPreviewContextMenuIpc(host: PreviewContextMenuHost): voi
     ) => {
       const entry = host.getEntry(event, tabId, instanceId);
       if (!entry) return { ok: false, error: 'Preview guest is not available' };
-      // Renderer-owned roles should never reach main.
       if (role === 'openLinkInNewTab' || role === 'inspect' || role === 'sendToChat') {
         return { ok: false, error: `Role ${role} is handled in the renderer` };
       }

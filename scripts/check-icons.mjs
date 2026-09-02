@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-/**
- * CI guard: every ICON_CLASS value must exist in the installed Uicons CSS.
- */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

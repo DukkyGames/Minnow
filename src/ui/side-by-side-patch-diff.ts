@@ -1,7 +1,3 @@
-/**
- * Aligned side-by-side diff rows from a single-file unified patch (VS Code style).
- */
-
 export type SideCellKind = 'context' | 'add' | 'remove' | 'gap';
 
 export interface SideCell {
@@ -164,7 +160,6 @@ export function renderSideBySidePatchDiff(
 ): void {
   host.replaceChildren();
   host.classList.add('sbs-diff');
-  // Word wrap keeps long commit-review lines in view instead of forcing sideways scroll.
   setSideBySidePatchDiffWordWrap(host, options.wordWrap === true);
 
   const allRows = buildSideBySideRowsFromPatch(patch);

@@ -207,7 +207,6 @@ export async function handleBoardTestingRequest(req, res, pathname, options = {}
   }
 
   if (pathname === `${API_PREFIX}/seed` && req.method === 'POST') {
-    // V1 session seed is gone (MIN-716). Create a V2 board via POST /api/boards.
     sendJson(res, 410, {
       ok: false,
       error: 'V1 session seed is retired. Create a board with POST /api/boards (plan markdown).',

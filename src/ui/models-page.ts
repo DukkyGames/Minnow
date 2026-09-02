@@ -1,9 +1,3 @@
-/**
- * Models full-page app — a local-model workbench: library, catalog, local
- * server, plus the provider and inference settings that used to live in
- * Settings.
- */
-
 import '../styles/models-page.css';
 import '../styles/settings-sampler.css';
 
@@ -34,6 +28,8 @@ let activeSection: ModelsSectionId = DEFAULT_MODELS_SECTION;
 let staticBindingsDone = false;
 let statusBound = false;
 
+// ── DOM helpers ──────────────────────────────────────────────────────────────
+
 function getModelsRoot(): HTMLElement | null {
   return document.getElementById('modelsView');
 }
@@ -50,6 +46,8 @@ function parseHashSection(): ModelsSectionId {
   return DEFAULT_MODELS_SECTION;
 }
 
+// ── Header status ────────────────────────────────────────────────────────────
+
 /** Mirror runtime state into the app header so it reads from any section. */
 function renderHeaderStatus(): void {
   const host = document.getElementById('modelsHeaderStatus');
@@ -59,7 +57,6 @@ function renderHeaderStatus(): void {
   const loads = getModelsState().loads;
   const crashed = getModelsState().serves.filter((s) => s.status === 'crashed');
   const unhealthy = serves.filter((s) => s.status === 'unhealthy');
-  // A failed load stays on screen until dismissed; it must not read as busy.
   const loading = loads.some((l) => !l.error) || serves.some((s) => s.status === 'starting');
   const failed = !loading && loads.some((l) => l.error);
 
@@ -98,6 +95,8 @@ function renderHeaderStatus(): void {
   }
   host.append(dot, label);
 }
+
+// ── Sections ─────────────────────────────────────────────────────────────────
 
 function setActiveSection(section: ModelsSectionId): void {
   activeSection = section;
@@ -140,8 +139,6 @@ function bindStaticSections(): void {
   });
 
   const stored = readModelsInspectorPreference();
-  // Below ~1040px the inspector overlays the table, so it starts closed unless
-  // the user has said otherwise.
   const wideEnough = (getModelsRoot()?.clientWidth ?? window.innerWidth) >= 1040;
   setModelsInspectorOpen(stored ? stored !== '0' : wideEnough);
 
@@ -152,6 +149,8 @@ function bindStaticSections(): void {
   }
   renderHeaderStatus();
 }
+
+// ── Page lifecycle ───────────────────────────────────────────────────────────
 
 function closeOtherFullPages(): void {
   void import('./experts/experts-hub').then((m) => {
@@ -202,7 +201,6 @@ export function openModels(section?: ModelsSectionId): void {
   bindStaticSections();
 
   const target = section ?? parseHashSection();
-  // OS router may open a deep link before initApp finishes; refresh when already active.
   if (wasAlreadyOpen && target === activeSection) {
     void renderModelsSection(target);
     return;
@@ -257,6 +255,8 @@ function onHashChange(): void {
     closeModels();
   }
 }
+
+// ── Init ─────────────────────────────────────────────────────────────────────
 
 export function initModelsPage(): void {
   registerWindowTeardown('models', () => closeModels({ skipNavigate: true }));

@@ -1,60 +1,4 @@
-/**
- * P5-C — The browser rung of the Final Tester ladder (MIN-721).
- *
- * The static ladder (P3-F) proves the code compiles. It cannot prove the app
- * works. This module is the rung that closes that gap: start the app, drive a
- * real browser at it, and check the *plan's own* observable outcomes.
- *
- * ## Three rules this module exists to keep
- *
- * 1. **The static rungs gate this one.** `runFinalLadder` never calls in here
- *    until typecheck/lint/unit/build are green. Launching Chromium against a
- *    build that does not compile produces confusing failures and burns minutes
- *    per run. Enforcement lives at the call site, and is asserted by test.
- *
- * 2. **Assertions are derived, never invented.** The Planner already writes,
- *    per task, "one observable outcome that proves this task is done". That
- *    sentence *is* the browser assertion. {@link deriveBrowserAssertions}
- *    compiles it mechanically — no model, no paraphrase. A criterion this
- *    compiler cannot read is reported as not-observable and asserts nothing;
- *    it is never guessed at, because a guessed assertion that passes is worse
- *    than no assertion at all.
- *
- * 3. **`blocked` is not `fail`.** A missing browser, a driver crash, a dev
- *    server that will not start, or a plan with no browser-observable criterion
- *    all mean *the verification could not run* — a different fact from *the app
- *    is broken*. They are journalled separately ({@link BrowserRungResult}
- *    `status`, and `evidence.browser` in `final.test.ended`). Only an assertion
- *    that actually executed and did not hold is `fail`. Collapsing the two
- *    turns a flaky driver into a fictional regression, which is the single
- *    fastest way to make unattended operation untrustworthy.
- *
- * ## Determinism
- *
- * Ten consecutive runs against an unchanged app must give ten identical
- * verdicts, so nothing here may depend on wall-clock timing or arrival order:
- *
- * - Assertions are **sorted** into a canonical order before execution, so the
- *   navigation sequence is a function of the plan text alone.
- * - Positive assertions **poll to a deadline** rather than reading once. A
- *   working app then passes on the first read and a broken one fails after the
- *   full wait — the verdict is the same either way; only the duration moves.
- * - Negative assertions (absent text, clean console) are evaluated after a
- *   fixed settle window, because polling cannot help something that starts out
- *   satisfied.
- * - Reads come from P5-B's tools, which already drop console timestamps, CDP
- *   request ids, and response timings, and sort network rows.
- * - Screenshots are report evidence and never an assertion; their ids are
- *   time-based and are excluded from {@link canonicalBrowserVerdict}.
- *
- * ## What this module does not do
- *
- * It does not spawn a browser or a server by hand. Browsers come from P5-B's
- * `browser_drive_*` tools through the ordinary in-process tool dispatch (so the
- * guard stack applies), and the app comes from `server/dev-server/`, the
- * repo's existing dev-server management. Both are injectable so the unit tests
- * run on bare node with neither a browser nor a server.
- */
+/** Browser rung of the Final Tester ladder. */
 
 import net from 'node:net';
 import path from 'node:path';
@@ -62,12 +6,7 @@ import path from 'node:path';
 import { isParseErrors, parsePlan } from './core/parse-plan.js';
 
 /**
- * P5-B exports these same two strings. They are duplicated rather than
- * imported so that `final-test.js`'s import closure stays free of the tool
- * registry, the browser driver, and the config store — the ladder must be
- * loadable (and unit-testable) on a machine with no browser at all.
- * `test/orchestrator/browser-rung.test.mjs` pins the duplicates to the
- * originals, the same arrangement `tool-set.js` uses for the renderer catalog.
+ * exports these same two strings.
  */
 export const BROWSER_UNAVAILABLE_PREFIX = 'Error: browser unavailable';
 
@@ -112,15 +51,9 @@ export const DEFAULT_RUNG_TIMEOUT_MS = 300_000;
 
 /**
  * How long to wait for the pinned port to be released after a stop.
- *
- * `stopDevServerById` kills the process tree and returns; it does not wait for
- * the socket to close. On a pinned port that races our own next start, and the
- * race is not theoretical — it cost one wrong verdict in ten consecutive runs
- * before this wait existed. See {@link waitForPortFree}.
  */
 export const DEFAULT_PORT_RELEASE_TIMEOUT_MS = 15_000;
 
-// ---------------------------------------------------------------- derivation
 
 const NEXT_HEADING = /^## /m;
 const CHECKLIST_HEADING = /^## Verification Checklist\b/m;
@@ -151,22 +84,6 @@ const TITLE_RE = /\btitle\b/i;
 
 /**
  * Words that say a criterion is about something on a screen.
- *
- * A quoted span alone is *not* evidence of a browser-observable outcome. Most
- * plans are not about UI, and their Accept criteria quote identifiers:
- * `the barrel exports "journalSize"`, `tokenCost separates "total_tokens"`.
- * Compiling those into "the page at / shows this string" produces assertions
- * that are not merely useless but actively wrong — they fail against a working
- * app and turn a good run into a fictional regression. Measured on a realistic
- * 18-task non-UI plan: eight false assertions, every one of which would fail.
- *
- * So a text or title assertion needs an anchor: either an explicit route in the
- * sentence, or one of these nouns. Deliberately absent from the list:
- *
- * - `browser`, because `entries ending in "browser"` is a plain string check.
- * - `section` and `report`, which are as often documents as they are screens.
- * - `render`, which loses to identifiers like `renderRunReport` on a word
- *   boundary and would otherwise let any function named render-something in.
  */
 const UI_SURFACE_RE =
   /\b(?:page|screen|route|dialog|modal|banner|header|footer|sidebar|button|link|form|toast|tooltip|menu|tab|ui|on[\s-]screen|visible|displays?|displayed|renders|rendered)\b/i;
@@ -199,11 +116,7 @@ function firstQuoted(text) {
 }
 
 /**
- * The path a criterion is about. A full URL wins over a bare path (a criterion
- * that names an origin means that origin); otherwise the first `/…` token.
- * `null` means "wherever the app's entry point is", which the caller resolves
- * to `/`.
- *
+ * The path a criterion is about.
  * @param {string} text
  * @returns {{ path: string, absoluteUrl: string | null } | null}
  */
@@ -219,23 +132,12 @@ export function extractPath(text) {
     }
   }
   const bare = PATH_RE.exec(raw)?.[1];
-  // `/**` and `/*` are touches globs, not routes.
   if (bare && !bare.includes('*')) return { path: bare, absoluteUrl: null };
   return null;
 }
 
 /**
  * Compile one observable-outcome sentence into a browser assertion.
- *
- * The vocabulary is deliberately small and closed. Every kind here is
- * checkable with P5-B's read tools alone — no `evaluate`, no CSS selectors, no
- * synthesized events — because an assertion mechanism the tool surface cannot
- * express deterministically is an assertion that will flake.
- *
- * Returns `null` when the sentence is not browser-observable. That is a normal
- * outcome, not an error: "the module exports a pure function" is a perfectly
- * good Accept criterion that a browser cannot see.
- *
  * @param {string} text
  * @returns {{
  *   kind: 'text' | 'absent-text' | 'title' | 'http-status' | 'console-clean',
@@ -252,14 +154,10 @@ export function compileAcceptCriterion(text) {
   const at = located?.path ?? '/';
   const absoluteUrl = located?.absoluteUrl ?? null;
 
-  // 1. Clean console. Checked first: "no console errors after saving" also
-  //    contains a quoted-looking clause often enough to be worth ordering.
   if (CONSOLE_CLEAN_RE.test(raw) && ERRORS_RE.test(raw) && CLEAN_RE.test(raw)) {
     return { kind: 'console-clean', path: at, absoluteUrl, expected: 'no console errors' };
   }
 
-  // 2. HTTP status. Needs a route to be meaningful — a bare "returns 200"
-  //    with no path is not an observable outcome, it is half of one.
   const status = STATUS_RE.exec(raw)?.[1];
   if (status && located) {
     return { kind: 'http-status', path: at, absoluteUrl, expected: status };
@@ -268,22 +166,13 @@ export function compileAcceptCriterion(text) {
   const quoted = firstQuoted(raw);
   if (!quoted) return null;
 
-  // 3. Document title. A bare "title" is not enough — plenty of non-UI criteria
-  //    are about a title field. It needs a route, or "document title".
   if (TITLE_RE.test(raw.slice(0, quoted.index))) {
     if (!located && !DOCUMENT_TITLE_RE.test(raw)) return null;
     return { kind: 'title', path: at, absoluteUrl, expected: quoted.value };
   }
 
-  // 4. Visible text, positive or negative — but only when the sentence is
-  //    actually about a screen. See UI_SURFACE_RE: a quoted identifier in a
-  //    criterion about a module export is not a page assertion, and compiling
-  //    it as one fails against a perfectly good app.
   if (!located && !UI_SURFACE_RE.test(raw)) return null;
 
-  //    The negation window is the clause leading up to the quote, not the whole
-  //    sentence: "shows 'Saved'" in a task titled "no longer crashes" must not
-  //    be read as an absence check.
   const lead = raw.slice(0, quoted.index);
   const clause = lead.slice(Math.max(0, lead.length - 60));
   const kind = NEGATION_RE.test(clause) ? 'absent-text' : 'text';
@@ -291,11 +180,7 @@ export function compileAcceptCriterion(text) {
 }
 
 /**
- * The `## Verification Checklist` bullets that are *not* static ladder
- * commands. A checklist line like "open `/settings` and the header reads
- * “Dashboard”" is an observable outcome the Planner wrote for a human;
- * it is exactly as good a browser assertion as an Accept criterion.
- *
+ * The `## Verification Checklist` bullets that are *not* static ladder commands.
  * @param {string} markdown
  * @returns {string[]}
  */
@@ -314,8 +199,6 @@ export function verificationChecklistProse(markdown) {
     if (!bullet) continue;
     const value = bullet[1].trim();
     if (!value) continue;
-    // A backticked command is a static rung; it is already covered and must
-    // not be re-run in a browser.
     const backticked = /`([^`]+)`/.exec(value)?.[1] ?? '';
     if (backticked && LADDER_COMMAND_RE.test(backticked)) continue;
     out.push(value);
@@ -324,18 +207,13 @@ export function verificationChecklistProse(markdown) {
 }
 
 /**
- * Canonical order. Grouped by path so one navigation serves every assertion at
- * that path, and totally ordered within a path so the read sequence is a
- * function of the plan text and nothing else.
- *
+ * Canonical order.
  * @param {BrowserAssertion} a
  * @param {BrowserAssertion} b
  * @returns {number}
  */
 function compareAssertions(a, b) {
   if (a.path !== b.path) return a.path < b.path ? -1 : 1;
-  // Positive assertions first: they poll, and polling gives a negative
-  // assertion on the same page a longer, not shorter, settle window.
   const aNeg = a.kind === 'absent-text' || a.kind === 'console-clean' ? 1 : 0;
   const bNeg = b.kind === 'absent-text' || b.kind === 'console-clean' ? 1 : 0;
   if (aNeg !== bNeg) return aNeg - bNeg;
@@ -367,12 +245,6 @@ function compareAssertions(a, b) {
 
 /**
  * Derive the browser rung's assertions from a plan document.
- *
- * Order of preference is the issue's: each task's `Accept` criterion first
- * (the Planner is required to make it an observable outcome), then the
- * `## Verification Checklist` prose. Duplicates collapse — two tasks that both
- * assert the same text at the same path are one navigation and one read.
- *
  * @param {string} planMarkdown
  * @returns {DerivedBrowserPlan}
  */
@@ -427,7 +299,6 @@ export function deriveBrowserAssertions(planMarkdown) {
   return { assertions, notObservable };
 }
 
-// ------------------------------------------------------------------ evidence
 
 /**
  * @param {string} text
@@ -438,9 +309,7 @@ function normalizeForMatch(text) {
 }
 
 /**
- * Strip the `url:` / `mode:` header P5-B's `browser_drive_read_page` prints, so
- * a needle cannot match the URL bar instead of the page.
- *
+ * Strip the `url:` / `mode:` header 's `browser_drive_read_page` prints, so a needle cannot match the URL bar instead of the page.
  * @param {string} output
  * @returns {string}
  */
@@ -459,9 +328,7 @@ function titleFromNavigate(output) {
 }
 
 /**
- * Status for one URL out of `browser_drive_read_network`'s deterministic
- * `METHOD STATUS URL` rows.
- *
+ * Status for one URL out of `browser_drive_read_network`'s deterministic `METHOD STATUS URL` rows.
  * @param {string} output
  * @param {string} url
  * @returns {string | null}
@@ -492,7 +359,6 @@ export function classifyToolError(output) {
   return null;
 }
 
-// ----------------------------------------------------------------- execution
 
 /**
  * @param {number} ms
@@ -534,19 +400,6 @@ function portInUse(port) {
 
 /**
  * Wait until nothing is listening on `port`, or the deadline passes.
- *
- * This closes the one race the rung can create for itself. Stopping the app
- * kills the process tree without waiting for its socket, so a start on the same
- * pinned port can arrive while the previous server is still accepting. The new
- * child then fails to bind and dies, the health probe is answered by the *old*
- * server and reports healthy, and the browser gets a connection error partway
- * through the run. The symptom is a `fail` on a positive text assertion while
- * the absence assertion on the same page passes — an app that is gone satisfies
- * every "does not contain" check. Measured: one such verdict in ten runs.
- *
- * Returns whether the port actually came free; the caller decides what to do
- * about a port that never does.
- *
  * @param {number} port
  * @param {{ timeoutMs?: number, signal?: AbortSignal }} [opts]
  * @returns {Promise<boolean>}
@@ -598,10 +451,7 @@ export function describeAssertion(assertion) {
 }
 
 /**
- * The default tool caller: P5-B's `browser_drive_*` through the ordinary
- * in-process dispatch, with the Final Tester's allowed set. Imported lazily so
- * `final-test.js` stays loadable without the tool registry.
- *
+ * The default tool caller: 's `browser_drive_*` through the ordinary in-process dispatch, with the Final Tester's allowed set.
  * @param {string} cwd
  * @returns {Promise<(name: string, args?: Record<string, unknown>) => Promise<string>>}
  */
@@ -618,11 +468,7 @@ async function defaultBrowserTools(cwd) {
 }
 
 /**
- * The default app control: `server/dev-server/`, the repo's existing dev-server
- * management. Not a hand-rolled `spawn` — that path already knows how to read
- * `startup.md`, resolve the effective command, pin the port, probe health, and
- * (crucially for an unattended run) kill the process tree on Windows.
- *
+ * The default app control: `server/dev-server/`, the repo's existing dev-server management.
  * @returns {Promise<AppControl>}
  */
 async function defaultAppControl() {
@@ -641,10 +487,6 @@ async function defaultAppControl() {
       }
       const alreadyRunning = before.status === 'running';
 
-      // If the manager says nothing of ours is running, the pinned port must
-      // be free before we start — otherwise we would either fail to bind and
-      // then verify a stranger's server, or race a predecessor that is still
-      // shutting down. See `waitForPortFree`.
       if (!alreadyRunning && typeof before.port === 'number') {
         const free = await waitForPortFree(before.port, {
           timeoutMs: opts.portReleaseTimeoutMs,
@@ -672,10 +514,6 @@ async function defaultAppControl() {
         return { ok: false, reason: 'dev-server-failed', detail: started.error ?? 'start failed' };
       }
 
-      // Pin, then verify by inspection. The port comes from the resolved guide
-      // and is never searched for: a Vite that auto-incremented past a busy
-      // port is a *different* app than the one under test, and finding it
-      // would be worse than reporting that the pinned port is not serving.
       const deadline = Date.now() + (opts.readyTimeoutMs ?? DEFAULT_APP_READY_TIMEOUT_MS);
       /** @type {Awaited<ReturnType<typeof manager.getDevServerStatusById>> | null} */
       let status = null;
@@ -713,8 +551,6 @@ async function defaultAppControl() {
       };
     },
     async stop(cwd, opts = {}) {
-      // Read the port before the row is cleared — after the stop there is
-      // nothing left to tell us which port to wait on.
       const before = await manager.getDevServerStatusById(cwd).catch(() => null);
       await manager.stopDevServerById(cwd);
       if (typeof before?.port === 'number') {
@@ -728,9 +564,7 @@ async function defaultAppControl() {
 }
 
 /**
- * Close the browser P5-B opened for this attempt root. Lazily imported for the
- * same reason the tools are.
- *
+ * Close the browser opened for this attempt root.
  * @param {string} cwd
  * @returns {Promise<void>}
  */
@@ -785,14 +619,7 @@ async function defaultCloseBrowser(cwd) {
  */
 
 /**
- * `runInstructions` for the browser rung: the command that starts the app, the
- * cwd it starts in, the URL to open, and the steps. A human who follows these
- * four lines reproduces the verdict by hand — which is the only definition of
- * "reproducible" worth having.
- *
- * `command:` and `cwd:` keep their P3-F meaning and position so
- * `parseRunInstructions` still reads them.
- *
+ * `runInstructions` for the browser rung: the command that starts the app, the cwd it starts in, the URL to open, and the steps.
  * @param {{ command: string, cwd: string, url: string, steps: string[] }} input
  * @returns {string}
  */
@@ -809,10 +636,7 @@ export function formatBrowserRunInstructions(input) {
 }
 
 /**
- * A verdict with every time-varying field removed, for the ten-identical-runs
- * proof. Screenshot ids are timestamps and durations are wall-clock; neither is
- * part of the *result*, so neither belongs in the comparison.
- *
+ * A verdict with every time-varying field removed, for the ten-identical-runs proof.
  * @param {BrowserRungResult} result
  * @returns {string}
  */
@@ -863,13 +687,6 @@ function assertionResult(assertion, url, outcome, detail) {
 
 /**
  * Run the browser rung.
- *
- * The caller is responsible for having run the static rungs first — see the
- * module header, rule 1. This function assumes a compiling build.
- *
- * It resolves, always. A throw from a tool, the dev server, or the driver
- * becomes `blocked`, never an unhandled rejection into the engine.
- *
  * @param {{
  *   cwd: string,
  *   planMarkdown?: string | null,
@@ -914,9 +731,6 @@ export async function runBrowserRung(input) {
     screenshots: [],
   });
 
-  // Rule 2's other half: no criterion the compiler can read means there is
-  // nothing to verify, which is `blocked` — not a silent pass, and certainly
-  // not a fail.
   if (derived.assertions.length === 0) {
     return blocked(
       'no-observable-criteria',
@@ -1006,7 +820,6 @@ export async function runBrowserRung(input) {
   const callTool = input.callTool ?? (await defaultBrowserTools(cwd));
 
   try {
-    // Group by resolved URL: one navigation serves every assertion on a page.
     /** @type {Map<string, BrowserAssertion[]>} */
     const byUrl = new Map();
     for (const assertion of derived.assertions) {
@@ -1027,8 +840,6 @@ export async function runBrowserRung(input) {
       const navOut = await callTool('browser_drive_navigate', { url });
       const navError = classifyToolError(navOut);
       if (navError) {
-        // A missing browser is fatal to the rung and stops it immediately;
-        // there is no point navigating nine more times to be told the same.
         blockedReason = navError;
         blockedDetail = navOut.split('\n')[0];
         for (const assertion of group) {
@@ -1041,8 +852,6 @@ export async function runBrowserRung(input) {
       await delay(settleMs, input.signal);
 
       if (captureScreenshots) {
-        // Evidence for the human report. Explicitly not an assertion: a
-        // screenshot that fails to capture must never move the verdict.
         try {
           const shot = await callTool('browser_drive_screenshot', {});
           const id = /^screenshot:\s*(\S+)$/m.exec(shot)?.[1];
@@ -1078,13 +887,9 @@ export async function runBrowserRung(input) {
       }
     }
   } catch (err) {
-    // A driver crash is `blocked`. It says nothing about the app.
     blockedReason = blockedReason ?? 'driver-error';
     blockedDetail = blockedDetail || (err instanceof Error ? err.message : String(err));
   } finally {
-    // Teardown is unconditional and covers both processes. An unattended run
-    // that leaks a Chromium or a dev server per board is a machine that stops
-    // working overnight.
     try {
       await closeBrowser(cwd);
     } catch {
@@ -1092,8 +897,6 @@ export async function runBrowserRung(input) {
     }
     if (started.ok && started.startedHere && app) {
       try {
-        // Not `input.signal`: an aborted run must still wait for its own
-        // server to release the port, or the next run inherits the race.
         await app.stop(cwd, { portReleaseTimeoutMs: input.portReleaseTimeoutMs });
       } catch {
         /* best-effort; the dev-server manager kills the tree on its own too */
@@ -1101,8 +904,6 @@ export async function runBrowserRung(input) {
     }
   }
 
-  // Any assertion that ran and did not hold is a real failure, and outranks a
-  // blocked sibling: a fail is information, blocked is the absence of it.
   const failed = results.filter((r) => r.outcome === 'fail');
   const blockedAssertions = results.filter((r) => r.outcome === 'blocked');
   const passed = results.filter((r) => r.outcome === 'pass');
@@ -1195,11 +996,6 @@ export async function runBrowserRung(input) {
 
 /**
  * Evaluate one assertion against the currently-open page.
- *
- * Positive assertions poll to a deadline; negative ones are read once, after
- * the caller's settle window. Both give the same verdict on every run against
- * an unchanged app — only the time taken differs.
- *
  * @param {{
  *   assertion: BrowserAssertion,
  *   url: string,
@@ -1275,7 +1071,6 @@ async function evaluateAssertion(input) {
       : { outcome: 'pass', detail: `page text does not contain ${JSON.stringify(assertion.expected)}` };
   }
 
-  // kind === 'text'
   return run(async () => {
     const out = await callTool('browser_drive_read_page', { mode: 'text' });
     const err = classifyToolError(out);

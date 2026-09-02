@@ -1,7 +1,3 @@
-/**
- * Build and parse expert prompt markdown files (front matter + body).
- */
-
 import { parsePromptMarkdown } from '../prompts/parse-front-matter';
 import { parseExpertMetaFromMarkdown } from './expert-meta-parse';
 import type { ExpertAccent, ExpertMeta } from './types';

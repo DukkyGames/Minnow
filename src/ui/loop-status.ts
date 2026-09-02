@@ -1,7 +1,3 @@
-/**
- * Chat transcript panel for active /loop timers: countdown, interval edit, stop.
- */
-
 import {
   INITIAL_LOOP_AUTO_DELAY_MS,
   MAX_LOOP_AUTO_DELAY_MS,
@@ -333,11 +329,9 @@ export function initLoopStatusUi(): void {
 export function syncLoopStatusUi(chatId?: string): void {
   if (typeof document === 'undefined') return;
 
-  // OS shell chrome syncs before boot loadSessionsFromStorage — skip until ready.
   const id = chatId ?? sessionState?.activeId;
   if (!id) return;
 
-  // Only one chat panel at a time in the transcript.
   for (const otherId of panelByChatId.keys()) {
     if (otherId !== id) hideLoopStatusPanel(otherId);
   }
@@ -354,7 +348,6 @@ export function syncLoopStatusUi(chatId?: string): void {
 /** Back-compat alias used across boot, ticker, and composer paths. */
 export function syncLoopActiveHint(): void {
   if (typeof document === 'undefined') return;
-  // page-bridge calls this on every instance sync; sessions may still be null.
   if (!sessionState?.activeId) {
     syncChatItemLoopIconsInDom();
     return;

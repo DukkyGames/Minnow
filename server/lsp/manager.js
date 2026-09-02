@@ -1,7 +1,3 @@
-/**
- * LSP process manager — spawn stdio servers, document sync, diagnostics, completion.
- */
-
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
@@ -31,29 +27,24 @@ import { hashTypeScriptProjectFingerprint } from './project-fingerprint.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(__dirname, '../..');
 
-/** Editor scope — live buffer / UI; agent scope — saved-disk tool diagnostics; index — Brain code indexer. */
 const LSP_SCOPE_EDITOR = 'editor';
 const LSP_SCOPE_AGENT = 'agent';
 export const LSP_SCOPE_INDEX = 'index';
 
 const DEFAULT_DIAG_QUIET_PERIOD_MS = 150;
 const DEFAULT_DIAG_EMPTY_QUIET_PERIOD_MS = 500;
-/** Default timeout for indexing/search LSP requests (workspace/symbol, documentSymbol). */
 const DEFAULT_LSP_REQUEST_TIMEOUT_MS = 6000;
-/** Cold CI runners can be slow to answer the first completion request. */
 const LSP_COMPLETION_TIMEOUT_MS = 4000;
 const LSP_HOVER_TIMEOUT_MS = 1000;
 const LSP_SIGNATURE_TIMEOUT_MS = 1000;
 const LSP_DEFINITION_TIMEOUT_MS = 3000;
 const LSP_FORMAT_TIMEOUT_MS = 10_000;
 const LSP_INITIALIZE_TIMEOUT_MS = 20_000;
-/** Publish settle window for agent `get_lsp_diagnostics` after sync (excludes cold init). */
 const DIAG_AGENT_SETTLE_MARGIN_MS = 10_000;
 const DEFAULT_DIAG_TOTAL_TIMEOUT_MS = LSP_INITIALIZE_TIMEOUT_MS + DIAG_AGENT_SETTLE_MARGIN_MS;
 const MAX_LSP_STDERR_LINES = 80;
 const MAX_DIAGNOSTIC_SNAPSHOT_ENTRIES = 128;
 
-/** Last client-visible LSP bridge failure (timeouts, spawn, request errors). */
 let lastLspBridgeError = null;
 
 /** @type {Record<string, { processes: Map<string, object>, pendingConnections: Map<string, Promise<object>>, documentSync: Map<string, { version: number, text: string }>, diagnosticSnapshots: Map<string, { revision: string, projectRevision: string, formatted: string }> }>} */
@@ -78,10 +69,8 @@ const scopeStores = {
   },
 };
 
-/** Active diagnostic waiters keyed by `${scope}::${serverId}::${fileUri}`. */
 const diagnosticWaiters = new Map();
 
-/** Tunable via setLspDiagnosticWaitForTest in unit tests. */
 let diagQuietPeriodMs = DEFAULT_DIAG_QUIET_PERIOD_MS;
 let diagEmptyQuietPeriodMs = DEFAULT_DIAG_EMPTY_QUIET_PERIOD_MS;
 let diagTotalTimeoutMs = DEFAULT_DIAG_TOTAL_TIMEOUT_MS;
@@ -94,15 +83,10 @@ function contentRevision(text) {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
-/** Active workspace root (Code workspace or per-request worktree override). */
 function lspWorkspaceRoot() {
   return getEffectiveWorkspaceRoot();
 }
 
-/**
- * Process map key — agent-scoped servers are isolated per workspace root so
- * initialize rootUri matches the worktree when tools run in isolation.
- */
 function connectionProcessKey(scope, serverId) {
   if (scope === LSP_SCOPE_AGENT) {
     return `${serverId}::${path.resolve(lspWorkspaceRoot())}`;
@@ -119,7 +103,6 @@ function toFileUri(relativePath, workspaceRoot = lspWorkspaceRoot()) {
   return normalizeFileUri(pathToFileURL(abs).href);
 }
 
-/** Map file extension to LSP languageId for didOpen. */
 function guessLanguageId(relativePath) {
   const ext = relativePath.includes('.')
     ? relativePath.slice(relativePath.lastIndexOf('.')).toLowerCase()
@@ -209,7 +192,6 @@ function normalizeLspRange(range) {
   };
 }
 
-/** Project-relative path from an LSP file URI (falls back to the raw URI). */
 function fileUriToRelativePath(uri) {
   if (!uri || typeof uri !== 'string') return '';
   try {
@@ -220,12 +202,10 @@ function fileUriToRelativePath(uri) {
       return rel.replace(/\\/g, '/');
     }
   } catch {
-    /* ignore invalid URIs */
   }
   return uri;
 }
 
-/** Normalize one documentSymbol or legacy SymbolInformation node. */
 function normalizeDocumentSymbol(symbol) {
   if (!symbol || typeof symbol !== 'object') return null;
   const name = String(symbol.name ?? '');
@@ -258,7 +238,6 @@ function normalizeDocumentSymbol(symbol) {
   return entry;
 }
 
-/** Normalize workspace/symbol result for the code index. */
 function normalizeWorkspaceSymbol(symbol) {
   if (!symbol || typeof symbol !== 'object') return null;
   const name = String(symbol.name ?? '');
@@ -275,7 +254,6 @@ function normalizeWorkspaceSymbol(symbol) {
   };
 }
 
-/** Normalize call-hierarchy item (prepareCallHierarchy / incoming / outgoing). */
 function normalizeCallHierarchyItem(item) {
   if (!item || typeof item !== 'object') return null;
   const name = String(item.name ?? '');
@@ -325,7 +303,6 @@ function normalizeOutgoingCalls(calls) {
   return out;
 }
 
-/** Prefer textEdit / insert-replace ranges over bare insertText. */
 function extractCompletionInsertFields(item) {
   let insertText = String(item.insertText ?? item.label ?? '');
   let textEditRange;
@@ -349,12 +326,10 @@ function extractCompletionInsertFields(item) {
   return { insertText, textEditRange, textEditInsertRange, textEditReplaceRange };
 }
 
-/** Composite dedup key — distinct overloads may share a label. */
 function completionDedupKey(item) {
   return `${item.sortText ?? ''}\0${item.label}\0${item.detail ?? ''}\0${item.insertText}`;
 }
 
-/** Stable sort by LSP sortText (falls back to label). */
 function stableSortCompletionItems(items) {
   return items
     .map((item, index) => ({ item, index }))
@@ -406,7 +381,6 @@ function normalizeCompletionItems(result) {
   return out;
 }
 
-/** Parse LSP completion list + isIncomplete flag. */
 function parseCompletionResult(result) {
   const isIncomplete = Boolean(
     result && typeof result === 'object' && !Array.isArray(result) && result.isIncomplete,
@@ -453,7 +427,6 @@ function formatLspSpawnError(serverId, bin, err) {
   return `LSP server "${serverId}" failed to start: ${message}`;
 }
 
-/** Wait for spawn success; reject on ENOENT and other spawn failures (avoids unhandled 'error'). */
 function spawnLspChild(argv, workspaceRoot = lspWorkspaceRoot()) {
   const [bin, ...args] = argv;
   return new Promise((resolve, reject) => {
@@ -462,8 +435,6 @@ function spawnLspChild(argv, workspaceRoot = lspWorkspaceRoot()) {
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: false,
       windowsHide: true,
-      // ELECTRON_RUN_AS_NODE when bin is the Electron binary — node servers ship
-      // inside app.asar and only Electron's Node can read them (see node-runtime.js).
       env: applyNodeRuntimeEnv(
         buildLspProcessEnv(
           {
@@ -490,7 +461,6 @@ function spawnLspChild(argv, workspaceRoot = lspWorkspaceRoot()) {
   });
 }
 
-/** LSP initialize options for built-in TypeScript (TLS v4+ uses init, not CLI flags). */
 function typescriptInitializationOptions() {
   const fallbackPath = tryResolveBundledTsserverPath();
   return {
@@ -505,7 +475,6 @@ function typescriptInitializationOptions() {
   };
 }
 
-/** Benign workspace/symbol failures — skip instead of surfacing to callers. */
 function isSkippableWorkspaceSymbolError(message) {
   const text = String(message ?? '');
   if (/Unhandled method workspace\/symbol/i.test(text)) return true;
@@ -515,7 +484,6 @@ function isSkippableWorkspaceSymbolError(message) {
 }
 
 /**
- * Reject a promise when it exceeds the time budget (prevents silent hangs during indexing).
  * @template T
  * @param {Promise<T>} promise
  * @param {number} [ms]
@@ -529,7 +497,6 @@ function withRequestTimeout(promise, ms = DEFAULT_LSP_REQUEST_TIMEOUT_MS, onTime
       try {
         onTimeout?.();
       } catch {
-        /* ignore */
       }
       reject(new Error(`LSP request timed out after ${ms}ms`));
     }, ms);
@@ -542,7 +509,6 @@ function withRequestTimeout(promise, ms = DEFAULT_LSP_REQUEST_TIMEOUT_MS, onTime
 }
 
 /**
- * Send an LSP request with cancellation + timeout (clears timer and cancels on hang).
  * @template T
  * @param {import('vscode-jsonrpc').MessageConnection} connection
  * @param {string} method
@@ -570,17 +536,14 @@ function recordLspBridgeError(message, extra = {}) {
   };
 }
 
-/** @internal Test-only — race helper for timer leak checks. */
 export function withRequestTimeoutForTest(promise, ms, onTimeout) {
   return withRequestTimeout(promise, ms, onTimeout);
 }
 
-/** Snapshot for diagnostics health / settings. */
 export function getLspBridgeHealthSnapshot() {
   return { lastBridgeError: lastLspBridgeError };
 }
 
-/** LSP TextDocumentSyncChangeKind — 1 full, 2 incremental. */
 function textDocumentSyncChangeKind(capabilities) {
   const cap = capabilities?.textDocumentSync;
   if (cap == null) return 1;
@@ -602,7 +565,6 @@ function offsetToLspPosition(text, offset) {
   return { line, character };
 }
 
-/** Build didChange contentChanges — incremental when the server advertises sync kind 2. */
 function buildDidChangeContentChanges(syncKind, previousText, nextText) {
   if (syncKind !== 2 || previousText === nextText) {
     return [{ text: nextText }];
@@ -638,7 +600,6 @@ function buildDidChangeContentChanges(syncKind, previousText, nextText) {
   ];
 }
 
-/** @internal Test-only — incremental vs full didChange payloads. */
 export function buildDidChangeContentChangesForTest(syncKind, previousText, nextText) {
   return buildDidChangeContentChanges(syncKind, previousText, nextText);
 }
@@ -658,12 +619,6 @@ function trimDiagnosticSnapshotsLru(store) {
   }
 }
 
-/**
- * Drop agent/editor sync so the next diagnostic pass didOpens on a fresh
- * tsserver. Required when tsconfig.node.json or @types/node appear after the
- * file was already opened — tsserver keeps the inferred-project "Cannot find
- * name 'process'" until the process restarts (MIN-616).
- */
 function invalidateScopeLanguageServer(scope, serverId) {
   const store = getScopeStore(scope);
   store.diagnosticSnapshots.clear();
@@ -681,10 +636,6 @@ function invalidateScopeLanguageServer(scope, serverId) {
   }
 }
 
-/**
- * Restart agent-scoped TypeScript when the project fingerprint changed since
- * this connection was opened (new tsconfig / @types/node).
- */
 function restartAgentTypescriptIfProjectChanged(projectRevision) {
   if (!projectRevision) return;
   const store = getScopeStore(LSP_SCOPE_AGENT);
@@ -695,7 +646,6 @@ function restartAgentTypescriptIfProjectChanged(projectRevision) {
   invalidateScopeLanguageServer(LSP_SCOPE_AGENT, 'typescript');
 }
 
-/** Default workspace/configuration sections when lsp.json has no overrides. */
 const DEFAULT_LSP_WORKSPACE_SECTIONS = {
   bashIde: {
     enableSourceErrorDiagnostics: true,
@@ -713,7 +663,6 @@ const DEFAULT_LSP_WORKSPACE_SECTIONS = {
 };
 
 /**
- * Resolve one workspace/configuration item for an LSP server entry.
  * @param {Record<string, unknown>} settings
  * @param {string | undefined} section
  */
@@ -751,7 +700,6 @@ function bindLspClientHandlers(connection, serverId, config) {
   connection.onNotification('window/workDoneProgress/create', () => {});
 }
 
-/** User-facing hint when TypeScript has no loaded project for workspace search. */
 function formatWorkspaceSymbolErrors(errors) {
   const joined = errors.join('; ');
   if (/No Project/i.test(joined)) {
@@ -765,12 +713,10 @@ function discardLspState(scope, processKey, state) {
   try {
     state.connection?.dispose?.();
   } catch {
-    /* ignore */
   }
   try {
     state.child?.kill();
   } catch {
-    /* ignore */
   }
 }
 
@@ -815,13 +761,8 @@ function notifyDiagnosticWaiters(scope, serverId, fileUri, diagnostics) {
 }
 
 /**
- * Event-driven waiter for publishDiagnostics — register before didOpen/didChange.
- * @param {{ deferTotalTimer?: boolean }} [options] - When true, call `startTotalTimer()` after sync (agent tool).
- * @returns {{
- *   promise: Promise<{ receivedAny: boolean, diagnostics: unknown[], reason: string }>,
- *   cancel: () => void,
- *   startTotalTimer: () => void,
- * }}
+ * @param {{ deferTotalTimer?: boolean }} [options]
+ * @returns {{ promise: Promise<{ receivedAny: boolean, diagnostics: unknown[], reason: string }>, cancel: () => void, startTotalTimer: () => void, }}
  */
 function createDiagnosticWaiter(scope, serverId, fileUri, options = {}) {
   const key = diagnosticWaiterKey(scope, serverId, fileUri);
@@ -1041,8 +982,7 @@ async function getConnection(scope, serverId, config) {
 }
 
 /**
- * Sync document lifecycle with LSP servers (didOpen / didChange / didClose).
- * @param {string} scope - {@link LSP_SCOPE_EDITOR}, {@link LSP_SCOPE_AGENT}, or {@link LSP_SCOPE_INDEX}
+ * @param {string} scope
  */
 export async function notifyLspDocumentForScope(scope, relativePath, event, text) {
   const merged = await loadMergedLspConfig();
@@ -1134,9 +1074,6 @@ export async function notifyLspDocumentForScope(scope, relativePath, event, text
   return { ok: false, error: 'Invalid event' };
 }
 
-/**
- * Sync document lifecycle with LSP servers (didOpen / didChange / didClose).
- */
 export async function notifyLspDocument(relativePath, event, text) {
   return notifyLspDocumentForScope(LSP_SCOPE_EDITOR, relativePath, event, text);
 }
@@ -1166,9 +1103,8 @@ async function ensureDocumentSyncedForScope(scope, relativePath, options = {}) {
 }
 
 /**
- * Ensure the LSP has the latest buffer for a path.
  * @param {string} relativePath
- * @param {{ editorText?: string }} [options] - When set (e.g. from CM6), never fall back to disk.
+ * @param {{ editorText?: string }} [options]
  */
 async function ensureDocumentSynced(relativePath, options = {}) {
   return ensureDocumentSyncedForScope(LSP_SCOPE_EDITOR, relativePath, options);
@@ -1206,7 +1142,6 @@ async function withLspMatchers(relativePath, handler, options = {}) {
   return handler({ merged, matchers, fileUri });
 }
 
-/** All configured, non-disabled language servers (for workspace-wide queries). */
 async function withAllLspServers(handler) {
   const merged = await loadMergedLspConfig();
   if (merged.enabled === false) {
@@ -1227,7 +1162,6 @@ async function withAllLspServers(handler) {
 }
 
 /**
- * Request completion items at a 0-based line/character position.
  * @param {string} relativePath
  * @param {number} line
  * @param {number} character
@@ -1310,9 +1244,6 @@ export async function getLspCompletions(relativePath, line, character, options =
   };
 }
 
-/**
- * Fetch formatted diagnostics for a project-relative path (saved disk only, agent scope).
- */
 export async function getLspDiagnostics(relativePath) {
   const merged = await loadMergedLspConfig();
   if (merged.enabled === false) {
@@ -1344,8 +1275,6 @@ export async function getLspDiagnostics(relativePath) {
   }
 
   const revision = contentRevision(diskText);
-  // tsconfig.node.json / @types/node can appear without the file bytes changing
-  // (Vite configs). Include them so we do not replay a stale "process" error.
   const usesTypescript = matchers.some((m) => m.id === 'typescript');
   const projectRevision = usesTypescript
     ? await hashTypeScriptProjectFingerprint(relativePath, workspaceRoot)
@@ -1425,9 +1354,8 @@ export async function getLspDiagnostics(relativePath) {
 }
 
 /**
- * Raw LSP diagnostics for a path (not LLM-formatted).
  * @param {string} relativePath
- * @param {string} [editorText] - Current editor buffer; avoids disk fallback when provided.
+ * @param {string} [editorText]
  */
 export async function getLspStructuredDiagnostics(relativePath, editorText) {
   const merged = await loadMergedLspConfig();
@@ -1482,9 +1410,6 @@ export async function getLspStructuredDiagnostics(relativePath, editorText) {
   }
 }
 
-/**
- * Hover contents at a 0-based position (first matching server wins).
- */
 export async function getLspHover(relativePath, line, character) {
   const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
     ok: true,
@@ -1517,9 +1442,6 @@ export async function getLspHover(relativePath, line, character) {
   return { hover: null };
 }
 
-/**
- * Go-to-definition at a 0-based position (first non-null result).
- */
 export async function getLspDefinition(relativePath, line, character) {
   const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
     ok: true,
@@ -1554,9 +1476,6 @@ export async function getLspDefinition(relativePath, line, character) {
   return { locations: [] };
 }
 
-/**
- * Signature help at a 0-based position.
- */
 export async function getLspSignatureHelp(relativePath, line, character) {
   const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
     ok: true,
@@ -1589,15 +1508,11 @@ export async function getLspSignatureHelp(relativePath, line, character) {
   return { signatureHelp: null };
 }
 
-/**
- * Document symbol tree for a project-relative path (textDocument/documentSymbol).
- */
 export async function getLspDocumentSymbols(relativePath) {
   return getLspDocumentSymbolsForScope(LSP_SCOPE_EDITOR, relativePath);
 }
 
 /**
- * Document symbol tree for a project-relative path (scoped tsserver instance).
  * @param {string} scope
  * @param {string} relativePath
  */
@@ -1632,9 +1547,6 @@ export async function getLspDocumentSymbolsForScope(scope, relativePath) {
   return { symbols: [] };
 }
 
-/**
- * Workspace-wide symbol search (workspace/symbol) across all configured servers.
- */
 export async function getLspWorkspaceSymbols(query) {
   const q = String(query ?? '');
   const ctx = await withAllLspServers(async ({ servers }) => ({ ok: true, servers }));
@@ -1680,7 +1592,6 @@ export async function getLspWorkspaceSymbols(query) {
 }
 
 /**
- * Call hierarchy at a 0-based position — prepare + incoming + outgoing calls.
  * @param {string} relativePath
  * @param {number} line
  * @param {number} character
@@ -1775,7 +1686,6 @@ function normalizeTextEdits(raw) {
 }
 
 /**
- * Whole-document formatting (first server that advertises documentFormattingProvider).
  * @param {string} relativePath
  * @param {{ editorText?: string, tabSize?: number, insertSpaces?: boolean }} [options]
  */
@@ -1819,7 +1729,6 @@ export async function getLspDocumentFormatting(relativePath, options = {}) {
 }
 
 /**
- * Range formatting at LSP positions (first server with documentRangeFormattingProvider).
  * @param {string} relativePath
  * @param {{ start: { line: number, character: number }, end: { line: number, character: number } }} range
  * @param {{ editorText?: string, tabSize?: number, insertSpaces?: boolean }} [options]
@@ -1867,9 +1776,6 @@ export async function getLspRangeFormatting(relativePath, range, options = {}) {
   return { edits: [], error: 'No range formatting provider for this file' };
 }
 
-/**
- * Resolve a completion item (documentation, additionalTextEdits).
- */
 export async function resolveLspCompletion(relativePath, item) {
   const ctx = await withLspMatchers(relativePath, async ({ matchers, fileUri }) => ({
     ok: true,
@@ -1902,7 +1808,6 @@ export async function resolveLspCompletion(relativePath, item) {
   return { item: null };
 }
 
-/** Human-readable install hint from defaults requirements block. */
 function formatRequirements(requirements) {
   if (!requirements || typeof requirements !== 'object') return undefined;
   const bits = [];
@@ -1919,7 +1824,6 @@ function formatRequirements(requirements) {
   return `Requires: ${bits.join(', ')}`;
 }
 
-/** Single-line explanation for settings UI (disable, no command, tooling). */
 function deriveDisabledReason(cfg, { disabled, hasCommand, running }) {
   if (running) return undefined;
   const parts = [];
@@ -1936,7 +1840,6 @@ function deriveDisabledReason(cfg, { disabled, hasCommand, running }) {
   return parts.length > 0 ? parts.join(' · ') : undefined;
 }
 
-/** List configured servers and running state. */
 export async function listLspServers() {
   const merged = await loadMergedLspConfig();
   const builtinIds = await getBuiltinLspIds();
@@ -1967,7 +1870,6 @@ export async function listLspServers() {
   });
 }
 
-/** @internal Test-only — in-memory sync state for a project-relative path. */
 export function getLspDocumentSyncForTest(relativePath, scope = LSP_SCOPE_EDITOR) {
   const fileUri = toFileUri(relativePath);
   const entry = getScopeStore(scope).documentSync.get(fileUri);
@@ -1975,7 +1877,6 @@ export function getLspDocumentSyncForTest(relativePath, scope = LSP_SCOPE_EDITOR
   return { version: entry.version, text: entry.text };
 }
 
-/** @internal Test-only — cached publishDiagnostics entry for a server + path. */
 export function getLspDiagnosticsMapForTest(
   relativePath,
   serverId = 'fake',
@@ -1988,7 +1889,6 @@ export function getLspDiagnosticsMapForTest(
   return state.diagnostics.get(fileUri);
 }
 
-/** @internal Test-only — tune diagnostic waiter timeouts. */
 export function setLspDiagnosticWaitForTest({
   quietPeriodMs,
   emptyQuietPeriodMs,
@@ -1999,14 +1899,12 @@ export function setLspDiagnosticWaitForTest({
   if (totalTimeoutMs != null) diagTotalTimeoutMs = totalTimeoutMs;
 }
 
-/** @internal Test-only — restore default diagnostic waiter timeouts. */
 export function resetLspDiagnosticWaitForTest() {
   diagQuietPeriodMs = DEFAULT_DIAG_QUIET_PERIOD_MS;
   diagEmptyQuietPeriodMs = DEFAULT_DIAG_EMPTY_QUIET_PERIOD_MS;
   diagTotalTimeoutMs = DEFAULT_DIAG_TOTAL_TIMEOUT_MS;
 }
 
-/** Stop specific language servers (e.g. after scaffolded tsconfig so tsserver reloads). */
 function matchesServerProcessKey(processKey, serverId) {
   return processKey === serverId || processKey.startsWith(`${serverId}::`);
 }

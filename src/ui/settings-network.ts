@@ -1,7 +1,3 @@
-/**
- * Settings → General: network access toggle (local vs LAN).
- */
-
 import { detectConfigServer } from '../config/storage-mode';
 import {
   fetchNetworkStatus,
@@ -13,6 +9,8 @@ import {
 import { setStatus } from './status';
 import { appendSettingsOfflineHint } from './settings-controls';
 import { renderCompanionDevices } from './settings-network-devices';
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -38,6 +36,8 @@ function restartBanner(): HTMLElement {
   p.textContent = 'Restart Minnow to apply this change.';
   return p;
 }
+
+// ── Segments ─────────────────────────────────────────────────────────────────
 
 function createSegmentButton(
   label: string,
@@ -82,6 +82,8 @@ function renderLanUrls(mount: HTMLElement, urls: string[]): void {
   }
   mount.appendChild(list);
 }
+
+// ── Render ───────────────────────────────────────────────────────────────────
 
 /** Render network access controls into the General settings mount. */
 export async function renderNetworkAccessSettings(mount: HTMLElement): Promise<void> {
@@ -195,7 +197,6 @@ export async function renderNetworkAccessSettings(mount: HTMLElement): Promise<v
     section.insertBefore(restartEl, urlsMount);
   }
 
-  // Keep buttons reachable for tests / a11y even though labels are set above.
   void localBtn;
   void lanBtn;
 }

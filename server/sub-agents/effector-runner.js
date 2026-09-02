@@ -1,21 +1,3 @@
-/**
- * P8-D — the sub-agent runner effector (MIN-757).
- *
- * Same `inspect` / `start` / `stop` / `onEnd` contract as the board runner
- * (`server/orchestrator/effector-runner.js`). The engine does not change:
- * it still journals `attempt.started` off `start()` resolving, and it still
- * requires the attempt to stay in `inspect()` until the `onEnd` handler has
- * resolved (see `engine.js`).
- *
- * Mapping, not invention: every `sub-agents.json` field already has a
- * `runTurn()` option. This file is the second consumer of `parseReport` and
- * `systemPrompt` (Phase 6 findings from P2-E/F).
- *
- * Sub-agents get no worktree — they run in the spawning chat's workspace,
- * journaled on `run.requested`. `cwd` is required; there is no silent
- * workspace-root default (P2-D).
- */
-
 import { randomUUID } from 'node:crypto';
 
 import {
@@ -64,9 +46,7 @@ import { agentsDir } from './journal.js';
 import { getSubAgentTypeRow, loadSubAgentFile } from './config.js';
 import { loadSubAgentSystemPrompt } from './prompts.js';
 
-/** Throttle live `delta` frames so the drawer can show a tail without a token flood. */
 const LIVE_DELTA_MS = 80;
-/** Same cap idea as `livePartialReasoning` on the client (last N chars). */
 const LIVE_PARTIAL_CAP = 400;
 
 /**
@@ -185,7 +165,6 @@ export function degradeNoReportIfProse(result, messages, schemaId) {
       return { ...result, outcome: 'pass', summary: structured.summary };
     }
   } catch {
-    // Not JSON — the prose itself is the degraded summary.
   }
   return { ...result, outcome: 'pass', summary: prose };
 }
@@ -310,8 +289,6 @@ function toolDefsFor(ids) {
  * @returns {string[]}
  */
 export function resolveSubAgentToolIds(typeRow) {
-  // Role is always `'sub-agent'`. Asking the gate — not assembling a list —
-  // is how "no browser tools except Final Tester" stays one fact (P5-B).
   let ids = [...headlessToolIdsForRole(SUB_AGENT_ROLE)];
   if (Array.isArray(typeRow.allowedTools) && typeRow.allowedTools.length > 0) {
     const allow = new Set(typeRow.allowedTools.filter((n) => typeof n === 'string'));
@@ -395,9 +372,6 @@ export function parseReportForSchema(schemaId) {
 }
 
 /**
- * Map a `TurnResult` onto the engine's `AttemptEnd`. Usage rides every
- * outcome — a timeout that burned tokens is the one worth costing (P5-D).
- *
  * @param {string} attemptId
  * @param {string} runId
  * @param {import('../runner/run-turn').TurnResult} result
@@ -550,8 +524,6 @@ export function createSubAgentEffector(options = {}) {
   const parentChatId = options.parentChatId;
   const runTurnFn = options.runTurn ?? defaultRunTurn;
   const promptVariant = options.promptVariant === 'lite' ? 'lite' : 'full';
-  // Unattended/headless: no human. A parent-injected AskCapability later is
-  // this argument, default null — not a product-named branch in server/runner/.
   const ask = options.ask === undefined ? null : options.ask;
   const loadConfig = options.loadConfig ?? loadSubAgentFile;
   const getTypeRow = options.getTypeRow ?? getSubAgentTypeRow;
@@ -656,8 +628,6 @@ export function createSubAgentEffector(options = {}) {
         throw new Error('sub-agent effector: desired.taskId (runId) is required');
       }
 
-      // Prep *before* the attempt is live. A throw here rejects `start()` and
-      // the engine journals nothing — there is no process yet.
       const state = await currentState();
       const run = state.runs.get(runId);
       if (!run) {
@@ -665,9 +635,6 @@ export function createSubAgentEffector(options = {}) {
       }
       const cwd = typeof run.cwd === 'string' ? run.cwd.trim() : '';
       if (!cwd) {
-        // P2-D: cwd is required. A missing journal field is a spawn bug, not
-        // a licence to default to the workspace root — that was the gap this
-        // phase closes.
         throw new Error(
           `sub-agent effector: cwd is required on run ${runId} (journaled on run.requested)`,
         );
@@ -685,9 +652,6 @@ export function createSubAgentEffector(options = {}) {
           : typeof file.defaultTimeoutMs === 'number' && file.defaultTimeoutMs > 0
             ? file.defaultTimeoutMs
             : undefined;
-      // Reuse the board limits module so a timeout is the same named policy,
-      // not a second magic number. Hitting the cap is `timeout`, routed
-      // through P8-C (retry with continue seed) rather than a cancel.
       const limits = attemptLimits({
         ...options.limits,
         ...(options.limits?.wallClockMs == null && timeoutMs != null
@@ -763,8 +727,6 @@ export function createSubAgentEffector(options = {}) {
         cwd,
       };
 
-      // The process exists. Only now is `start()` allowed to resolve — that
-      // resolution licenses `attempt.started`.
       running.set(attemptId, entry);
       liveAttemptIds.add(attemptId);
       startLog.push({
@@ -784,9 +746,6 @@ export function createSubAgentEffector(options = {}) {
       void (async () => {
         /** @type {unknown[] | undefined} */
         let prior = seedKind === 'continue' ? transcriptByRun.get(runId) : undefined;
-        // In-memory continue seed is lost on process restart. The lossy disk
-        // transcript is the only prior we still have — fold it back into API
-        // messages so the retry is not a cold start.
         if (seedKind === 'continue' && (!Array.isArray(prior) || prior.length === 0) && parentChatId) {
           prior = await loadContinuePriorFromDisk(parentChatId, run);
         }
@@ -832,15 +791,10 @@ export function createSubAgentEffector(options = {}) {
             parseReport: parseReportForSchema(schemaId),
             systemPrompt: prompt,
             summarySchema: schemaId,
-            // Unattended: no human. Fabricated ask_question must fail immediately.
             ask,
             ...(prior ? { messages: prior, seedKind: 'continue' } : seedKind === 'continue' ? { seedKind: 'continue' } : {}),
             onEvent: (event) => {
               if (!parentChatId) return;
-              // Disk is lossy and drops high-frequency types (same recorder
-              // as boards). Live SSE is a separate sink: phase/tools already
-              // ride shouldEmitSubAgentLiveTurnEvent; throttled deltas get
-              // their own emit so the drawer is not an empty generating row.
               recordTranscriptEvent({
                 entryDir: agentsDir(parentChatId),
                 attemptId,
@@ -869,7 +823,6 @@ export function createSubAgentEffector(options = {}) {
             },
           });
         } catch (err) {
-          // An uncaught throw must become `crashed`, never take the engine down.
           result = { outcome: 'crashed', error: errorMessage(err) };
         }
 
@@ -878,15 +831,10 @@ export function createSubAgentEffector(options = {}) {
           transcriptByRun.set(runId, rec.messages);
         }
 
-        // Effector-only: prose (or valid structured JSON) without report_outcome
-        // is a degraded pass. True empty no_report still retries then abandons.
-        // Do not promote raw thinking to a pass — lastAssistantProse skips it.
         const incomingOutcome = result?.outcome;
         result = degradeNoReportIfProse(result, rec?.messages, schemaId);
         clearLiveDelta(attemptId);
         if (parentChatId) {
-          // Delta-only turns never write round_end. Record the in-memory prose
-          // so GET hydrate is not empty after degradeNoReportIfProse.
           if (
             incomingOutcome === 'no_report' &&
             result.outcome === 'pass' &&
@@ -938,9 +886,6 @@ export function createSubAgentEffector(options = {}) {
       listeners.push(handler);
     },
 
-    // ---- test affordances -------------------------------------------------
-
-    /** Every attempt ever started, in order. */
     get started() {
       return startLog;
     },

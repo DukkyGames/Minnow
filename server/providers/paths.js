@@ -1,8 +1,3 @@
-/**
- * Default API paths per provider apiKind.
- * LM Studio list/chat use v0; load/unload use v1 REST on the same baseUrl.
- */
-
 import { deriveMessagesPathFromChat } from '../../src/lib/derive-messages-path.mjs';
 
 /**
@@ -65,7 +60,6 @@ export function getDefaultPaths(apiKind, overrides = {}) {
 }
 
 /**
- * Flatten LM Studio 0.4.8+ catalog signals and drop upstream `capabilities` (Minnow merges its own).
  * @param {unknown} item
  */
 function normalizeLmStudioModelRow(item) {
@@ -122,10 +116,8 @@ function normalizeLmStudioModelRow(item) {
   };
 }
 
-/** Boolean catalog fields that mean "this model reads images". */
 const VISION_BOOLEAN_FIELDS = ['vision', 'supports_vision', 'supports_images', 'multimodal'];
 
-/** Capability tokens meaning image input across OpenAI-compatible catalogs. */
 const VISION_CAPABILITY_TOKENS = new Set([
   'vision',
   'image',
@@ -154,9 +146,6 @@ function modalityListHasImage(value) {
 }
 
 /**
- * OpenRouter-style `text+image->text`: only the input half means vision
- * (`text->image` is an image generator, not a VLM).
- *
  * @param {string} value
  */
 function inputModalityStringHasImage(value) {
@@ -165,9 +154,6 @@ function inputModalityStringHasImage(value) {
 }
 
 /**
- * Vision signal from an OpenAI-compatible catalog row. Returns undefined when the
- * catalog says nothing — the caller must not read that as "no vision".
- *
  * @param {Record<string, unknown>} src
  * @returns {boolean | undefined}
  */
@@ -222,9 +208,6 @@ const OPENAI_CONTEXT_FIELD_ALIASES = [
 ];
 
 /**
- * `meta` / `model_extra` context fields. `n_ctx_train` is what llama-server puts in
- * `meta` — the trained window, i.e. this row's max. The window the process is
- * actually serving comes from `/props` as `loaded_context_length`.
  * @type {readonly string[]}
  */
 const OPENAI_NESTED_CONTEXT_FIELD_ALIASES = [
@@ -236,7 +219,6 @@ const OPENAI_NESTED_CONTEXT_FIELD_ALIASES = [
 ];
 
 /**
- * Read the first positive numeric context field from a plain object.
  * @param {Record<string, unknown> | null | undefined} obj
  * @param {readonly string[]} fields
  * @returns {number | undefined}
@@ -255,7 +237,6 @@ function firstPositiveContextField(obj, fields) {
 }
 
 /**
- * Flatten OpenAI-compatible model rows and preserve upstream context metadata.
  * @param {unknown} item
  */
 function normalizeOpenAiModelRow(item) {
@@ -327,7 +308,6 @@ export function normalizeModelsResponse(apiKind, json) {
 const V1_MODELS_TIMEOUT_MS = 15_000;
 
 /**
- * Read reasoning block from an LM Studio v1 models list row.
  * @param {unknown} item
  * @returns {{ allowed_options?: string[], default?: string } | undefined}
  */
@@ -374,9 +354,6 @@ function v1ModelsListFromJson(json) {
 }
 
 /**
- * Best-effort GET /api/v1/models to merge richer reasoning when v0 rows lack allowed_options.
- * Non-fatal: returns the input payload unchanged on any failure.
- *
  * @param {string} baseUrl
  * @param {Record<string, string>} headers
  * @param {{ data: Array<Record<string, unknown>> }} normalized

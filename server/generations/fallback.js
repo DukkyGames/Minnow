@@ -1,23 +1,16 @@
-/**
- * Role-based fallback chain resolution and upstream error classification.
- */
-
 /** @typedef {'default' | 'utility' | 'vision' | 'research'} FallbackRole */
 
 /** @typedef {{ providerId: string, modelId: string }} FallbackCandidate */
 
 export const FALLBACK_ROLES = ['default', 'utility', 'vision', 'research'];
 
-/** Legacy coarse roles → Settings → Models routing row ids. */
 const LEGACY_FALLBACK_KEY_ALIASES = {
   default: 'main-chat',
   utility: 'chat-titles',
 };
 
-/** Reserved roles key for last-resort global fallback (not a routing row id). */
 const GLOBAL_FALLBACK_CHAIN_KEY = '_global';
 
-/** Hard cap on total candidates after appending global fallbacks. */
 const ABSOLUTE_MAX_CHAIN_LENGTH = 8;
 
 /**
@@ -58,29 +51,17 @@ const RETRYABLE_NODE_CODES = new Set([
   'UND_ERR_BODY_TIMEOUT',
 ]);
 
-/**
- * Statuses that mean "the same request would succeed later": the model is busy,
- * not wrong. Retrying the same candidate is the right move — failing over swaps
- * the user onto a different model, and dying loses the turn outright.
- * 529 is Anthropic's "overloaded"; 425 is Too Early; 408 is a server-side timeout.
- */
 const RATE_LIMIT_HTTP_STATUSES = new Set([408, 425, 429, 529]);
 
 const RETRYABLE_HTTP_STATUSES = new Set([502, 503, 504, ...RATE_LIMIT_HTTP_STATUSES]);
 
-/** Attempts against one candidate before falling through to the next. */
 export const MAX_SAME_CANDIDATE_ATTEMPTS = 3;
 
-/** Base backoff for same-candidate retries. */
 const RETRY_BASE_DELAY_MS = 1_000;
 
-/** Never stall a turn longer than this, whatever `Retry-After` claims. */
 const RETRY_MAX_DELAY_MS = 30_000;
 
 /**
- * Parse a `Retry-After` header (delta-seconds or HTTP-date) into milliseconds.
- * Returns null when absent or unparseable so the caller falls back to backoff.
- *
  * @param {string | null | undefined} value
  * @param {number} [nowMs]
  * @returns {number | null}
@@ -96,8 +77,6 @@ export function parseRetryAfterMs(value, nowMs = Date.now()) {
     return Math.min(Math.round(seconds * 1000), RETRY_MAX_DELAY_MS);
   }
 
-  // Date.parse is lenient enough to read "-4" as a year, so require the weekday
-  // and month names an HTTP-date always carries before trusting it.
   if (!/[a-z]/i.test(raw)) return null;
   const at = Date.parse(raw);
   if (Number.isNaN(at)) return null;
@@ -105,11 +84,7 @@ export function parseRetryAfterMs(value, nowMs = Date.now()) {
 }
 
 /**
- * Delay before re-running the same candidate: honour `Retry-After` when the
- * provider sent one, otherwise exponential backoff with jitter so a fleet of
- * clients does not resynchronize onto the same retry instant.
- *
- * @param {number} attempt 1 for the first retry.
+ * @param {number} attempt
  * @param {number | null | undefined} [retryAfterMs]
  * @returns {number}
  */
@@ -123,9 +98,6 @@ export function computeRetryDelayMs(attempt, retryAfterMs) {
 }
 
 /**
- * Read `Retry-After` off anything response-shaped (undici Response, or the
- * `{ status }` literals the Anthropic bridge hands us).
- *
  * @param {unknown} response
  * @returns {string | null}
  */
@@ -201,15 +173,7 @@ export function candidateKey(providerId, modelId) {
 }
 
 /**
- * Build an ordered, deduped candidate list capped at maxChainLength.
- *
- * @param {{
- *   role?: string | null,
- *   primaryProviderId: string,
- *   primaryModelId?: string,
- *   config?: unknown,
- *   enabledProviderIds?: Set<string> | string[],
- * }} params
+ * @param {{ role?: string | null, primaryProviderId: string, primaryModelId?: string, config?: unknown, enabledProviderIds?: Set<string> | string[], }} params
  * @returns {FallbackCandidate[]}
  */
 export function resolveFallbackChain({

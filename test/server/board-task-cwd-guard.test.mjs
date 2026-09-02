@@ -32,7 +32,7 @@ function baseState(overrides = {}) {
   };
 }
 
-// ── resolveChatContext ──────────────────────────────────────────────────────
+// ── resolveChatContext ───────────────────────────────────────────────────────
 
 describe('resolveChatContext', () => {
   it('returns worktreeRoot and groupId from chat.worktreeRoot', async () => {
@@ -155,7 +155,7 @@ describe('resolveChatContext (SQLite hot path)', () => {
   });
 });
 
-// ── guardCdOutsideWorktree ──────────────────────────────────────────────────
+// ── guardCdOutsideWorktree ───────────────────────────────────────────────────
 
 describe('guardCdOutsideWorktree', () => {
   const TREE = 'C:/worktrees/board-b/task-W1-B';

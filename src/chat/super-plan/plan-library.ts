@@ -1,12 +1,3 @@
-/**
- * Super Plan library — plan files on disk joined to the runs that produced them.
- *
- * `find_files` returns paths only, so recency comes from a bounded fan-out of
- * `get_file_metadata` calls. Rows whose run is still live take their timestamp
- * from the pipeline instead, which is both cheaper and more accurate: a run
- * that has not written its plan yet has no file to stat.
- */
-
 import { normalizeWorkspacePath } from '../../lib/normalize-workspace-path';
 import { executeTool } from '../../tools/client';
 import { isLocalServerAvailable } from '../../tools/config';
@@ -20,6 +11,8 @@ import {
   SUPER_PLAN_STAGE_ORDER,
   type SuperPlanState,
 } from './types';
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 /** Row state. Every value renders as its own word, never as colour alone. */
 export type PlanLibraryState =
@@ -66,6 +59,8 @@ const METADATA_BUDGET = 80;
 const METADATA_CONCURRENCY = 6;
 
 const DAY_MS = 86_400_000;
+
+// ── Titles ───────────────────────────────────────────────────────────────────
 
 /** Title-case a plan slug: "server-session-engine" reads as "Server session engine". */
 export function titleFromPlanPath(path: string): string {
@@ -148,6 +143,8 @@ export function isChatInCurrentWorkspace(chat: Chat): boolean {
   return isChatInWorkspace(chat, getWorkspacePath());
 }
 
+// ── Collect ──────────────────────────────────────────────────────────────────
+
 /** Every super-plan chat that carries pipeline state in the given workspace. */
 export function collectSuperPlanRuns(workspacePath = getWorkspacePath()): PlanLibraryEntry[] {
   const workspaceKey = normalizeWorkspacePath(workspacePath);
@@ -200,9 +197,7 @@ async function readModifiedTimes(paths: string[]): Promise<Map<string, number>> 
         const content = typeof result.content === 'string' ? result.content : '';
         const ms = parseModifiedMs(content);
         if (ms !== undefined) out.set(path, ms);
-      } catch {
-        /* a plan the rail cannot stat still lists, just without a date */
-      }
+      } catch {}
     }
   }
 
@@ -226,20 +221,13 @@ function parsePaths(raw: string): string[] {
     .filter((line) => line.length > 0 && !line.startsWith('(truncated'));
 }
 
-/**
- * Only top-level plans become rows. `documentation/plans/references/` holds
- * specs and research reports, which belong to a run rather than standing
- * alongside it, and reach the user through the Artifacts segment.
- */
 function isTopLevelPlan(path: string): boolean {
   const rest = path.replace(/^documentation\/plans\//, '');
   return rest.length > 0 && !rest.includes('/');
 }
 
-/**
- * Plan files joined with run state. Runs always list; the disk half degrades to
- * an error code when the local server is down.
- */
+// ── List ─────────────────────────────────────────────────────────────────────
+
 export async function listSuperPlanLibrary(): Promise<PlanLibraryResult> {
   const runs = collectSuperPlanRuns();
   const byPath = new Map<string, PlanLibraryEntry>();
@@ -316,17 +304,12 @@ function sortLibrary(entries: PlanLibraryEntry[]): PlanLibraryEntry[] {
   });
 }
 
-/**
- * Recency buckets. When no row carries a timestamp (server down, or a library
- * past the stat budget) the rail collapses to one unlabelled group rather than
- * filing everything under a date it does not know.
- */
+// ── Group ────────────────────────────────────────────────────────────────────
+
 export function groupPlanLibraryEntries(
   entries: PlanLibraryEntry[],
   nowMs = Date.now(),
 ): PlanLibraryGroup[] {
-  // A stopped run is history, not work in flight, so it files by date with the
-  // rest rather than sitting at the top pretending to still be going.
   const isLive = (e: PlanLibraryEntry): boolean =>
     e.state === 'running' || e.state === 'waiting' || e.state === 'paused' || e.state === 'error';
   const live = entries.filter(isLive);

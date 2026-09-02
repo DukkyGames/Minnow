@@ -1,7 +1,3 @@
-/**
- * Settings → Model routing — consolidated per-role provider/model bindings.
- */
-
 import '../styles/settings-general.css';
 import '../styles/settings-routing.css';
 
@@ -108,6 +104,8 @@ let globalFallbackCooldownInput: HTMLInputElement | null = null;
 let globalFallbackEditor: FallbackRowEditor | null = null;
 let globalFallbackHealthHost: HTMLElement | null = null;
 
+// ── Advanced ─────────────────────────────────────────────────────────────────
+
 function supportsAdvancedPanel(row: ModelRoutingRow): boolean {
   return (
     row.persistKind === 'main-chat' ||
@@ -213,6 +211,8 @@ function el<K extends keyof HTMLElementTagNameMap>(
   if (text !== undefined) node.textContent = text;
   return node;
 }
+
+// ── Rows ─────────────────────────────────────────────────────────────────────
 
 function formatEffective(row: ModelRoutingRow): string {
   if (row.usesChatDefault && row.persistKind !== 'ui-designer') {
@@ -424,6 +424,8 @@ async function saveRow(controls: RowControls, options?: RoutingPersistOptions): 
       break;
   }
 }
+
+// ── Fallback ─────────────────────────────────────────────────────────────────
 
 function appendRoutingRole(
   groupBody: HTMLElement,
@@ -787,6 +789,8 @@ function renderGroup(
     );
   }
 }
+
+// ── Render ───────────────────────────────────────────────────────────────────
 
 /** Render the model routing settings section into #settingsModelRoutingBody. */
 export async function renderModelRoutingSection(mount: HTMLElement): Promise<void> {

@@ -1,19 +1,9 @@
-/**
- * P8-F — one sub-agent run as a view of the server journal.
- *
- * Locked decision 2 applied to sub-agents: the renderer subscribes, derives,
- * and POSTs commands. It never mutates a run. Reconnection is the browser's
- * (`EventSource` retries with `Last-Event-ID`); a dropped stream costs the
- * tail, not a re-fold from event zero. Live tokens have no `seq` and are
- * never replayed. Drop live frames because they are a reconnect mix or a
- * genuine attempt end — not because the fold says terminal (P10-L).
- */
-
 import { foldInto, emptyState } from '../../server/sub-agents/derive.js';
 import type { RunState } from '../../server/sub-agents/types';
 import { applyTurnEventToMessages } from '../../server/orchestrator/transcript-messages.js';
 
-/** The bit of EventSource this client uses. Tests inject a fake; Node has none. */
+// ── Types ────────────────────────────────────────────────────────────────────
+
 export interface EventStream {
   addEventListener(type: string, listener: (event: { data: string }) => void): void;
   close(): void;
@@ -23,17 +13,13 @@ export interface SubAgentRunClientOptions {
   openStream?: (url: string) => EventStream;
 }
 
-/**
- * Live SSE is keyed on parentChatId (P8-B). Each card opens a per-run
- * EventSource. Identity only (sibling / stale attempt). Replay vs live is
- * {@link isReplayedLiveFrame} — do not drop because the fold is terminal.
- */
+// ── Live frames ──────────────────────────────────────────────────────────────
+
 export function liveFrameBelongsToRun(
   payload: { taskId?: unknown; attemptId?: unknown },
   runId: string,
   raw: Record<string, unknown> | null,
 ): boolean {
-  // A missing taskId is not this run. Fail closed so a sibling cannot paint.
   if (payload.taskId !== runId) return false;
   const attemptId = typeof payload.attemptId === 'string' ? payload.attemptId : '';
   if (!raw) return true;
@@ -42,12 +28,10 @@ export function liveFrameBelongsToRun(
   const foldSettled =
     phase === 'passed' || phase === 'cancelled' || phase === 'abandoned';
   if (attempts.length === 0) {
-    // Zero-attempt cancel/pass/abandon must not sit on generating.
     if (foldSettled) return false;
     return true;
   }
   if (!attemptId) {
-    // No attempt id: paint only while an attempt is still open.
     return attempts.some((row) => {
       if (!row || typeof row !== 'object') return false;
       return (row as { ended?: unknown }).ended !== true;
@@ -60,7 +44,6 @@ export function liveFrameBelongsToRun(
   if (typeof open?.attemptId === 'string' && open.attemptId) {
     return attemptId === open.attemptId;
   }
-  // Retry gap: every known attempt has ended. A frame for one of them is stale.
   return !attempts.some((row) => {
     if (!row || typeof row !== 'object') return false;
     const rec = row as { attemptId?: unknown; ended?: unknown };
@@ -68,15 +51,6 @@ export function liveFrameBelongsToRun(
   });
 }
 
-/**
- * Drop live frames that are a reconnect mix or a genuine attempt end.
- *
- * Live frames have no `seq` (P8-B). A numeric seq on this channel is a
- * journal event leaked onto `event: live`. An attempt that ended *with an
- * outcome* has been confirmed by the effector. Fold-terminal `cancelled`
- * while the attempt is still open is *not* replay — that is the
- * cancelling window P10-L must paint.
- */
 export function isReplayedLiveFrame(
   payload: { seq?: unknown; attemptId?: unknown },
   raw: Record<string, unknown> | null,
@@ -93,7 +67,6 @@ export function isReplayedLiveFrame(
   return match?.ended === true && match.outcome != null;
 }
 
-/** Combine identity (P10-M) with replay (P10-L) for one consume-path test. */
 export function shouldPaintLiveFrame(
   payload: { taskId?: unknown; attemptId?: unknown; seq?: unknown },
   runId: string,
@@ -130,16 +103,13 @@ export interface SubAgentRunClient {
   };
   seedMessages(messages: unknown[]): void;
   subscribe(listener: () => void): () => void;
-  /** Parent-inject frames. Not journaled; the fold records `result.delivered` after they land. */
   subscribeDeliver(listener: (frame: DeliverFrame) => void): () => void;
   connect(): void;
   close(): void;
 }
 
-/**
- * Open a live view of one run. Resume-from-seq matches the board client:
- * `Last-Event-ID` is the last journal `seq`, live frames carry none.
- */
+// ── Client ───────────────────────────────────────────────────────────────────
+
 export function createSubAgentRunClient(
   runId: string,
   options: SubAgentRunClientOptions = {},
@@ -175,7 +145,6 @@ export function createSubAgentRunClient(
     if (Number.isSafeInteger(eventSeq) && eventSeq <= seq) return false;
     if (event.type === 'attempt.started') {
       engineError = null;
-      // A new attempt must not keep the previous attempt's tool rows or tail.
       liveMessages = [];
       livePartialText = '';
       liveThinking = '';
@@ -250,14 +219,9 @@ export function createSubAgentRunClient(
           content?: string;
         };
       };
-      // Drop replayed frames (stale seq / genuine attempt end), not because
-      // the fold is terminal. A live frame for an open attempt after
-      // run.cancelled is journaled MUST paint (P10-L / MIN-777).
       if (!shouldPaintLiveFrame(payload, runId, raw)) return;
       const inner = payload.event;
       if (!inner?.type) return;
-      // Accumulate tool/round rows onto messages so the drawer is not empty
-      // while tools run. Throttled `delta` is a live tail only.
       if (inner.type === 'phase') {
         const next = inner.phase;
         if (next === 'thinking' || next === 'generating' || next === 'tools') {
@@ -300,8 +264,6 @@ export function createSubAgentRunClient(
       if (inner.type === 'thinking') {
         livePhase = 'thinking';
         if (typeof inner.text === 'string') {
-          // Tail for cards/status; full text lands on messages so Activity keeps
-          // Thoughts after the phase leaves `thinking` (same mapper as hydrate).
           liveThinking = inner.text.slice(-400);
           liveMessages = applyTurnEventToMessages(liveMessages, inner);
         }
@@ -313,8 +275,6 @@ export function createSubAgentRunClient(
   };
 
   const onError = (event: { data: string }) => {
-    // Named `event: error` frames carry JSON. A dropped connection also
-    // fires `error` with empty data — EventSource reconnects with Last-Event-ID.
     if (typeof event?.data !== 'string' || event.data.length === 0) return;
     try {
       const payload = JSON.parse(event.data) as Partial<EngineError> & { error?: string };
@@ -344,8 +304,6 @@ export function createSubAgentRunClient(
       messages: liveMessages,
     }),
     seedMessages(messages) {
-      // Hydrate from disk only when live SSE has not already painted rows.
-      // A late GET must not clobber an in-flight accumulation.
       if (liveMessages.length > 0) return;
       if (!Array.isArray(messages) || messages.length === 0) return;
       liveMessages = messages.slice();
@@ -364,7 +322,6 @@ export function createSubAgentRunClient(
       try {
         source = openStream(`/api/agents/${encodeURIComponent(runId)}/events`);
       } catch (err) {
-        // Node / happy-dom have no EventSource. Tests inject `openStream`.
         console.error('[agents] EventSource unavailable', err);
         return;
       }
@@ -389,7 +346,6 @@ export function createSubAgentRunClient(
       });
       source.addEventListener('error', (event: { data: string }) => {
         if (typeof event?.data === 'string' && event.data.length > 0) return;
-        // EventSource reconnects by itself, carrying Last-Event-ID.
       });
     },
     close() {

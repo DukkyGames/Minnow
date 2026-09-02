@@ -1,7 +1,3 @@
-/**
- * LSP hover tooltips with markdown rendering.
- */
-
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { hoverTooltip } from '@codemirror/view';

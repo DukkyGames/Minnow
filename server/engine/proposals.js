@@ -30,14 +30,12 @@ import { randomUUID } from 'node:crypto';
  */
 
 const VALID_CATEGORIES = new Set([
-  // Personal track.
   'identity',
   'preference',
   'fact',
   'contact',
   'project',
   'goal',
-  // Project track — knowledge about the codebase being worked on.
   'decision',
   'gotcha',
   'convention',
@@ -143,8 +141,6 @@ export function createProposals(getPaths, deps) {
       body: String(input.body ?? '').slice(0, 32_000),
       tags,
       category,
-      // Carried through so accepting a workspace-scoped proposal writes it into
-      // the workspace pages, not the shared facts/ tree.
       scope: VALID_SCOPES.has(input.scope) ? input.scope : 'personal',
       ...(typeof input.expertId === 'string' && input.expertId.trim()
         ? { expertId: input.expertId.trim().slice(0, 64) }

@@ -35,6 +35,7 @@ function extractToken(req, url) {
 }
 
 /**
+ * POST /api/auth/pair is the only unauthenticated API path, and only on LAN from a private peer.
  * @returns {import('connect').HandleFunction}
  */
 export function createAuthMiddleware() {
@@ -56,9 +57,6 @@ export function createAuthMiddleware() {
       return;
     }
 
-    // This exact bootstrap operation is the only unauthenticated API path.
-    // It remains available only while the server is LAN-bound and only to a
-    // loopback/private-network peer. Host validation above still applies.
     if (url.pathname === '/api/auth/pair' && req.method === 'POST') {
       if (getNetworkAccess() !== 'lan' || !isClientAllowed(req, getNetworkAccess())) {
         sendJson(res, 403, { error: 'LAN pairing only' });

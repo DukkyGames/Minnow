@@ -1,25 +1,11 @@
-/**
- * Read attention geometry straight out of a GGUF file's header.
- *
- * For weights that are already on disk there is no reason to guess: the header states the
- * block count, GQA width, head size, and every tensor's exact type and shape. That turns the
- * Load tab's memory estimate from a heuristic into arithmetic, and gives the GPU-layers
- * slider a real maximum instead of a bucket fitted to parameter count.
- *
- * Only the header is read — the KV block plus the tensor index, typically a few MB — never
- * the weights themselves.
- */
-
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 
-const GGUF_MAGIC = 0x46554747; // "GGUF" little-endian
+const GGUF_MAGIC = 0x46554747; 
 
-/** Stop growing the header buffer past this; a real header never approaches it. */
 const MAX_HEADER_BYTES = 64 * 1024 * 1024;
 const INITIAL_READ_BYTES = 1024 * 1024;
 
-/** GGUF metadata value type tags. */
 const VALUE_TYPE = {
   UINT8: 0,
   INT8: 1,
@@ -37,48 +23,45 @@ const VALUE_TYPE = {
 };
 
 /**
- * ggml tensor types as `[elementsPerBlock, bytesPerBlock]`, which is what turns a tensor's
- * shape into its size on disk. Indexes match `enum ggml_type`.
  * @type {Record<number, [number, number]>}
  */
 const GGML_TYPE_SIZES = {
-  0: [1, 4], // F32
-  1: [1, 2], // F16
-  2: [32, 18], // Q4_0
-  3: [32, 20], // Q4_1
-  6: [32, 22], // Q5_0
-  7: [32, 24], // Q5_1
-  8: [32, 34], // Q8_0
-  9: [32, 36], // Q8_1
-  10: [256, 84], // Q2_K
-  11: [256, 110], // Q3_K
-  12: [256, 144], // Q4_K
-  13: [256, 176], // Q5_K
-  14: [256, 210], // Q6_K
-  15: [256, 292], // Q8_K
-  16: [256, 66], // IQ2_XXS
-  17: [256, 74], // IQ2_XS
-  18: [256, 98], // IQ3_XXS
-  19: [256, 50], // IQ1_S
-  20: [32, 18], // IQ4_NL
-  21: [256, 110], // IQ3_S
-  22: [256, 82], // IQ2_S
-  23: [256, 136], // IQ4_XS
-  24: [1, 1], // I8
-  25: [1, 2], // I16
-  26: [1, 4], // I32
-  27: [1, 8], // I64
-  28: [1, 8], // F64
-  29: [256, 56], // IQ1_M
-  30: [1, 2], // BF16
-  34: [256, 54], // TQ1_0
-  35: [256, 66], // TQ2_0
-  39: [32, 17], // MXFP4
+  0: [1, 4], 
+  1: [1, 2], 
+  2: [32, 18], 
+  3: [32, 20], 
+  6: [32, 22], 
+  7: [32, 24], 
+  8: [32, 34], 
+  9: [32, 36], 
+  10: [256, 84], 
+  11: [256, 110], 
+  12: [256, 144], 
+  13: [256, 176], 
+  14: [256, 210], 
+  15: [256, 292], 
+  16: [256, 66], 
+  17: [256, 74], 
+  18: [256, 98], 
+  19: [256, 50], 
+  20: [32, 18], 
+  21: [256, 110], 
+  22: [256, 82], 
+  23: [256, 136], 
+  24: [1, 1], 
+  25: [1, 2], 
+  26: [1, 4], 
+  27: [1, 8], 
+  28: [1, 8], 
+  29: [256, 56], 
+  30: [1, 2], 
+  34: [256, 54], 
+  35: [256, 66], 
+  39: [32, 17], 
 };
 
-/**
- * Cursor over a GGUF header that pulls more of the file in as the parse advances.
- */
+// ── Reader ───────────────────────────────────────────────────────────────────
+
 class HeaderReader {
   /** @param {import('node:fs/promises').FileHandle} handle */
   constructor(handle, fileSize) {
@@ -89,9 +72,8 @@ class HeaderReader {
   }
 
   /**
-   * Guarantee `count` more bytes past the cursor, reading further into the file if needed.
-   * @param {number} count
-   */
+ * @param {number} count
+ */
   async ensure(count) {
     const needed = this.offset + count;
     if (needed <= this.buffer.length) return;
@@ -172,7 +154,6 @@ class HeaderReader {
     return value;
   }
 
-  /** Advance past a string without decoding it — used for token vocabularies. */
   async skipString() {
     const length = await this.u64();
     if (length < 0 || length > MAX_HEADER_BYTES) throw new Error('GGUF string length invalid');
@@ -180,6 +161,8 @@ class HeaderReader {
     this.offset += length;
   }
 }
+
+// ── Scalars ──────────────────────────────────────────────────────────────────
 
 /**
  * @param {HeaderReader} reader
@@ -217,11 +200,6 @@ async function readScalar(reader, type) {
 }
 
 /**
- * Read one metadata value.
- *
- * Arrays are walked but not collected past a small prefix: `tokenizer.ggml.tokens` alone
- * holds ~150k strings, and nothing here needs its contents — only its length, which is a
- * usable vocabulary size when the tensor index does not give one.
  * @param {HeaderReader} reader
  * @param {number} type
  */
@@ -232,8 +210,6 @@ async function readValue(reader, type) {
   const count = await reader.u64();
   if (count < 0 || count > 1e8) throw new Error('GGUF array length invalid');
 
-  // Per-layer arrays (attention patterns, head counts) run to the block count, so collect
-  // anything short enough to be one of those; only vocabularies are longer.
   const collect = count <= 1024 && itemType !== VALUE_TYPE.ARRAY && itemType !== VALUE_TYPE.STRING;
   const items = [];
   for (let i = 0; i < count; i += 1) {
@@ -251,7 +227,6 @@ async function readValue(reader, type) {
 /** @param {unknown} value */
 function asNumber(value) {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
-  // `head_count_kv` is per-layer on a few hybrid models; the widest layer sets the cache size.
   if (Array.isArray(value)) {
     const nums = value.filter((v) => typeof v === 'number' && Number.isFinite(v));
     return nums.length ? Math.max(...nums) : 0;
@@ -265,14 +240,12 @@ function countPositiveEntries(value) {
   return value.filter((v) => typeof v === 'number' && Number.isFinite(v) && v > 0).length;
 }
 
+// ── Hybrid ───────────────────────────────────────────────────────────────────
+
 /**
- * How many layers keep a growing KV cache on a Gated DeltaNet hybrid.
- *
- * llama.cpp marks layer `i` recurrent when `(i + 1) % interval !== 0` inside the
- * main stack, then treats NextN/MTP blocks as dense attention (see qwen35.cpp).
- * @param {number} nLayers `block_count`, which includes MTP blocks
- * @param {number} interval `{arch}.full_attention_interval`
- * @param {number} [nextn] `{arch}.nextn_predict_layers`
+ * @param {number} nLayers
+ * @param {number} interval
+ * @param {number} [nextn]
  */
 export function countHybridFullAttentionLayers(nLayers, interval, nextn = 0) {
   if (!(nLayers > 0)) return 0;
@@ -287,7 +260,6 @@ export function countHybridFullAttentionLayers(nLayers, interval, nextn = 0) {
 }
 
 /**
- * `{arch}.attention.recurrent_layers`: true/1 = linear-attention, false/0 = full attention.
  * @param {unknown} value
  * @param {number} nLayers
  */
@@ -303,13 +275,6 @@ function countNonRecurrentLayers(value, nLayers) {
 }
 
 /**
- * Full-attention layer count from `{arch}.attention.sliding_window_pattern`.
- *
- * The key comes in two shapes. A scalar N means one full-attention layer every N — llama.cpp's
- * `set_swa_pattern(N)`. An array of booleans is the per-layer map that newer architectures
- * (Gemma 4) ship instead, where `true` marks a layer that *uses* the sliding window. Reading
- * the array form matters: it is the difference between charging a Gemma-class model for 30
- * growing caches and for the 5 it actually keeps.
  * @param {unknown} value
  * @param {number} nLayers
  * @returns {{ swaPeriod: number, fullLayers: number }}
@@ -326,11 +291,6 @@ function readSwaPattern(value, nLayers) {
 }
 
 /**
- * Growing-KV layer count for hybrid (Gated DeltaNet) GGUFs.
- *
- * Qwen3.5 / 3.6 / 3.8 ship `full_attention_interval` instead of a sliding-window
- * pattern. Without this, every block is charged as full attention and the Load
- * tab overstates KV by the hybrid ratio (4x on the 3:1 models).
  * @param {string} arch
  * @param {number} nLayers
  * @param {Record<string, unknown>} kv
@@ -343,7 +303,6 @@ function resolveHybridAttention(arch, nLayers, kv, swa, tensors) {
   const interval = asNumber(kv[`${arch}.full_attention_interval`]);
   const nextn = asNumber(kv[`${arch}.nextn_predict_layers`]);
 
-  // Per-layer KV width with zeros on linear layers (RYS / some community quants).
   if (!fullLayers) {
     const kvHeads = kv[`${arch}.attention.head_count_kv`];
     const positive = countPositiveEntries(kvHeads);
@@ -356,7 +315,6 @@ function resolveHybridAttention(arch, nLayers, kv, swa, tensors) {
     fullLayers = countNonRecurrentLayers(kv[`${arch}.attention.recurrent_layers`], nLayers);
   }
 
-  // Tensor probe: linear-attention blocks own `ssm_*` weights; the rest grow a cache.
   if (!fullLayers && tensors.ssmLayerCount > 0 && tensors.ssmLayerCount < nLayers) {
     fullLayers = nLayers - tensors.ssmLayerCount;
   }
@@ -370,22 +328,19 @@ function resolveHybridAttention(arch, nLayers, kv, swa, tensors) {
     swaPeriod,
     fullLayers,
     fullAttentionInterval: interval > 1 ? interval : 0,
-    // Multi-token-prediction heads shipped inside the main GGUF. Non-zero is what
-    // makes `--spec-type draft-mtp` startable without a separate draft model.
     nextnPredictLayers: nextn > 0 ? nextn : 0,
   };
 }
 
 /**
  * @typedef {object} GgufTensorSummary
- * @property {number} layerBytes Bytes in repeating `blk.*` tensors.
- * @property {number} fixedBytes Bytes in embedding / output / norm tensors.
- * @property {number} nVocab Vocabulary size from the token embedding shape, 0 if absent.
- * @property {number} ssmLayerCount Distinct `blk.N` indices that carry SSM / linear-attention tensors.
+ * @property {number} layerBytes
+ * @property {number} fixedBytes
+ * @property {number} nVocab
+ * @property {number} ssmLayerCount
  */
 
 /**
- * Walk the tensor index, totalling bytes per role and picking up the vocabulary size.
  * @param {HeaderReader} reader
  * @param {number} tensorCount
  * @returns {Promise<GgufTensorSummary>}
@@ -403,7 +358,7 @@ async function readTensorIndex(reader, tensorCount) {
     const dims = [];
     for (let d = 0; d < nDims; d += 1) dims.push(await reader.u64());
     const type = await reader.u32();
-    await reader.u64(); // data offset
+    await reader.u64(); 
 
     const elements = dims.reduce((acc, d) => acc * d, 1);
     const [blockSize, blockBytes] = GGML_TYPE_SIZES[type] ?? [1, 4];
@@ -411,7 +366,6 @@ async function readTensorIndex(reader, tensorCount) {
 
     if (name.startsWith('blk.')) {
       layerBytes += bytes;
-      // `blk.12.ssm_conv1d.weight` — linear-attention layers have no growing KV cache.
       const dot = name.indexOf('.', 4);
       const idx = dot > 4 ? Number(name.slice(4, dot)) : NaN;
       if (Number.isInteger(idx) && name.includes('.ssm_')) ssmLayers.add(idx);
@@ -419,12 +373,13 @@ async function readTensorIndex(reader, tensorCount) {
       fixedBytes += bytes;
     }
 
-    // ggml stores token_embd.weight as [n_embd, n_vocab].
     if (name === 'token_embd.weight' && dims.length >= 2) nVocab = dims[1];
   }
 
   return { layerBytes, fixedBytes, nVocab, ssmLayerCount: ssmLayers.size };
 }
+
+// ── Header ───────────────────────────────────────────────────────────────────
 
 /**
  * @typedef {object} GgufMetadata
@@ -437,20 +392,19 @@ async function readTensorIndex(reader, tensorCount) {
  * @property {number} nVocab
  * @property {number} nExperts
  * @property {number} swaWindow
- * @property {number} swaPeriod One full-attention layer every N; 0 when not stated as a scalar.
- * @property {number} nFullAttentionLayers Exact count from a per-layer pattern; 0 when absent.
- * @property {number} fullAttentionInterval `{arch}.full_attention_interval`; 0 when absent.
- * @property {number} swaHeadDim Head size on sliding-window layers, when it differs; 0 otherwise.
+ * @property {number} swaPeriod
+ * @property {number} nFullAttentionLayers
+ * @property {number} fullAttentionInterval
+ * @property {number} swaHeadDim
  * @property {number} trainCtx
  * @property {number} layerBytes
  * @property {number} fixedBytes
- * @property {number} splitCount 1 for a single-file model.
+ * @property {number} splitCount
  * @property {number} fileSizeBytes
  */
 
 /**
- * Parse the header of a GGUF file.
- * @param {string} filePath absolute path to a `.gguf` file
+ * @param {string} filePath
  * @returns {Promise<GgufMetadata>}
  */
 export async function parseGgufHeader(filePath) {
@@ -526,8 +480,6 @@ const cache = new Map();
 const CACHE_LIMIT = 64;
 
 /**
- * Parse a GGUF header, memoized on path + size + mtime so reopening the inspector is free.
- * Returns null rather than throwing when the file is missing or not readable as GGUF.
  * @param {string} filePath
  * @returns {Promise<GgufMetadata | null>}
  */
@@ -559,7 +511,6 @@ export async function readGgufMetadata(filePath) {
   return parsed;
 }
 
-/** Test helper — drop memoized headers. */
 export function clearGgufMetadataCache() {
   cache.clear();
 }

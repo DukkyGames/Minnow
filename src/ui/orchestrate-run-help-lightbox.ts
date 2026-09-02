@@ -1,9 +1,3 @@
-/**
- * Run-settings help lightbox: what concurrency, Running/Stopped, and the four isolation
- * modes actually do. Modelled on `git-help-lightbox.ts` — same focus trap, Escape
- * handling, and `registerChromePopover` call for Electron visibility.
- */
-
 import {
   registerChromePopover,
   unregisterChromePopover,

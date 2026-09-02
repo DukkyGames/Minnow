@@ -200,7 +200,6 @@ describe('P3-A worktree lifecycle', { concurrency: false }, () => {
       assert.equal(typeof started[0].worktree, 'string');
       assert.ok(started[0].worktree.length > 0);
       assert.equal(path.resolve(seenCwd), path.resolve(started[0].worktree));
-      // Builder pass commits; tester reuses the same tree.
       const builderWt = started.find((event) => event.role === 'builder')?.worktree;
       const testerWt = started.find((event) => event.role === 'tester')?.worktree;
       if (testerWt) assert.equal(path.resolve(testerWt), path.resolve(builderWt));
@@ -258,7 +257,6 @@ describe('P3-A worktree lifecycle', { concurrency: false }, () => {
     assert.equal(cont.ok, true, cont.error);
     assert.equal(path.resolve(cont.path), path.resolve(first.path));
 
-    // Rebase is the merge-conflict retry: same tree, same unique commits.
     assert.equal(wantsReuse({ taskId: 'C', role: 'builder', seedKind: 'rebase', sameWorktree: true }), true);
     const rebase = await allocateAttemptWorktree({
       boardId: BOARD_ID,
@@ -534,8 +532,6 @@ describe('P3-A worktree lifecycle', { concurrency: false }, () => {
     await fs.symlink(intNm, cycle, linkType);
     assert.equal(await inspectDepDir(intNm), 'broken');
 
-    // Leave ensuredBoards populated — that is the production allocate path
-    // after the first task. The next task must still start.
     const second = await allocateAttemptWorktree({
       boardId,
       taskId: 'DepB',
@@ -564,8 +560,6 @@ describe('P3-A worktree lifecycle', { concurrency: false }, () => {
   });
 
   test('no persisted worktree ownership registry exists outside the journal', async () => {
-    // In-memory live maps (inspect(), ensuredBoards) are allowed. A file or
-    // exported map that tracks ownership would be a second source of truth.
     const banned = [
       /writeFile\([^)]*(?:worktree[-_]?(?:registry|ownership|index)|allocation[-_]?map)/i,
       /\b(?:worktreeRegistry|worktreeOwnership|allocationMap)\s*=/,

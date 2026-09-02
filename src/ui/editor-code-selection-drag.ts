@@ -1,7 +1,3 @@
-/**
- * CodeMirror dragstart: selection → composer code-reference chips.
- */
-
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { setCodeSelectionDragData } from '../attachments/code-selection-drag';

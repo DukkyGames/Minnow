@@ -1,16 +1,7 @@
-/**
- * JSON schema fragments and model-facing guidance for the `ask_question` tool.
- * Keeps the OpenAI function definition and prompts aligned with runtime validation.
- */
-
 /** Canonical example passed to the model in the tool description. */
 export const ASK_QUESTION_EXAMPLE_JSON =
   '{"questions":[{"id":"q","prompt":"Pick one","options":[{"id":"a","label":"A"},{"id":"b","label":"B"}]}]}';
 
-/**
- * Tool description: required shape, field names, and common mistakes.
- * Appended to the short summary in definitions.ts.
- */
 export const ASK_QUESTION_TOOL_DESCRIPTION = [
   'questions[{id,prompt,options[{id,label}],allow_multiple?}];not question/choices/__other__.',
   'allow_multiple:true for click-all-that-apply.',

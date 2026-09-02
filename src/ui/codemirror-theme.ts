@@ -1,7 +1,3 @@
-/**
- * CodeMirror syntax highlighting aligned with highlight.js GitHub (see main.ts).
- */
-
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';

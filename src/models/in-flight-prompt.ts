@@ -26,9 +26,7 @@ function emit(): void {
   for (const fn of [...listeners]) {
     try {
       fn();
-    } catch {
-      /* one bad consumer must not kill the rest */
-    }
+    } catch {}
   }
 }
 
@@ -59,7 +57,6 @@ export function overlayMatchesActivity(
   if (current.libraryId && activity.libraryId && current.libraryId === activity.libraryId) {
     return true;
   }
-  // Chat may publish the library id or the served label as modelLabel.
   if (current.modelLabel && activity.libraryId && current.modelLabel === activity.libraryId) {
     return true;
   }

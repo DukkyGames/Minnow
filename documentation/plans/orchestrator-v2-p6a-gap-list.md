@@ -35,7 +35,7 @@ Interface (must-land, done):
 | 1 History continuation (`messages[]` / `seedKind: 'continue'`) | **Done.** Board callers that pass only `seed` stay isolated. |
 | 2 Optional report tool (`injectReportTool: false` / `reportToolName: null`) | **Done.** Default remains inject-on. No product-shaped branch in `server/runner/`. |
 | 3 `TurnResult` has no `completed` | **Done as (a):** chat maps `no_report` → turn complete. No new outcome. |
-| 4 Disable nudge + structured-outcome finalization | **Done.** `nudgeToolUse: false`, `finalizeStructuredOutcome: false`. Board omits (defaults on). |
+| 4 Disable nudge + structured-outcome finalization | **Done.** Chat: `nudgeToolUse: false`, `finalizeStructuredOutcome: false`. Board: `finalizeStructuredOutcome: false` plus a `report_outcome` nudge (must not use the sub-agent JSON-only finalization). |
 | 5 TranscriptStore suffix | **Done** as a consequence of (1), **P10-C (MIN-768):** continue persist suffixes on every settled snapshot (not once at turn end); `finally` is an idempotent backstop. Isolated persist is unchanged. |
 | 6 `execute` attachments | **Done (P10-B / MIN-767).** `TurnEvent.tool_result` carries `attachments` / `codeChange` / `isError`. Emit is `onToolDone`, so parseError and abort fills fire. Live DOM is P10-H (`renderToolResult` full arity). |
 | 7 Lifecycle events | **Done (P10-B / MIN-767) as round facts, not start/end/error/abort types.** `round_start` / `round_end` / `phase` / `reasoning_end` / `stream_meta` are what the inner loop already had. Promise + `crashed`/`timeout` still end the turn; Stop/fail presentation is a caller overlay (P10-E). |

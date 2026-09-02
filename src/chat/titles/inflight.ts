@@ -1,7 +1,3 @@
-/**
- * In-flight title job registry (avoids sessions ↔ schedule import cycle).
- */
-
 const inflight = new Map<string, AbortController>();
 
 /** Abort a title job when the chat is deleted. */

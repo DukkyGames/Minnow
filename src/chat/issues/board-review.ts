@@ -1,7 +1,3 @@
-/**
- * Orchestrate board completion → Issues status with review role (MIN-261 Phase 3).
- */
-
 import {
   isClosedStatus,
   isReviewStatus,
@@ -10,10 +6,6 @@ import {
 import { listIssues, updateIssue } from '../../state/issues-store.ts';
 import { getIssuesTaxonomySync } from '../../state/issues-taxonomy-store.ts';
 
-/**
- * When an Orchestrate board finishes, move linked issues to review.
- * Matches by boardChatId (planner chat) and/or planPath.
- */
 export function markIssuesReviewForBoardComplete(input: {
   plannerChatId?: string;
   planPath?: string;

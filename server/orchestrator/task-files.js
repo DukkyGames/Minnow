@@ -1,14 +1,5 @@
 /**
  * What a task actually changed, read from git at its merge commit.
- *
- * The journal records that a task merged and at which sha; it does not record a
- * diffstat, and it should not. A stat is derivable from the repository at any
- * time, and putting derived numbers on an append-only log is how the two get to
- * disagree. So this reads git on demand and nothing here is ever folded.
- *
- * Every failure is an empty answer, never a throw: the detail panel falls back
- * to the task's declared footprint, and a board whose worktree was pruned or
- * whose repo was moved must still open.
  */
 
 import { runProcess } from '../process-runner.js';
@@ -23,9 +14,7 @@ const MAX_FILES = 400;
 const MAX_DIFF_LINES = 4_000;
 
 /**
- * A sha reaches here from HTTP, so it is never interpolated into an argv
- * unchecked. Git would treat a leading dash as a flag.
- *
+ * A sha reaches here from HTTP, so it is never interpolated into an argv unchecked.
  * @param {unknown} sha
  * @returns {string | null}
  */
@@ -64,13 +53,6 @@ async function git(args, cwd) {
 
 /**
  * `-m --first-parent` is load-bearing.
- *
- * The merge queue lands work as real merge commits, and `git show` on a merge
- * prints *nothing* by default — the empty diffstat that would otherwise make a
- * merged task look like it changed no files. `--first-parent` asks for the diff
- * against the branch that was merged into, which is what "what did this task
- * add" means. On a squash (single parent) the flags are inert.
- *
  * @param {string} sha
  * @returns {string[]}
  */
@@ -106,8 +88,6 @@ export async function readCommitFileStats(sha, cwd = getWorkspaceRoot()) {
     const [addRaw, delRaw] = parts;
     const filePath = parts.slice(2).join('\t').trim();
     if (!filePath) continue;
-    // git writes `-` for both counts on a binary file. That is a real change
-    // with no line count, not a parse failure, so it is kept and marked.
     const binary = addRaw === '-' || delRaw === '-';
     const add = binary ? 0 : Number(addRaw);
     const del = binary ? 0 : Number(delRaw);
@@ -131,10 +111,6 @@ export async function readCommitFileStats(sha, cwd = getWorkspaceRoot()) {
 
 /**
  * Turn one file's unified patch into the rows `renderUnifiedPromptDiff` draws.
- *
- * Hunk headers survive as unchanged rows: without them a diff of three distant
- * hunks reads as one contiguous block of code that does not exist.
- *
  * @param {string} patch
  * @returns {{ lines: Array<{ type: 'unchanged' | 'add' | 'remove', text: string }>,
  *             truncated: boolean }}
@@ -150,13 +126,13 @@ export function patchToDiffLines(patch) {
       lines.push({ type: 'unchanged', text: line });
       continue;
     }
-    if (!inHunk) continue; // diff --git / index / --- / +++ preamble
+    if (!inHunk) continue;
     if (line.startsWith('+')) lines.push({ type: 'add', text: line.slice(1) });
     else if (line.startsWith('-')) lines.push({ type: 'remove', text: line.slice(1) });
     else if (line.startsWith(' ')) lines.push({ type: 'unchanged', text: line.slice(1) });
-    else if (line.startsWith('\\')) continue; // "\ No newline at end of file"
+    else if (line.startsWith('\\')) continue;
     else if (line === '') lines.push({ type: 'unchanged', text: '' });
-    else inHunk = false; // next file's preamble, on a multi-file patch
+    else inHunk = false;
   }
   const truncated = lines.length > MAX_DIFF_LINES;
   return { lines: truncated ? lines.slice(0, MAX_DIFF_LINES) : lines, truncated };

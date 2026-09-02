@@ -1,16 +1,3 @@
-/**
- * P5-A — Browser process lifecycle (MIN-719).
- *
- * Launch, health check, supervised kill, and an orphan registry drained when the
- * host exits. Everything here is written to one rule: **a hung or crashed
- * browser must never hang or crash the engine.** Every wait has a deadline,
- * every deadline ends in a kill, and a kill is idempotent.
- *
- * Port discovery is by inspection, not assumption: Chromium is launched with
- * `--remote-debugging-port=0` and writes the real port into
- * `<profileDir>/DevToolsActivePort`, which we poll for.
- */
-
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -26,15 +13,12 @@ import path from 'node:path';
  */
 
 /**
- * Every browser this process launched and has not confirmed dead.
- * Drained on host exit so a crashed engine cannot leave a browser running.
  * @type {Set<{ pid: number, profileDir: string }>}
  */
 const liveBrowsers = new Set();
 
 let exitHookInstalled = false;
 
-/** Best-effort synchronous teardown — only safe work allowed on `exit`. */
 function drainOnExit() {
   for (const entry of liveBrowsers) {
     try {
@@ -52,7 +36,6 @@ function drainOnExit() {
         }
       }
     } catch {
-      /* already gone */
     }
   }
   liveBrowsers.clear();
@@ -64,7 +47,6 @@ function installExitHook() {
   process.on('exit', drainOnExit);
 }
 
-/** Test/inspection hook: pids the driver still believes are alive. */
 export function trackedBrowserPids() {
   return [...liveBrowsers].map((e) => e.pid);
 }
@@ -81,10 +63,6 @@ function delay(ms) {
 }
 
 /**
- * Poll `<profileDir>/DevToolsActivePort` until the browser writes it.
- *
- * The file is two lines: the port, then the browser-target WS path.
- *
  * @param {string} profileDir
  * @param {number} timeoutMs
  * @param {() => boolean} hasExited
@@ -115,12 +93,6 @@ async function readDevToolsActivePort(profileDir, timeoutMs, hasExited) {
 }
 
 /**
- * HTTP health check against the DevTools endpoint.
- *
- * Used both as the post-launch readiness gate and as the "is the browser itself
- * hung, or is only the page slow?" probe. Has its own AbortSignal deadline so it
- * can never be the thing that hangs.
- *
  * @param {number} port
  * @param {number} [timeoutMs]
  * @returns {Promise<{ ok: true, version: string, browserWsUrl: string } | { ok: false, error: string }>}
@@ -143,7 +115,6 @@ export async function checkBrowserHealth(port, timeoutMs = 5_000) {
 }
 
 /**
- * List DevTools targets.
  * @param {number} port
  * @param {number} [timeoutMs]
  * @returns {Promise<Array<{ id: string, type: string, title: string, url: string, webSocketDebuggerUrl: string }>>}
@@ -157,17 +128,12 @@ export async function listTargets(port, timeoutMs = 5_000) {
 }
 
 /**
- * Spawn a browser and wait until its DevTools endpoint answers.
- *
- * Rejects (after cleaning up the process) rather than returning a half-live
- * handle. Callers translate that into a capability report.
- *
  * @param {object} input
  * @param {string} input.executablePath
  * @param {string} input.profileDir
  * @param {string[]} input.args
  * @param {number} input.launchTimeoutMs
- * @param {(reason: string) => void} [input.onExit] fired when the browser dies unprompted
+ * @param {(reason: string) => void} [input.onExit]
  * @returns {Promise<BrowserProcessHandle>}
  */
 export async function launchBrowserProcess(input) {
@@ -175,7 +141,6 @@ export async function launchBrowserProcess(input) {
 
   const child = spawn(input.executablePath, input.args, {
     windowsHide: true,
-    // Own process group on posix so a supervised kill can take the whole tree.
     detached: process.platform !== 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -230,8 +195,6 @@ export async function launchBrowserProcess(input) {
     return await fail(`browser published port ${active.port} but /json/version failed: ${health.error}`);
   }
 
-  // Late death: once we return, an unprompted exit is the session's problem, not
-  // the launcher's. Deregister so the exit hook does not chase a dead pid.
   child.on('exit', () => {
     liveBrowsers.delete(entry);
     input.onExit?.(exitReason ?? 'browser exited');
@@ -252,13 +215,6 @@ export async function launchBrowserProcess(input) {
 }
 
 /**
- * Supervised kill: escalate to a forced tree kill and wait for the exit.
- *
- * Idempotent, never throws, always resolves — a kill that cannot be confirmed
- * resolves `{ killed: false }` rather than leaving the caller waiting. On win32
- * `taskkill /T /F` is the only reliable way to take Chromium's child processes
- * (renderers, GPU, utility) with it.
- *
  * @param {import('node:child_process').ChildProcess} child
  * @param {{ graceMs?: number, waitMs?: number }} [opts]
  * @returns {Promise<{ killed: boolean, alreadyDead: boolean }>}
@@ -283,21 +239,16 @@ export async function killBrowserProcess(child, opts = {}) {
         windowsHide: true,
         stdio: 'ignore',
       });
-      // Without an error listener an ENOENT here becomes an unhandled 'error'
-      // that takes the host down — the exact failure mode this module exists to
-      // avoid (see server/terminal-runner.js killProcessTree).
       killer.on('error', () => {
         try {
           child.kill('SIGKILL');
         } catch {
-          /* gone */
         }
       });
     } catch {
       try {
         child.kill('SIGKILL');
       } catch {
-        /* gone */
       }
     }
   } else {
@@ -308,7 +259,6 @@ export async function killBrowserProcess(child, opts = {}) {
       try {
         child.kill('SIGTERM');
       } catch {
-        /* gone */
       }
     }
     const gracePassed = await Promise.race([exited, delay(grace).then(() => false)]);
@@ -319,7 +269,6 @@ export async function killBrowserProcess(child, opts = {}) {
         try {
           child.kill('SIGKILL');
         } catch {
-          /* gone */
         }
       }
     }
@@ -331,7 +280,6 @@ export async function killBrowserProcess(child, opts = {}) {
 }
 
 /**
- * Is a pid still running? Used by tests and the orphan check.
  * @param {number} pid
  * @returns {boolean}
  */

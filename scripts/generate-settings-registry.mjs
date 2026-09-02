@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Generate server/settings/registry-manifest.json from the client field registry.
- * Run: npm run settings-registry:generate
- */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';

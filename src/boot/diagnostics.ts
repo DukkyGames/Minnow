@@ -13,6 +13,8 @@ import {
 import { getWorkspacePath } from '../state/workspace';
 import { setStatus } from '../ui/status';
 
+// ── Surface keys ─────────────────────────────────────────────────────────────
+
 const KEY_DEDUPE_MS = 10_000;
 const BUG_CARD_WINDOW_MS = 60_000;
 const BUG_CARD_CAP = 5;
@@ -105,6 +107,8 @@ export function isBenignResizeObserverLoopError(message: string): boolean {
   return RESIZE_OBSERVER_LOOP_RE.test(message.trim());
 }
 
+// ── Report ───────────────────────────────────────────────────────────────────
+
 function report(kind: string, message: string, stack?: string): void {
   const key = buildSurfaceKey(kind, message, stack);
   const decision = shouldSurface(key, Date.now());
@@ -113,7 +117,6 @@ function report(kind: string, message: string, stack?: string): void {
 
   window.minnow?.diagnostics?.reportError({ kind, message, stack });
 
-  // Mirror to server JSONL when the tool server is reachable (browser tab + Electron).
   void fetch('/api/diagnostics/report', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -124,7 +127,6 @@ function report(kind: string, message: string, stack?: string): void {
       surface: window.location.hash || 'app',
     }),
   }).catch(() => {
-    /* offline or Vite-only — Electron IPC may still capture */
   });
 
   setStatus('err', truncateStatus(message));
@@ -138,7 +140,6 @@ function report(kind: string, message: string, stack?: string): void {
     if (surfaceState.suppressionBugId) {
       updateIssue(surfaceState.suppressionBugId, { notes: description });
     } else {
-      // Stable legacy-style id so suppression updates can find the same card.
       const issueId = `bug-crash-${Date.now().toString(36)}`;
       addIssue(
         {
@@ -186,6 +187,8 @@ function report(kind: string, message: string, stack?: string): void {
     dedupeKey: `crash:${key}`,
   });
 }
+
+// ── Install ──────────────────────────────────────────────────────────────────
 
 /** Install global renderer error handlers and recover last renderer crash marker. */
 export function installRendererDiagnostics(): void {

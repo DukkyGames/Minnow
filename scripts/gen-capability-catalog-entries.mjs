@@ -1,7 +1,3 @@
-/**
- * One-off helper to emit catalog-entries.ts from the capability matrix workbook.
- * Regenerate if spreadsheet columns change (order must stay stable).
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -14,6 +10,8 @@ const xlsxPath = path.join(ROOT, 'documentation/minnow-model-capability-matrix.x
 const outPath = path.join(ROOT, 'src/benchmark/capabilities/catalog-entries.ts');
 
 fs.mkdirSync(path.dirname(outPath), { recursive: true });
+
+// ── Header maps ──────────────────────────────────────────────────────────────
 
 const GROUP_BY_HEADER_PREFIX = [
   { prefix: 'Streaming', group: 'core-protocol' },
@@ -149,14 +147,6 @@ const ID_BY_HEADER = {
   'Markdown & code fences': 'features-markdown',
 };
 
-/**
- * Rows with no automatable model-side signal. Everything else that once lived here —
- * browser, sub-agent control, board, recall, email, calendar — now runs as an emit-only
- * probe (src/benchmark/capabilities/probes-auto-*).
- *
- * The spreadsheet still lists a Modes band; those columns are omitted from the shipped
- * catalog because they duplicate mode-control / feature coverage without useful signal.
- */
 const MANUAL_IDS = new Set([
   'features-research',
   'features-compare',
@@ -171,10 +161,6 @@ const MANUAL_REASONS = {
   'features-voice': 'Voice round trip needs microphone hardware and UI capture.',
 };
 
-/**
- * Rows whose automated probe is narrower than the human test the spreadsheet describes.
- * The note is appended to `passCriteria` so the Settings grid says what the score covers.
- */
 const AUTO_SCOPE_NOTES = {
   'browser-navigate': 'Probe scores the tool calls the model emits; the browser pane is stubbed.',
   'browser-snapshot':
@@ -188,8 +174,9 @@ const AUTO_SCOPE_NOTES = {
   'apps-calendar': 'Probe scores the emitted manage_calendar call; the provider is stubbed.',
 };
 
-/** Spreadsheet columns we intentionally omit from the shipped catalog. */
 const SKIP_GROUP = 'modes';
+
+// ── Parsers ──────────────────────────────────────────────────────────────────
 
 function parseTier(comment) {
   const m = comment.match(/Tier (\d)/);
@@ -209,26 +196,19 @@ function inferGroup(header) {
   throw new Error(`no group for ${header}`);
 }
 
-/**
- * Human-readable test instruction for the Settings grid and the xlsx test guide.
- *
- * This is documentation, not the probe input — auto probes send the authored message in
- * `src/benchmark/capabilities/probe-prompts.ts`. The old rules sliced `howToTest` on
- * "Ask " and "->" and produced fragments ("a task needing 4+ chained calls (grep"), so
- * anything that does not reduce to a clean sentence keeps `howToTest` verbatim.
- */
 function buildPrompt(howToTest) {
   const quoted = howToTest.match(/^'([^']+)'/);
   if (quoted) return quoted[1];
   const asked = howToTest.match(/^Ask ('([^']+)'|[^.]+?)\s*(?:->|\.|$)/i);
   if (asked) {
     const body = (asked[2] ?? asked[1]).trim().replace(/\.$/, '');
-    // "for a plan", "a task needing 4+ chained calls (grep" — fragments, not instructions.
     if (/^(for|a|an|the|it)\b/i.test(body) || /[([]$/.test(body)) return howToTest;
     return body.charAt(0).toUpperCase() + body.slice(1);
   }
   return howToTest;
 }
+
+// ── Sheet walk ───────────────────────────────────────────────────────────────
 
 const wb = XLSX.readFile(xlsxPath, { cellComments: true });
 const sheet = wb.Sheets['Cloud'];
@@ -277,6 +257,8 @@ for (let C = 10; C <= range.e.c; C++) {
 if (entries.length !== 58) throw new Error(`expected 58 entries, got ${entries.length}`);
 const autoCount = entries.filter((e) => e.scoreMode === 'auto').length;
 if (autoCount !== 54) throw new Error(`expected 54 auto, got ${autoCount}`);
+
+// ── Write file ───────────────────────────────────────────────────────────────
 
 const lines = [
   '/**',

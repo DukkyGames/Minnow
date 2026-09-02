@@ -1,7 +1,3 @@
-/**
- * Drag #rightPaneSplitResizer to resize primary vs secondary right-pane slots.
- */
-
 import {
   RIGHT_PANE_SPLIT_RATIO_MAX,
   RIGHT_PANE_SPLIT_RATIO_MIN,

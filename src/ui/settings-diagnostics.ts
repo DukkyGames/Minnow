@@ -38,6 +38,8 @@ type DiagnosticErrorGroup = {
 
 type SourceFilter = 'all' | 'renderer' | 'server' | 'electron';
 
+// ── Fetch ────────────────────────────────────────────────────────────────────
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -84,6 +86,8 @@ async function fetchDiagnosticLogs(source: SourceFilter): Promise<Record<string,
   const body = (await res.json()) as { lines?: Record<string, unknown>[] };
   return body.lines ?? [];
 }
+
+// ── Lists ────────────────────────────────────────────────────────────────────
 
 function renderFilterRow(
   onChange: (source: SourceFilter) => void,
@@ -177,6 +181,8 @@ function renderLogTail(host: HTMLElement, lines: Record<string, unknown>[]): voi
   pre.textContent = lines.map((line) => JSON.stringify(line)).join('\n');
   host.appendChild(pre);
 }
+
+// ── Render ───────────────────────────────────────────────────────────────────
 
 /** Populate Settings → Advanced → Health & diagnostics. */
 export async function renderDiagnosticsSettingsSection(): Promise<void> {

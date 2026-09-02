@@ -34,7 +34,6 @@ const FILE_TOOL_MIDDLE_ORDER = [
   'create_pdf',
   'create_spreadsheet',
   'create_word_document',
-  // After create_* so the probe can extract text from the PDF just written.
   'read_document',
 ] as const;
 

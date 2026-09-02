@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Compile the Electron main/preload (tsc + preload .mjs rename).
- * Shared by postinstall, spawn-electron, and npm run electron:build.
- */
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -14,7 +10,6 @@ const tscBin = path.join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc');
 const renameScript = path.join(repoRoot, 'scripts', 'rename-preload-mjs.mjs');
 
 /**
- * Run tsc for electron/ and rename preload.js → preload.mjs.
  * @param {{ stdio?: 'inherit' | 'pipe' | 'ignore' }} [options]
  */
 export function buildElectronMain(options = {}) {

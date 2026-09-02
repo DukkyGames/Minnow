@@ -1,17 +1,9 @@
-/**
- * Address-bar parsing and file URL helpers for the in-app Chromium preview.
- */
-
 const HTTP_URL_RE = /^https?:\/\//i;
 const FILE_URL_RE = /^file:\/\//i;
 const WINDOWS_ABS_RE = /^[a-zA-Z]:[\\/]/;
 const IPV4_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
 const DOMAIN_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i;
 
-/**
- * Common TLDs we recognize for bare-hostname auto-prefixing in the address bar.
- * Distinguishes `example.com` (host → URL) from `index.html` (file → workspace).
- */
 const COMMON_TLDS = new Set([
   'com', 'org', 'net', 'edu', 'gov', 'mil', 'int', 'info', 'biz', 'name',
   'io', 'dev', 'app', 'ai', 'co', 'me', 'tv', 'cc', 'gg', 'sh', 'ly',
@@ -61,17 +53,12 @@ export interface ParsePreviewAddressOptions {
   allowLocalFiles?: boolean;
 }
 
-/**
- * Detect inputs like `google.com`, `www.example.co.uk/path`, `localhost:5173`,
- * or `127.0.0.1:8080` and return a fully-qualified URL. Returns null when the
- * input doesn't look like a host (so `index.html` / `src/foo.ts` stay workspace-relative).
- */
+/** Detect inputs like `google.com`, `www.example.co.uk/path`, `localhost:5173`, or `127.0.0.1:8080` and return a fully-qualified URL. */
 export function tryUrlFromBareHost(input: string): string | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
   if (HTTP_URL_RE.test(trimmed) || FILE_URL_RE.test(trimmed)) return null;
 
-  // Split host[:port] from the rest. Path/query/fragment may follow either form.
   const sepMatch = trimmed.match(/[/?#]/);
   const hostAndPort = sepMatch ? trimmed.slice(0, sepMatch.index) : trimmed;
   if (!hostAndPort) return null;

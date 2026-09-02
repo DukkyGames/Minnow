@@ -1,10 +1,6 @@
-/**
- * Shared SessionState chat/group/scalar normalization (plain JS + JSDoc).
- * Imported by server validators and the SPA sessions module so PUT/PATCH and
- * client load stay on one allowlist (sessions SQLite migration Phase B.1).
- */
-
 import { foldLeftoverBoardAutonomy } from '../lib/leftover-autonomy.mjs';
+
+// ── Plan paths ───────────────────────────────────────────────────────────────
 
 /** Inline copy of server/config/orchestrate-plan-path.js (avoid server→client coupling). */
 const ORCHESTRATE_PLANS_PREFIX = 'documentation/plans/';
@@ -37,11 +33,10 @@ function randomChatId() {
 const PLACEHOLDER_CHAT_NAME = 'New chat';
 /** Wire SessionState.version (not SQLite PRAGMA user_version). */
 export const SESSION_SCHEMA_VERSION = 6;
-/**
- * Chat fields rebuilt by {@link normalizeChatRow}'s explicit allowlist that still must
- * survive PUT/validate/PATCH. Named keys only — never `{...row, ...out}` (that would reopen
- * the injection surface for unknown/prototype-polluting properties).
- */
+
+// ── Chat fields ──────────────────────────────────────────────────────────────
+
+/** Chat fields that must survive PUT/validate/PATCH. */
 const CHAT_PASSTHROUGH_KEYS = new Set([
   'subAgentRuns',
   'todos',
@@ -62,8 +57,6 @@ const CHAT_PASSTHROUGH_KEYS = new Set([
   'pendingMessageQueue',
   'pendingModeId',
   'turnError',
-  // C.2 lazy summaries: denormalized count must survive ensureChatShape so rails
-  // stay listable before history hydrate (missing count → empty sidebar + prune wipe).
   'messageCount',
 ]);
 const MAX_GOAL_CONDITION_CHARS = 4000;
@@ -218,6 +211,8 @@ function newChatId() {
   return randomChatId();
 }
 
+// ── Board log ────────────────────────────────────────────────────────────────
+
 const BOARD_TASK_STATUSES = new Set([
   'planned',
   'in_progress',
@@ -233,7 +228,6 @@ const BOARD_CATEGORIES = new Set(['build', 'fix', 'test', 'research']);
 const BOARD_LOG_MAX = 500;
 const BOARD_LOG_LEVELS = new Set(['info', 'warn', 'error']);
 const BOARD_LOG_TYPES = new Set([
-  // Leftover V1 session log vocabulary (hydrate only — not a live tool).
   'board_init',
   'mode_change',
   'auto_start',
@@ -385,6 +379,8 @@ function ensureBoardCategory(raw) {
   return typeof raw === 'string' && BOARD_CATEGORIES.has(raw) ? raw : null;
 }
 
+// ── Board task ───────────────────────────────────────────────────────────────
+
 function ensureBoardTask(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const r = /** @type {Record<string, unknown>} */ (raw);
@@ -485,7 +481,6 @@ function ensureBoardTask(raw) {
   if (typeof r.apiPort === 'number' && Number.isFinite(r.apiPort)) {
     out.apiPort = r.apiPort;
   }
-  // quarantine payload
   if (r.quarantine && typeof r.quarantine === 'object') {
     const q = /** @type {Record<string, unknown>} */ (r.quarantine);
     const QUARANTINE_CATEGORIES = new Set(['infra', 'code', 'merge', 'stall', 'unknown']);
@@ -637,8 +632,6 @@ function ensureOrchestrateBoard(raw) {
   if (typeof r.finishReport === 'string' && r.finishReport.trim()) {
     out.finishReport = r.finishReport.trim();
   }
-  // V1 six-flag autonomy collapses here. Stale inbound keys are read by the
-  // folder and never copied onto `out`, so a later save cannot persist them.
   foldLeftoverBoardAutonomy(out, r);
   if (typeof r.worktreeSlug === 'string' && r.worktreeSlug.trim()) {
     out.worktreeSlug = r.worktreeSlug.trim().slice(0, 64);
@@ -710,6 +703,8 @@ function ensureOrchestrateBoard(raw) {
   }
   return out;
 }
+
+// ── Groups ───────────────────────────────────────────────────────────────────
 
 /**
  * Normalize one ChatGroup row (sidebar folder / board). Returns null when invalid.
@@ -905,6 +900,8 @@ function ensureActiveLoops(raw) {
   return out.length ? out : undefined;
 }
 
+// ── Chat links ───────────────────────────────────────────────────────────────
+
 /** Cap standing chat link chips so a drop loop cannot bloat the session blob. */
 const MAX_CHAT_LINKS = 32;
 const CHAT_LINK_PATH_MAX = 512;
@@ -935,7 +932,6 @@ function ensureChatLink(raw) {
     const path =
       typeof r.path === 'string' ? r.path.trim().replace(/\\/g, '/') : '';
     if (!path || path.includes('\n') || path.length > CHAT_LINK_PATH_MAX) return null;
-    // Attachment-snapshot tabs are not workspace files.
     if (path.startsWith('.minnow/attachments/')) return null;
     const labelRaw = typeof r.label === 'string' ? r.label.trim() : '';
     const fallback = path.split('/').filter(Boolean).pop() || path;
@@ -977,6 +973,8 @@ export function ensureChatLinks(raw) {
   return out.length ? out : undefined;
 }
 
+// ── Chat row ─────────────────────────────────────────────────────────────────
+
 /**
  * Normalize one Chat row for persistence (whole-blob PUT and PATCH).
  * Null/invalid input yields a placeholder chat (same as historical ensureChatShape).
@@ -1013,7 +1011,6 @@ export function normalizeChatRow(raw) {
       : '';
 
   const currentGenerationId = ensureCurrentGenerationId(row.currentGenerationId);
-  // Boot resume gate: survives Quit Minnow after generations are cancelled.
   const resumeInterrupted = row.resumeInterrupted === true;
 
   const orchestratePlanPath = normalizeOrchestratePlanPath(row.orchestratePlanPath);
@@ -1078,7 +1075,6 @@ export function normalizeChatRow(raw) {
       ? { gitBranch: row.gitBranch.trim() }
       : {}),
     ...(row.chatWorktreeManaged === true ? { chatWorktreeManaged: true } : {}),
-    // Match client ensureChatShape defaults so load/validate stay symmetric.
     workAgentId:
       typeof row.workAgentId === 'string' && row.workAgentId.trim()
         ? row.workAgentId.trim()
@@ -1120,7 +1116,6 @@ export function normalizeChatRow(raw) {
           : Date.now(),
   };
 
-  // Copy only allowlisted keys that were previously dropped by the rebuilder.
   for (const key of CHAT_PASSTHROUGH_KEYS) {
     if (Object.prototype.hasOwnProperty.call(row, key) && row[key] !== undefined) {
       out[key] = row[key];
@@ -1129,6 +1124,8 @@ export function normalizeChatRow(raw) {
 
   return out;
 }
+
+// ── Session scalars ──────────────────────────────────────────────────────────
 
 /**
  * Normalize session-level scalars (everything except chats/groups).
@@ -1155,7 +1152,6 @@ export function normalizeSessionScalars(raw, options = {}) {
   const out = {};
 
   if (mode === 'full' || has('version')) {
-    // Wire schema version is always bumped to current on write.
     out.version = SESSION_SCHEMA_VERSION;
   }
 
@@ -1198,7 +1194,6 @@ export function normalizeSessionScalars(raw, options = {}) {
       out.codeChangeTotalsByWorkspace = parsed.codeChangeTotalsByWorkspace;
     }
   } else {
-    // Partial PATCH: normalize present optional keys; allow explicit null to clear.
     if (has('sidebarWidth')) {
       if (typeof parsed.sidebarWidth === 'number' && Number.isFinite(parsed.sidebarWidth)) {
         out.sidebarWidth = Math.min(520, Math.max(200, Math.round(parsed.sidebarWidth)));

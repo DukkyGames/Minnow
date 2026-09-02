@@ -1,13 +1,3 @@
-/**
-
- * Live in-page filter for settings search (MIN-130).
-
- * Dims non-matching rows and shows match counts on the unified sidebar.
-
- */
-
-
-
 import { SETTINGS_FIELD_CATALOG } from './settings-catalog';
 
 import {
@@ -34,17 +24,13 @@ import { rankSettingsSearch } from './settings-search-rank';
 
 import { updateSettingsNavActive } from './settings-search-navigate';
 
-
-
 const HIDDEN_CLASS = 'is-filter-hidden';
 
 const DIM_CLASS = 'is-filter-dim';
 
-
-
 let cachedFieldKeys: Set<string> | null = null;
 
-
+// ── Match ────────────────────────────────────────────────────────────────────
 
 function matchingFieldKeys(query: string): Set<string> {
 
@@ -67,8 +53,6 @@ function matchingFieldKeys(query: string): Set<string> {
   return keys;
 
 }
-
-
 
 function countMatchesByCategory(keys: Set<string>): Map<SettingsCategoryId, number> {
 
@@ -116,8 +100,6 @@ function countMatchesByCategory(keys: Set<string>): Map<SettingsCategoryId, numb
 
 }
 
-
-
 function countMatchesByArea(keys: Set<string>): Map<SettingsSectionId, number> {
 
   const counts = new Map<SettingsSectionId, number>();
@@ -162,8 +144,6 @@ function countMatchesByArea(keys: Set<string>): Map<SettingsSectionId, number> {
 
 }
 
-
-
 function countMatchesByHub(keys: Set<string>): Map<string, number> {
 
   const counts = new Map<string, number>();
@@ -190,7 +170,7 @@ function countMatchesByHub(keys: Set<string>): Map<string, number> {
 
 }
 
-
+// ── Badges ───────────────────────────────────────────────────────────────────
 
 function setBadge(el: Element | null | undefined, count: number): void {
 
@@ -216,8 +196,6 @@ function setBadge(el: Element | null | undefined, count: number): void {
 
 }
 
-
-
 function updateSidebarCounts(
 
   categoryCounts: Map<SettingsCategoryId, number>,
@@ -240,8 +218,6 @@ function updateSidebarCounts(
 
   }
 
-
-
   document.querySelectorAll<HTMLElement>('[data-settings-nav-area]').forEach((item) => {
 
     const area = item.dataset.settingsNavArea as SettingsSectionId | undefined;
@@ -251,8 +227,6 @@ function updateSidebarCounts(
     setBadge(item.querySelector('.settings-nav__count'), areaCounts.get(area) ?? 0);
 
   });
-
-
 
   document.querySelectorAll<HTMLElement>('[data-settings-nav-hub]').forEach((item) => {
 
@@ -266,15 +240,11 @@ function updateSidebarCounts(
 
 }
 
-
-
 function filterActiveCategory(keys: Set<string>): void {
 
   const activePanel = document.querySelector('.settings-category.is-active');
 
   if (!activePanel) return;
-
-
 
   const filtering = keys.size > 0;
 
@@ -287,8 +257,6 @@ function filterActiveCategory(keys: Set<string>): void {
     filtering && activePanel.getAttribute('data-category') === 'integrations',
 
   );
-
-
 
   if (filtering) {
 
@@ -310,8 +278,6 @@ function filterActiveCategory(keys: Set<string>): void {
 
   }
 
-
-
   const rows = activePanel.querySelectorAll('[data-settings-search-key]');
 
   rows.forEach((node) => {
@@ -327,8 +293,6 @@ function filterActiveCategory(keys: Set<string>): void {
     node.classList.toggle(DIM_CLASS, false);
 
   });
-
-
 
   const areas = activePanel.querySelectorAll('.settings-area');
 
@@ -352,8 +316,6 @@ function filterActiveCategory(keys: Set<string>): void {
 
   });
 
-
-
   if (activePanel.getAttribute('data-category') === 'integrations' && filtering) {
 
     activePanel.querySelectorAll<HTMLElement>('.settings-hub').forEach((hub) => {
@@ -376,7 +338,7 @@ function filterActiveCategory(keys: Set<string>): void {
 
 }
 
-
+// ── Apply ────────────────────────────────────────────────────────────────────
 
 /** Apply query: dim/hide non-matches in the active category; badge sidebar groups and items. */
 
@@ -400,8 +362,6 @@ export function applySettingsPageFilter(query: string): void {
 
 }
 
-
-
 function getActiveAreaFromDom(): SettingsSectionId {
   const active = document.querySelector(
     '[data-settings-nav-area][aria-current="page"]',
@@ -419,8 +379,6 @@ function restoreActiveAreaView(): void {
   const panel = document.querySelector(`.settings-category[data-category="${category}"]`);
 
   if (!panel) return;
-
-
 
   if (category === 'integrations') {
 
@@ -448,8 +406,6 @@ function restoreActiveAreaView(): void {
 
   }
 
-
-
   panel.querySelectorAll<HTMLElement>('.settings-area').forEach((section) => {
 
     section.classList.toggle('is-active', section.dataset.area === area);
@@ -460,7 +416,7 @@ function restoreActiveAreaView(): void {
 
 }
 
-
+// ── Clear ────────────────────────────────────────────────────────────────────
 
 /** Restore all rows and clear sidebar badges. */
 
@@ -506,8 +462,6 @@ export function clearSettingsPageFilter(): void {
 
 }
 
-
-
 /** Re-run filter after category switch (if a query is active). */
 
 export function refreshSettingsPageFilterForCategory(): void {
@@ -517,5 +471,4 @@ export function refreshSettingsPageFilterForCategory(): void {
   filterActiveCategory(cachedFieldKeys);
 
 }
-
 

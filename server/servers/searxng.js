@@ -1,7 +1,3 @@
-/**
- * SearXNG managed server provisioner — standalone Python + venv + settings.yml.
- */
-
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -27,21 +23,12 @@ import {
 
 const SERVER_ID = 'searxng';
 
-/** python-build-standalone release tag (cpython 3.12.x). */
 const PYTHON_STANDALONE_RELEASE = '20250205';
 const PYTHON_STANDALONE_VERSION = '3.12.9';
 
-/**
- * Official SearXNG from GitHub (PyPI "searxng" is an unrelated MCP wrapper).
- * Installed from a release zip — git+pip fails on Windows (colon paths in the repo).
- */
 const SEARXNG_GIT_REF = 'e964708c0';
 export const SEARXNG_SOURCE_REF = SEARXNG_GIT_REF;
 
-/**
- * Unix deployment templates in the upstream repo (symlinks + colon gitlink paths).
- * Not needed for pip install; tar extraction fails on Windows without excludes (MIN-158).
- */
 export const SEARXNG_ZIP_TAR_EXCLUDES = ['*utils/templates*'];
 
 /**
@@ -73,7 +60,6 @@ function pythonStandaloneDownloadUrl(assetName) {
   return `https://github.com/astral-sh/python-build-standalone/releases/download/${PYTHON_STANDALONE_RELEASE}/${assetName}`;
 }
 
-/** True when a path is the stdlib venv template stub, not a real interpreter. */
 export function isVenvTemplatePython(exePath) {
   const normalized = exePath.replace(/\\/g, '/').toLowerCase();
   return (
@@ -82,21 +68,16 @@ export function isVenvTemplatePython(exePath) {
   );
 }
 
-/** Versioned interpreter filename in python-build-standalone (e.g. python3.12). */
 function standalonePythonVersionedBinaryName() {
   const [major, minor] = PYTHON_STANDALONE_VERSION.split('.');
   return `python${major}.${minor}`;
 }
 
-/** True when exePath exists on disk and is not a stdlib venv template stub. */
 function isStandalonePythonCandidate(exePath) {
   return Boolean(exePath) && fs.existsSync(exePath) && !isVenvTemplatePython(exePath);
 }
 
 /**
- * python-build-standalone ships bin/python3 as a symlink. Default fs.cp can leave
- * absolute symlinks into the temp extract dir; after cleanup spawn ENOENT (MIN-432).
- * Re-link bin/python3 and bin/python relative to the versioned interpreter when found.
  * @param {string} runtimeDir
  * @returns {Promise<string | null>}
  */
@@ -131,9 +112,6 @@ export async function repairStandalonePythonBinSymlinks(runtimeDir) {
 }
 
 /**
- * Resolve python.exe / python3 after extracting install_only archive.
- * install_only layouts put the interpreter at the extract root (e.g. runtime/python.exe),
- * not under runtime/python/python.exe — avoid walking into Lib/venv template stubs.
  * @param {string} pythonRoot
  * @returns {Promise<string>}
  */
@@ -194,7 +172,6 @@ export async function findStandalonePythonExe(pythonRoot) {
 }
 
 /**
- * True when pythonExe is a real interpreter (not a venv template stub).
  * @param {string | null | undefined} exePath
  * @returns {Promise<boolean>}
  */
@@ -236,7 +213,7 @@ async function writePythonRuntimeMeta(pythonRoot, pythonExe, extra = {}) {
 
 /**
  * @param {(message: string) => void} [onProgress]
- * @returns {Promise<string>} path to standalone python executable
+ * @returns {Promise<string>}
  */
 export async function ensureStandalonePython(onProgress) {
   const pythonRoot = getServersPythonDir();
@@ -246,14 +223,12 @@ export async function ensureStandalonePython(onProgress) {
   try {
     meta = JSON.parse(await fsp.readFile(metaPath, 'utf8'));
   } catch {
-    /* first install */
   }
 
   if (await verifyStandalonePythonExe(meta?.pythonExe)) {
     return meta.pythonExe;
   }
 
-  // Stale meta from an older installer (e.g. Lib/venv template python.exe) — repair without re-download.
   if (fs.existsSync(runtimeDir)) {
     onProgress?.('Repairing Python runtime');
     try {
@@ -266,7 +241,6 @@ export async function ensureStandalonePython(onProgress) {
         return repaired;
       }
     } catch {
-      /* fall through to full download */
     }
   }
 
@@ -286,7 +260,6 @@ export async function ensureStandalonePython(onProgress) {
       const expected = (await fsp.readFile(shaPath, 'utf8')).trim().split(/\s+/)[0];
       if (expected) await verifySha256(archivePath, expected);
     } catch {
-      /* checksum file optional */
     }
 
     const extractDir = path.join(tmpRoot, 'extract');
@@ -299,7 +272,6 @@ export async function ensureStandalonePython(onProgress) {
     const targetDir = path.join(pythonRoot, 'runtime');
     await fsp.rm(targetDir, { recursive: true, force: true });
     await fsp.mkdir(path.dirname(targetDir), { recursive: true });
-    // Preserve relative symlinks — default cp can leave absolute links into tmp (MIN-432).
     await fsp.cp(inner, targetDir, { recursive: true, verbatimSymlinks: true });
 
     await repairStandalonePythonBinSymlinks(targetDir);
@@ -314,29 +286,11 @@ export async function ensureStandalonePython(onProgress) {
   }
 }
 
-/** @param {string} venvDir @returns {string} */
+/** @param {string} venvDir */
 function venvPythonPath(venvDir) {
   return venvPythonExe(venvDir);
 }
 
-/**
- * Engine overrides merged into upstream defaults (see searx settings_loader.update_settings).
- *
- * Bing is disabled in stock SearXNG but tends to stay up on loopback. It is NOT trusted
- * alone: for queries it has no cached SERP for, Bing answers HTTP 200 with the correct
- * <title> and searchbox echo but 10 `li.b_algo` blocks belonging to unrelated queries.
- * That is a fail-open mode no result-count check can catch, so DuckDuckGo is kept on as
- * a second general engine — it rate-limits to *zero* results, which the provider chain
- * already handles, and its results corroborate or outrank Bing's junk.
- *
- * stackoverflow is promoted into `general` because dev queries are exactly the long-tail
- * ones Bing decoys on. The rest of the `it` category stays out: mdn and docker hub are
- * keyword matchers that dilute badly (e.g. "chokidar v4 watch options" -> MDN
- * Geolocation.watchPosition).
- *
- * brave/startpage stay disabled — they rate-limit automated metasearch hard enough to
- * return nothing useful, so they only cost latency.
- */
 export const SEARXNG_ENGINE_OVERRIDES_YAML = `
 engines:
   - name: bing
@@ -352,15 +306,9 @@ engines:
     disabled: true
 `;
 
-/** Matches the generated `secret_key: "<64 hex>"` line so it survives a rewrite. */
 const SECRET_KEY_RE = /secret_key:\s*"([0-9a-f]{64})"/;
 
 /**
- * Reuse the secret key already in settings.yml.
- *
- * SearXNG derives its cache hash token from `server.secret_key`, so minting a new key on
- * every launch made it truncate all cache tables on startup
- * (`[DATA_CACHE] hash token changed`). Generate once, then keep.
  * @returns {Promise<string>}
  */
 async function readOrCreateSecretKey() {
@@ -371,7 +319,6 @@ async function readOrCreateSecretKey() {
       return match[1];
     }
   } catch {
-    /* first write */
   }
   return randomBytes(32).toString('hex');
 }
@@ -423,14 +370,11 @@ function getSearxngSourceDir() {
   return path.join(getServerDir(SERVER_ID), 'src');
 }
 
-/** Marker written when valkeydb.py has been patched for Windows (idempotent). */
 const VALKEYDB_WINDOWS_PATCH_MARKER = 'Minnow Windows compatibility patch';
 
 /**
- * SearXNG imports Unix-only `pwd` at module load; patch valkeydb.py on Windows.
- * Upstream does not support Windows (searxng/searxng#5411); limiter is off in our settings.
  * @param {string} valkeydbPath
- * @returns {Promise<boolean>} true when file was patched or already patched
+ * @returns {Promise<boolean>}
  */
 export async function patchValkeydbForWindows(valkeydbPath) {
   if (process.platform !== 'win32') {
@@ -473,7 +417,6 @@ function venvValkeydbPath(venvDir) {
 }
 
 /**
- * Apply Windows-only patches to cached source and installed venv package.
  * @param {{ sourceDir: string, venvDir: string }} paths
  */
 async function applyWindowsCompatibilityPatches({ sourceDir, venvDir }) {
@@ -485,7 +428,6 @@ async function applyWindowsCompatibilityPatches({ sourceDir, venvDir }) {
 }
 
 /**
- * Download SearXNG sources and pip-install into the venv (Windows-safe zip path).
  * @param {string} venvPython
  * @param {(message: string) => void} [onProgress]
  */
@@ -660,7 +602,6 @@ export async function uninstall() {
   try {
     await fsp.rm(serverDir, { recursive: true, force: true });
   } catch {
-    /* ignore */
   }
   return { ok: true };
 }

@@ -78,6 +78,8 @@ function roundTripHistory(chat: Chat): Message[] {
   return JSON.parse(JSON.stringify(wire.history ?? [])) as Message[];
 }
 
+// ── resolveFailedTurnPartialRow ──────────────────────────────────────────────
+
 describe('resolveFailedTurnPartialRow', () => {
   test('keeps partial prose and reasoning on a failed row', () => {
     const row = resolveFailedTurnPartialRow({
@@ -127,6 +129,8 @@ describe('resolveFailedTurnPartialRow', () => {
   });
 });
 
+// ── persistFailedTurnPartial ─────────────────────────────────────────────────
+
 describe('persistFailedTurnPartial', () => {
   test('appends a failed assistant row onto the chat', () => {
     const chat = makeChat();
@@ -158,6 +162,8 @@ describe('persistFailedTurnPartial', () => {
     assert.equal(chat.history.length, 1);
   });
 });
+
+// ── failed assistant affordance ──────────────────────────────────────────────
 
 describe('failed assistant affordance', () => {
   test('markMessageFailed adds chip to assistant row', () => {
@@ -204,6 +210,8 @@ describe('failed assistant affordance', () => {
   });
 });
 
+// ── failed-turn recovery chrome ──────────────────────────────────────────────
+
 describe('failed-turn recovery chrome', () => {
   test('error bubble offers Continue and Clear instead of rewind-and-retry', async () => {
     setupDom();
@@ -229,6 +237,8 @@ describe('failed-turn recovery chrome', () => {
     assert.equal(host.querySelectorAll('.msg-error-recover-actions').length, 1);
   });
 });
+
+// ── P10-E runChatTurn ────────────────────────────────────────────────────────
 
 describe('P10-E runChatTurn failed-turn persist (MIN-770)', () => {
   afterEach(() => {

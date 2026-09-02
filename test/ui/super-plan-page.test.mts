@@ -143,6 +143,8 @@ function textOf(root: ParentNode, selector: string): string {
   return (root.querySelector(selector)?.textContent ?? '').trim();
 }
 
+// ── super plan page ──────────────────────────────────────────────────────────
+
 describe('super plan page', () => {
   after(() => {
     globalThis.fetch = originalFetch;
@@ -573,6 +575,8 @@ describe('super plan page', () => {
   });
 });
 
+// ── super plan library ───────────────────────────────────────────────────────
+
 describe('super plan library', () => {
   afterEach(() => {
     resetWorkspaceStateForTests();
@@ -665,6 +669,8 @@ describe('super plan library', () => {
     assert.equal(formatRelativeTime(undefined, now), '');
   });
 });
+
+// ── super plan activity ──────────────────────────────────────────────────────
 
 describe('super plan activity ledger persistence (MIN-599)', () => {
   afterEach(() => {

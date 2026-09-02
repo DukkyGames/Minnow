@@ -1,7 +1,3 @@
-/**
- * Classify Linear issues with priority + labels for bulk triage.
- * Reads exported list_issues JSON files from agent-tools.
- */
 import fs from 'fs';
 import path from 'path';
 
@@ -44,6 +40,8 @@ function text(issue) {
 function hasAny(t, words) {
   return words.some((w) => t.includes(w));
 }
+
+// ── Classify type ────────────────────────────────────────────────────────────
 
 function classifyType(t, title) {
   const bugWords = [
@@ -134,6 +132,8 @@ function classifyType(t, title) {
   }
   return 'Improvement';
 }
+
+// ── Classify areas ───────────────────────────────────────────────────────────
 
 function classifyAreas(t, title) {
   const areas = [];
@@ -226,6 +226,8 @@ function classifyAreas(t, title) {
   return picked.slice(0, 3);
 }
 
+// ── Classify priority ────────────────────────────────────────────────────────
+
 function classifyPriority(issue, type, areas) {
   const status = issue.status;
   const t = text(issue);
@@ -270,9 +272,10 @@ function classifyPriority(issue, type, areas) {
   return base;
 }
 
+// ── Apply ────────────────────────────────────────────────────────────────────
+
 function mergeLabels(existing, type, areas) {
   const out = new Set();
-  // Strip old type labels; keep valid area labels from existing
   for (const l of existing ?? []) {
     const name = typeof l === 'string' ? l : l.name;
     if (VALID_LABELS.has(name) && !['Bug', 'Feature', 'Improvement'].includes(name)) {

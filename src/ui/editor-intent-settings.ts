@@ -1,7 +1,3 @@
-/**
- * Settings UI for editor Intent mode (MIN-131).
- */
-
 import {
   loadEditorIntentModeConfig,
   saveEditorIntentModeConfig,

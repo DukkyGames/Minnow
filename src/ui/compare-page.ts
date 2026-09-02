@@ -1,7 +1,3 @@
-/**
- * Blind model compare — multi-column streaming, vote, reveal, history.
- */
-
 import '../styles/compare.css';
 import '../styles/settings-controls.css';
 
@@ -79,7 +75,6 @@ function writeParallelPref(parallel: boolean): void {
   try {
     localStorage.setItem(PARALLEL_PREF_KEY, parallel ? '1' : '0');
   } catch {
-    /* ignore */
   }
 }
 
@@ -667,7 +662,6 @@ async function stopCompareRun(): Promise<void> {
     try {
       await cancelGeneration(id);
     } catch {
-      /* ignore */
     }
   }
   for (const col of columns) {

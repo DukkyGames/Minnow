@@ -1,16 +1,3 @@
-/**
- * `gh issue` operations for /api/git.
- *
- * Same choke point and same rules as the pull-request layer in `forge-ops.js`:
- * the user's own `gh` auth, no tokens in `~/.minnow`, and an honest gate when
- * the remote is not GitHub or `gh` is missing.
- *
- * Nothing here decides *whether* to sync. That is the settings mode and the
- * per-issue flag, both on the client. These are the primitives the mode drives.
- *
- * Phase 5 of `documentation/plans/issues-app-v2.md`.
- */
-
 import { gh, parseJson, processError, requireForge } from './forge-ops.js';
 
 const ISSUE_FIELDS = [
@@ -25,7 +12,6 @@ const ISSUE_FIELDS = [
   'updatedAt',
 ].join(',');
 
-/** Cap imported bodies so a 100-issue list cannot freeze the SPA on parse/render. */
 const MAX_ISSUE_BODY_CHARS = 16_000;
 
 function forgeCatch(err, fallback) {
@@ -34,13 +20,6 @@ function forgeCatch(err, fallback) {
 }
 
 /**
- * Shape a `gh issue` record into the fields the Issues app models.
- *
- * `updatedAt` is parsed to epoch milliseconds here because the whole conflict
- * story rests on comparing it with the local `updatedAt`, and doing that
- * comparison against an ISO string somewhere downstream is how mirror modes
- * silently pick the wrong winner.
- *
  * @param {any} raw
  */
 export function normalizeForgeIssue(raw) {
@@ -70,7 +49,6 @@ function truncateIssueBody(body) {
 }
 
 /**
- * `gh issue create` prints the new issue's URL, not JSON.
  * @param {string} stdout
  */
 export function parseIssueCreateOutput(stdout) {
@@ -83,7 +61,6 @@ export function parseIssueCreateOutput(stdout) {
   return { url: url ?? '', number: match ? Number(match[1]) : undefined };
 }
 
-/** List issues on the remote. Never throws — import must fail as JSON, not a 500. */
 export async function issueList({ cwd, state = 'open', limit = 100, labels } = {}) {
   try {
     const gate = await requireForge(cwd);
@@ -126,7 +103,6 @@ export async function issueList({ cwd, state = 'open', limit = 100, labels } = {
   }
 }
 
-/** Read one remote issue. */
 export async function issueView({ cwd, number } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -145,7 +121,6 @@ export async function issueView({ cwd, number } = {}) {
   return { ok: true, issue };
 }
 
-/** Create a remote issue. Returns its number and URL for the local link. */
 export async function issueCreate({ cwd, title, body, labels } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -165,9 +140,6 @@ export async function issueCreate({ cwd, title, body, labels } = {}) {
     return { ok: true, ...parseIssueCreateOutput(result.stdout) };
   }
 
-  // A local label that does not exist on the remote is the most common failure
-  // here. Losing the whole push over a label is the wrong trade, so retry
-  // without them and say so rather than pretending the labels made it.
   const usedLabels = args.length > base.length;
   if (usedLabels && /label/i.test(String(result.stderr ?? ''))) {
     const retry = await gh(base, gate.cwd);
@@ -178,7 +150,6 @@ export async function issueCreate({ cwd, title, body, labels } = {}) {
   return { ok: false, error: processError(result, 'Could not create the issue') };
 }
 
-/** Update a remote issue's title, body, or labels. */
 export async function issueEdit({ cwd, number, title, body, addLabels, removeLabels } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -208,7 +179,6 @@ export async function issueEdit({ cwd, number, title, body, addLabels, removeLab
   return { ok: true, number: num };
 }
 
-/** Close or reopen a remote issue. */
 export async function issueState({ cwd, number, state = 'closed', reason } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -230,7 +200,6 @@ export async function issueState({ cwd, number, state = 'closed', reason } = {})
   return { ok: true, number: num, state: verb === 'close' ? 'closed' : 'open' };
 }
 
-/** Add a comment to a remote issue. */
 export async function issueComment({ cwd, number, body } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;

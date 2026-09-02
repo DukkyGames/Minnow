@@ -17,6 +17,8 @@ import {
 import { announceStreamingProse } from '../ui/a11y/stream-announcer';
 import { scrollBottom } from '../ui/input';
 
+// ── State ────────────────────────────────────────────────────────────────────
+
 let minnowMarkedConfigured = false;
 
 /** Per-bubble incremental render state (WeakMap so detached bubbles GC cleanly). */
@@ -112,7 +114,6 @@ export function cancelAssistantBubbleRenderDebounce(bubble?: HTMLElement): void 
     const state = renderStateByBubble.get(bubble);
     if (state) {
       clearBubbleTimers(bubble, state);
-      // Drop the pending caret so a late flush cannot resurrect it on a finished bubble.
       clearPendingPaint(state);
     }
     return;
@@ -154,9 +155,7 @@ function ensureMarkedOptionsConfigured(): void {
     if (typeof (marked as { setOptions?: (o: object) => void }).setOptions === 'function') {
       (marked as { setOptions: (o: object) => void }).setOptions({ gfm: true, breaks: false });
     }
-  } catch {
-    /* Some builds differ; defaults are usually acceptable for chat. */
-  }
+  } catch {}
 }
 
 export interface AssistantBubbleOptions {
@@ -203,6 +202,8 @@ function resetIncrementalState(bubble: HTMLElement): void {
   state.signatures = [];
   state.nodes = [];
 }
+
+// ── Incremental ──────────────────────────────────────────────────────────────
 
 /** One-shot full render (non-streaming / final flush) — same cost as the pre-Phase-5 path. */
 function renderFull(
@@ -257,7 +258,6 @@ function renderIncremental(
     return;
   }
 
-  // Find first signature mismatch; last token is always dirty mid-stream.
   let dirtyFrom = 0;
   const limit = Math.min(tokens.length, state.signatures.length);
   while (dirtyFrom < limit) {
@@ -267,11 +267,9 @@ function renderIncremental(
   if (tokens.length === 0) {
     dirtyFrom = 0;
   } else {
-    // Clamp so the growing final token is always rebuilt.
     dirtyFrom = Math.min(dirtyFrom, tokens.length - 1);
   }
 
-  // Drop DOM for dirty suffix.
   for (let i = dirtyFrom; i < state.nodes.length; i++) {
     for (const node of state.nodes[i] ?? []) {
       node.parentNode?.removeChild(node);
@@ -280,8 +278,6 @@ function renderIncremental(
   state.nodes.length = dirtyFrom;
   state.signatures.length = dirtyFrom;
 
-  // Detach this bubble's carets (and the live node, wherever it sits) so a
-  // remount or a previous paint cannot leave a second blinking bar.
   if (streamCursor?.parentNode) streamCursor.remove();
   removeStreamingCarets(bubble);
 
@@ -296,15 +292,12 @@ function renderIncremental(
     } catch {
       html = '';
     }
-    // Wrap before sanitize: DOMPurify can drop a lone block root (`<h2>`, `<ul>`, …)
-    // when the dirty string is a single element; a throwaway wrapper keeps structure.
     const wrapped = html.trim() ? `<div data-mn-md-wrap>${html}</div>` : '';
     const cleanWrapped = DOMPurify.sanitize(wrapped, { USE_PROFILES: { html: true } });
     const template = document.createElement('template');
     template.innerHTML = cleanWrapped;
     const wrapEl = template.content.querySelector('[data-mn-md-wrap]');
     const sourceRoot: ParentNode = wrapEl ?? template.content;
-    // Keep text nodes too — DOMPurify often unwraps `<p>` to mixed text+inline children.
     const children = Array.from(sourceRoot.childNodes).filter((n) => {
       if (n.nodeType === 1) return true;
       if (n.nodeType === 3) return (n.textContent ?? '').length > 0;
@@ -330,6 +323,8 @@ function renderIncremental(
 
   if (streamCursor) bubble.appendChild(streamCursor);
 }
+
+// ── Public API ───────────────────────────────────────────────────────────────
 
 /**
  * Render assistant markdown: marked → DOMPurify → highlight.js.
@@ -361,7 +356,6 @@ export function setAssistantBubbleContent(
     return;
   }
 
-  // Streaming: incremental O(n). Non-streaming: one-shot parse (unchanged call-site contract).
   if (streaming) {
     renderIncremental(bubble, raw, streamCursor);
     return;
@@ -435,8 +429,6 @@ export function scheduleAssistantBubbleRender(
     }, remaining);
     state.timer = timer;
     bubblesWithActiveTimer.add(bubble);
-    // Legacy global tracks the most recent schedule so cancel-all without a bubble still works
-    // for single-chat streams that never migrated to the bubble param.
     setAssistantRenderDebounceTimer(timer);
   }
 

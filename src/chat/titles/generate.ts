@@ -1,7 +1,3 @@
-/**
- * Call the LLM once (non-streaming) to produce a normalized chat title.
- */
-
 import { extractMessageText } from '../../api/chat';
 import { extractReasoningMessage } from '../../api/reasoning';
 import { buildTitleMessages } from './prompt';
@@ -20,10 +16,6 @@ type TitleCompletionMessage = {
   reasoning_content?: string;
 } | null | undefined;
 
-/**
- * Visible assistant `content` only for titles — never reasoning channels.
- * When the provider mirrors reasoning into `content`, treat it as empty.
- */
 function extractTitleCompletionText(message: TitleCompletionMessage): string {
   const content = extractMessageText(message).trim();
   if (!content) return '';

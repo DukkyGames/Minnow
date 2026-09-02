@@ -47,7 +47,6 @@ const COPYABLE_CLASS = 'status-pill__text--copyable';
 /** Copy the current error status text to the clipboard (skips when the user is selecting text). */
 function copyStatusErrorIfIdleSelection(): void {
   if (lastStatusState !== 'err' || !lastStatusMsg.trim()) return;
-  // Let highlight + Ctrl/Cmd+C work for partial copies without stealing the click.
   const selected = window.getSelection()?.toString() ?? '';
   if (selected.length > 0) return;
 
@@ -86,7 +85,6 @@ function applyStatusPill(
   const trimmed = msg.trim();
   const isErr = state === 'err';
 
-  // Errors are click-to-copy; long non-error messages keep a hover title for the full string.
   text.classList.toggle(COPYABLE_CLASS, isErr);
   if (isErr) {
     text.setAttribute('role', 'button');

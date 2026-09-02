@@ -1,16 +1,3 @@
-/**
- * Compact Code composer strip: when the controls row is too narrow, keep
- * mode / cog / model / context wheel on the row and park the rest in the cog
- * sheet. Compact moves the cog next to the mode dropdown; CSS `order` puts
- * the wheel last.
- *
- * The cog sheet is two pages: this-turn settings first, Tools permissions
- * only after a drill-in. Hub (`.input-bar--hub`) and active chat share
- * `#composerControls`, so one observer covers both. Threshold is width-based
- * with hysteresis — not live overflow measuring — so a few leftover icons
- * never keep the dense row.
- */
-
 import { scheduleAnimationFrame } from '../lib/schedule-animation-frame';
 import { closeModeSelectorMenu } from './mode-selector';
 import { closeComposerRunTargetMenus } from './composer-run-target';
@@ -56,6 +43,8 @@ let initialized = false;
 /** Original neighbor of the overflow sheet before it was portaled to `document.body`. */
 let overflowPopoverHome: { parent: Node; next: ChildNode | null } | null = null;
 
+// ── Queries ──────────────────────────────────────────────────────────────────
+
 function getRow(): HTMLElement | null {
   return document.getElementById('composerControls');
 }
@@ -100,6 +89,8 @@ function getEnableAllSlot(): HTMLElement | null {
   return document.getElementById('composerOverflowEnableAllSlot');
 }
 
+// ── State ────────────────────────────────────────────────────────────────────
+
 /** True when the Code composer is in the compact strip. */
 export function isComposerControlsCompact(): boolean {
   return compact;
@@ -110,15 +101,14 @@ export function isComposerOverflowToolsPageOpen(): boolean {
   return overflowOpen && toolsPageOpen;
 }
 
-/**
- * Width hysteresis for the compact strip. Widths ≤ 0 keep the current state
- * (the row is not laid out yet).
- */
+/** Width hysteresis for the compact strip. */
 export function nextComposerCompactState(current: boolean, width: number): boolean {
   if (!Number.isFinite(width) || width <= 0) return current;
   if (current) return width <= COMPOSER_COMPACT_LEAVE_PX;
   return width < COMPOSER_COMPACT_ENTER_PX;
 }
+
+// ── Overflow ─────────────────────────────────────────────────────────────────
 
 function detachOverflowListeners(): void {
   if (outsideHandler) {
@@ -131,10 +121,7 @@ function detachOverflowListeners(): void {
   }
 }
 
-/**
- * Viewport box used to keep the overflow sheet on screen and, when it fits,
- * inside the Code chat column so it does not slide under the chats sidebar.
- */
+/** Viewport box used to keep the overflow sheet on screen and, when it fits, inside the Code chat column so it does not slide under the chats sidebar. */
 export type ComposerOverflowViewport = {
   width: number;
   height: number;
@@ -143,11 +130,7 @@ export type ComposerOverflowViewport = {
   margin?: number;
 };
 
-/**
- * Clamp a viewport-fixed overflow sheet. Prefers the chat column (`#mainColumn`)
- * when the sheet fits there; otherwise keeps the preferred left and only
- * viewport-clamps so a too-narrow column can still overlay the sidebar.
- */
+/** Clamp a viewport-fixed overflow sheet. */
 export function clampComposerOverflowPlacement(
   box: { top: number; left: number; width: number; height: number },
   viewport: ComposerOverflowViewport,
@@ -161,7 +144,6 @@ export function clampComposerOverflowPlacement(
   const columnInner =
     colLeft != null && colRight != null ? colRight - colLeft - margin * 2 : Number.NaN;
 
-  // Sheet fits in the chat column: keep it to the right of the chats sidebar.
   if (Number.isFinite(columnInner) && width <= columnInner && colLeft != null && colRight != null) {
     const minLeft = colLeft + margin;
     const maxLeft = colRight - width - margin;
@@ -179,12 +161,7 @@ export function clampComposerOverflowPlacement(
   return { top, left };
 }
 
-/**
- * Lift the sheet to `document.body` while open. `#mainColumn` uses
- * `container-type: inline-size`, which creates a stacking context; a
- * `position:fixed` descendant at z-index 36 then paints under `.chat-sidebar`
- * (also 36) even though the sheet is "fixed".
- */
+/** Lift the sheet to `document.body` while open. */
 function portalOverflowPopover(popover: HTMLElement): void {
   if (popover.parentElement === document.body) return;
   if (popover.parentNode) {
@@ -306,14 +283,12 @@ function showOverflowToolsPage(): void {
   tools?.classList.remove('hidden');
   tools?.removeAttribute('hidden');
   try {
-    // Compact Tools page has no web-search fields; skip provider sync.
     const list = document.getElementById('composerToolsList');
     if (list) {
       ensureToolsSectionFilled('composerToolsList', { variant: 'composer' });
       loadToolConfigIntoDrawer(document);
     }
   } catch {
-    /* An empty Tools page is still better than failing the sheet. */
   }
   setToolsPopoverInline(true);
   parkEnableAllToolbar();
@@ -407,7 +382,6 @@ function attachOverflowListeners(): void {
   };
   document.addEventListener('pointerdown', outsideHandler, true);
 
-  // Escape always closes the sheet, including from the Tools page.
   escapeHandler = (event: KeyboardEvent) => {
     if (event.key !== 'Escape' || !overflowOpen) return;
     event.stopPropagation();
@@ -423,7 +397,6 @@ function openOverflowPopover(): void {
   if (!popover || !button || !compact) return;
 
   closeModeSelectorMenu();
-  // Cog open is this-turn settings; do not build the Tools catalog until drill-in.
   showOverflowSettingsPage();
   portalOverflowPopover(popover);
   popover.classList.remove('hidden');
@@ -434,7 +407,6 @@ function openOverflowPopover(): void {
   try {
     firstFocusable(getSettingsPage())?.focus();
   } catch {
-    /* Focus is best-effort; opening the sheet must not fail if the tree has no control. */
   }
 }
 
@@ -445,6 +417,8 @@ function toggleOverflowPopover(): void {
   }
   openOverflowPopover();
 }
+
+// ── Park ─────────────────────────────────────────────────────────────────────
 
 function overflowKey(el: HTMLElement): string {
   return el.id || el.dataset.overflowId || '';
@@ -520,11 +494,7 @@ function setToolsPopoverInline(inline: boolean): void {
   popover.classList.toggle('hidden', !inline);
 }
 
-/**
- * Compact row is flex, not a 4-column grid: the cog must be a sibling of the
- * mode dropdown. Leaving it inside the trail (or promoting it with
- * display:contents) dropped it onto a second implicit row.
- */
+/** Compact row is flex, not a 4-column grid: the cog must be a sibling of the mode dropdown. */
 function placeOverflowAnchor(compactMode: boolean): void {
   const anchor = document.getElementById('composerOverflowAnchor');
   const trail = getRow()?.querySelector('.composer-controls__trail');
@@ -546,6 +516,8 @@ function placeOverflowAnchor(compactMode: boolean): void {
   if (row.firstChild !== anchor) row.insertBefore(anchor, row.firstChild);
 }
 
+// ── Sync ─────────────────────────────────────────────────────────────────────
+
 /** Park (or restore) overflow controls to match the current compact flag. */
 export function refreshComposerCompactOverflow(): void {
   const settingsPage = getSettingsPage();
@@ -565,11 +537,9 @@ export function refreshComposerCompactOverflow(): void {
   }
 
   restoreEnableAllToolbar();
-  // Overflow must be back in the trail before restore uses it as nextSibling.
   placeOverflowAnchor(false);
   setToolsPopoverInline(false);
   showOverflowSettingsPage();
-  // Reverse order so stored nextSibling pointers are already back in the row.
   for (const el of overflowElements().reverse()) {
     if (settingsPage.contains(el) || toolsBody?.contains(el) || getOverflowSlot()?.contains(el)) {
       restoreElement(el);
@@ -599,10 +569,7 @@ function applyCompactState(next: boolean): void {
   refreshComposerCompactOverflow();
 }
 
-/**
- * Apply hysteresis to a measured `#composerControls` width.
- * Widths ≤ 0 are ignored (not laid out yet).
- */
+/** Apply hysteresis to a measured `#composerControls` width. */
 export function syncComposerCompactFromWidth(width: number): boolean {
   const next = nextComposerCompactState(compact, width);
   if (next !== compact) applyCompactState(next);

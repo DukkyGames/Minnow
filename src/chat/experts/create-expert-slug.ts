@@ -1,7 +1,3 @@
-/**
- * Slug generation and id deduplication for new custom experts.
- */
-
 const ENTITY_ID_RE = /^[a-z][a-z0-9-]{0,63}$/;
 
 export const RESERVED_EXPERT_IDS = new Set([

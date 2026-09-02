@@ -1,7 +1,3 @@
-/**
- * Whether a persisted Super Plan run should keep the full plan screen on foreground.
- */
-
 import { normalizeModeId } from '../modes/types';
 import type { Chat } from '../../types';
 

@@ -1,8 +1,3 @@
-/**
- * Resolve the prompt for a maintenance /loop (empty promptText).
- * Prefers `<workspace>/.minnow/loop.md`, else a built-in checklist prompt.
- */
-
 import type { Chat } from '../../types';
 import { executeTool } from '../../tools/client';
 
@@ -17,10 +12,6 @@ export const BUILTIN_MAINTENANCE_LOOP_PROMPT = [
 
 const LOOP_MD_RELATIVE_PATH = '.minnow/loop.md';
 
-/**
- * Read workspace `.minnow/loop.md` via the tools API using this chat's workspace.
- * Returns trimmed content, or empty string when missing/unreadable.
- */
 export async function readWorkspaceLoopMarkdown(chat: Chat): Promise<string> {
   const workspaceRoot = chat.workspacePath?.trim();
   try {
@@ -33,7 +24,6 @@ export async function readWorkspaceLoopMarkdown(chat: Chat): Promise<string> {
       },
     );
     const content = typeof result.content === 'string' ? result.content.trim() : '';
-    // Tool errors are returned as content starting with "Error:"
     if (!content || /^error:/i.test(content)) return '';
     return content;
   } catch {
@@ -41,10 +31,6 @@ export async function readWorkspaceLoopMarkdown(chat: Chat): Promise<string> {
   }
 }
 
-/**
- * Resolve the text to send for a loop fire.
- * Empty promptText → maintenance file or built-in constant (re-read each fire).
- */
 export async function resolveLoopPromptText(
   chat: Chat,
   promptText: string,

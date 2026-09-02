@@ -190,8 +190,6 @@ export function renderResearchReportView(
   const root = document.createElement('div');
   root.className = 'rs-report';
 
-  // Reading column and sources column. They stack on narrow windows and sit
-  // side by side once there is room, so the split lives in CSS, not here.
   const main = document.createElement('div');
   main.className = 'rs-report__main';
   const aside = document.createElement('div');
@@ -270,8 +268,6 @@ export function renderResearchReportView(
         article.appendChild(body);
       }
 
-      // Markers the engine listed for this finding but never placed in the
-      // prose still need a way in, so they trail the last paragraph.
       const orphans = finding.cites.filter((n) => !emitted.has(n));
       if (orphans.length) {
         const tail =

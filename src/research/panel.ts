@@ -103,7 +103,7 @@ function formatClock(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-// ── Report surface ──────────────────────────────────────────────────────────
+// ── Report surface ───────────────────────────────────────────────────────────
 
 function resolveResearchReportUrl(researchId: string): string {
   const path = researchReportUrl(researchId);
@@ -132,7 +132,6 @@ function openResearchReportInNewSurface(url: string): void {
 /** Open visual report in Electron preview or a new browser tab. */
 export function openResearchReport(researchId: string): void {
   const url = resolveResearchReportUrl(researchId);
-  // Preview lives under #appBody, which the Research surface hides.
   if (isResearchPageOpen()) {
     openResearchReportInNewSurface(url);
     return;
@@ -159,7 +158,7 @@ function notifyResearchPanelStatus(): void {
   void import('../ui/research-panel').then((m) => m.syncResearchPanelStatus());
 }
 
-// ── Rail ────────────────────────────────────────────────────────────────────
+// ── Rail ─────────────────────────────────────────────────────────────────────
 
 async function refreshRail(): Promise<void> {
   const mount = el('researchRailList');
@@ -197,7 +196,7 @@ function findRun(id: string): ResearchLibraryItem | undefined {
   return knownRuns.find((run) => run.id === id);
 }
 
-// ── Panes ───────────────────────────────────────────────────────────────────
+// ── Panes ────────────────────────────────────────────────────────────────────
 
 function showAskPane(): void {
   activeId = null;
@@ -269,7 +268,7 @@ function setEvidenceCount(count: number): void {
   slot.textContent = String(count);
 }
 
-// ── Run header ──────────────────────────────────────────────────────────────
+// ── Run header ───────────────────────────────────────────────────────────────
 
 const STATE_WORDS: Record<ResearchStatus, string> = {
   running: 'running',
@@ -389,7 +388,7 @@ function stopClock(): void {
   }
 }
 
-// ── Running state ───────────────────────────────────────────────────────────
+// ── Running state ────────────────────────────────────────────────────────────
 
 function setRunningState(isRunning: boolean): void {
   running = isRunning;
@@ -437,7 +436,7 @@ function renderResearchStartButton(): void {
   startBtn.setAttribute('aria-label', 'Start research');
 }
 
-// ── Options ─────────────────────────────────────────────────────────────────
+// ── Options ──────────────────────────────────────────────────────────────────
 
 async function resolveResearchBinding(): Promise<{ providerId: string; model: string }> {
   return resolveResearchModelBinding();
@@ -459,7 +458,7 @@ function readStartOptions(): Omit<ResearchStartRequest, 'query' | 'continueFrom'
   };
 }
 
-// ── Loading a saved run ─────────────────────────────────────────────────────
+// ── Loading a saved run ──────────────────────────────────────────────────────
 
 function showBriefSkeleton(): void {
   const mount = el('researchResultMount');
@@ -517,9 +516,7 @@ async function ensureRunningLedgerHydrated(researchId: string): Promise<void> {
     } else {
       ledger.reset();
     }
-  } catch {
-    /* stream will still append new rows */
-  }
+  } catch {}
 }
 
 /** Select a run from the rail and paint it into the main pane. */
@@ -531,7 +528,6 @@ async function selectRun(researchId: string): Promise<void> {
     setActiveResearchRow(mount, researchId);
   }
 
-  // The run streaming right now is already painted; rehydrate evidence if the UI remounted.
   if (running && liveRun?.id === researchId) {
     setRunHeader({ title: researchDisplayTitle(liveRun), status: 'running' });
     renderRunActions(researchId, 'running', liveRun.query);
@@ -621,7 +617,6 @@ async function selectRun(researchId: string): Promise<void> {
           : 'This run has no saved brief.',
         status === 'error',
       );
-      // With no brief to read, the working record is the only thing worth showing.
       if (hasActivityLog(data)) {
         setRunView('evidence');
       }
@@ -658,7 +653,7 @@ function hasActivityLog(data: { activityLog?: unknown }): boolean {
   return Array.isArray(data.activityLog) && data.activityLog.length > 0;
 }
 
-// ── Discuss spinoff ─────────────────────────────────────────────────────────
+// ── Discuss spinoff ──────────────────────────────────────────────────────────
 
 /** Client spinoff: new chat seeded with the report. */
 export async function discussResearchReport(researchId: string): Promise<void> {
@@ -695,7 +690,7 @@ export async function discussResearchReport(researchId: string): Promise<void> {
   }
 }
 
-// ── Running ─────────────────────────────────────────────────────────────────
+// ── Running ──────────────────────────────────────────────────────────────────
 
 function teardownStream(): void {
   streamUnsubscribe?.();
@@ -912,7 +907,6 @@ function finishRun(
   status: 'done' | 'error' | 'cancelled',
   message?: string,
 ): void {
-  // A cancel and the stream's own end event both land here; first one wins.
   if (!running) {
     return;
   }
@@ -939,7 +933,6 @@ function finishRun(
         dedupeKey: `research:${researchId}`,
       });
     });
-    // The run is persisted now, so the rail can carry it on its own.
     liveRun = null;
     void refreshRail();
     if (activeId === researchId) {
@@ -982,16 +975,14 @@ async function cancelActiveRun(): Promise<void> {
   }
   try {
     await cancelResearch(id);
-  } catch {
-    /* best-effort */
-  }
+  } catch {}
   teardownStream();
   if (running) {
     finishRun(id, liveRun?.query ?? '', 'cancelled');
   }
 }
 
-// ── Surface lifecycle ───────────────────────────────────────────────────────
+// ── Surface lifecycle ────────────────────────────────────────────────────────
 
 function closeOtherOverlays(): void {
   closeSettings({ skipNavigate: true });
@@ -1146,7 +1137,7 @@ function onHashChange(): void {
   }
 }
 
-// ── Wiring ──────────────────────────────────────────────────────────────────
+// ── Wiring ───────────────────────────────────────────────────────────────────
 
 let railFilterTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -1183,7 +1174,6 @@ function bindStaticControls(): void {
       }
       queryInput.value = text;
       queryInput.focus();
-      // Land the caret on the gap the reader has to fill in.
       const gap = text.indexOf('…');
       if (gap >= 0) {
         queryInput.setSelectionRange(gap, gap + 1);

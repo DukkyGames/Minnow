@@ -1,31 +1,4 @@
-/**
- * P1-D — the scripted effector.
- *
- * Returns canned outcomes on a script, so the scheduler can be exercised
- * exhaustively without a model, a repo, or a process. **The scheduler must be
- * fully testable with zero model calls** (PRD §8) — in V1 scripted boards were a
- * dev affordance; here they are how correctness is established.
- *
- * ## Script format
- *
- * ```js
- * [{ match: { taskId?, role?, nth? },
- *    emit: { outcome, summary?, evidence?, sha?, files?, delayMs?, vanish? } }]
- * ```
- *
- * Deliberately close to `src/dev/orchestrate-scenarios/schema.ts` so its catalog
- * can be ported rather than reinvented. Rules are matched in order and the first
- * one that matches wins, so a general rule can be written last as a default.
- *
- * `nth` counts matches of *that rule*, 1-based, so `{ role: 'builder', nth: 1 }`
- * means "the first builder attempt this rule sees".
- *
- * ## `vanish`
- *
- * The entry disappears from `inspect()` with no end event at all, simulating a
- * killed process or a suspended display. The engine must restart it with no
- * special code — that is the property the whole architecture rests on.
- */
+/** Scripted effector for tests. No model calls. */
 
 /**
  * @typedef {object} ScriptRule
@@ -65,10 +38,9 @@ export function createScriptedEffector(options = {}) {
   const running = new Map();
   /** @type {Array<(end: import('./engine.js').AttemptEnd) => void>} */
   const listeners = [];
-  /** Per-rule match counts, for `nth`. @type {number[]} */
+  /** @type {number[]} */
   const ruleHits = script.map(() => 0);
 
-  /** Every attempt ever started, in order — the record a test asserts against. */
   /** @type {Array<{ taskId: string | null, role: string, attemptId: string, seedKind?: string }>} */
   const startLog = [];
 
@@ -119,8 +91,6 @@ export function createScriptedEffector(options = {}) {
       running.set(attemptId, entry);
 
       if (emit.vanish) {
-        // Gone without a trace: no end event, no exit code, nothing to observe
-        // except its absence from `inspect()` on the next tick.
         running.delete(attemptId);
         return { attemptId };
       }
@@ -141,10 +111,6 @@ export function createScriptedEffector(options = {}) {
         if (desired.role === 'merge' && end.outcome === 'pass' && end.sha === undefined) {
           end.sha = `sha-${attemptId}`;
         }
-        // The attempt stays visible to `inspect()` until the engine has finished
-        // recording the end. Dropping it first would leave a window where the
-        // work is neither running nor finished, and the next tick would start a
-        // second copy of it.
         try {
           for (const listener of listeners) await listener(end);
         } finally {
@@ -153,10 +119,6 @@ export function createScriptedEffector(options = {}) {
       };
 
       if (emit.delayMs) entry.timer = clock.setTimer(fire, emit.delayMs);
-      // Fire on the next microtask rather than synchronously: `start()` must
-      // resolve, and the engine must journal `task.attempt.started`, before the
-      // end arrives. A synchronous end would let the engine journal an ending
-      // for an attempt it has not yet recorded as started.
       else void Promise.resolve().then(fire);
 
       return {
@@ -184,17 +146,13 @@ export function createScriptedEffector(options = {}) {
       listeners.push(handler);
     },
 
-    // ---- test affordances -------------------------------------------------
 
-    /** Every attempt ever started, in order. */
     get started() {
       return startLog;
     },
 
     /**
-     * Make everything currently running disappear with no end events — the
-     * display-sleep analogue, and the OOM analogue.
-     *
+     * Drop running attempts with no end events.
      * @returns {void}
      */
     vanishAll() {

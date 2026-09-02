@@ -1,8 +1,3 @@
-/**
- * Resolve LSP spawn commands to bundled Minnow binaries (no global install).
- * Search order: workspace node_modules → app bundle → ~/.minnow/lsp-servers → PATH.
- */
-
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,8 +12,7 @@ import { getLspNodeExecutable, isNodeCommandToken } from './node-runtime.js';
 /** @typedef {{ argv: string[], displayBin: string }} ResolvedLspSpawn */
 
 /**
- * Resolve a package entry from a given package.json root.
- * @param {string} rootDir - directory containing package.json
+ * @param {string} rootDir
  * @param {string} specifier
  * @returns {string | undefined}
  */
@@ -34,7 +28,6 @@ function tryResolveFromRoot(rootDir, specifier) {
 }
 
 /**
- * Resolve specifier: workspace → app bundle → managed prefix.
  * @param {string} specifier
  * @returns {string}
  */
@@ -68,8 +61,6 @@ function tryResolvePackageSpec(specifier) {
 }
 
 /**
- * vscode-langservers-extracted v4 moved server entrypoints under lib/*-language-server/node/.
- * Keep legacy v3 paths as fallbacks for older managed installs.
  * @param {string} minnowId
  * @returns {string}
  */
@@ -102,7 +93,7 @@ function resolveVscodeLangserversExtractedEntry(minnowId) {
 }
 
 /**
- * @param {string} specifier - e.g. "typescript-language-server/lib/cli.mjs"
+ * @param {string} specifier
  * @returns {string}
  */
 function resolveFromAppRoot(specifier) {
@@ -110,18 +101,15 @@ function resolveFromAppRoot(specifier) {
 }
 
 /**
- * Full argv for the bundled TypeScript/JavaScript language server.
  * @param {string[]} extraArgs
  * @returns {ResolvedLspSpawn}
  */
-/** Candidate specifiers for bundled tsserver (TS ≤6 ships tsserver.js; TS 7 does not). */
 const TSSERVER_SPECIFIERS = [
   'typescript/lib/tsserver.js',
   'tsserver-fallback/lib/tsserver.js',
 ];
 
 /**
- * Resolve bundled tsserver.js when available (workspace → app → managed).
  * @returns {string | undefined}
  */
 export function tryResolveBundledTsserverPath() {
@@ -132,7 +120,6 @@ export function tryResolveBundledTsserverPath() {
   return undefined;
 }
 
-/** Bundled tsserver.js (used when the workspace has no local typescript). */
 export function getBundledTsserverPath() {
   const resolved = tryResolveBundledTsserverPath();
   if (resolved) return resolved;
@@ -174,7 +161,6 @@ function buildTypeScriptLanguageServerArgv(extraArgs = []) {
   };
 }
 
-/** $minnow: token → node CLI resolution spec and default stdio args. */
 const MINNOW_NODE_SERVERS = {
   'typescript-language-server': {
     spec: 'typescript-language-server/lib/cli.mjs',
@@ -202,7 +188,6 @@ const MINNOW_NODE_SERVERS = {
   },
   'graphql-lsp': {
     spec: 'graphql-language-service-cli/bin/graphql.js',
-    // graphql-language-service-cli accepts stream | node | socket (not "stdio").
     args: ['server', '-m', 'stream'],
     display: 'graphql-lsp',
   },
@@ -224,7 +209,7 @@ const MINNOW_NODE_SERVERS = {
 };
 
 /**
- * @param {string} minnowId - token without $minnow: prefix
+ * @param {string} minnowId
  * @param {string[]} tail
  * @returns {ResolvedLspSpawn}
  */
@@ -245,8 +230,6 @@ function resolveMinnowToken(minnowId, tail) {
 }
 
 /**
- * Resolve the first token of a plain command through LSP search paths.
- * A bare "node" always means the runtime Minnow itself runs on — never a PATH lookup.
  * @param {string} bin
  * @returns {string}
  */
@@ -262,7 +245,6 @@ export function resolveLspExecutable(bin) {
 }
 
 /**
- * Map defaults / user command arrays to a concrete spawn argv.
  * @param {string[]} command
  * @returns {ResolvedLspSpawn}
  */
@@ -298,12 +280,10 @@ export function resolveLspSpawnArgv(command) {
     return part;
   });
 
-  // Keep "node" in errors rather than the full Electron/Node executable path.
   const displayBin = isNodeCommandToken(head) ? head : (mapped[0] ?? '');
   return { argv: mapped, displayBin };
 }
 
-/** Exposed for tests — managed LSP npm prefix used in resolution order. */
 export function getManagedLspServersDir() {
   return getManagedLspNpmRoot();
 }

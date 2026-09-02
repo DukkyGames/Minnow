@@ -1,7 +1,3 @@
-/**
- * Brain full-page app — wiki browser and maintenance sections (MIN-B5).
- */
-
 import '../styles/brain-page.css';
 import '../styles/brain-graph.css';
 
@@ -100,6 +96,8 @@ const BRAIN_WORKSPACE_SECTIONS: BrainSectionId[] = [
 let activeSection: BrainSectionId = 'graph';
 let staticBindingsDone = false;
 
+// ── DOM helpers ──────────────────────────────────────────────────────────────
+
 function getBrainRoot(): HTMLElement | null {
   return document.getElementById('brainView');
 }
@@ -130,6 +128,8 @@ function updatePageHeader(section: BrainSectionId): void {
   void refreshUsageLine();
 }
 
+// ── Usage ────────────────────────────────────────────────────────────────────
+
 /** Weeks of history drawn in the header sparkline. */
 const USAGE_SPARK_WEEKS = 10;
 
@@ -143,16 +143,10 @@ function buildUsageCounter(value: number, label: string): HTMLElement {
   return wrap;
 }
 
-/**
- * Bar sparkline of total weekly Brain activity, newest bar last.
- *
- * Built as inline SVG rather than a canvas: it is a handful of rects, and its
- * fills come from stylesheet rules, so a theme swap needs no redraw.
- */
+/** Bar sparkline of total weekly Brain activity, newest bar last. */
 function buildUsageSpark(weeks: Array<{ week: string; total: number }>): SVGSVGElement {
   const ns = 'http://www.w3.org/2000/svg';
   const width = weeks.length * 5 - 2;
-  // Matches the CSS height so bars land on whole pixels inside the usage pill.
   const height = 11;
   const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('class', 'brain-usage__spark');
@@ -164,7 +158,6 @@ function buildUsageSpark(weeks: Array<{ week: string; total: number }>): SVGSVGE
   const max = Math.max(1, ...weeks.map((w) => w.total));
   weeks.forEach((entry, index) => {
     const bar = document.createElementNS(ns, 'rect');
-    // Floor at 1px so a quiet-but-nonzero week still registers.
     const barHeight = entry.total === 0 ? 1 : Math.max(2, (entry.total / max) * height);
     bar.setAttribute('x', String(index * 5));
     bar.setAttribute('y', String(height - barHeight));
@@ -177,14 +170,7 @@ function buildUsageSpark(weeks: Array<{ week: string; total: number }>): SVGSVGE
   return svg;
 }
 
-/**
- * Show Brain activity in the header: this week's writes and reads plus a
- * ten-week trend.
- *
- * The whole overhaul rests on the wiki actually being read and written, so the
- * numbers are worth surfacing where they can't be ignored. Hidden when nothing
- * has happened yet — a row of zeroes is noise.
- */
+/** Show Brain activity in the header: this week's writes and reads plus a ten-week trend. */
 async function refreshUsageLine(): Promise<void> {
   const el = document.getElementById('brainPageHeaderUsage');
   if (!el) return;
@@ -222,8 +208,6 @@ async function refreshUsageLine(): Promise<void> {
   el.replaceChildren(buildUsageCounter(writes, 'writes'), buildUsageCounter(reads, 'reads'));
   if (history.length > 1) el.append(buildUsageSpark(history));
 
-  // The pill is a live region: give it one clean sentence rather than letting a
-  // screen reader walk the counters and then every sparkline bar.
   el.setAttribute('title', 'Brain activity this week');
   el.setAttribute(
     'aria-label',
@@ -244,6 +228,8 @@ export function setBrainHeaderActions(...nodes: Node[]): void {
 export function clearBrainHeaderActions(): void {
   setBrainHeaderActions();
 }
+
+// ── Sections ─────────────────────────────────────────────────────────────────
 
 function setActiveSection(section: BrainSectionId, options?: { editPath?: string }): void {
   const prevSection = activeSection;
@@ -295,6 +281,8 @@ function bindStaticSections(): void {
       ?.addEventListener('click', () => setActiveSection(id));
   }
 }
+
+// ── Page lifecycle ───────────────────────────────────────────────────────────
 
 function closeOtherFullPages(): void {
   void import('./models-page').then((m) => {
@@ -369,10 +357,7 @@ export function openBrainNewPage(): void {
   pathEl?.focus();
 }
 
-/**
- * Brain stayed open in the OS layer stack (e.g. user opened Settings from the menubar).
- * Drop graph hit-testing and cursors so the foreground app is fully interactive.
- */
+/** Brain stayed open in the OS layer stack (e.g. user opened Settings from the menubar). */
 export function suspendBrainAppSurface(): void {
   getBrainRoot()?.classList.remove('is-graph-canvas-bg');
   teardownGraphSection();
@@ -418,7 +403,6 @@ function onHashChange(): void {
   const hash = window.location.hash;
   if (hash.startsWith('#/app/brain') || hash.startsWith('#/brain')) {
     const section = parseHashSection();
-    // setActiveSection already updated activeSection + rendered before syncing hash.
     if (isBrainPageOpen() && section === activeSection) {
       return;
     }
@@ -430,6 +414,8 @@ function onHashChange(): void {
     closeBrain();
   }
 }
+
+// ── Init ─────────────────────────────────────────────────────────────────────
 
 export function initBrainPage(): void {
   registerWindowTeardown('brain', () => closeBrain({ skipNavigate: true }));

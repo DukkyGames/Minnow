@@ -1,10 +1,3 @@
-/**
- * Provider capability probes (separate entry points, shared capabilities.json):
- * - runCapabilityProbe — per-model matrix (MIN-48): vision, tools, streaming
- * - probeProviderCapabilities — structured output (#10): response_format / json_schema
- * Persists via capabilities-store.
- */
-
 import { getProviderRuntime } from './store.js';
 import { proxyModels } from './proxy.js';
 import {
@@ -32,7 +25,6 @@ export const NO_LOADED_MODEL_MATRIX_PROBE_MSG =
 export const ANTHROPIC_STRUCTURED_PROBE_MSG =
   'Structured output probe is not supported for Anthropic Messages API (v1 bridge).';
 
-/** Minimal JSON Schema for structured-output probe. */
 const PROBE_SCHEMA = {
   type: 'object',
   properties: {
@@ -42,25 +34,9 @@ const PROBE_SCHEMA = {
   additionalProperties: false,
 };
 
-/**
- * 16x16 checkerboard PNG (88 bytes) for the accept/reject vision probe: runtimes
- * without a multimodal projector reject the request outright. Deliberately not a
- * 1x1 pixel — LM Studio answers `Invalid image detected at index 0` for those, so
- * a real VLM would be recorded as vision-less.
- */
 const PROBE_IMAGE_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAH0lEQVR42mP4jwQYkAAucYZBqGGQO48oDaPxMCg0AADZV36QzYI8swAAAABJRU5ErkJggg==';
 
-/**
- * Control payload for the vision probe: a well-formed `data:image/png` URL whose
- * base64 body is not a PNG at all.
- *
- * Anything that actually decodes images rejects this. Gateways that pass image
- * parts straight through to a text-only model — OpenCode Zen, several OpenAI
- * proxies — answer 200 to both this and the real image, which used to be
- * recorded as "vision: true" and left the user attaching screenshots to a model
- * that could never see them.
- */
 const PROBE_INVALID_IMAGE_DATA_URL =
   'data:image/png;base64,bm90LWFuLWltYWdlLW1pbm5vdy1jYXBhYmlsaXR5LXByb2Jl';
 
@@ -84,8 +60,6 @@ function resolveProbeChatCompletionsUrl(runtime) {
 }
 
 /**
- * Pick an openai-v1 catalog model for structured-output HTTP probes on mixed gateways.
- *
  * @param {object} runtime
  * @param {Array<{ id: string }>} catalog
  * @param {{ selectedModelId?: string }} [options]
@@ -119,8 +93,6 @@ function findOpenAiModelForStructuredProbe(runtime, catalog, options = {}) {
 }
 
 /**
- * Build probe request bodies with provider-specific field sanitization.
- *
  * @param {object} runtime
  * @param {string} probeModelId
  * @param {object} responseFormat
@@ -143,9 +115,6 @@ function buildStructuredProbeBody(runtime, probeModelId, responseFormat, extra =
 }
 
 /**
- * HTTP probes for response_format on an openai-v1 chat completions path.
- * Tries json_schema (non-strict) first, then json_object when schema mode is rejected.
- *
  * @param {object} runtime
  * @param {string} probeModelId
  */
@@ -306,7 +275,6 @@ async function postChatCompletion(url, headers, body, timeoutMs, signal) {
     try {
       json = text ? JSON.parse(text) : null;
     } catch {
-      /* non-json */
     }
     return { ok: res.ok, status: res.status, json, text };
   } finally {
@@ -380,14 +348,6 @@ function applyToolsProbe(cap, result) {
 }
 
 /**
- * Record a vision probe result. Only a rejected request is evidence of "no vision";
- * a catalog row that already claims vision is left alone.
- *
- * `control` is the {@link PROBE_INVALID_IMAGE_DATA_URL} request. Accepting the real
- * image only counts as vision when the endpoint *rejected* the corrupt one — an
- * endpoint that takes both is not looking at either, so the probe records nothing
- * and lets the catalog (or the send-time attempt) decide.
- *
  * @param {object} cap
  * @param {{ ok: boolean, status: number, text?: string }} result
  * @param {{ ok: boolean, status: number, text?: string }} [control]
@@ -440,8 +400,6 @@ function createProbeAbortSignal(timeoutMs, signal) {
 }
 
 /**
- * Matrix probe via the Anthropic Messages bridge (AI SDK) instead of raw OpenAI fetch.
- *
  * @param {object} modelRow
  * @param {{ profile: object, headers: Record<string, string>, paths: object, secrets: object }} runtime
  * @param {AbortSignal | undefined} signal
@@ -609,8 +567,6 @@ async function probeModelCapabilities(modelRow, runtime, signal) {
   );
   applyToolsProbe(cap, toolResult);
 
-  // Only meaningful once plain chat works — otherwise a rejected image says
-  // nothing about vision (auth, wrong path, runtime down).
   if (chatResult.ok && cap.vision !== true) {
     const imageProbeBody = (dataUrl) => ({
       model: modelId,
@@ -634,8 +590,6 @@ async function probeModelCapabilities(modelRow, runtime, signal) {
       MODEL_PROBE_TIMEOUT_MS,
       signal,
     );
-    // Only worth asking when the real image was accepted — a rejection already
-    // settles it, and the control costs a second round-trip per model.
     const controlResult = visionResult.ok
       ? await postChatCompletion(
           url,
@@ -652,8 +606,6 @@ async function probeModelCapabilities(modelRow, runtime, signal) {
 }
 
 /**
- * Per-model capability matrix probe (vision, tools, streaming, context).
- *
  * @param {string} providerId
  * @param {{ modelIds?: string[], selectedModelId?: string, signal?: AbortSignal }} [options]
  */
@@ -689,8 +641,6 @@ export async function runCapabilityProbe(providerId, options = {}) {
   const catalogById = new Map(catalog.map((m) => [m.id, m]));
   const patches = {};
   const probedAt = new Date().toISOString();
-  // Caller-supplied modelIds are a targeted run (first-load / one model). Do not
-  // ingest the rest of the catalog — that used to overwrite siblings' probe data.
   const targeted = Boolean(options.modelIds?.length);
 
   for (const modelId of prioritized) {
@@ -734,8 +684,6 @@ function isCatalogModelLoaded(row) {
 }
 
 /**
- * Pick a loaded model id for structured-output probes (LM Studio requires a loaded model).
- *
  * @param {string} providerId
  * @param {{ modelId?: string, selectedModelId?: string }} [options]
  */
@@ -778,8 +726,6 @@ export async function resolveStructuredProbeModelId(providerId, options = {}) {
 }
 
 /**
- * Read capabilities for structured-output UI (#10). Returns null when never probed.
- *
  * @param {string} id
  */
 export async function readProviderCapabilitiesFile(id) {
@@ -794,9 +740,6 @@ export async function readProviderCapabilitiesFile(id) {
 }
 
 /**
- * Structured-output probe (response_format / json_schema). Merges into capabilities.json.
- * Requires a loaded model (resolved from catalog when modelId is omitted).
- *
  * @param {string} id
  * @param {{ modelId?: string, selectedModelId?: string }} [options]
  */

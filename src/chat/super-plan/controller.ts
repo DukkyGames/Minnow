@@ -1,13 +1,3 @@
-/**
- * Super Plan controller — sequences the full pipeline with two user checkpoints.
- *
- * Advancement is a single sequential loop per chat: each stage runner resolves
- * only after its work (chat turn, research run, sub-agent review) has fully
- * completed, so the loop finalizes the stage deterministically and moves on.
- * The chat stream-end hook is only a stall-recovery safety net, never the
- * primary advancement path (that dual path previously double-ran stages).
- */
-
 import { isChatStreaming, subscribeChatStreamEnd } from '../streaming-state';
 import { isChatTurnInProgress, isChatTurnSetupPending } from '../chat-turn-guard';
 import type { Chat, TurnRunRecord } from '../../types';
@@ -52,6 +42,8 @@ function ensureStreamEndHook(): void {
   });
 }
 
+// ── Listeners ────────────────────────────────────────────────────────────────
+
 export function subscribeSuperPlanController(
   listener: SuperPlanControllerListener,
 ): () => void {
@@ -63,9 +55,7 @@ function notifyListeners(chat: Chat): void {
   for (const fn of listeners) {
     try {
       fn(chat);
-    } catch {
-      /* UI hook */
-    }
+    } catch {}
   }
 }
 
@@ -73,10 +63,6 @@ function isBlockedCheckpoint(stage: SuperPlanStageId): boolean {
   return stage === 'spec_confirm' || stage === 'present';
 }
 
-/**
- * True when skipSuperPlanStage (or another external action) finished or advanced
- * past `stageId` while the sequential loop was still tied to that stage.
- */
 function wasSuperPlanStageSuperseded(
   chat: Chat,
   stageId: SuperPlanStageId,
@@ -97,16 +83,11 @@ function resolveStageTurnRun(
   const newRuns = (chat.runs ?? []).slice(runsBefore);
   if (newRuns.length === 0) return undefined;
   if (newRuns.length === 1) return newRuns[0];
-  // A queued follow-up can start after the stage turn; it is always newer.
   return newRuns.reduce((earliest, run) =>
     run.createdAt < earliest.createdAt ? run : earliest,
   );
 }
 
-/**
- * True when the sequential loop exited with an idle pending/running stage that
- * should auto-resume (backed off on a busy chat, or stream-end fired too early).
- */
 function shouldRetrySuperPlanAdvance(chat: Chat): boolean {
   const state = chat.superPlan;
   if (!state || state.cancelled || state.paused) return false;
@@ -151,6 +132,8 @@ export function isSuperPlanAdvancing(chatId: string): boolean {
   return advancingChats.has(chatId);
 }
 
+// ── Start ────────────────────────────────────────────────────────────────────
+
 /** Start the Super Plan pipeline for a chat (resumes an interrupted one instead of restarting). */
 export async function startSuperPlan(chat: Chat, prompt: string): Promise<void> {
   ensureStreamEndHook();
@@ -165,10 +148,8 @@ export async function startSuperPlan(chat: Chat, prompt: string): Promise<void> 
   await advanceSuperPlan(chat);
 }
 
-/**
- * Run stages sequentially from the active stage until the pipeline blocks on
- * the user, pauses, errors, or completes. Re-entrant calls are no-ops.
- */
+// ── Advance ──────────────────────────────────────────────────────────────────
+
 export async function advanceSuperPlan(chat: Chat): Promise<void> {
   if (!chat.superPlan || chat.superPlan.cancelled || chat.superPlan.paused) return;
   if (advancingChats.has(chat.id)) return;
@@ -182,8 +163,6 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
     for (;;) {
       const state = chat.superPlan;
       if (!state || state.cancelled || state.paused) break;
-      // A concurrent send claimed the chat: back off and let the stream-end
-      // safety net resume the pending stage once the chat is free again.
       if (isChatStreaming(chat.id) || isChatTurnSetupPending(chat.id)) break;
       const stageId = state.activeStage;
       currentStage = stageId;
@@ -211,8 +190,6 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
       markSuperPlanStageStatus(chat, stageId, 'running');
       notifyListeners(chat);
 
-      // Skip may land between marking running and starting the runner — do not
-      // launch a superseded stage (e.g. grill interview after Skip interview).
       if (wasSuperPlanStageSuperseded(chat, stageId)) {
         continue;
       }
@@ -223,16 +200,11 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
       });
 
       if (outcome.kind === 'await_stream') {
-        // The stage's chat turn has fully completed by the time the runner
-        // resolves; finalize deterministically instead of waiting on the
-        // stream-end hook (which fires mid-turn and used to double-advance).
         if (chat.superPlan?.cancelled) break;
         if (wasSuperPlanStageSuperseded(chat, stageId)) {
           continue;
         }
         if ((chat.runs?.length ?? 0) <= runsBefore) {
-          // runChatTurn no-opped (chat was busy) — leave the stage pending so
-          // the safety net or the Resume button reruns it.
           if (wasSuperPlanStageSuperseded(chat, stageId)) {
             continue;
           }
@@ -285,8 +257,6 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
       }
 
       if (outcome.kind === 'done' || outcome.kind === 'skipped') {
-        // A reviewer run that completes just as the user cancels must not
-        // overwrite the 'Cancelled by user' record with a done stage.
         if (chat.superPlan?.cancelled) break;
         if (!isBlockedCheckpoint(stageId) || outcome.kind === 'skipped') {
           markSuperPlanStageStatus(chat, stageId, 'done', {
@@ -320,29 +290,19 @@ export async function advanceSuperPlan(chat: Chat): Promise<void> {
   }
 }
 
-/**
- * Stall-recovery safety net: if a chat turn ends and the pipeline has a
- * pending or stale-running stage with no loop in flight, kick the loop.
- */
 export async function onSuperPlanStreamEnd(chatId: string): Promise<void> {
-  // notifyChatStreamEnded used to fire *before* setStreaming(false) on the
-  // deleted client loop. The `runTurn` path ends streaming first (PRD §1.3).
-  // Yield anyway so Super Plan advance never races the stream-end listener.
   await new Promise((resolve) => setTimeout(resolve, 0));
   const { findChatById } = await import('../../state/sessions');
   const chat = findChatById(chatId);
   if (!chat?.superPlan || chat.superPlan.cancelled || chat.superPlan.paused) return;
   if (isChatStreaming(chat.id)) return;
   if (advancingChats.has(chat.id)) {
-    // Stream-end fired while the sequential loop still owns this chat — retry once
-    // it finishes; the first hook invocation would otherwise no-op permanently.
     scheduleSuperPlanAdvanceIfStalled(chat);
     return;
   }
 
   const record = chat.superPlan.stages[chat.superPlan.activeStage];
   if (record?.status === 'running') {
-    // A running stage with no loop and no stream is stale (e.g. reload mid-stage).
     resetSuperPlanStage(chat, chat.superPlan.activeStage);
   } else if (record?.status !== 'pending') {
     return;
@@ -397,6 +357,8 @@ export async function resumeSuperPlanAfterUser(
   }
 }
 
+// ── Pause ────────────────────────────────────────────────────────────────────
+
 /** Pause the pipeline: stop the in-flight stage turn; the stage reruns on resume. */
 export function pauseSuperPlan(chat: Chat): void {
   if (!chat.superPlan || chat.superPlan.cancelled) return;
@@ -441,11 +403,6 @@ export async function skipSuperPlanStage(chat: Chat): Promise<void> {
   if (!state || state.cancelled) return;
   const stageId = state.activeStage;
   if (stageId === 'present') return;
-  // Skipping a live stage (e.g. an in-progress interview) must abort its
-  // in-flight turn first, or advanceSuperPlan would bail out on the still-
-  // streaming chat and the stopped run would be misread as a pause. Include
-  // turn setup (before the streaming flag is set) so an early Skip interview
-  // does not let the grill turn start asking questions.
   if (isChatTurnInProgress(chat.id)) {
     stopChatTurn(chat.id);
   }
@@ -507,10 +464,6 @@ export function isSuperPlanBlocked(chat: Chat): boolean {
   return record?.status === 'blocked_user';
 }
 
-/**
- * Pipeline is idle without user input: paused, errored, or a stage sits
- * pending/stale-running with no loop or stream in flight (e.g. after reload).
- */
 export function isSuperPlanStalled(chat: Chat): boolean {
   const state = chat.superPlan;
   if (!state || state.cancelled) return false;

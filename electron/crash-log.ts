@@ -1,14 +1,8 @@
-/**
- * Synchronous crash log for Electron main + renderer diagnostics.
- * Self-contained — no imports from server/ so crash handlers work pre-bootstrap.
- */
-
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
-/** One crash record written to crash.jsonl and optional last-crash.json. */
 export type CrashEntry = {
   kind: string;
   reason?: string;
@@ -19,13 +13,11 @@ export type CrashEntry = {
   extra?: Record<string, unknown>;
 };
 
-/** Persisted line in crash.jsonl. */
 export type CrashLogLine = CrashEntry & {
   ts: string;
   pid: number;
 };
 
-/** Marker left when the renderer process dies (read on next boot). */
 export type LastCrashMarker = {
   kind: string;
   reason?: string;
@@ -38,15 +30,15 @@ const CRASH_LOG_FILE = 'crash.jsonl';
 const LAST_CRASH_FILE = 'last-crash.json';
 const OOM_PAUSE_FILE = 'oom-pause.json';
 
-/** How long OOM throttling / pause-on-resume stays active after a renderer OOM kill. */
 export const OOM_PAUSE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 let cachedLogDir: string | null = null;
 
-/** Lines queued for the next async flush. */
 let crashBuffer: string[] = [];
 let crashFlushTimer: ReturnType<typeof setTimeout> | undefined;
 const CRASH_FLUSH_DELAY_MS = 50;
+
+// ── Flush buffer ─────────────────────────────────────────────────────────────
 
 function scheduleCrashFlush(): void {
   if (crashFlushTimer !== undefined) return;
@@ -54,14 +46,10 @@ function scheduleCrashFlush(): void {
     crashFlushTimer = undefined;
     const lines = crashBuffer.splice(0);
     if (!lines.length) return;
-    fs.appendFile(crashLogPath(), lines.join(''), 'utf8', () => {/* best-effort */});
+    fs.appendFile(crashLogPath(), lines.join(''), 'utf8', () => {});
   }, CRASH_FLUSH_DELAY_MS);
 }
 
-/**
- * Drain any buffered crash lines synchronously. Call from process-death handlers
- * (uncaughtException, unresponsive) to ensure queued records are not lost before exit.
- */
 export function flushCrashLogSync(): void {
   if (crashFlushTimer !== undefined) {
     clearTimeout(crashFlushTimer);
@@ -72,16 +60,15 @@ export function flushCrashLogSync(): void {
   try {
     fs.appendFileSync(crashLogPath(), lines.join(''), 'utf8');
   } catch {
-    /* last resort */
   }
 }
 
-/** Reset cached log dir (tests only). */
 export function resetCrashLogDirCache(): void {
   cachedLogDir = null;
 }
 
-/** Best-effort Electron app.getPath without requiring a live app instance. */
+// ── Log paths ────────────────────────────────────────────────────────────────
+
 function tryElectronLogsPath(): string | null {
   try {
     if (!process.versions.electron) return null;
@@ -91,15 +78,10 @@ function tryElectronLogsPath(): string | null {
       return app.getPath('logs');
     }
   } catch {
-    /* no electron in plain node:test */
   }
   return null;
 }
 
-/**
- * Resolve ~/.minnow/logs (or MINNOW_HOME/logs).
- * Order: explicit override → MINNOW_HOME → ~/.minnow → Electron app logs.
- */
 export function resolveCrashLogDir(opts?: { override?: string }): string {
   if (cachedLogDir) return cachedLogDir;
 
@@ -130,12 +112,10 @@ export function resolveCrashLogDir(opts?: { override?: string }): string {
   return cachedLogDir;
 }
 
-/** Create log directory; never throw from crash-path resolution. */
 function ensureDir(dir: string): void {
   try {
     fs.mkdirSync(dir, { recursive: true });
   } catch {
-    /* ignore — append will no-op in try/catch */
   }
 }
 
@@ -151,11 +131,8 @@ function oomPausePath(): string {
   return path.join(resolveCrashLogDir(), OOM_PAUSE_FILE);
 }
 
-/**
- * Queue one crash line for async flush to crash.jsonl.
- * Never throws — crash handlers may run while the process is dying.
- * Call flushCrashLogSync() before process exit to drain the buffer.
- */
+// ── Crash log ────────────────────────────────────────────────────────────────
+
 export function logCrash(entry: CrashEntry): void {
   try {
     const line: CrashLogLine = {
@@ -166,11 +143,11 @@ export function logCrash(entry: CrashEntry): void {
     crashBuffer.push(`${JSON.stringify(line)}\n`);
     scheduleCrashFlush();
   } catch {
-    /* last resort — cannot recover if disk is full or path invalid */
   }
 }
 
-/** Write marker for renderer crash recovery on next load. */
+// ── Last crash ───────────────────────────────────────────────────────────────
+
 export function writeLastCrashMarker(entry: Omit<LastCrashMarker, 'ts'> & { ts?: string }): void {
   try {
     const marker: LastCrashMarker = {
@@ -182,11 +159,9 @@ export function writeLastCrashMarker(entry: Omit<LastCrashMarker, 'ts'> & { ts?:
     };
     fs.writeFileSync(lastCrashPath(), JSON.stringify(marker), 'utf8');
   } catch {
-    /* ignore */
   }
 }
 
-/** Read last crash marker if present. */
 export function readLastCrashMarker(): LastCrashMarker | null {
   try {
     const raw = fs.readFileSync(lastCrashPath(), 'utf8');
@@ -201,18 +176,17 @@ export function readLastCrashMarker(): LastCrashMarker | null {
   }
 }
 
-/** Remove last-crash marker (ENOENT is fine). */
 export function clearLastCrashMarker(): void {
   try {
     fs.unlinkSync(lastCrashPath());
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      /* ignore other errors during cleanup */
     }
   }
 }
 
-/** Persist OOM marker so the renderer can pause AFK boards on next boot. */
+// ── OOM pause ────────────────────────────────────────────────────────────────
+
 export function writeOomPauseMarker(entry?: { ts?: string }): void {
   try {
     const marker: LastCrashMarker = {
@@ -223,11 +197,9 @@ export function writeOomPauseMarker(entry?: { ts?: string }): void {
     };
     fs.writeFileSync(oomPausePath(), JSON.stringify(marker), 'utf8');
   } catch {
-    /* ignore */
   }
 }
 
-/** Read OOM pause marker when still inside the retention window. */
 export function readOomPauseMarker(nowMs = Date.now()): LastCrashMarker | null {
   try {
     const raw = fs.readFileSync(oomPausePath(), 'utf8');
@@ -242,13 +214,11 @@ export function readOomPauseMarker(nowMs = Date.now()): LastCrashMarker | null {
   }
 }
 
-/** Clear OOM pause marker after the user explicitly resumes the board. */
 export function clearOomPauseMarker(): void {
   try {
     fs.unlinkSync(oomPausePath());
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      /* ignore */
     }
   }
 }

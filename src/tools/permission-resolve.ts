@@ -1,7 +1,3 @@
-/**
- * Resolves effective tool permission for an invocation from the tool catalog only.
- */
-
 import { getToolPermissionForId, type ToolConfig } from './config';
 import type { ToolPermissionMode } from './tool-settings-types';
 

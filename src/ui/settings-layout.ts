@@ -1,7 +1,3 @@
-/**
- * Shared settings page layout helpers (grouped panels, cross-links).
- */
-
 import type { ModelsSectionId } from './models-page';
 import type { SettingsSectionId } from './settings-page-types';
 
@@ -145,14 +141,11 @@ export function linkToSettingsSection(
   btn.className = 'settings-inline-link';
   btn.textContent = label;
   btn.addEventListener('click', () => {
-    // Models-owned areas always open the Models app (legacy #/settings redirects).
     const modelsSection = MODELS_APP_SECTION_BY_SETTINGS[sectionId];
     if (modelsSection) {
       openModelsSection(modelsSection as ModelsSectionId);
       return;
     }
-    // Call openSettings directly so Minnow re-applies the section when the
-    // Settings window is already open (hash → #/app/settings is a no-op then).
     openSettingsSection(sectionId as SettingsSectionId);
   });
   return btn;

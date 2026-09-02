@@ -1,30 +1,11 @@
-/**
- * Memory model for a llama.cpp run: weights + KV cache + compute graph + backend overhead.
- *
- * One shared model behind every memory number Minnow shows — the Models discovery ranking,
- * the inspector's Load tab, and the server-side serve profiles. Those three used to carry
- * three different formulas that disagreed with each other by up to 2x on the same model at
- * the same settings, on top of all being wrong in the same direction (see model-geometry.mjs
- * for why the old parameter-count-derived KV term could not work).
- *
- * Everything here is bytes in, bytes out; GiB conversion happens at the display edge, to
- * match how `detectHardware` reports VRAM and RAM.
- */
-
 /** @typedef {import('./model-geometry.d.mts').ModelGeometry} ModelGeometry */
 
-/**
- * A KV cache quantization: one value for both caches, or a `--cache-type-k` /
- * `--cache-type-v` pair when the user set them independently.
- * @typedef {string | { k?: string, v?: string }} KvCacheType
- */
+// ── Constants ────────────────────────────────────────────────────────────────
+
+/** @typedef {string | { k?: string, v?: string }} KvCacheType */
 
 export const GIB = 1024 ** 3;
 
-/**
- * Bytes per element for each `--cache-type-k/v` value, from the ggml block layouts:
- * a quantized KV type stores `blockSize` elements in `typeSize` bytes.
- */
 export const KV_TYPE_BYTES = {
   f32: 4,
   f16: 2,
@@ -74,7 +55,6 @@ export const WEIGHT_GIB_PER_BILLION = {
   IQ3_XXS: 0.38,
   Q2_K: 0.37,
   IQ2_XXS: 0.28,
-  // Native 4-bit formats carry group scales and f16 embeddings but no k-quant precision islands.
   FP4: 0.53,
   NVFP4: 0.53,
   MXFP4: 0.53,
@@ -117,6 +97,8 @@ export const DEFAULT_UBATCH = 512;
  * worst case, so this counts concurrent scratch across attention and FFN, not the total.
  */
 const GRAPH_SCRATCH_TENSORS = 6;
+
+// ── KV cache ─────────────────────────────────────────────────────────────────
 
 /** @param {string | null | undefined} cacheType */
 export function kvElementBytes(cacheType) {
@@ -177,8 +159,6 @@ export function kvCacheBytes(geometry, ctx, cacheType = 'f16', opts = {}) {
 
   const fullLayers = fullAttentionLayers(geometry);
   const windowedLayers = geometry.nLayers - fullLayers;
-  // `--swa-full` opts out of the windowed allocation: every layer carries the
-  // whole context, which is exactly the saving this term normally banks.
   const windowTokens = opts.swaFull
     ? tokens
     : Math.min(tokens, (geometry.swaWindow || 0) + ubatch);
@@ -294,8 +274,6 @@ function splitWeights(geometry, weightsBytes, gpuLayers, offloadOutput) {
   let repeating = weightsBytes;
   let fixed = 0;
   if (exactTotal > 0) {
-    // Scale the measured ratio onto the caller's byte count, which stays authoritative
-    // (a split GGUF reports only the part we parsed).
     repeating = weightsBytes * ((geometry.layerBytes ?? 0) / exactTotal);
     fixed = weightsBytes - repeating;
   }
@@ -303,6 +281,8 @@ function splitWeights(geometry, weightsBytes, gpuLayers, offloadOutput) {
   const onGpu = repeating * layerFraction + (offloadOutput ? fixed : 0);
   return { weightsVram: onGpu, weightsRam: weightsBytes - onGpu };
 }
+
+// ── Estimate ─────────────────────────────────────────────────────────────────
 
 /**
  * Memory needed to run a model at given settings.
@@ -323,17 +303,10 @@ export function estimateRunMemory(input) {
     ubatch,
     swaFull: input.swaFull === true,
   });
-  // KV lives wherever its layer lives — the old model charged every byte of it to VRAM even
-  // at `-ngl 1`, which made partial offload look far more expensive than it is.
   const kvVram = geometry.nLayers > 0 ? kvTotal * (gpuLayers / geometry.nLayers) : 0;
   const kvRam = kvTotal - kvVram;
 
   const split = splitWeights(geometry, weightsBytes, gpuLayers, offloadOutput);
-  // A speculative draft model is a second, whole set of weights. It has its own
-  // geometry we do not parse, so it is charged as one block to wherever the main
-  // model's layers live rather than split layer-by-layer. MTP adds nothing here —
-  // its heads ship inside the main GGUF (its runtime context is a separate, small
-  // term llama-server reports itself once loaded).
   const draftWeights = Math.max(0, input.draftWeightsBytes || 0);
   const weightsVram = split.weightsVram + (onGpu ? draftWeights : 0);
   const weightsRam = split.weightsRam + (onGpu ? 0 : draftWeights);
@@ -391,14 +364,12 @@ export function estimateRunMemory(input) {
 export function maxContextForBudget(geometry, budgetBytes, cacheType = 'f16', opts = {}) {
   const minCtx = opts.minCtx ?? 1024;
   const maxCtx = opts.maxCtx ?? 1_048_576;
-  // Keep the historical default: Discover/fit.ts depend on power-of-two display values.
   const snap = opts.snap ?? 'power2';
   if (budgetBytes <= 0) return 0;
 
   const perToken = kvBytesPerToken(geometry, cacheType);
   if (perToken <= 0) return maxCtx;
 
-  // Windowed layers add a context-independent floor; take it off the budget first.
   const floor = kvCacheBytes(geometry, maxCtx, cacheType, opts) - perToken * maxCtx;
   const usable = budgetBytes - floor;
   if (usable <= 0) return 0;
@@ -408,8 +379,6 @@ export function maxContextForBudget(geometry, budgetBytes, cacheType = 'f16', op
 
   if (snap === 'none') return Math.min(maxCtx, raw);
 
-  // Snap the *raw* fit, then cap. Snapping after min(maxCtx, raw) would turn a 40k fit
-  // with maxCtx 24576 into 16384 instead of 24576 — a silent Discover regression.
   const power = 2 ** Math.floor(Math.log2(raw));
   return Math.min(maxCtx, power);
 }

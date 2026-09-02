@@ -1,11 +1,3 @@
-/**
- * Source Control Center — History.
- *
- * The existing commit graph on the left, the selected commit's message and
- * changed files on the right. Clicking a file opens its diff in place, so
- * reading a commit never leaves the section.
- */
-
 import { gitShow, type GitFileEntry } from '../state/git-api';
 import { renderGitGraph, type GitGraphOptions } from './git-graph';
 import { showGitGraphCommitContextMenu } from './git-graph-context-menu';
@@ -224,7 +216,6 @@ function collectFiles(patch: string, nameStatus: GitFileEntry[]): CommitFile[] {
     });
   }
 
-  // name-status catches binary and mode-only changes that produce no hunks.
   for (const entry of nameStatus) {
     if (!byPath.has(entry.path)) {
       byPath.set(entry.path, {

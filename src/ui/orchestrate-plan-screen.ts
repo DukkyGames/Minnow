@@ -1,8 +1,5 @@
 import { appAlert, appConfirm, appPrompt } from './app-dialog';
-/**
- * Orchestrate planning screen — full #chatArea overlay for Plan-mode authoring.
- * Suppresses chat stream DOM while mounted; supports suspend/resume via sidebar.
- */
+/** Orchestrate planning screen — full #chatArea overlay for Plan-mode authoring. */
 
 import '../styles/orchestrate-plan-screen.css';
 
@@ -162,14 +159,12 @@ let superPlanUnsubscribe: (() => void) | null = null;
 let planProgressPanel: PlanProgressPanel | null = null;
 let planActivitySession: ResearchActivitySession | null = null;
 let planActivityCollector: PlanActivityCollector | null = null;
-/**
- * Set while the user is reading a plan they picked out of the library rather
- * than the run that owns the session. Live controller ticks stand down until
- * they navigate back, so the page they are reading is not painted over.
- */
+/** Set while the user is reading a plan they picked out of the library rather than the run that owns the session. */
 let superPlanDocPath: string | null = null;
 /** Artifact signature of the last library refresh, so ticks do not re-list. */
 let lastSuperPlanArtifacts = '';
+
+// ── Session ──────────────────────────────────────────────────────────────────
 
 function ensureStreamEndListener(): void {
   if (streamEndUnsubscribe) return;
@@ -229,10 +224,7 @@ export function isOrchestratePlanScreenSuspendedForChat(chat: Chat): boolean {
 
 export { isSuperPlanPipelineResumable } from '../chat/super-plan/resumable';
 
-/**
- * True when persisted {@link Chat.superPlan} should rebuild the plan-screen
- * session after reload (includes user-stopped/cancelled runs; excludes finished).
- */
+/** True when persisted {@link Chat.superPlan} should rebuild the plan-screen session after reload (includes user-stopped/cancelled runs; excludes finished). */
 export function isSuperPlanPlanScreenRestorable(chat: Chat): boolean {
   if (normalizeModeId(chat.modeId) !== 'super-plan') return false;
   const sp = chat.superPlan;
@@ -250,7 +242,6 @@ export function derivePlanScreenPhaseFromSuperPlan(chat: Chat): OrchestratePlanS
   if (checkpoint === 'present') return 'preview';
   const sp = chat.superPlan!;
   const record = sp.stages[sp.activeStage];
-  // Cancelled runs keep the working stepper (read-only progress), not the error panel.
   if (record?.status === 'error' && !sp.cancelled) return 'error';
   if (
     sp.activeStage === 'grill' &&
@@ -283,10 +274,7 @@ function resolvePlanSessionArtifactPath(
   return sp.planPath?.trim() || undefined;
 }
 
-/**
- * Rebuild the in-memory plan-screen session from persisted {@link Chat.superPlan}
- * after reload or when returning to Code without an active overlay session.
- */
+/** Rebuild the in-memory plan-screen session from persisted {@link Chat.superPlan} after reload or when returning to Code without an active overlay session. */
 export function restoreOrchestratePlanScreenSessionFromChat(chat: Chat): boolean {
   if (planSession?.chatId === chat.id) return true;
   if (!isSuperPlanPlanScreenRestorable(chat)) return false;
@@ -366,7 +354,6 @@ function preparePlanScreenQuestionsBeforeTeardown(
     forceCloseAskQuestionModalForChat(chatId);
     return;
   }
-  // Strip already lives in the composer — leave it for chat-switch park/unpark.
   if (options.keepQuestionsInComposer) {
     if (planSession) planSession.phase = 'questions';
     return;
@@ -386,6 +373,8 @@ export function removeOrchestratePlanScreenSuspendedBanner(): void {
   if (typeof document === 'undefined') return;
   document.getElementById(ORCHESTRATE_PLAN_BANNER_ID)?.remove();
 }
+
+// ── Teardown ─────────────────────────────────────────────────────────────────
 
 /** Remove overlay nodes only; session state is preserved. */
 export function teardownOrchestratePlanScreenDom(
@@ -463,8 +452,6 @@ export function resolveOrchestratePlanScreenQuestionHost(
   if (session.phase === 'working' || session.phase === 'super-plan-working') {
     session.phase = 'questions';
   }
-  // Super Plan keeps the interview inline in the ledger column, so its host is
-  // already on the page and never needs a repaint to appear.
   if (isSuperPlanPageMounted()) {
     return getSuperPlanQuestionsHost();
   }
@@ -526,6 +513,8 @@ async function handleSuperPlanStepRework(chatId: string, stepIndex: number): Pro
   }
   void rewindSuperPlanToStage(chat, stageId);
 }
+
+// ── Working phase ────────────────────────────────────────────────────────────
 
 function mountPlanProgressPanel(chat: Chat): void {
   const mount = document.getElementById(PLAN_PROGRESS_MOUNT_ID);
@@ -596,7 +585,6 @@ function syncWorkingPhaseControls(chat: Chat): void {
   const showResume = paused || stalled;
   if (pauseBtn) pauseBtn.hidden = showResume;
   if (resumeBtn) resumeBtn.hidden = !showResume;
-  // Only offer to skip while the interview stage is the active one.
   if (skipInterviewBtn) skipInterviewBtn.hidden = chat.superPlan?.activeStage !== 'grill';
 }
 
@@ -640,11 +628,7 @@ function resolveOrCreatePlanChat(): Chat {
   return getActiveChat();
 }
 
-/**
- * True when the plan screen may repaint #chatArea for this chat right now.
- * Never steal the view while the session is suspended (user is reading the
- * chat transcript or working in another chat).
- */
+/** True when the plan screen may repaint #chatArea for this chat right now. */
 function canRepaintPlanScreen(chat: Chat): boolean {
   const session = planSession;
   if (!session || session.chatId !== chat.id) return false;
@@ -666,11 +650,6 @@ async function syncPlanScreenFromSuperPlan(chat: Chat): Promise<void> {
   const session = planSession;
   if (!session || session.chatId !== chat.id) return;
 
-  /*
-   * The Super Plan page is one surface for every pipeline phase, so a stage
-   * change patches it rather than rebuilding it. Repainting here would reset
-   * the ledger scroll position and replay the entry animation on every tick.
-   */
   if (isSuperPlanPageMounted() && !superPlanDocPath) {
     session.phase = derivePlanScreenPhaseFromSuperPlan(chat);
     session.planPath =
@@ -680,7 +659,6 @@ async function syncPlanScreenFromSuperPlan(chat: Chat): Promise<void> {
       return;
     }
     syncSuperPlanPage(chat);
-    // Re-list only when the run's files changed, not on every controller tick.
     const artifacts = `${chat.superPlan?.specPath ?? ''}|${chat.superPlan?.planPath ?? ''}`;
     if (artifacts !== lastSuperPlanArtifacts) {
       lastSuperPlanArtifacts = artifacts;
@@ -806,7 +784,6 @@ async function onPlanSessionStreamEnd(chatId: string): Promise<void> {
   if (!chat) return;
 
   if (normalizeModeId(chat.modeId) === 'super-plan' && chat.superPlan) {
-    // The controller owns its own stream-end hook; only mirror state into the UI here.
     await syncPlanScreenFromSuperPlan(chat);
     return;
   }
@@ -865,6 +842,8 @@ export function shouldRouteComposerSendToSuperPlan(
   if (isOrchestratePlanScreenOwningChat(chat.id)) return false;
   return true;
 }
+
+// ── Start planning ───────────────────────────────────────────────────────────
 
 async function startPlanningFromPrompt(
   promptText: string,
@@ -1052,7 +1031,6 @@ function appendWorkingPhaseContent(
     );
     const activeStage = chat?.superPlan?.activeStage;
 
-    // Let the user cut the interview short and jump straight to the build spec.
     const skipInterviewBtn = document.createElement('button');
     skipInterviewBtn.type = 'button';
     skipInterviewBtn.className =
@@ -1133,6 +1111,8 @@ function appendWorkingPhaseContent(
   });
 }
 
+// ── DOM build ────────────────────────────────────────────────────────────────
+
 function appendPlanScreenHeader(
   parent: HTMLElement,
   eyebrow: string,
@@ -1160,11 +1140,7 @@ function appendPlanScreenHeader(
   parent.appendChild(header);
 }
 
-/**
- * Super Plan owns its own surface (rail + run pane). The centered overlay
- * below still serves regular Plan mode and the Orchestrate prompt, which have
- * no library and no ten-stage pipeline to show.
- */
+/** Super Plan owns its own surface (rail + run pane). */
 function buildSuperPlanScreenDom(
   opts: RenderOrchestratePlanScreenOptions,
   chat: Chat,
@@ -1247,11 +1223,6 @@ function buildSuperPlanScreenDom(
     },
   };
 
-  /*
-   * The phase decides the surface, not the presence of pipeline state: a run
-   * that has just been started has no `superPlan` record yet, and dropping
-   * back to the composer there would take the interview's question host with it.
-   */
   const mode: 'compose' | 'run' | 'doc' = superPlanDocPath
     ? 'doc'
     : opts.phase === 'prompt'
@@ -1656,6 +1627,8 @@ function mountPlanActivityButton(actionsStart: HTMLElement): void {
   planActivitySession.mountButton(actionsStart);
 }
 
+// ── Library ──────────────────────────────────────────────────────────────────
+
 /** Remove a plan from the library rail (run chat, plan file, or both). */
 async function deleteSuperPlanLibraryEntry(entry: PlanLibraryEntry): Promise<void> {
   const title = entry.title.trim() || 'this plan';
@@ -1752,11 +1725,7 @@ function openSuperPlanRun(chatId: string): void {
   });
 }
 
-/**
- * True when the Super Plan surface is already what this chat is showing.
- * Repainting it during an ordinary transcript render would reset the ledger
- * scroll position and replay the entry animation, so callers check here first.
- */
+/** True when the Super Plan surface is already what this chat is showing. */
 export function isSuperPlanScreenShowingChat(chatId: string): boolean {
   return Boolean(
     isSuperPlanPageMounted() &&
@@ -1772,14 +1741,7 @@ export function isSuperPlanScreenMountedForOtherChat(chatId: string): boolean {
   );
 }
 
-/**
- * Paint the Super Plan surface for a chat that just came to the foreground.
- *
- * Super Plan is a screen, not a conversation: the chat behind it is a transport
- * for pipeline tool calls, and the surface already shows the stages, the
- * artifacts and the plan itself. Wherever a transcript would otherwise be
- * painted for a super-plan chat, this stands in.
- */
+/** Paint the Super Plan surface for a chat that just came to the foreground. */
 export function reopenSuperPlanScreenForChat(chat: Chat): void {
   if (normalizeModeId(chat.modeId) !== 'super-plan') return;
   if (isSuperPlanScreenShowingChat(chat.id)) return;
@@ -1797,10 +1759,7 @@ export function reopenSuperPlanScreenForChat(chat: Chat): void {
   });
 }
 
-/**
- * Show a saved plan the rail found on disk. The session keeps pointing at
- * whatever run owns it, so returning to that run costs one click on the rail.
- */
+/** Show a saved plan the rail found on disk. */
 function renderSuperPlanDoc(path: string): void {
   const trimmed = path.trim();
   if (!trimmed) return;
@@ -1826,6 +1785,8 @@ function renderSuperPlanDoc(path: string): void {
   syncSuperPlanChrome(true);
   notifyAskQuestionDisplayContextChanged();
 }
+
+// ── Render ───────────────────────────────────────────────────────────────────
 
 /** Paint plan screen into #chatArea for the given phase. */
 export function renderOrchestratePlanScreen(
@@ -1887,10 +1848,7 @@ export function renderOrchestratePlanScreen(
   notifyAskQuestionDisplayContextChanged();
 }
 
-/**
- * Start Super Plan (or regular Plan) from the chat composer — mounts the plan screen
- * and runs {@link startSuperPlan} / {@link runChatTurn} on the active chat.
- */
+/** Start Super Plan (or regular Plan) from the chat composer — mounts the plan screen and runs {@link startSuperPlan} / {@link runChatTurn} on the active chat. */
 export async function startPlanningFromComposer(promptText: string): Promise<void> {
   const text = promptText.trim();
   if (!text) return;

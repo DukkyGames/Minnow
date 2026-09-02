@@ -1,7 +1,3 @@
-/**
- * Build ComposeContext from app config, tools, and session state.
- */
-
 import {
   resolveActiveWorkAgent,
   resolveActiveWorkAgentId,
@@ -37,6 +33,8 @@ import { resolveShellSandboxModeForChat } from '../../tools/shell-sandbox-client
 import type { ComposeContext, PromptProfile } from './types';
 import { getBoardGroupForChat } from '../../state/chat-groups';
 import { resolveEffectiveOrchestratePlanPath } from '../plans/plan-path';
+
+// ── Cwd ──────────────────────────────────────────────────────────────────────
 
 /** Workspace folder path for {{cwd}} in system prompts (falls back to origin). */
 export function resolveComposeCwd(): string {
@@ -74,6 +72,8 @@ export interface ResolvedExpertContext {
   routeSource: string;
 }
 
+// ── Context ──────────────────────────────────────────────────────────────────
+
 /**
  * Assemble compose context for the active chat and config.
  */
@@ -107,12 +107,6 @@ export async function buildComposeContext(
   const runFirstTurn = shouldRunFirstTurnInjections(chat, {
     firstUserSend: options?.firstUserSend,
   });
-  /*
-   * The prompt is recomposed on every send (mode, agent, skill, tools and cwd all
-   * move mid-chat), but retrieval only runs on turn 1. Replaying the persisted
-   * bodies keeps turn 20 carrying the same durable context turn 1 had — and keeps
-   * the leading system message byte-stable, so local KV prefixes still hit.
-   */
   const replayBodies = runFirstTurn
     ? {}
     : resolveInjectionReplay(chat.history, {
@@ -334,10 +328,8 @@ export interface OutboundSystemMessages {
   injectionBlocks: OutboundInjectionBlocks;
 }
 
-/**
- * Resolve composed programmatic prompt and optional user rules for send.
- * Shared by tool loop, plain chat, and token estimate (F25).
- */
+// ── Outbound ─────────────────────────────────────────────────────────────────
+
 export async function resolveOutboundSystemMessages(
   chat: Chat,
   legacySysPrompt: string,
@@ -353,11 +345,6 @@ export async function resolveOutboundSystemMessages(
     const { composeSystemPrompt } = await import('./prompt-composer');
     const ctx = await resolveComposeContextForSend(chat, options);
     composedRaw = composeSystemPrompt(ctx);
-    /*
-     * Replayed blocks came *from* the transcript, so re-announcing them would push a
-     * fresh `injection` row on every single turn. Only freshly retrieved bodies get a
-     * notice; the prompt still carries the text either way.
-     */
     if (!ctx.injectionsReplayed) {
       const brain = ctx.memoryBlock?.trim() ?? '';
       const codeMap = ctx.codeMapBlock?.trim() ?? '';

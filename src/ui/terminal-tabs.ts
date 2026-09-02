@@ -1,7 +1,3 @@
-/**
- * Multi-tab bar: fixed Agent tab + interactive PTY terminal sessions.
- */
-
 import { fetchShellProfiles, type ShellProfile } from '../api/terminal-pty';
 import { randomUUID } from '../lib/random-id.ts';
 import {
@@ -227,7 +223,6 @@ function renderTabBar(activeId: string | null): void {
   addBtn.addEventListener('click', () => {
     void addTab();
   });
-  // Keep the add control inline with tabs, not pinned to the strip edge.
   list.appendChild(addBtn);
 
   tabBarEl.appendChild(list);
@@ -338,10 +333,7 @@ export function isTerminalTabsInitialized(): boolean {
   return tabsInitialized;
 }
 
-/**
- * Persist open PTY tab metadata before unload so reload restores the tab bar.
- * Uses keepalive fetch; safe to call from pagehide.
- */
+/** Persist open PTY tab metadata before unload so reload restores the tab bar. */
 export function flushTerminalTabsForUnload(): void {
   if (!tabsInitialized || liveTabs.size === 0) return;
   const activeId = getTerminalMetaCached().activeTabId ?? null;
@@ -381,7 +373,6 @@ export async function initTerminalTabs(
   shellSelect.addEventListener('change', () => {
     const profileId = shellSelect.value;
     void (async () => {
-      // Remember default shell and open a fresh PTY tab (MIN-244).
       await saveTerminalMeta({ defaultShellProfileId: profileId });
       await addTab(profileId);
     })();

@@ -28,9 +28,6 @@ let sseUnsub: (() => void) | null = null;
  * tears the stream down once nobody is left listening.
  */
 export function subscribeServeActivityFeed(listener: FeedListener): () => void {
-  // The feed is started from app init, which also runs under happy-dom and in the
-  // Electron main-adjacent bundles. Telemetry is a nicety; never make a boot path
-  // depend on EventSource existing.
   if (typeof EventSource !== 'function') return () => {};
 
   listeners.add(listener);
@@ -41,20 +38,15 @@ export function subscribeServeActivityFeed(listener: FeedListener): () => void {
       for (const fn of listeners) {
         try {
           fn(activity);
-        } catch {
-          /* one bad consumer must not kill the feed */
-        }
+        } catch {}
       }
     });
   }
 
-  // Replay so a late subscriber paints immediately instead of on the next tick.
   for (const activity of byServeId.values()) {
     try {
       listener(activity);
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   }
 
   return () => {
@@ -112,7 +104,6 @@ export function activitySuffixForModelId(modelId: string): string {
     return queued ? `${work} · ${queued}` : work;
   }
 
-  // mlx-lm has no /slots sample. Show Minnow-owned prefill / gen from the overlay.
   const overlay = getInFlightPromptOverlay();
   const needle = modelId.trim();
   if (

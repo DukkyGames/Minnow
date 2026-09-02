@@ -1,7 +1,3 @@
-/**
- * Shared tool permission list UI for drawer, settings page, and composer popover.
- */
-
 import {
   isToolPermissionMode,
   saveToolCacheFromUi,
@@ -46,6 +42,8 @@ export type FillToolsSectionOptions = {
 };
 
 let toolHandlersRegistered = false;
+
+// ── Collapsible groups ───────────────────────────────────────────────────────
 
 /** Keep category bulk toggles from opening or closing the group summary. */
 function stopSummaryToggle(event: Event): void {
@@ -105,11 +103,7 @@ function wrapCollapsibleToolGroup(
   return details;
 }
 
-/**
- * Group shell for dynamic tool sources (plugins, MCP servers) so their rows keep
- * the same shape as built-in categories: collapsible in Settings, plain section
- * in the drawer.
- */
+/** Group shell for dynamic tool sources (plugins, MCP servers) so their rows keep the same shape as built-in categories: collapsible in Settings, plain section in the drawer. */
 export function createDynamicToolGroup(options: {
   category: string;
   title: string;
@@ -170,6 +164,8 @@ export function createDynamicToolGroup(options: {
   details.append(summary, body);
   return details;
 }
+
+// ── Tool controls ────────────────────────────────────────────────────────────
 
 /** Build a per-category or global "select all" control. */
 function createToolSelectAllControl(
@@ -279,9 +275,10 @@ export function bindToolsListChange(list: HTMLElement): void {
   if (list.dataset.toolsChangeBound === 'true') return;
   list.dataset.toolsChangeBound = 'true';
   list.addEventListener('change', (event) => handleToolsListChange(event, list));
-  // Composer popover uses segmented buttons instead of <select>; clicks do not emit change.
   list.addEventListener('click', (event) => handleToolsListChange(event, list));
 }
+
+// ── Fill section ─────────────────────────────────────────────────────────────
 
 /** Populate a tool list container with grouped permission rows. */
 export function fillToolsSection(
@@ -407,10 +404,7 @@ export function fillToolsSection(
   bindToolsListChange(container);
 }
 
-/**
- * Build a tools list on first use (boot defers these so cold start does not
- * construct 100+ permission rows four times before first paint).
- */
+/** Build a tools list on first use (boot defers these so cold start does not construct 100+ permission rows four times before first paint). */
 export function ensureToolsSectionFilled(
   containerId: string,
   options: FillToolsSectionOptions = {},
@@ -422,6 +416,8 @@ export function ensureToolsSectionFilled(
   }
   fillToolsSection(containerId, options);
 }
+
+// ── Register ─────────────────────────────────────────────────────────────────
 
 /** Bind tool lists and Brave API key field to config handlers (once per app boot). */
 export function registerToolHandlers(): void {

@@ -1,8 +1,3 @@
-/**
- * Validate session, tool, and system-prompt payloads before writing to disk.
- */
-
-
 import { ALL_TOOL_IDS, ARCHIVE_RECALL_TOOL_IDS, BRAIN_DESTRUCTIVE_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_IDS, BRAIN_FULL_PERMISSION_TOOL_ID_SET, MINNOW_DOCS_TOOL_IDS } from './tool-ids.js';
 import { normalizeWorkspacePathKey } from '../workspace/root.js';
 import { normalizeToolOutputConfig } from '../tools/output-cap.js';
@@ -105,7 +100,6 @@ function ensureBugBoard(raw) {
   return { bugs, startedAt, lastUpdatedAt };
 }
 
-/** Validate ~/.minnow/bugs/state.json */
 export function validateBugsState(raw) {
   if (!raw || typeof raw !== 'object') {
     return { version: 1, bugs: [] };
@@ -134,7 +128,6 @@ const ISSUE_STATUS_ROLES = new Set([
   'canceled',
 ]);
 
-/** Seed defaults for ~/.minnow/issues/taxonomy.json (mirrors src/issues/taxonomy.ts). */
 export function defaultIssuesTaxonomy() {
   return {
     version: 1,
@@ -249,7 +242,6 @@ function collectRemovedTaxonomyIds(previous, next) {
 }
 
 /**
- * Validate ~/.minnow/issues/taxonomy.json.
  * @param {unknown} raw
  * @param {{ previous?: object; issues?: Array<{ type: string; status: string; priority: string }> }} [options]
  */
@@ -302,21 +294,11 @@ export function validateIssuesTaxonomy(raw, options = {}) {
   return next;
 }
 
-/**
- * Value always written to `version` in issues/state.json.
- *
- * Frozen at the highest revision every already-shipped reader can parse; those
- * readers reset to an empty state on an unrecognized `version`. The real
- * revision travels in `schemaRevision`, which they ignore. Mirrors
- * ISSUES_COMPAT_VERSION in src/types.ts.
- */
 export const ISSUES_COMPAT_VERSION = 2;
 
-/** Current schema revision for issues/state.json (mirrors ISSUES_SCHEMA_VERSION). */
 export const ISSUES_SCHEMA_VERSION = 3;
 
 /**
- * Effective schema revision of a stored blob (`schemaRevision`, else `version`).
  * @param {Record<string, unknown>} row
  * @returns {number}
  */
@@ -332,7 +314,6 @@ export function issuesSchemaRevisionOf(row) {
   return ISSUES_SCHEMA_VERSION;
 }
 
-/** Card keys this revision normalizes; everything else passes through verbatim. */
 const NORMALIZED_ISSUE_CARD_KEYS = new Set([
   'id',
   'type',
@@ -363,7 +344,6 @@ const NORMALIZED_ISSUE_CARD_KEYS = new Set([
   'triagedAt',
 ]);
 
-/** Top-level state keys this revision normalizes. */
 const NORMALIZED_ISSUES_STATE_KEYS = new Set([
   'version',
   'schemaRevision',
@@ -375,12 +355,6 @@ const NORMALIZED_ISSUES_STATE_KEYS = new Set([
 ]);
 
 /**
- * Copy keys this revision does not model onto the normalized output.
- *
- * The config API validates every PUT, so without this a client running a newer
- * schema would have its new fields stripped by an older server on the way to
- * disk — silent, per-field data loss with no error anywhere.
- *
  * @template {Record<string, unknown>} T
  * @param {Record<string, unknown>} source
  * @param {T} target
@@ -612,14 +586,6 @@ function ensureIssueCard(raw) {
   return preserveUnknownKeys(r, out, NORMALIZED_ISSUE_CARD_KEYS);
 }
 
-/**
- * Validate ~/.minnow/issues/state.json.
- *
- * Resetting to an empty state is reserved for a blob with no issues array —
- * an unreadable file. An unrecognized `version` is read on its own terms and
- * written back at its own number: this validator sits on the PUT path, so
- * rejecting a newer revision here would overwrite the user's issues with `[]`.
- */
 export function validateIssuesState(raw) {
   const empty = () => ({
     version: ISSUES_COMPAT_VERSION,
@@ -677,7 +643,6 @@ export function validateIssuesState(raw) {
     }
   }
 
-  // Never write back a lower revision than the payload carried.
   const projects = parseIssueProjects(row.projects);
   const views = parseIssueViews(row.views);
   const state = {
@@ -734,8 +699,6 @@ export function validateSessionState(raw) {
     throw new Error('Session must have at least one chat');
   }
 
-  // Whole-blob ladder: only migrate chats when the incoming blob is pre-v6
-  // (matches client parseSessionStateFromJson — A.0.3 parity).
   if (version < SESSION_SCHEMA_VERSION) {
     for (const chat of state.chats) {
       migrateChatRowV5ToV6(chat);
@@ -797,7 +760,6 @@ function normalizePermissionsFromStored(stored, seedDefault) {
   return { default: merged };
 }
 
-/** True when a tool id was present in persisted tools.json (enabled or permissions). */
 function toolIdWasStored(raw, id) {
   if (!raw || typeof raw !== 'object') return false;
   const stored = /** @type {Record<string, unknown>} */ (raw);
@@ -817,7 +779,6 @@ function toolIdWasStored(raw, id) {
   return false;
 }
 
-/** Insert missing Brain tool ids at `full` for upgraded configs (Correction 6). */
 function backfillBrainTools(config, raw) {
   for (const id of BRAIN_FULL_PERMISSION_TOOL_IDS) {
     if (!toolIdWasStored(raw, id)) {
@@ -839,7 +800,6 @@ function backfillBrainTools(config, raw) {
   }
 }
 
-/** Clamp archive policy numeric fields (MIN-139). */
 export function normalizeArchiveConfig(raw) {
   if (!raw || typeof raw !== 'object') return undefined;
   const row = /** @type {Record<string, unknown>} */ (raw);
@@ -1185,7 +1145,6 @@ const SUPERVISOR_DEFAULTS = {
 };
 
 /**
- * Deep-merge `supervisor` config with clamps (server + tests).
  * @param {Record<string, unknown>} patch
  * @param {Record<string, unknown>} base
  * @returns {object}
@@ -1268,7 +1227,6 @@ export function mergeSupervisorConfig(patch, base) {
 }
 
 /**
- * Normalize Super Plan pipeline settings under config.json planning.superPlan.
  * @param {unknown} raw
  * @param {Record<string, unknown>} [existing]
  * @returns {object}
@@ -1350,7 +1308,6 @@ export function normalizeSuperPlanConfig(raw, existing = {}) {
 }
 
 /**
- * Merge allowed fields into config.json meta.
  * @param {object} existing
  * @param {unknown} patch
  * @returns {object}
@@ -1532,8 +1489,6 @@ export function mergeConfigMeta(existing, patch) {
           existingAutopilot.defaultStatus = status;
         }
       }
-      // Only fold recognised inbound autonomy keys so a junk patch cannot
-      // clobber a stored Running default.
       existingAutopilot.defaultStatus = foldAutopilotDefaultStatus({
         ...existingAutopilot,
         ...(typeof a.defaultHandsOff === 'boolean' ? { defaultHandsOff: a.defaultHandsOff } : {}),
@@ -2278,7 +2233,6 @@ export function mergeConfigMeta(existing, patch) {
   return base;
 }
 
-/** Normalize experts.enabled and experts.profiles from config.json meta. */
 function normalizeExpertsConfigBlock(raw) {
   if (!raw || typeof raw !== 'object') {
     return { enabled: true, profiles: {} };
@@ -2325,7 +2279,6 @@ function normalizeExpertsConfigBlock(raw) {
 }
 
 /**
- * Default fallback chain config for new homes and merge fallbacks.
  * @returns {object}
  */
 export function defaultFallbackChainsConfig() {
@@ -2344,7 +2297,6 @@ export function defaultFallbackChainsConfig() {
 }
 
 /**
- * Normalize fallback chain config from config.json meta.
  * @param {unknown} raw
  * @param {Record<string, unknown>} [existing]
  */
@@ -2426,7 +2378,6 @@ const TTS_FORMATS = new Set(['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm']);
 
 const STT_RESPONSE_FORMATS = new Set(['json', 'text', 'verbose_json', 'srt', 'vtt']);
 
-/** Clamp a numeric config field to [min, max] with fallback. */
 function clampVoiceNum(value, min, max, fallback) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, value));
@@ -2437,7 +2388,6 @@ function isQwen06bCustomVoice(modelId) {
 }
 
 /**
- * Default local Whisper settings (GPU-first when CUDA is available).
  * @param {boolean} [cudaAvailable]
  */
 function defaultSttLocal(cudaAvailable = false) {
@@ -2480,7 +2430,6 @@ function defaultSttProvider() {
 }
 
 /**
- * Default local Qwen3-TTS settings (GPU-first when CUDA is available).
  * @param {boolean} [cudaAvailable]
  */
 function defaultTtsLocal(cudaAvailable = false) {
@@ -2518,7 +2467,6 @@ function defaultTtsLocal(cudaAvailable = false) {
   };
 }
 
-/** Default PCM streaming tuning for local Qwen3-TTS (distinct from `tts.streaming` enable flag). */
 function defaultTtsLocalStreaming() {
   return {
     emitEveryFrames: 8,
@@ -2580,8 +2528,7 @@ function defaultVoiceAudio() {
 }
 
 /**
- * Default voice I/O config for new homes and merge fallbacks.
- * @param {boolean} [cudaAvailable] When true, prefer whisper-small and bfloat16 TTS.
+ * @param {boolean} [cudaAvailable]
  * @returns {object}
  */
 export function defaultVoiceConfig(cudaAvailable = false) {
@@ -2813,7 +2760,6 @@ function normalizeTtsBrowser(raw, base) {
   return out;
 }
 
-/** Sync legacy flat STT/TTS fields for provider middleware compatibility. */
 function syncLegacyVoiceFields(stt, tts) {
   if (stt.backend === 'provider') {
     stt.providerId = stt.provider.providerId;
@@ -2847,7 +2793,6 @@ function syncLegacyVoiceFields(stt, tts) {
 }
 
 /**
- * Normalize voice STT/TTS settings persisted in config.json.
  * @param {unknown} raw
  * @param {Record<string, unknown>} [existing]
  * @param {{ cudaAvailable?: boolean, installedManifest?: { stt?: unknown[], tts?: unknown[] } }} [options]
@@ -3111,7 +3056,6 @@ export function normalizeVoiceConfig(raw, existing = {}, options = {}) {
 }
 
 /**
- * Normalize memory config including semantic embeddings subsection.
  * @param {unknown} raw
  * @param {Record<string, unknown>} [existing]
  */
@@ -3198,7 +3142,6 @@ export function normalizeMemoryConfig(raw, existing = {}) {
 }
 
 /**
- * Normalize synthesis config for memory/skill auto-learning proposals.
  * @param {unknown} raw
  * @param {Record<string, unknown>} [existing]
  */
@@ -3287,7 +3230,6 @@ const DEFAULT_SUB_AGENTS = {
 };
 
 /**
- * Normalize sub-agents.json user overrides (warn on unknown tool ids).
  * @param {unknown} body
  * @returns {{ config: object, warnings: string[] }}
  */
@@ -3478,7 +3420,6 @@ const SEARCH_PROVIDERS = new Set([
 const SEARCH_FALLBACK_PROVIDERS = new Set(['tavily', 'brave', 'duckduckgo']);
 
 /**
- * Default search.json (Deep Research provider chain + web_search prefs).
  * @returns {object}
  */
 export function defaultSearchConfig() {
@@ -3507,7 +3448,6 @@ function clampInt(value, min, max, fallback) {
 }
 
 /**
- * Normalize search.json (whitelist providers, clamp result count).
  * @param {unknown} raw
  * @returns {object}
  */
@@ -3554,8 +3494,7 @@ export function normalizeSearchConfig(raw) {
 }
 
 /**
- * Build initial search.json from legacy tools.json web search fields.
- * @param {object} toolsConfig normalized tools.json
+ * @param {object} toolsConfig
  * @returns {object}
  */
 export function seedSearchConfigFromTools(toolsConfig) {
@@ -3583,7 +3522,6 @@ export function seedSearchConfigFromTools(toolsConfig) {
 }
 
 /**
- * Default research.json engine parameters.
  * @returns {object}
  */
 export function defaultResearchConfig() {
@@ -3605,7 +3543,6 @@ export function defaultResearchConfig() {
 }
 
 /**
- * Normalize research.json (clamp numeric engine limits).
  * @param {unknown} raw
  * @returns {object}
  */
@@ -3672,7 +3609,6 @@ export function normalizeResearchConfig(raw) {
   return config;
 }
 
-/** Managed local server ids allowed in servers.json (Phase 0: searxng only). */
 const MANAGED_SERVER_IDS = ['searxng', 'llama-cpp', 'mlx-lm'];
 
 const DEFAULT_SERVER_PORTS = {
@@ -3682,7 +3618,6 @@ const DEFAULT_SERVER_PORTS = {
 };
 
 /**
- * Default servers.json (managed SearXNG and future local servers).
  * @returns {Record<string, { enabled: boolean, autoStart: boolean, port: number }>}
  */
 export function defaultServersConfig() {
@@ -3718,7 +3653,6 @@ function coerceBool(value, fallback) {
 }
 
 /**
- * Normalize servers.json (catalog ids only, clamp ports, coerce booleans).
  * @param {unknown} raw
  * @returns {Record<string, { enabled: boolean, autoStart: boolean, port: number }>}
  */

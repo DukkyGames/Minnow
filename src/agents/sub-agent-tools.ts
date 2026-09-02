@@ -1,7 +1,3 @@
-/**
- * Resolve which OpenAI tool definitions a sub-agent may call.
- */
-
 import type { OpenAIFunctionDefinition } from '../tools/definitions';
 import type { SubAgentTypeConfig } from './types';
 
@@ -12,10 +8,6 @@ const META_SPAWN_TOOLS = new Set([
   'get_sub_agent_status',
 ]);
 
-/**
- * Filter parent-enabled tools by sub-agent allow/deny lists.
- * Always removes recursive spawn tools unless type is reserved "orchestrator" (v1: never).
- */
 export function resolveSubAgentTools(
   typeConfig: SubAgentTypeConfig,
   typeId: string,

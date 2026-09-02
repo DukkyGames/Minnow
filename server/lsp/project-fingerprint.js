@@ -53,6 +53,7 @@ async function statToken(absPath) {
  * Hash tsconfig / jsconfig / package.json plus @types/node along the path from
  * `relativePath` up to `workspaceRoot`. Callers compare this to the last value
  * seen by the agent TypeScript server and bounce tsserver on change.
+ * Hash configs in name order so the digest does not depend on readdir order.
  *
  * @param {string} relativePath - Project-relative file being diagnosed.
  * @param {string} workspaceRoot
@@ -72,7 +73,6 @@ export async function hashTypeScriptProjectFingerprint(relativePath, workspaceRo
       names = [];
     }
 
-    // Hash configs in name order so the digest does not depend on readdir order.
     const configNames = names.filter((name) => isTypeScriptProjectConfigName(name)).sort();
     for (const name of configNames) {
       const abs = path.join(dir, name);

@@ -1,7 +1,3 @@
-/**
- * Canonical settings row builders (select, input, textarea, radio segments, actions).
- */
-
 let rowLabelCounter = 0;
 
 export type SettingsRowOptions = {
@@ -14,6 +10,8 @@ type SettingsRowLabelParts = {
   label: HTMLDivElement;
   titleId: string;
 };
+
+// ── Shell ────────────────────────────────────────────────────────────────────
 
 function buildSettingsRowLabel(
   labelText: string,
@@ -64,6 +62,8 @@ export type SettingsSelectRowOptions = SettingsRowOptions & {
   disabled?: boolean;
   onChange?: (value: string) => void;
 };
+
+// ── Inputs ───────────────────────────────────────────────────────────────────
 
 /** Label left, select right (`.settings-row` + `.settings-select`). */
 export function createSettingsSelectRow(
@@ -340,6 +340,8 @@ export type SettingsActionsRowOptions = {
   searchKey?: string;
   className?: string;
 };
+
+// ── Actions ──────────────────────────────────────────────────────────────────
 
 /** Standard action button row (`.settings-actions`). */
 export function createSettingsActionsRow(

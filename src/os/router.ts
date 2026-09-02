@@ -12,6 +12,8 @@ import { recordAppSurfaceFocus } from './app-focus-cycle';
 import { osOnAppClose, osOnAppOpen } from './page-bridge';
 import { CODE_SECTION_IDS, type AppId, type CodeSectionId, type LaunchOptions, type OsRoute } from './types';
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 /** Legacy `#/app/…` target, or workspace gate when that app is unavailable. */
 function legacyHashForApp(appId: AppId): string {
   if (!isAppAvailable(appId)) return '#/workspaces';
@@ -32,7 +34,6 @@ function notifyAppUnavailable(appId: AppId): void {
  * @deprecated Legacy no-op — window sheets were removed with the window manager.
  */
 function parkPhoneWindowSheets(): void {
-  /* no-op */
 }
 
 /** Block unavailable apps: toast (when user-disabled) and return to desktop. */
@@ -144,6 +145,8 @@ export function resolveLegacyHash(hash: string): {
   return { hash: trimmed };
 }
 
+// ── Parse ────────────────────────────────────────────────────────────────────
+
 /** Parse a normalized hash into an OS route. */
 export function parseOsHash(hash: string): OsRoute {
   const normalized = hash || '#/';
@@ -169,13 +172,10 @@ export function parseOsHash(hash: string): OsRoute {
     }
     if (route.appId === 'code') {
       const seg = appMatch[2];
-      // Honor an explicit segment (including `chat`) so leftover pendingCodeSection
-      // cannot reopen Overview after the hash has already moved.
       route.codeSection = isCodeSectionId(seg)
         ? seg
         : (pendingCodeSection ?? 'chat');
     }
-    // Prepare Issues deep-link parse for Phase 2 detail panel.
     if (route.appId === 'issues' && appMatch[2]) {
       route.issueId = appMatch[2];
     }
@@ -239,6 +239,8 @@ function syncForegroundLifecycle(nextApp: AppId | null): void {
     lastRecordedSurface = null;
   }
 }
+
+// ── Apply route ──────────────────────────────────────────────────────────────
 
 function applyRoute(route: OsRoute, options?: LaunchOptions): void {
   if (route.view === 'workspaces') {
@@ -323,6 +325,8 @@ function applyRouteFromHash(): void {
 function onHashChange(): void {
   applyRouteFromHash();
 }
+
+// ── Navigate ─────────────────────────────────────────────────────────────────
 
 /** Navigate to the workspace gate. */
 export function navigateToWorkspaces(): void {
@@ -454,6 +458,8 @@ export function getRouterStateForTests(): {
     snapshot: getInstanceSnapshot(),
   };
 }
+
+// ── Code sections ────────────────────────────────────────────────────────────
 
 /** Navigate to a Code app section. Same-hash calls apply the route immediately. */
 function navigateToCodeSection(section: CodeSectionId): void {

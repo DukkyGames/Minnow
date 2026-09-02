@@ -57,6 +57,8 @@ afterEach(() => {
   resetSandboxProbeCache();
 });
 
+// ── hostHelperPathToWsl / ────────────────────────────────────────────────────
+
 describe('hostHelperPathToWsl / mapPolicyPathToWsl', () => {
   it('translates Windows helper paths to /mnt mounts', () => {
     assert.equal(hostHelperPathToWsl(FAKE_HELPER_WIN), FAKE_HELPER_WSL);
@@ -68,6 +70,8 @@ describe('hostHelperPathToWsl / mapPolicyPathToWsl', () => {
     assert.equal(hostHelperPathToWsl('/usr/local/bin/minnow-sandbox'), '/usr/local/bin/minnow-sandbox');
   });
 });
+
+// ── probeWslPresent ──────────────────────────────────────────────────────────
 
 describe('probeWslPresent', () => {
   it('reports wsl_unavailable without distros', () => {
@@ -89,6 +93,8 @@ describe('probeWslPresent', () => {
     assert.equal(probe.defaultDistro, 'Ubuntu');
   });
 });
+
+// ── probeWslLandlock ─────────────────────────────────────────────────────────
 
 describe('probeWslLandlock', () => {
   it('maps missing WSL before touching the helper', () => {
@@ -156,6 +162,8 @@ describe('probeWslLandlock', () => {
   });
 });
 
+// ── WSL argv split ───────────────────────────────────────────────────────────
+
 describe('WSL argv split / ensure / recover', () => {
   it('splits prefix and inner at --', () => {
     const spawn = buildWslOneShotSpawn({
@@ -189,6 +197,8 @@ describe('WSL argv split / ensure / recover', () => {
     assert.deepEqual(inner, { command: 'bash', args: ['-l', '-c', 'npm test'] });
   });
 });
+
+// ── composeWslLandlockWrap ───────────────────────────────────────────────────
 
 describe('composeWslLandlockWrap', () => {
   const policy = buildWorkspacePolicy({
@@ -282,6 +292,8 @@ describe('composeWslLandlockWrap', () => {
   });
 });
 
+// ── wrapSandbox win32 ────────────────────────────────────────────────────────
+
 describe('wrapSandbox win32 composition', () => {
   it('applies wsl-landlock when fixtures + helper are provided', () => {
     const policy = buildWorkspacePolicy({
@@ -321,6 +333,8 @@ describe('wrapSandbox win32 composition', () => {
   });
 });
 
+// ── resolveWslLandlockHelper ─────────────────────────────────────────────────
+
 describe('resolveWslLandlockHelper', () => {
   it('translates MINNOW_SANDBOX_HELPER Windows paths', () => {
     // Use this test file as an existsSync stand-in for a host-visible helper.
@@ -338,6 +352,8 @@ describe('resolveWslLandlockHelper', () => {
     assert.equal(resolveWslLandlockHelper(env), 'minnow-sandbox');
   });
 });
+
+// ── planWslHelperProvision / ─────────────────────────────────────────────────
 
 describe('planWslHelperProvision / installHelperIntoWsl', () => {
   it('plans install when host ELF exists and installed copy is missing', () => {

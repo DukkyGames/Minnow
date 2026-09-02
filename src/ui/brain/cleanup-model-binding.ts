@@ -1,7 +1,3 @@
-/**
- * Brain cleanup planner — resolve provider/model from the top-bar picker.
- */
-
 import { decodeModelSelectKey } from '../../lib/model-select-key';
 import { resolveProvider } from '../../providers/store';
 import { getActiveChat } from '../../state/sessions';

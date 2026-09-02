@@ -1,8 +1,3 @@
-/**
- * MIN-387: Wire index.html shell controls via addEventListener (no inline on* attrs).
- * Transitional module — surfaces migrate into render*() owners over time.
- */
-
 import { fetchModels } from '../api/models';
 import {
   closeDrawer,
@@ -44,7 +39,6 @@ export function initShellHandlers(): void {
   if (shellHandlersBound) return;
   shellHandlersBound = true;
 
-  // Top bar — model controls
   wireClick('btnRefreshModels', () => fetchModels());
 
   const modelSelect = document.getElementById('modelSelect');
@@ -53,7 +47,6 @@ export function initShellHandlers(): void {
     modelSelect.addEventListener('change', onModelSelectChange);
   }
 
-  // Top bar — navigation
   wireClick('btnSidebarToggle', toggleSidebarLayout);
   wireClick('btnResearch', () => {
     void import('../research/panel').then((m) => m.openResearchFromTopbar());
@@ -70,12 +63,10 @@ export function initShellHandlers(): void {
     void import('./settings-page').then((m) => m.openSettingsFromTopbar());
   });
 
-  // Drawer-only Experts hint — do not bind every .settings-inline-link (settings cross-links).
   wireClick('drawerExpertsLink', () => {
     void import('../ui/experts/experts-hub').then((m) => m.openExpertLabFromTopbar());
   });
 
-  // Settings drawer
   wireClick('drawerOverlay', closeDrawer);
   const drawer = document.getElementById('drawer');
   if (drawer && drawer.dataset.shellWired !== '1') {
@@ -101,29 +92,23 @@ export function initShellHandlers(): void {
     drawerClearBtn.addEventListener('click', clearChat);
   }
 
-  // Mobile backdrops
   wireClick('sidebarBackdrop', closeMobileSidebar);
   wireClick('fileSidebarBackdrop', closeMobileFileSidebar);
 
-  // Chat sidebar
   wireClick('btnChatSearch', () => {
     const btn = document.getElementById('btnChatSearch');
     if (!btn) return;
     void import('./chat-search-popover').then((m) => m.toggleChatSearchPopover(btn));
   });
-  // Panel open/close lives on the app rail tile (see os/app-rail.ts).
   wireClickAll('.chat-new-wide', createChat);
   wireClick('btnOrchestrate', () => {
     void import('./orchestrate-hub').then((m) => m.toggleOrchestrateHubFromTopbar());
   });
 
-  // Composer — #msgInput keydown/input wired in initComposerInput() from main.ts
   wireClick('sendBtn', handleComposerPrimaryAction);
 
-  // Stats strip expand control
   wireClick('statsExpandBtn', toggleStatsPanel);
 
-  // File sidebar
   wireClick('btnFileSidebarCollapse', toggleFileSidebarLayout);
   wireClick('btnPreviewToggle', () => {
     void import('./preview-panel').then((m) => m.togglePreviewPanel());

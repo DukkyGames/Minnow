@@ -1,8 +1,3 @@
-/**
- * Tab strip UI for the multi-tab file viewer.
- * Rendering is handled by unified-right-tabs.ts (MIN-224).
- */
-
 import {
   bindUnifiedRightTabs,
   refreshUnifiedRightTabs,

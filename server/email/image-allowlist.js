@@ -42,8 +42,6 @@ export async function listImageAllowlist() {
  */
 async function writeImageAllowlist(senders) {
   const filePath = emailImageAllowlistPath();
-  // Don't depend on ensureMinnowLayout having run; a first-write on a fresh
-  // profile must not fail just because nothing has touched ~/.minnow/email yet.
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   const tmp = `${filePath}.tmp-${process.pid}-${Date.now()}`;
   await fs.writeFile(

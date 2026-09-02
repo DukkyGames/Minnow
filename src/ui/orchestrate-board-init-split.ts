@@ -1,8 +1,3 @@
-/**
- * Transient Orchestrate board-init layout: full board onboarding loader (no chat split).
- * Chat still streams in the background; bubbles stay hidden until the user jumps to Chat view.
- */
-
 import { normalizeModeId } from '../chat/modes/types';
 import { isChatStreaming } from '../chat/streaming-state';
 import {
@@ -22,7 +17,6 @@ export function lastUserMessageMatchesBoardKickoff(chat: Chat): boolean {
     if (!msg) continue;
     if (msg.role === 'user') {
       const content = String(msg.content).trim();
-      // Marker covers pathless, path-named, and historical kickoff wording.
       return content.includes(BOARD_ONBOARDING_KICKOFF_MARKER);
     }
     if (msg.role === 'assistant' || msg.role === 'tool') continue;
@@ -31,10 +25,7 @@ export function lastUserMessageMatchesBoardKickoff(chat: Chat): boolean {
   return false;
 }
 
-/**
- * True while the parent orchestrator stream is initializing the board
- * (no orchestrateBoard store yet, kickoff message in history).
- */
+/** True while the parent orchestrator stream is initializing the board (no orchestrateBoard store yet, kickoff message in history). */
 export function isOrchestrateBoardInitSplitActive(chat: Chat): boolean {
   if (normalizeModeId(chat.modeId) !== 'orchestrate') return false;
   if (!isChatStreaming(chat.id)) return false;

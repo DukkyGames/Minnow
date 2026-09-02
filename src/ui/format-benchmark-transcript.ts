@@ -1,7 +1,3 @@
-/**
- * Plain-text formatter for benchmark probe transcripts (clipboard / bug reports).
- */
-
 import { apiMessageContentToText } from '../api/message-content.ts';
 import type { BenchmarkRun, TestResult } from '../benchmark/types.ts';
 import type { ApiAssistantMessage, ApiMessage, ApiMessageContent } from '../types.ts';

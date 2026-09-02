@@ -1,7 +1,3 @@
-/**
- * Apply streamed Quick Edit replacements to a document range (Phase 4).
- */
-
 import {
   buildLineDiff,
   countLineChangeStats,

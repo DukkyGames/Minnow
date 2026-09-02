@@ -1,11 +1,4 @@
 #!/usr/bin/env node
-/**
- * Validate (and optionally bootstrap) macOS release signing prerequisites.
- *
- * Usage:
- *   npm run signing:check          # report status, exit 1 when release-ready signing is incomplete
- *   npm run signing:setup          # generate a CSR + print portal steps when no cert exists
- */
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -47,10 +40,6 @@ function ensureCsrDir() {
   fs.mkdirSync(csrDir, { recursive: true });
 }
 
-/**
- * Create a Certificate Signing Request for Developer ID Application.
- * The private key stays in build/macos-signing/ (gitignored).
- */
 function generateCsr() {
   ensureCsrDir();
   const keyPath = path.join(csrDir, 'developer_id.key');

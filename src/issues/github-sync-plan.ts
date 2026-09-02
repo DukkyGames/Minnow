@@ -111,8 +111,6 @@ export function planIssueSync(input: PlanSyncInput): SyncAction {
 
   if (mode === 'off') return { kind: 'noop', reason: 'GitHub sync is off' };
 
-  // Per-issue opt-in exists so Link + push does not push a private scratch
-  // issue to a public repo the first time someone turns the mode on.
   if (mode === 'link' && !issue.githubSync) {
     return { kind: 'noop', reason: 'This issue is not opted into sync' };
   }
@@ -122,8 +120,6 @@ export function planIssueSync(input: PlanSyncInput): SyncAction {
 
   if (!link || !remote) {
     if (!link) return { kind: 'create' };
-    // Linked but the remote is gone: deleted, moved, or the repo changed.
-    // Silently recreating it would duplicate; this is the user's call.
     return { kind: 'noop', reason: `GitHub issue #${link.number} could not be read` };
   }
 
@@ -136,9 +132,6 @@ export function planIssueSync(input: PlanSyncInput): SyncAction {
   const remoteChanged = hasRemoteChanged(remote, link);
 
   if (mode === 'link') {
-    // Local is the source of truth in this mode, so a remote edit never wins.
-    // It is still not *discarded* — the remote keeps its own history, and the
-    // user sees the divergence the moment they switch to mirror.
     return { kind: 'push', fields: local };
   }
 
@@ -148,15 +141,10 @@ export function planIssueSync(input: PlanSyncInput): SyncAction {
   if (localChanged) return { kind: 'push', fields: local };
   if (remoteChanged) return { kind: 'pull', fields: remoteSide };
 
-  // Content differs but neither timestamp moved past the watermark. Something
-  // is not being tracked, so the safe answer is to ask rather than guess.
   return { kind: 'conflict', local, remote: remoteSide };
 }
 
 function hasLocalChanged(issue: IssueCard, link: IssueGithubLink): boolean {
-  // Compare against the local timestamp captured at the last sync when it is
-  // available; `syncedAt` is a wall clock that can sit before a same-moment
-  // local write.
   const baseline = link.localUpdatedAt ?? link.syncedAt;
   return issue.updatedAt > baseline;
 }

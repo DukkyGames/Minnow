@@ -1,13 +1,3 @@
-/**
- * File-tree drag-and-drop: internal moves + OS file/folder import into workspace folders.
- *
- * Robustness note: browsers track drop-allowance per DOM element and clear it on
- * `dragleave`, so a `drop` event may never fire even when the last `dragover` was
- * allowed (the item snaps back). The `dragend` handler therefore falls back to
- * resolving the release point via `document.elementFromPoint` and performs the
- * move itself when no `drop` was handled.
- */
-
 import { collectDroppedTreeEntries } from '../attachments/directory-drop';
 import { classifyFileDrag } from '../attachments/external-file-drop';
 import { WORKSPACE_FILE_MIME } from '../attachments/workspace-ref';
@@ -27,6 +17,8 @@ let moveInFlight = false;
 let activeDragSourcePath: string | null = null;
 /** Set when the `drop` handler dispatches a move/import; the dragend fallback skips when true. */
 let dropHandled = false;
+
+// ── Detect ───────────────────────────────────────────────────────────────────
 
 function hasWorkspaceDrag(dataTransfer: DataTransfer | null): boolean {
   return classifyFileDrag(dataTransfer) === 'workspace';
@@ -61,10 +53,9 @@ function clearDropHighlight(host: HTMLElement): void {
   }
 }
 
-/**
- * Core internal move: validate + move `source` into `destDir`. Shared by the
- * `drop` handler and the `dragend` fallback.
- */
+// ── Drop ─────────────────────────────────────────────────────────────────────
+
+/** Core internal move: validate + move `source` into `destDir`. */
 async function performTreeMove(source: string, destDir: string): Promise<void> {
   const destination = computeMoveDestination(source, destDir);
   if (!destination) {
@@ -108,7 +99,6 @@ async function handleExternalTreeDrop(
   const dataTransfer = event.dataTransfer;
   if (!dataTransfer) return;
 
-  // collectDroppedTreeEntries captures webkitGetAsEntry before its first await.
   const { entries, error } = await collectDroppedTreeEntries(dataTransfer);
   if (!entries.length) {
     setStatus('err', error ?? 'Nothing to import from this drop.');
@@ -133,6 +123,8 @@ function pathFromDragRow(target: EventTarget | null): string | null {
   const path = row.dataset.path?.trim();
   return path || null;
 }
+
+// ── Bind ─────────────────────────────────────────────────────────────────────
 
 function bindHost(host: HTMLElement): void {
   host.addEventListener(
@@ -222,9 +214,6 @@ function bindHost(host: HTMLElement): void {
   });
 
   host.addEventListener('dragend', (event) => {
-    // Fallback: the browser may never fire `drop` (a `dragleave` cleared the
-    // per-element drop-allowed state first). Resolve the release point via
-    // elementFromPoint and perform the move so the item does not snap back.
     const source = activeDragSourcePath?.trim() ?? '';
     if (!dropHandled && source) {
       const under = (typeof document.elementFromPoint === 'function'

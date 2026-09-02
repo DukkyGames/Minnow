@@ -32,13 +32,7 @@ export function markMessageStopped(wrap: HTMLElement): void {
   insertMessageChip(wrap, 'msg--stopped', 'msg-stopped-chip', 'Generation stopped');
 }
 
-/**
- * Partial-reply label on an assistant row the turn errored out of. The text was
- * already produced, so it stays in the transcript instead of being rolled back —
- * the chip is what tells the user the reply is incomplete.
- * When `recovery` is set (tail failed turn), Continue / Clear sit on the chip
- * so they survive a history re-render (MIN-666).
- */
+/** Partial-reply label on an assistant row the turn errored out of. */
 export function markMessageFailed(
   wrap: HTMLElement,
   recovery?: FailedTurnRecoveryTarget,

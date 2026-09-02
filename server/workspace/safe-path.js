@@ -13,13 +13,12 @@ export function normalizePathForComparison(fsPath) {
 /**
  * Resolve symlinks for boundary checks. Walks up the tree on ENOENT so
  * create/write paths for not-yet-existing files still validate parent dirs.
+ * On Windows, use native realpath so 8.3 short names match the long path.
  * @param {string} resolvedAbs Absolute path from path.resolve
  * @returns {string}
  */
 export function realpathForBoundaryCheck(resolvedAbs) {
   try {
-    // Prefer native realpath on Windows so 8.3 short names (e.g. RUNNER~1) canonicalize
-    // to the same long path as fs.promises.realpath — required for prefix checks in CI.
     if (process.platform === 'win32' && typeof fs.realpathSync.native === 'function') {
       return fs.realpathSync.native(resolvedAbs);
     }

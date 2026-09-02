@@ -1,7 +1,3 @@
-/**
- * Settings page section ids, categories, and sidebar groups.
- */
-
 import {
   SETTINGS_CATEGORIES,
   SETTINGS_CATEGORY_AREAS,

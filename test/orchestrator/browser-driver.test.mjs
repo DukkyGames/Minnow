@@ -61,6 +61,8 @@ after(async () => {
   await fsp.rm(homeDir, { recursive: true, force: true, maxRetries: 5 });
 });
 
+// ── discovery ────────────────────────────────────────────────────────────────
+
 describe('discovery', () => {
   test('win32 candidates prefer Chrome, then Edge, then Brave', () => {
     const candidates = browserCandidates('win32', {
@@ -140,7 +142,6 @@ describe('discovery', () => {
       assert.equal(capability.available, false);
       assert.equal(capability.reason, 'disabled-in-settings');
 
-      // The same gate must stop a launch, so the ladder degrades identically.
       const launched = await launchBrowser();
       assert.equal(launched.ok, false);
       assert.equal(launched.reason, 'disabled-in-settings');
@@ -150,6 +151,8 @@ describe('discovery', () => {
     }
   });
 });
+
+// ── launch options ───────────────────────────────────────────────────────────
 
 describe('launch options', () => {
   test('defaults are applied and nonsense values fall back', () => {
@@ -168,8 +171,6 @@ describe('launch options', () => {
   test('argv pins an ephemeral debug port and an isolated profile', () => {
     const options = normalizeLaunchOptions({});
     const args = buildLaunchArgs({ profileDir: 'C:\\tmp\\p1', options });
-    // Port 0 is load-bearing: the real port is read back from
-    // DevToolsActivePort, never assumed.
     assert.ok(args.includes('--remote-debugging-port=0'));
     assert.ok(args.includes('--user-data-dir=C:\\tmp\\p1'));
     assert.ok(args.includes('--headless=new'));
@@ -193,6 +194,8 @@ describe('launch options', () => {
     assert.match(capped, /truncated 40 chars/);
   });
 });
+
+// ── profile directories ──────────────────────────────────────────────────────
 
 describe('profile directories', () => {
   test('a profile is minted under the Minnow home and removed again', async () => {
@@ -221,7 +224,6 @@ describe('profile directories', () => {
   test('sweepStaleProfiles removes only what a crashed host left behind', async () => {
     const stale = await createProfileDir('stale');
     const fresh = await createProfileDir('fresh');
-    // Backdate the stale one past the cutoff.
     const old = new Date(Date.now() - 48 * 60 * 60 * 1000);
     await fsp.utimes(stale, old, old);
 
@@ -235,6 +237,8 @@ describe('profile directories', () => {
   });
 });
 
+// ── accessibility snapshot ───────────────────────────────────────────────────
+
 describe('accessibility snapshot', () => {
   test('an empty tree renders as (empty page)', () => {
     const snap = buildSnapshot(undefined);
@@ -243,9 +247,6 @@ describe('accessibility snapshot', () => {
   });
 
   test('ignored wrapper nodes hoist their children instead of pruning them', () => {
-    // Regression: Chromium's <html> node is `ignored` with no name. The prior
-    // implementation returned null for it, which discarded the entire document
-    // and made every snapshot a lone RootWebArea.
     const snap = buildSnapshot([
       {
         nodeId: '1',
@@ -294,6 +295,8 @@ describe('accessibility snapshot', () => {
   });
 });
 
+// ── CDP client containment ───────────────────────────────────────────────────
+
 describe('CDP client containment', () => {
   test('sending on an unconnected client rejects rather than hanging', async () => {
     const client = new CdpClient('ws://127.0.0.1:1/never');
@@ -324,6 +327,8 @@ describe('CDP client containment', () => {
   });
 });
 
+// ── absent-browser degradation ───────────────────────────────────────────────
+
 describe('absent-browser degradation', () => {
   test('launchBrowser reports rather than throwing when the path is wrong', async () => {
     const launched = await launchBrowser({
@@ -341,6 +346,8 @@ describe('absent-browser degradation', () => {
     assert.deepEqual(afterDirs, before);
   });
 });
+
+// ── pid liveness ─────────────────────────────────────────────────────────────
 
 describe('pid liveness', () => {
   test('this process is alive and pid 0 is not', () => {

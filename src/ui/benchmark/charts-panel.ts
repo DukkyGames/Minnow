@@ -1,7 +1,3 @@
-/**
- * Benchmark Charts tab — model comparison, historical leaderboard, per-test breakdown.
- */
-
 import { computeCampaignAggregates, pickCampaignInsight } from '../../benchmark/aggregates.ts';
 import type {
   BenchmarkCampaign,

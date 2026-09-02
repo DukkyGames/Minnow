@@ -1,7 +1,3 @@
-/**
- * Capability matrix — run controls (filters, progress, target chips).
- */
-
 import {
   CAPABILITY_MATRIX_PROBE_WAVES,
   allCapabilityGroupIds,

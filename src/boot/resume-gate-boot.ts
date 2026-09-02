@@ -64,8 +64,6 @@ export async function collectResumeCandidates(state: SessionState): Promise<Resu
     chats.push({ chat, kind });
   };
 
-  // Boot generation / tool resume only ever resumes the active chat; match that
-  // exactly so the prompt never lists work it would not actually restart.
   const activeId = getActiveChat()?.id;
   const active = listChatsWithGenerationId(state.chats).find((chat) => chat.id === activeId);
   if (active) {
@@ -75,9 +73,6 @@ export async function collectResumeCandidates(state: SessionState): Promise<Resu
     if (activeChat) pushChat(activeChat, 'tool-batch');
   }
 
-  // Quit/crash marker can outlive currentGenerationId (graceful Quit cancels gens).
-  // List every stamped chat so background work is visible; Resume still only
-  // reconnects the active chat (others clear the marker after the answer).
   for (const chat of state.chats) {
     if (!isChatResumeInterrupted(chat)) continue;
     pushChat(chat, 'interrupted');
@@ -123,14 +118,12 @@ function describeBoardCandidate(candidate: PendingBoardResume): ResumePromptItem
 
 /** Drop stale generation / interrupt markers ("Don't resume"). */
 function declineResume(candidates: ResumeCandidates): void {
-  // Server-side stop, so the board shows Stopped and the next boot stays quiet.
   if (candidates.boards.length) void resolveBoardResumes('decline');
 
   clearResumeInterruptedForChats(
     candidates.chats.map((c) => c.chat),
     { clearGenerationId: true },
   );
-  // Persist immediately so a second crash cannot resurrect what was just declined.
   if (candidates.chats.length) saveSessionsNow();
 }
 
@@ -142,7 +135,6 @@ export async function runBootResumeGate(state: SessionState): Promise<void> {
   const { bootIncompleteToolResumeForChats } = await import('../chat/incomplete-tool-resume.ts');
 
   if (!hasCandidates(candidates)) {
-    // Nothing interrupted — boot exactly as before, no prompt.
     setResumeGateState('resumed');
     await bootGenerationResumeForChats(state.chats);
     await bootIncompleteToolResumeForChats(state.chats);
@@ -164,14 +156,11 @@ export async function runBootResumeGate(state: SessionState): Promise<void> {
 
   setResumeGateState('resumed');
 
-  // Releases the tick timers `engine.load()` withheld for these boards.
   if (candidates.boards.length) await resolveBoardResumes('resume');
 
   await bootGenerationResumeForChats(state.chats);
   await bootIncompleteToolResumeForChats(state.chats);
 
-  // Markers are spent once the user answers Resume — clear so Agent Activity and
-  // a later quit do not re-prompt for work that already ran (or had nothing left).
   clearResumeInterruptedForChats(candidates.chats.map((c) => c.chat));
   if (candidates.chats.length) saveSessionsNow();
 }
@@ -180,8 +169,6 @@ export async function runBootResumeGate(state: SessionState): Promise<void> {
 export function startBootResumeGate(state: SessionState): void {
   void runBootResumeGate(state).catch((err) => {
     reportBackgroundError('resume-gate', err);
-    // Leave the hold in place: failing open would restart work unprompted, which
-    // is the exact behavior this gate exists to prevent.
     setResumeGateState('declined');
   });
 }

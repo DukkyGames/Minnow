@@ -1,7 +1,3 @@
-/**
- * Browser resolver for outbound prompt token estimate (Feature 25).
- */
-
 import {
   getPromptConfigEpoch,
   getToolConfigEpoch,
@@ -60,6 +56,8 @@ export {
   type HistoryEstimateOptions,
   type OutboundPromptEstimate,
 } from './token-estimate-core';
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 export interface ResolveOutboundPromptEstimateOptions {
   chat?: Chat;
@@ -158,7 +156,6 @@ function applyBudgetTrimToHistoryTokens(
   const budgetResolved = resolveContextBudget({
     agentConfig,
     modelLimit: resolveModelLimitForEstimate(modelId, chat),
-    // Match the send-time budget: tools are outside `messages` but inside the window.
     reservedTokens: toolsTokens,
   });
   if (budgetResolved.effectiveLimit == null) {
@@ -205,7 +202,6 @@ async function resolveOutboundComposeForEstimate(
     ...options?.composeOptions,
     routeUserText,
     userMessagePreview: routeUserText,
-    // Same replay cap the send path uses, so the ring counts what actually ships.
     modelContextLimit:
       options?.composeOptions?.modelContextLimit ??
       resolveModelLimitForEstimate(options?.modelId, chat),
@@ -263,6 +259,8 @@ let cachedStaticEstimate: CachedOutboundStaticEstimate | null = null;
 function outboundStaticEstimateCacheKey(chatId: string, modelId: string): string {
   return `${chatId}\0${modelId}\0${getToolConfigEpoch()}\0${getPromptConfigEpoch()}`;
 }
+
+// ── Cache ────────────────────────────────────────────────────────────────────
 
 /** Clear composed-system + tools memo (unit tests). */
 export function resetOutboundPromptEstimateCacheForTests(): void {
@@ -334,13 +332,14 @@ async function resolveCachedStaticOutboundEstimate(
   return entry;
 }
 
+// ── Estimate ─────────────────────────────────────────────────────────────────
+
 export async function resolveOutboundPromptEstimate(
   options?: ResolveOutboundPromptEstimateOptions,
 ): Promise<OutboundPromptEstimate> {
   const chat = options?.chat ?? getActiveChat();
 
   const staticPart = await resolveCachedStaticOutboundEstimate(chat, options);
-  // Mirrors what the send path will actually put on the wire (Phase 4 replay).
   const historyOptions: HistoryEstimateOptions = {
     replayPriorReasoning: await fetchReplayPriorReasoningEnabled(),
     modelId: options?.modelId,

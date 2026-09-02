@@ -1,14 +1,5 @@
-/**
- * P5-A — Server-side browser driver public types (MIN-719).
- *
- * The server ships untranspiled JavaScript, so the shared surface is `.js` plus
- * a hand-written `.d.ts` (see the implementation plan, finding D, and
- * `server/orchestrator/*.d.ts` for the same pattern).
- */
-
 import type { ChildProcess } from 'node:child_process';
 
-// ---------------------------------------------------------------- discovery
 
 export type BrowserFamily = 'chrome' | 'chrome-canary' | 'edge' | 'brave' | 'chromium';
 
@@ -53,14 +44,12 @@ export function discoverBrowser(opts?: {
   executablePath?: string;
 }): Promise<BrowserCapability>;
 
-/** Discovery plus the `browser.enabled` setting. Never throws. */
 export function probeBrowserCapability(opts?: {
   platform?: string;
   env?: Record<string, string | undefined>;
   executablePath?: string;
 }): Promise<BrowserCapability>;
 
-// ------------------------------------------------------------ launch options
 
 export const DEFAULT_HARD_TIMEOUT_MS: number;
 export const DEFAULT_LAUNCH_TIMEOUT_MS: number;
@@ -73,7 +62,6 @@ export const MAX_CONSOLE_ENTRIES: number;
 export interface LaunchOptions {
   executablePath?: string;
   headless?: boolean;
-  /** Caller-supplied profile dir. When omitted the driver mints and removes one. */
   profileDir?: string;
   hardTimeoutMs?: number;
   launchTimeoutMs?: number;
@@ -81,10 +69,8 @@ export interface LaunchOptions {
   navigationTimeoutMs?: number;
   viewport?: { width: number; height: number };
   extraArgs?: string[];
-  /** Overrides the settings allowlist. Intended for tests. */
   allowedOriginPatterns?: string[];
   env?: Record<string, string | undefined>;
-  /** Filename-safe hint used in the profile directory name (e.g. a boardId). */
   label?: string;
 }
 
@@ -107,7 +93,6 @@ export function buildLaunchArgs(input: {
 
 export function capText(text: string, max?: number): string;
 
-// ------------------------------------------------------------------ profiles
 
 export function browserProfileRoot(): string;
 export function createProfileDir(label?: string): Promise<string>;
@@ -116,7 +101,6 @@ export function sweepStaleProfiles(
   olderThanMs?: number,
 ): Promise<{ removed: string[]; failed: string[] }>;
 
-// ------------------------------------------------------------------- process
 
 export interface BrowserProcessHandle {
   child: ChildProcess;
@@ -150,7 +134,6 @@ export function launchBrowserProcess(input: {
   onExit?: (reason: string) => void;
 }): Promise<BrowserProcessHandle>;
 
-/** Idempotent, never throws, always resolves. */
 export function killBrowserProcess(
   child: ChildProcess,
   opts?: { graceMs?: number; waitMs?: number },
@@ -158,10 +141,8 @@ export function killBrowserProcess(
 
 export function isPidAlive(pid: number): boolean;
 
-/** Pids the driver still believes are alive (inspection/tests). */
 export function trackedBrowserPids(): number[];
 
-// ------------------------------------------------------------------ CDP + AX
 
 export type CdpErrorCode = 'timeout' | 'closed' | 'protocol' | 'connect';
 
@@ -209,7 +190,6 @@ export function renderTree(nodes: SnapshotNode[], indent?: number): string;
 export function takeSnapshot(client: CdpClient, opts?: { timeoutMs?: number }): Promise<Snapshot>;
 export function resolveUid(snapshot: Snapshot, uid: number): SnapshotNode | undefined;
 
-// ------------------------------------------------------------------- session
 
 export type SessionEndReason =
   | 'user'
@@ -253,7 +233,6 @@ export interface NavigateResult {
   outcome: 'loaded' | 'timeout';
   url: string;
   title: string;
-  /** Present and true when the timeout was caused by an unresponsive browser. */
   killed?: boolean;
 }
 
@@ -269,12 +248,10 @@ export class BrowserSession {
   lastSnapshot: Snapshot | null;
 
   status(): SessionStatus;
-  /** Browser-level health, independent of what the page is doing. */
   isResponsive(): Promise<boolean>;
   consoleMessages(): ConsoleEntry[];
   recordConsoleEntry(level: string, text: string): void;
 
-  /** Allowlist-checked. Throws `BrowserDriverError('allowlist')` when blocked. */
   navigate(url: string, opts?: { timeoutMs?: number }): Promise<NavigateResult>;
   evaluate(
     expression: string,
@@ -283,7 +260,6 @@ export class BrowserSession {
   text(opts?: { maxChars?: number; timeoutMs?: number }): Promise<string>;
   html(opts?: { maxChars?: number; timeoutMs?: number }): Promise<string>;
   snapshot(opts?: { timeoutMs?: number }): Promise<Snapshot>;
-  /** Evidence for humans. Never an assertion mechanism — it may fail benignly. */
   screenshot(opts?: { timeoutMs?: number }): Promise<ScreenshotResult>;
 
   kill(reason?: SessionEndReason, detail?: string): Promise<SessionStatus>;
@@ -304,8 +280,4 @@ export interface LaunchFailure {
 
 export type LaunchResult = LaunchSuccess | LaunchFailure;
 
-/**
- * Launch an isolated browser. Returns a result rather than throwing for every
- * case the Final Tester ladder must degrade on.
- */
 export function launchBrowser(opts?: LaunchOptions): Promise<LaunchResult>;

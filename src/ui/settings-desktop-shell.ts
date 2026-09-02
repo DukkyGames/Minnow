@@ -1,8 +1,3 @@
-/**
- * Settings → General: Desktop app (close-to-tray, launch at startup, interface zoom,
- * hardware acceleration).
- */
-
 import { detectConfigServer } from '../config/storage-mode';
 import { appConfirm } from './app-dialog';
 import { setStatus } from './status';

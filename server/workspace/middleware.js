@@ -143,7 +143,6 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
       return true;
     }
 
-    // Board onboarding git init (MIN-615) — not the /git-setup LLM skill.
     if (pathname === '/api/workspace/initialize-git' && req.method === 'POST') {
       const body = await readJsonBody(req);
       const workspaceRoot =
@@ -159,7 +158,6 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
       return true;
     }
 
-    // Reveal a workspace file/folder in Explorer / Finder / Files (file-tree context menu).
     if (pathname === '/api/workspace/reveal-in-explorer' && req.method === 'POST') {
       const body = await readJsonBody(req);
       const userPath = body?.path;
@@ -259,7 +257,6 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
       return true;
     }
 
-    // Multi-server registry + ports (MIN-500). Legacy /dev-server/* routes stay as primary aliases.
     if (pathname === '/api/workspace/dev-servers' && req.method === 'GET') {
       const listed = await listDevServerStatuses();
       sendJson(res, 200, { ok: true, ...listed });

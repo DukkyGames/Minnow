@@ -29,10 +29,10 @@ const MODELS_TIMEOUT_MS = 15_000;
 
 /**
  * @param {string} id
+ * Fake board-testing provider is registered but returns no models until the host starts.
  */
 export async function proxyModels(id) {
   validateProviderId(id);
-  // Dev board-testing provider: registered in ~/.minnow but inert until the fake host starts.
   if (id === FAKE_PROVIDER_ID && !getFakeModelStatus().running) {
     return { data: [] };
   }

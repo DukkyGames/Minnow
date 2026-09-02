@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Embed Minnow branding into node_modules/electron/dist/electron.exe on Windows.
- * Dev runs use that binary, so the taskbar / Task Manager icon comes from here — not BrowserWindow.icon.
- */
 
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
@@ -14,7 +10,6 @@ const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
-/** Resolve the platform Electron executable (same path spawn-electron.mjs launches). */
 function resolveElectronExe() {
   try {
     const electronPath = require('electron');

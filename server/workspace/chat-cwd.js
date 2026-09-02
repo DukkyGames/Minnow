@@ -1,11 +1,3 @@
-/**
- * Resolve the working directory for agent terminal runs from persisted session state.
- * Mirrors client {@link file://../../src/state/worktree-isolation.ts} resolveChatWorktreeRoot.
- *
- * Hot path (no injectedState): indexed SQLite lookup via resolveChatWorktreeContext.
- * Injected state keeps the in-memory validate+scan path for unit tests.
- */
-
 import {
   resolveChatWorktreeContext,
   useJsonSessionsStore,
@@ -18,8 +10,6 @@ import { validateSessionState } from '../config/validators.js';
  */
 
 /**
- * Scan a validated SessionState for worktree root + board group id.
- * Used for injectedState tests and JSON-store rollback.
  * @param {string} trimmedId
  * @param {unknown} raw
  * @returns {{ worktreeRoot: string | undefined; groupId: string | undefined }}
@@ -52,23 +42,19 @@ function resolveFromSessionBlob(trimmedId, raw) {
 }
 
 /**
- * Resolve both the worktree root and the board group id for a chat in one state read.
  * @param {string} chatId
- * @param {SessionState | null | undefined} [injectedState] Optional state for unit tests.
+ * @param {SessionState | null | undefined} [injectedState]
  * @returns {Promise<{ worktreeRoot: string | undefined; groupId: string | undefined }>}
  */
 export async function resolveChatContext(chatId, injectedState) {
   const trimmedId = typeof chatId === 'string' ? chatId.trim() : '';
   if (!trimmedId) return { worktreeRoot: undefined, groupId: undefined };
 
-  // Injected blob — keep in-memory path so existing unit tests stay green.
   let raw = injectedState;
   if (raw == null) {
-    // Hot path: indexed chats + optional board_tasks.worktree_path lookup.
     if (!useJsonSessionsStore()) {
       return resolveChatWorktreeContext(trimmedId);
     }
-    // JSON rollback: whole-blob read from state.json.
     raw = (await readConfigJson('sessions/state.json')) ?? {
       version: 5,
       chats: [],
@@ -79,9 +65,8 @@ export async function resolveChatContext(chatId, injectedState) {
 }
 
 /**
- * Resolve a chat's isolated worktree root from session state.
  * @param {string} chatId
- * @param {SessionState | null | undefined} [injectedState] Optional state for unit tests.
+ * @param {SessionState | null | undefined} [injectedState]
  * @returns {Promise<string | undefined>}
  */
 export async function resolveChatCwd(chatId, injectedState) {

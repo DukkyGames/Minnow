@@ -1,7 +1,3 @@
-/**
- * Default self-healing config (off by default until Step 20 toggle).
- */
-
 export const DEFAULT_SELF_HEALING_CONFIG = {
   enabled: false,
   tier1: {

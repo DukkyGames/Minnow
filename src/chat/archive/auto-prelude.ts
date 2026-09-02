@@ -1,7 +1,3 @@
-/**
- * Format Brain archive retrieve hits into a retrieved_context system block (pure).
- */
-
 import { estimateTokensFromText } from '../prompts/token-estimate-core';
 import type { ArchiveRecallHit } from './types';
 

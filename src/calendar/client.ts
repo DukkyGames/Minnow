@@ -133,7 +133,6 @@ export async function importIcsFromUrl(input: {
 }
 
 export function exportIcsUrl(calendarId: string): string {
-  // Opened via window.open (direct navigation, no fetch) — token rides the query string.
   return withSessionToken(`/api/calendar/export/ics?calendarId=${encodeURIComponent(calendarId)}`);
 }
 

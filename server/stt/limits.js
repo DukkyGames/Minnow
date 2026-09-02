@@ -48,13 +48,13 @@ export function normalizeMimeType(mime) {
 
 /**
  * Check whether a MIME type is allowed for STT uploads.
+ * Codec-qualified webm (audio/webm;codecs=opus) is accepted.
  * @param {string} mime
  */
 export function isAllowedAudioMime(mime) {
   const base = normalizeMimeType(mime);
   if (!base) return false;
   if (ALLOWED_AUDIO_MIME_TYPES.has(base)) return true;
-  // Accept codec-qualified webm variants such as audio/webm;codecs=opus.
   if (base.startsWith('audio/webm')) return true;
   return false;
 }

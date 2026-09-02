@@ -1,45 +1,3 @@
-/**
- * P1-E — the Boards surface. Orchestrator V2's view.
- *
- * A **new surface**, not a retrofit of `orchestrate-board.ts`. V1's `BoardTask`
- * carries ~50 fields; V2's `TaskState` carries 17 and deliberately drops the
- * retry counters and the multi-flag leftover autonomy blob that PRD §6 replaces
- * with one enum and one integer. Every V1 site reading a deleted field needs a
- * decision rather than a substitution, and V1's Orchestrate section is additionally
- * wired to planner chats, rails, onboarding and kickoff that V2 removes outright.
- * So this is built beside it and V1 is left alone until Phase 4 deletes it.
- *
- * ## The rule this file exists to keep
- *
- * **Nothing here writes board state.** Every mutation is a POST through
- * `client.ts`, and the screen repaints when — and only when — the engine says so
- * over the stream. A Stop button does not grey the board out; it POSTs, and the
- * board changes when `board.stopped` comes back. That is what makes "the
- * renderer is a view" true rather than aspirational, and it is why there is no
- * local state here beyond which task is expanded and which requests are in
- * flight.
- *
- * ## Phase 9
- *
- * P1-E built the smallest surface that proves the property above — a wave-grouped
- * list, a merge queue, a raw journal. Phase 9 finishes it against what V1's
- * Orchestrate actually did: waves × kanban (P9-B), a per-board model binding
- * (P9-C), attempt transcripts (P9-D), rename and delete (P9-E), the `ob-*`
- * twin-shape vocabulary (P9-F), a finish report (P9-G), and manual abandon
- * (P9-H). **Every one of those is a read, a POST, or new engine surface.** None
- * of them is a renderer-owned write, which is why the rule above still holds.
- *
- * ## What it cannot do yet
- *
- * Merge is the serialized rebase-then-merge queue (P3-C). Final is the static
- * ladder (P3-F); the browser step waits for Phase 5. The end-of-run report is
- * the persisted `report.md` artifact (P3-G). When the run is finished or
- * user-stopped, the report pane replaces the kanban; a session-local Board /
- * Report toggle flips back. Retry POSTs `/rerun` (`board.reopened`).
- * Live agent output arrives as SSE `event: live` from P2-F; this view renders
- * the current tool name on the running task card.
- */
-
 import '../styles/orchestrator-boards.css';
 import '../styles/orchestrate-hub.css';
 import '../styles/orchestrate-plan-screen.css';
@@ -101,18 +59,15 @@ import {
 } from '../chat/plans/plan-preview';
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
 
-/** UI copy for discoverOrchestratePlans error codes (kept here so V2 does not import V1 picker UI). */
 const PLAN_LIST_HINTS: Record<string, string> = {
   server_off: 'Open or restart Minnow to list plans.',
   no_plans_dir: 'No documentation/plans folder in this workspace.',
 };
 
-/** Strip documentation/plans/ so the dropdown shows the basename, matching Orchestrate. */
 function shortPlanLabel(fullPath: string): string {
   return fullPath.replace(/^documentation\/plans\//, '');
 }
 
-/** Ignore stale plan-preview fetches when the select changes quickly. */
 let askPlanPreviewRequestId = 0;
 
 async function refreshAskPlanPreview(
@@ -153,7 +108,6 @@ export const BOARDS_ROOT_ID = 'orchestratorBoardsRoot';
 const CHAT_AREA_CLASS = 'chat-area--orchestrator-boards';
 const MAIN_COLUMN_CLASS = 'main-column--orchestrator-boards';
 
-/** How much of the journal the timeline asks for. It is kept in full on disk. */
 const TIMELINE_LIMIT = 300;
 
 interface Surface {
@@ -171,55 +125,34 @@ let unsubscribeList: (() => void) | null = null;
 let selectedBoardId: string | null = null;
 let selectedTaskId: string | null = null;
 let showTimeline = false;
-/** Last journal GET, so a live-board repaint does not flash "Loading…" over the log. */
 let journalView: {
   boardId: string;
   events: readonly Record<string, unknown>[];
   truncated: boolean;
 } | null = null;
-/** Manual starts awaiting their answer, so a button can say it is working. */
 const pendingTasks = new Set<string>();
-/** The last thing that went wrong, shown until the next successful command. */
 let notice: { text: string; tone: 'warn' | 'bad' } | null = null;
-/** The attempt transcript open in the detail panel — P9-D. */
 let transcript: TranscriptView | null = null;
-/**
- * The selected task's changed files, read from git at its merge commit.
- *
- * Held here for the same reason the transcript is: it is a read beside the
- * journal, it is keyed to the selection, and nothing folds it.
- */
 let taskFiles: TaskFilesView | null = null;
-/** Diffs for rows the reader opened, mutable so a fetch can land into the view. */
 const fileDiffs = new Map<string, FileDiffView>();
-/** Which file rows are open. Kept out of `taskFiles` so a refetch cannot close them. */
 const expandedFiles = new Set<string>();
-/** Board ids whose delete is awaiting a second click — P9-E. */
 const confirmingDelete = new Set<string>();
-/** The board id currently being renamed inline, if any — P9-E. */
 let renamingBoardId: string | null = null;
-/** Persisted P3-G report, keyed by board. Presentation only — never folded. */
 const finishReportByBoard = new Map<string, string>();
-/** In-flight GET so a paint loop does not stampede the endpoint. */
 const finishReportLoads = new Set<string>();
-/** Session-local: user chose the kanban over the report. Not journaled. */
 const reportDismissed = new Set<string>();
 
-// ---------------------------------------------------------------------------
-// Mount
-// ---------------------------------------------------------------------------
+// ── Mount ────────────────────────────────────────────────────────────────────
 
 export function isBoardsViewOpen(): boolean {
   return Boolean(document.getElementById(BOARDS_ROOT_ID));
 }
 
-/** Close the live V2 board pane without tearing down the Boards page (MIN-752). */
 export function deselectBoardForWorkspaceSwitch(): void {
   if (!isBoardsViewOpen()) return;
   selectBoard(null);
 }
 
-/** Re-fetch the workspace-filtered list after a workspace switch (MIN-752). */
 export function refreshBoardsViewAfterWorkspaceSwitch(): void {
   if (!isBoardsViewOpen()) return;
   void list?.refresh();
@@ -238,10 +171,6 @@ export async function openBoardsView(): Promise<void> {
   const area = document.getElementById('chatArea');
   if (!area) return;
 
-  // P9-F: the twin-shape vocabulary — `ob-shell` / `ob-rail` / `ob-main` — the
-  // same one Super Plan and Research use. The `ov2-*` classes stay alongside it
-  // because they are what Phase 4 leaves standing; the `ob-*` ones are what make
-  // this read as the same page family rather than a second invention.
   const root = el('div', 'ov2 ob-shell');
   root.id = BOARDS_ROOT_ID;
   const listPane = el('aside', 'ov2__list ob-rail');
@@ -258,8 +187,6 @@ export async function openBoardsView(): Promise<void> {
 
   list = createBoardListClient();
   unsubscribeList = list.subscribe(() => {
-    // A board can vanish from under the selection only if something outside this
-    // window removed it; fall back to the list rather than to a blank screen.
     if (selectedBoardId && !list?.getBoards().some((b) => b.boardId === selectedBoardId)) {
       selectBoard(null);
     }
@@ -301,7 +228,6 @@ export function teardownBoardsView(): void {
   syncRailButton();
 }
 
-/** Escape closes the task overlay even when focus is not on the dialog itself. */
 function onBoardsDocumentKeydown(event: KeyboardEvent): void {
   if (event.key !== 'Escape') return;
   if (!surface || !selectedTaskId) return;
@@ -310,17 +236,11 @@ function onBoardsDocumentKeydown(event: KeyboardEvent): void {
   selectTaskDetail(null);
 }
 
-/**
- * Open or close the task detail overlay and put keyboard focus where the
- * overlay lifecycle expects it (Close on open, task card on close).
- */
 function selectTaskDetail(taskId: string | null): void {
   const previous = selectedTaskId;
   selectedTaskId = taskId;
   clearTaskDetailState();
   paintBoard();
-  // The diffstat is a git read, so it is asked for once per opened task rather
-  // than on every paint. `loadTaskFiles` returns early if it is already loaded.
   if (taskId) void loadTaskFiles(taskId);
   if (taskId === null && previous) {
     surface?.root
@@ -333,11 +253,6 @@ function selectTaskDetail(taskId: string | null): void {
   }
 }
 
-/**
- * Leave the V2 Boards surface. By default restores the last active chat into
- * `#chatArea` and stamps `#/app/code/chat` so the Chats view-bar control does
- * not leave a blank column (same contract as Overview / Dev Servers).
- */
 export async function closeBoardsView(options?: {
   skipNavigate?: boolean;
   restoreChat?: boolean;
@@ -346,8 +261,6 @@ export async function closeBoardsView(options?: {
 
   teardownBoardsView();
 
-  // Leftover V1 board folders can keep viewMode `board` under the V2 surface.
-  // Clear that focus before painting, or renderChatFromHistory redirects back.
   const { dismissActiveBoardView } = await import('../state/chat-groups');
   dismissActiveBoardView();
 
@@ -355,7 +268,6 @@ export async function closeBoardsView(options?: {
 
   if (!options?.skipNavigate) {
     const { navigateToCodeChatIfCurrentSection } = await import('../os/router');
-    // Both hashes open this surface (`showCodeStageSection`).
     navigateToCodeChatIfCurrentSection('boards');
     navigateToCodeChatIfCurrentSection('orchestrate');
   }
@@ -395,9 +307,7 @@ function syncRailButton(): void {
   btn.classList.toggle('icon-btn--active', open);
 }
 
-// ---------------------------------------------------------------------------
-// Selection
-// ---------------------------------------------------------------------------
+// ── Selection ────────────────────────────────────────────────────────────────
 
 function selectBoard(boardId: string | null): void {
   if (boardId === selectedBoardId) return;
@@ -418,8 +328,6 @@ function selectBoard(boardId: string | null): void {
 
   if (boardId) {
     client = createBoardClient(boardId, { openStream });
-    // Repaint on every change the engine reports, and on connection changes —
-    // the header shows both, and they are not the same thing.
     unsubscribeBoard = client.subscribe(() => paintBoard());
     client.connect();
   }
@@ -427,26 +335,15 @@ function selectBoard(boardId: string | null): void {
   paintBoard();
 }
 
-/** Select a board after create/launch. Exported so Orchestrate entry can skip a chat. */
 export function showBoard(boardId: string): void {
   selectBoard(boardId);
 }
 
-/**
- * `EventSource` carries no custom headers, so the per-boot session token goes in
- * the query string — the same thing every other stream in the app does.
- *
- * It lives here rather than in `client.ts` on purpose: the client knows about
- * `/api/boards` and nothing about how this application authenticates, which is
- * what lets it be driven end to end in a test with a plain HTTP reader.
- */
 function openStream(url: string): EventSource {
   return new EventSource(withSessionToken(url));
 }
 
-// ---------------------------------------------------------------------------
-// The board list
-// ---------------------------------------------------------------------------
+// ── Board list ───────────────────────────────────────────────────────────────
 
 function paintList(): void {
   if (!surface) return;
@@ -481,9 +378,6 @@ function paintList(): void {
 }
 
 function renderListItem(board: BoardSummary): HTMLElement {
-  // No `ob-row` here: that class pulls V1 padding from `ob-page.css` onto the
-  // <li>, nesting a padded button inside a padded row and leaving a dead margin
-  // around the selected card (and room for the old text "Delete" label).
   const item = el('li', 'ov2__board-item');
   const btn = el('button', 'ov2__board-btn');
   btn.type = 'button';
@@ -504,10 +398,6 @@ function renderListItem(board: BoardSummary): HTMLElement {
   btn.appendChild(meta);
   item.appendChild(btn);
 
-  // P9-E. Two clicks, and the second one says what it takes with it: the journal
-  // is the only record of the run, so "are you sure" has to name what is lost
-  // rather than ask an abstract question. Icon-only; confirm stays a trash glyph
-  // with danger styling so the row does not reserve space for a text label.
   const confirming = confirmingDelete.has(board.boardId);
   const remove = el('button', `ov2__board-delete${confirming ? ' is-confirming' : ''}`);
   remove.type = 'button';
@@ -533,13 +423,6 @@ function renderListItem(board: BoardSummary): HTMLElement {
   return item;
 }
 
-/**
- * Delete a board — P9-E.
- *
- * Boards accumulated forever and a typo'd board id was permanent, because
- * `ROUTES` had no delete. The selection falls back to nothing rather than to the
- * next board: silently landing on someone else's run is worse than an empty pane.
- */
 async function commandDeleteBoard(boardId: string): Promise<void> {
   try {
     await deleteBoard(boardId);
@@ -555,15 +438,8 @@ async function commandDeleteBoard(boardId: string): Promise<void> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Creating a board
-// ---------------------------------------------------------------------------
+// ── Create ───────────────────────────────────────────────────────────────────
 
-/**
- * Fill a plan <select> from the workspace list Orchestrate already uses.
- *
- * Exported so the create form can be tested without mounting the whole surface.
- */
 export async function fillBoardsPlanSelect(
   sel: HTMLSelectElement,
   hintEl: HTMLElement,
@@ -587,8 +463,6 @@ export async function fillBoardsPlanSelect(
     sel.appendChild(opt);
   }
 
-  // One plan in the workspace is the common Super Plan case — select it so
-  // Create is one click rather than a hunt through an otherwise empty control.
   sel.value = !error && plans.length === 1 ? plans[0]! : '';
 
   hintEl.textContent = '';
@@ -606,7 +480,6 @@ export async function fillBoardsPlanSelect(
 
 export interface CreateFormHandlers {
   discoverPlans?: () => Promise<DiscoverOrchestratePlansResult>;
-  /** Defaults to POST /api/boards. Tests inject a stub that only needs the path. */
   createBoard?: (
     planPath: string,
     options?: { boardId?: string; markdown?: string },
@@ -624,12 +497,6 @@ export interface AskPaneHandlers {
   onCreated: (boardId: string) => void;
 }
 
-/**
- * V1 Orchestrate hub ask/start pane, wired to V2 `createBoardFromPlan`.
- *
- * Shown in the main column when no board is selected. The rail stays the V2
- * journal list; this pane is only the plan picker, preview, and Open board.
- */
 export async function mountBoardsAskPane(
   pane: HTMLElement,
   handlers: AskPaneHandlers,
@@ -769,7 +636,6 @@ export async function mountBoardsAskPane(
     void loadPlans();
   });
 
-  // Blank Super Plan composer — same as the V1 hub, not the last live run.
   makePlanBtn.addEventListener('click', () => {
     void import('../ui/super-plan-entry').then((m) => m.openSuperPlanScreen({ preferNew: true }));
   });
@@ -807,7 +673,6 @@ function paintAskErrors(pane: HTMLElement): void {
   slot.appendChild(line);
 }
 
-/** Show the ask/start pane and put the plan picker in focus (rail New board). */
 function openAskPane(): void {
   if (!surface) return;
   if (selectedBoardId) {
@@ -819,17 +684,6 @@ function openAskPane(): void {
   if (sel instanceof HTMLSelectElement) sel.focus();
 }
 
-/**
- * The create form, with the parse errors shown where they belong.
- *
- * Plan intake is a dropdown of workspace plans, not a free-text path: the
- * files already live under documentation/plans/, and typing a relative path
- * was how the first cut missed both the list and the workspace-root read.
- *
- * `parsePlan` returns a line, a column, a message and a hint for every problem —
- * that detail is the entire point of PRD §5's move away from an LLM reading the
- * plan, and collapsing it into "board creation failed" would throw it away.
- */
 export async function mountCreateForm(
   pane: HTMLElement,
   handlers: CreateFormHandlers,
@@ -848,8 +702,6 @@ export async function mountCreateForm(
     ),
   );
 
-  // Refresh sits beside the select, not inside a <label> — a label click would
-  // otherwise activate the dropdown as well as the button.
   const pathField = el('div', 'ov2-create__field');
   pathField.appendChild(el('span', undefined, 'Plan'));
   const pathRow = el('div', 'ov2-create__field-row');
@@ -957,19 +809,6 @@ function renderCreateError(err: unknown): HTMLElement {
   return el('p', 'ov2-create__error', err instanceof Error ? err.message : String(err));
 }
 
-// ---------------------------------------------------------------------------
-// The board
-// ---------------------------------------------------------------------------
-
-/**
- * What has focus right now, as something a repaint can put it back on — P9-I.
- *
- * The surface calls `replaceChildren` on every frame, so the focused node is
- * destroyed several times a minute on a live board. Restoring by *key* rather
- * than by node identity is what makes that survivable: a card that is still on
- * the board after the repaint gets its focus back, and one that moved column
- * keeps it too, because the key is the task, not the position.
- */
 function captureFocus(): { key: string; selectionStart: number | null } | null {
   const active = document.activeElement as HTMLElement | null;
   if (!active || !surface?.root.contains(active)) return null;
@@ -993,10 +832,10 @@ function restoreFocus(captured: { key: string; selectionStart: number | null } |
   const input = target as HTMLInputElement;
   try {
     input.setSelectionRange(captured.selectionStart, captured.selectionStart);
-  } catch {
-    // Not a text input any more. The focus is the part that mattered.
-  }
+  } catch {}
 }
+
+// ── Board ────────────────────────────────────────────────────────────────────
 
 function paintBoard(): void {
   if (!surface) return;
@@ -1007,7 +846,6 @@ function paintBoard(): void {
     surface.root.classList.remove('is-detail-open');
     surface.root.querySelector('.ov2-detail-overlay')?.remove();
     pane.classList.add('ov2__board--ask');
-    // Keep an in-progress picker (and its preview) across list/notice repaints.
     if (pane.querySelector('.ob-pane--ask')) {
       paintAskErrors(pane);
       return;
@@ -1029,7 +867,6 @@ function paintBoard(): void {
     detachV2BoardHeaderInstruments();
     surface.root.classList.remove('is-detail-open');
     surface.root.querySelector('.ov2-detail-overlay')?.remove();
-    // A skeleton in the board's own shape, not the word "Loading" — P9-I.
     pane.replaceChildren(renderBoardSkeleton());
     return;
   }
@@ -1037,8 +874,6 @@ function paintBoard(): void {
   const connected = client?.isConnected() ?? false;
   const scrollTop = pane.scrollTop;
   const focused = captureFocus();
-  // The model chip and reasoning strip live outside this wipe — detach first
-  // so replaceChildren cannot destroy the open picker.
   detachV2BoardHeaderInstruments();
   pane.replaceChildren();
   pane.appendChild(renderBoardHeader(state, connected, renderControls(state)));
@@ -1105,14 +940,9 @@ function paintBoard(): void {
     pane.appendChild(renderTimelineSection());
     if (journalView?.boardId !== selectedBoardId) void loadTimeline();
   }
-  // Repainting from scratch is what keeps the view a pure function of the
-  // state; restoring the scroll offset and the focus is what stops that being
-  // felt as a keyboard user losing their place every five seconds.
   pane.scrollTop = scrollTop;
 
   const selected = selectedTaskId ? state.tasks.get(selectedTaskId) : undefined;
-  // Cover the whole Boards shell so the dialog can use nearly the full area,
-  // not only the short board scrollport beside the rail.
   surface.root.classList.toggle('is-detail-open', Boolean(selected));
   surface.root.querySelector('.ov2-detail-overlay')?.remove();
   if (selected) surface.root.appendChild(renderTaskDetail(state, selected, actions, options));
@@ -1121,7 +951,6 @@ function paintBoard(): void {
   restoreFocus(focused);
 }
 
-/** Everything the detail panel holds about one task. Cleared when it changes. */
 function clearTaskDetailState(): void {
   transcript = null;
   taskFiles = null;
@@ -1131,15 +960,6 @@ function clearTaskDetailState(): void {
   resetTaskDetailUi();
 }
 
-/**
- * Keep an open log on a *running* attempt current.
- *
- * `event: live` only repaints the board for tool traffic (a repaint per token
- * would be a repaint per token), so a long reasoning block would otherwise sit
- * on screen unchanged until the next tool call. This tops the log up on a slow
- * timer while it is open, and stops the moment the attempt ends or the log is
- * closed: nothing polls unless someone is reading.
- */
 const LOG_POLL_MS = 1_200;
 let logPollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -1155,7 +975,6 @@ function syncLogPolling(state: BoardState): void {
   const attempt = attemptId
     ? task?.attempts.find((candidate) => candidate.attemptId === attemptId)
     : undefined;
-  // A finished attempt's transcript is final, so there is nothing to poll for.
   const wanted = Boolean(attempt && !attempt.ended);
   if (!wanted) {
     stopLogPolling();
@@ -1168,7 +987,6 @@ function syncLogPolling(state: BoardState): void {
   }, LOG_POLL_MS);
 }
 
-/** Re-read an open transcript in place. No skeleton: the log is already on screen. */
 async function refreshTranscript(attemptId: string): Promise<void> {
   const boardId = selectedBoardId;
   if (!boardId) return;
@@ -1177,25 +995,14 @@ async function refreshTranscript(attemptId: string): Promise<void> {
     if (transcript?.attemptId !== attemptId || boardId !== selectedBoardId) return;
     transcript = { attemptId, status: 'ready', ...result };
     paintBoard();
-  } catch {
-    // A failed top-up leaves the log as it was. It is a read, and the next tick
-    // tries again; replacing readable content with an error would be worse.
-  }
+  } catch {}
 }
 
-/** Rebuild the immutable view the panel reads from the mutable maps above. */
 function taskFilesView(): TaskFilesView | null {
   if (!taskFiles) return null;
   return { ...taskFiles, diffs: fileDiffs, expanded: expandedFiles };
 }
 
-/**
- * What the selected task changed, from git at its merge commit.
- *
- * The journal is not asked and is not written: a diffstat is derivable from the
- * repository, so keeping one on an append-only log would only create a second
- * number that can disagree with the first.
- */
 async function loadTaskFiles(taskId: string): Promise<void> {
   const boardId = selectedBoardId;
   if (!boardId) return;
@@ -1215,7 +1022,6 @@ async function loadTaskFiles(taskId: string): Promise<void> {
   paintBoard();
   try {
     const result = await readTaskFiles(boardId, taskId);
-    // The reader may have moved on while this was in flight.
     if (selectedTaskId !== taskId || boardId !== selectedBoardId) return;
     taskFiles = { ...taskFiles, ...result, status: 'ready' };
   } catch (err) {
@@ -1229,12 +1035,6 @@ async function loadTaskFiles(taskId: string): Promise<void> {
   paintBoard();
 }
 
-/**
- * Open, or close, one changed file's diff — the chat file list's own gesture.
- *
- * Patches are fetched per row rather than with the stat list: a task that merged
- * forty files would otherwise pull forty patches to show three.
- */
 async function toggleFileDiff(path: string): Promise<void> {
   const boardId = selectedBoardId;
   const taskId = selectedTaskId;
@@ -1273,17 +1073,10 @@ async function toggleFileDiff(path: string): Promise<void> {
   paintBoard();
 }
 
-/** Jump to a changed file in the editor, the same jump the chat file list makes. */
 function openTaskFile(path: string): void {
   void import('../ui/file-viewer').then((m) => m.openFileInViewer(path));
 }
 
-/**
- * Load, or close, one attempt's transcript — P9-D.
- *
- * A read and nothing else: transcripts live beside the journal and no part of
- * the board state depends on them, so opening one cannot affect the run.
- */
 async function toggleTranscript(attemptId: string): Promise<void> {
   const boardId = selectedBoardId;
   if (!boardId) return;
@@ -1293,13 +1086,11 @@ async function toggleTranscript(attemptId: string): Promise<void> {
     paintBoard();
     return;
   }
-  // A different log: forget where the last one was scrolled and what was open.
   resetTaskDetailLogUi();
   transcript = { attemptId, status: 'loading', events: [], truncated: false, capped: false };
   paintBoard();
   try {
     const result = await readAttemptTranscript(boardId, attemptId, { limit: 500 });
-    // The user may have moved on while this was in flight.
     if (transcript?.attemptId !== attemptId || boardId !== selectedBoardId) return;
     transcript = { attemptId, status: 'ready', ...result };
   } catch (err) {
@@ -1316,24 +1107,11 @@ async function toggleTranscript(attemptId: string): Promise<void> {
   paintBoard();
 }
 
-/**
- * Interactive cluster for the V1-shaped board header.
- *
- * Same commands as the old boxed `.ov2-controls` bar (start, stop, concurrency,
- * model, rename, timeline). The chrome is the Orchestrator instrument strip so
- * Boards does not invent a second control vocabulary.
- *
- * `setConcurrency` journals `board.started`, which *starts* a stopped board.
- * That is why N only POSTs while the loop is already running; Start carries N
- * for the first tick.
- */
 function renderControls(state: BoardState): HTMLElement {
   const controls = el('div', 'board-header__controls');
   const finished = state.finished;
   const running = state.status === 'running';
 
-  // Slot only — the Orchestrate chip is adopted after paint so a live journal
-  // stream cannot remount it (and cannot get stuck on "Loading models…").
   const modelSlot = el('div', 'board-header__model-slot mn-os-mb-model-slot');
   modelSlot.title = state.model
     ? `${state.model.providerId} / ${state.model.id}`
@@ -1404,7 +1182,6 @@ function renderControls(state: BoardState): HTMLElement {
   return controls;
 }
 
-/** Number input labelled "run", matching the Orchestrator concurrency field. */
 function renderConcurrencyControl(
   state: BoardState,
   finished: boolean,
@@ -1421,8 +1198,6 @@ function renderConcurrencyControl(
   input.type = 'number';
   input.min = '1';
   input.max = '64';
-  // Pre-start fold is 1; show the product default so the first start journals 2
-  // unless the user changed it.
   const shownN =
     state.status === 'created' ? DEFAULT_BOARD_CONCURRENCY : state.concurrency;
   input.value = String(shownN);
@@ -1438,13 +1213,6 @@ function renderConcurrencyControl(
   return wrap;
 }
 
-/**
- * Rename the board — P9-E.
- *
- * A journaled command (`board.renamed`), not a field assignment: it reaches every
- * other open window over the same stream as everything else, and a replay of the
- * journal produces the same name.
- */
 function renderRenameControl(state: BoardState): HTMLElement {
   if (renamingBoardId !== state.boardId) {
     const btn = el('button', 'board-btn board-btn--compact', 'Rename');
@@ -1496,10 +1264,6 @@ function readConcurrencyInput(): number {
   return Math.min(64, n);
 }
 
-/**
- * The P3-G artifact. Loaded over GET, never from the fold, so a report cannot
- * leak back into scheduling if this view is later mistaken for a store.
- */
 function showingReport(state: BoardState): boolean {
   return Boolean(selectedBoardId) && wantsReportScreen(state) && !reportDismissed.has(selectedBoardId!);
 }
@@ -1511,9 +1275,7 @@ async function loadFinishReport(boardId: string): Promise<void> {
     const { markdown } = await readBoardReport(boardId);
     finishReportByBoard.set(boardId, markdown);
     if (selectedBoardId === boardId) paintBoard();
-  } catch {
-    // 404 while the writer is still running; the next SSE tick retries.
-  } finally {
+  } catch {} finally {
     finishReportLoads.delete(boardId);
   }
 }
@@ -1550,13 +1312,7 @@ async function loadTimeline(): Promise<void> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Commands
-//
-// Each one POSTs and then does nothing. The board moves when the engine says it
-// moved, over the stream — no optimistic update, and nothing here to undo when
-// a command is refused.
-// ---------------------------------------------------------------------------
+// ── Commands ─────────────────────────────────────────────────────────────────
 
 async function run(what: string, command: () => Promise<void>): Promise<void> {
   try {
@@ -1606,16 +1362,6 @@ function commandRename(name: string): Promise<void> {
   });
 }
 
-/**
- * Give up on a task by hand — P9-H.
- *
- * The board does not grey the card out. It POSTs, the engine journals
- * `task.abandoned { reason: 'user' }`, and the card moves to Complete when the
- * fold says it did — the same path an automatic abandonment takes. That is the
- * difference between a manual override and a renderer-owned write, and it is why
- * anything depending on this task is stranded correctly rather than left in a
- * state only this window knows about.
- */
 async function commandAbandonTask(taskId: string): Promise<void> {
   if (!client || pendingTasks.has(taskId)) return;
   pendingTasks.add(taskId);
@@ -1645,9 +1391,6 @@ async function commandStartTask(taskId: string): Promise<void> {
     notice = started
       ? null
       : {
-          // The server decides, and it says no for reasons a view should not
-          // guess at: the task is already running, its dependencies have not
-          // merged, or its footprint overlaps something in flight.
           text: `${taskId} cannot start right now.`,
           tone: 'warn',
         };

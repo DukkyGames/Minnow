@@ -1,6 +1,3 @@
-/**
- * Hex palette tokens must use srgb in color-mix (oklch interpolation breaks on #hex).
- */
 import fs from 'node:fs';
 import path from 'node:path';
 

@@ -1,12 +1,3 @@
-/**
- * Vendors upstream caveman SKILL.md into src/skills/caveman/.
- * Preserves Minnow-authored wrapper comment in SKILL.md; writes SKILL.upstream.md from upstream.
- *
- * Env:
- *   CAVEMAN_SYNC_STRICT=1  — exit non-zero on sync failure (CI)
- *   CAVEMAN_SKILL_TARGET   — override built-in skill dir (default src/skills/caveman)
- *   CAVEMAN_UPSTREAM_URL   — override raw SKILL.md URL
- */
 
 import fs from 'node:fs';
 import path from 'node:path';

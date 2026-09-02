@@ -1,18 +1,3 @@
-/**
- * Ambient context for quick capture.
- *
- * The menubar button's job is that you never type where a problem is. It reads
- * whatever the shell was already showing — active file and selection, the chat
- * you were in, the branch and HEAD you are on — and pre-attaches it.
- *
- * Everything here is best-effort and defensive: capture must open instantly and
- * must never fail because git is slow or a module is not mounted. Synchronous
- * context comes back from {@link collectAmbientCapture}; git resolves later via
- * {@link collectGitCapture} and is merged in when it lands.
- *
- * Phase 2 of `documentation/plans/issues-app-v2.md`.
- */
-
 import { formatCodeRefLabel } from '../attachments/code-ref-format';
 import {
   emptyCapturePayload,
@@ -36,8 +21,6 @@ function basename(path: string): string {
 /** Active editor tab plus its selection, when the editor is mounted. */
 function activeFileItem(): CaptureItem | null {
   const path = safe(() => {
-    // Imported lazily-by-reference: the module graph already loads these in the
-    // shell, and a static import here would pull the editor into every entry.
     const store = codeViewerModule();
     return store?.getActiveViewerTabPath() ?? null;
   });
@@ -71,11 +54,7 @@ type ViewerModule = {
   getActiveViewerTabPath: () => string | null;
 };
 
-/**
- * Resolved once and cached. Kept behind a function so tests can run without the
- * editor bundle and so a missing module degrades to "no file context" rather
- * than an exception during capture.
- */
+/** Resolved once and cached. */
 let viewerModule: ViewerModule | null | undefined;
 let editorViewGetter: (() => unknown) | null | undefined;
 
@@ -83,13 +62,7 @@ function codeViewerModule(): ViewerModule | null {
   return viewerModule ?? null;
 }
 
-/**
- * Wire the editor accessors from the shell after boot.
- *
- * Capture must not import the editor: it lives in the menubar, which mounts
- * before Code ever opens. The shell hands the accessors over once, and capture
- * degrades to "no file context" until then.
- */
+/** Wire the editor accessors from the shell after boot. */
 export function registerCaptureEditorAccessors(accessors: {
   getActiveViewerTabPath: () => string | null;
   getEditorView: () => unknown;
@@ -146,8 +119,6 @@ function activeChatItem(): CaptureItem | null {
   const id = chat?.id?.trim();
   if (!id) return null;
   const title = chat?.title?.trim();
-  // No `detail`: the chat id is a UUID, and eleven pixels of truncated UUID on
-  // a chip is noise. It stays on the chip's title attribute instead.
   return {
     kind: 'chat',
     label: title && title !== 'New chat' ? title : 'Current chat',
@@ -155,13 +126,7 @@ function activeChatItem(): CaptureItem | null {
   };
 }
 
-/**
- * Synchronous ambient context. Safe to call on every popover open.
- *
- * `workspacePath` is read through the accessor rather than imported so this
- * module stays free of state imports that would drag the store into the
- * menubar's load path.
- */
+/** Synchronous ambient context. */
 export function collectAmbientCapture(workspacePath?: string): CapturePayload {
   const payload = emptyCapturePayload();
   payload.sourceLabel = 'Quick capture';
@@ -176,13 +141,7 @@ export function collectAmbientCapture(workspacePath?: string): CapturePayload {
   return payload;
 }
 
-/**
- * Branch and HEAD, resolved off the main path.
- *
- * Deliberately not awaited before the popover paints: capture opens in one
- * frame and the git chips arrive when they arrive. A repo-less workspace or a
- * server that is not up simply yields nothing.
- */
+/** Branch and HEAD, resolved off the main path. */
 export async function collectGitCapture(): Promise<CaptureItem[]> {
   const items: CaptureItem[] = [];
   try {
@@ -213,7 +172,6 @@ export async function collectGitCapture(): Promise<CaptureItem[]> {
       });
     }
   } catch {
-    // No repo, no server, or git is busy. Capture works without it.
   }
   return items;
 }

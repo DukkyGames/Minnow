@@ -1,7 +1,3 @@
-/**
- * Manual `/compress` — persistently rewrite history with an LLM summary.
- */
-
 import {
   agentContextBudgetFromWorkAgent,
   DEFAULT_CONTEXT_ENFORCEMENT_POLICY,

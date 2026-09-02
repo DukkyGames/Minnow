@@ -1,7 +1,3 @@
-/**
- * Skip the wait until the next /loop fire.
- */
-
 import type { Chat } from '../../types';
 import { getActiveLoops, touchActiveLoops } from '../../state/sessions';
 

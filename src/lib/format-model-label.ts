@@ -132,7 +132,6 @@ export function formatModelLabel(input: ModelLabelInput): ModelLabelParts {
   const quant = input.quantization?.trim() || undefined;
   const loadState = normalizeLoadState(input.state);
 
-  // Load state is shown via the top-bar model-state dot (A4), not option text.
   let optionText = primary;
   if (quant) optionText += ` · ${quant}`;
 

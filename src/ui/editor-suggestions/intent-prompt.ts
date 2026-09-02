@@ -1,9 +1,3 @@
-/**
- * Intent resolve: instruct-style prompt, multi-line sanitation, and the
- * streaming request. Unlike inline completion this is a *replacement* of the
- * intent line, so the model is told to rewrite rather than continue.
- */
-
 import {
   formatGenerationErrorMessage,
   type GenerationEndEvent,
@@ -129,10 +123,7 @@ export function buildIntentMessages(input: IntentPromptContext): ApiMessage[] {
   ];
 }
 
-/**
- * Shift a block of model output so its first line sits at `baseIndent`,
- * preserving relative indentation of the remaining lines.
- */
+/** Shift a block of model output so its first line sits at `baseIndent`, preserving relative indentation of the remaining lines. */
 export function reindentBlock(lines: string[], baseIndent: string): string[] {
   if (lines.length === 0) return [];
   const firstIndent = leadingWhitespace(lines[0] ?? '');
@@ -149,10 +140,7 @@ export function reindentBlock(lines: string[], baseIndent: string): string[] {
   });
 }
 
-/**
- * Normalize a multi-line replacement: first line via the shared completion
- * indentation rules, remaining lines shifted by the same delta.
- */
+/** Normalize a multi-line replacement: first line via the shared completion indentation rules, remaining lines shifted by the same delta. */
 export function alignIntentBlock(code: string, baseIndent: string, indentUnit = '  '): string {
   const normalized = code.replace(/\r\n/g, '\n').replace(/\s+$/, '');
   if (!normalized.trim()) return '';
@@ -164,10 +152,7 @@ export function alignIntentBlock(code: string, baseIndent: string, indentUnit = 
   return reindentBlock(lines, targetIndent).join('\n');
 }
 
-/**
- * Sanitize streamed output for an intent replacement. Prose-only replies fall
- * back to mining code out of the reasoning channel once the stream has ended.
- */
+/** Sanitize streamed output for an intent replacement. */
 export function finalizeIntentText(
   contentText: string,
   reasoningText: string,
@@ -243,8 +228,6 @@ export async function resolveIntentSuggestion(
     return { text: null, error: validation.message };
   }
 
-  // Strict: the binding is already remapped off any synthetic My Models id, so a
-  // miss here means the request would land on an unrelated backend.
   let provider;
   try {
     provider = await resolveProv(binding.providerId, { strict: true });

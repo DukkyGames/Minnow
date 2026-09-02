@@ -4,7 +4,6 @@
  */
 
 export const KNOWN_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
-  // Anthropic
   'claude-sonnet-4-5': 200_000,
   'claude-sonnet-4-6': 200_000,
   'claude-sonnet-5': 200_000,
@@ -24,7 +23,6 @@ export const KNOWN_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
   'claude-3-sonnet': 200_000,
   'claude-3-haiku': 200_000,
 
-  // OpenAI
   'gpt-5': 400_000,
   'gpt-4.1': 1_047_576,
   'gpt-4.1-mini': 1_047_576,
@@ -41,7 +39,6 @@ export const KNOWN_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
   'o3-mini': 200_000,
   'o4-mini': 200_000,
 
-  // DeepSeek
   'deepseek-chat': 64_000,
   'deepseek-coder': 64_000,
   'deepseek-reasoner': 64_000,
@@ -49,7 +46,6 @@ export const KNOWN_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
   'deepseek-v3': 64_000,
   'deepseek-v2': 64_000,
 
-  // Google
   'gemini-2.5-pro': 1_048_576,
   'gemini-2.5-flash': 1_048_576,
   'gemini-2.0-flash': 1_048_576,
@@ -59,7 +55,6 @@ export const KNOWN_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
   'gemma-3': 128_000,
   'gemma-2': 8192,
 
-  // Mistral
   'mistral-large': 128_000,
   'mistral-medium': 32_000,
   'mistral-small': 32_000,
@@ -69,19 +64,16 @@ export const KNOWN_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
   codestral: 32_000,
   pixtral: 128_000,
 
-  // xAI
   'grok-4': 131_072,
   'grok-3': 131_072,
   'grok-2': 131_072,
 
-  // Meta / Llama
   'llama-4': 1_048_576,
   'llama-3.3': 131_072,
   'llama-3.2': 131_072,
   'llama-3.1': 131_072,
   'llama-3': 131_072,
 
-  // Qwen — longer keys win substring lookup, so 3.5/3.6/3.8 must precede generic qwen3.
   'qwen3.8': 262_144,
   qwen3_8: 262_144,
   'qwen3.5': 262_144,
@@ -91,39 +83,30 @@ export const KNOWN_CONTEXT_WINDOWS: Readonly<Record<string, number>> = {
   qwen2: 32_768,
   qwq: 32_768,
 
-  // Cohere
   'command-r-plus': 128_000,
   'command-r': 128_000,
   'command-a': 256_000,
 
-  // Perplexity
   'sonar-pro': 200_000,
   sonar: 128_000,
 
-  // MiniMax
   minimax: 1_000_000,
 
-  // Moonshot / Kimi
   moonshot: 128_000,
   kimi: 128_000,
 
-  // Microsoft
   'phi-4': 16_000,
   'phi-3': 128_000,
 
-  // Nvidia
   nemotron: 131_072,
 
-  // Yi
   'yi-large': 32_768,
   'yi-1.5': 16_384,
   'yi-lightning': 16_384,
 
-  // Nous
   hermes: 131_072,
   'nous-hermes': 131_072,
 
-  // Open community
   dolphin: 32_768,
   mythomax: 4096,
   wizard: 32_768,

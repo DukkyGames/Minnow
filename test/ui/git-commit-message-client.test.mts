@@ -18,6 +18,8 @@ import {
   truncateStagedPatch,
 } from '../../src/ui/git-commit-message-client.ts';
 
+// ── truncateStagedPatch ──────────────────────────────────────────────────────
+
 describe('truncateStagedPatch', () => {
   test('returns patch unchanged when under limit', () => {
     const patch = 'diff --git a/foo.ts b/foo.ts\n+hello';
@@ -35,6 +37,8 @@ describe('truncateStagedPatch', () => {
     assert.match(out, /diff truncated/);
   });
 });
+
+// ── filterCommitMessagePatch ─────────────────────────────────────────────────
 
 describe('filterCommitMessagePatch', () => {
   test('collapses oversized per-file hunks', () => {
@@ -54,6 +58,8 @@ describe('filterCommitMessagePatch', () => {
     assert.equal(filterCommitMessagePatch(''), '');
   });
 });
+
+// ── buildGitCommitMessagePrompt ──────────────────────────────────────────────
 
 describe('buildGitCommitMessagePrompt', () => {
   test('includes changed file list, scope, and diff in user message', () => {
@@ -120,6 +126,8 @@ describe('buildGitCommitMessagePrompt', () => {
   });
 });
 
+// ── sanitizeCommitMessage ────────────────────────────────────────────────────
+
 describe('sanitizeCommitMessage', () => {
   test('strips markdown fences', () => {
     assert.equal(
@@ -143,6 +151,8 @@ describe('sanitizeCommitMessage', () => {
     assert.equal(sanitizeCommitMessage(raw), raw);
   });
 });
+
+// ── stripThinkingFromCommitOutput ────────────────────────────────────────────
 
 describe('stripThinkingFromCommitOutput', () => {
   test('returns reply after inline thinking tags', () => {
@@ -249,12 +259,16 @@ describe('extractCommitMessageFromChain', () => {
   });
 });
 
+// ── looksLikeDiffAnalysisText ────────────────────────────────────────────────
+
 describe('looksLikeDiffAnalysisText', () => {
   test('detects numbered markdown diff walkthroughs', () => {
     const sample = '2. **Identify Key Changes & Intent:**\n- Removed stale copy.';
     assert.equal(looksLikeDiffAnalysisText(sample), true);
   });
 });
+
+// ── resolveCommitMessageDisplayText ──────────────────────────────────────────
 
 describe('resolveCommitMessageDisplayText', () => {
   test('prefers content channel over reasoning', () => {
@@ -348,6 +362,8 @@ describe('resolveCommitMessageDisplayText', () => {
   });
 });
 
+// ── normalizeCommitMessageOutput ─────────────────────────────────────────────
+
 describe('normalizeCommitMessageOutput', () => {
   test('accepts plain commit text without conventional prefix', () => {
     assert.equal(
@@ -357,12 +373,16 @@ describe('normalizeCommitMessageOutput', () => {
   });
 });
 
+// ── stripReasoningFraming ────────────────────────────────────────────────────
+
 describe('stripReasoningFraming', () => {
   test('removes trailing meta commentary', () => {
     const raw = 'feat(ui): add generator\n\nLooks good.';
     assert.equal(stripReasoningFraming(raw), 'feat(ui): add generator');
   });
 });
+
+// ── resolveGitCommitMessageBinding ───────────────────────────────────────────
 
 describe('resolveGitCommitMessageBinding', () => {
   test('uses chat model when editor AI is disabled', async () => {

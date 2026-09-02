@@ -74,7 +74,7 @@ mock.module('../../src/models/model-select-library.ts', {
   namedExports: {
     LIBRARY_MODEL_PROVIDER_ID: 'minnow-library',
     LIBRARY_MODEL_OPTGROUP_LABEL: 'My Models',
-    dedupLlamaCppModelsAgainstLibrary: (results: unknown[]) => results,
+    omitLocalRuntimeCatalogModels: (results: unknown[]) => results,
     fetchLibraryModelSelectMerge: async () => ({
       optgroupHtml: '',
       cacheEntries: [],

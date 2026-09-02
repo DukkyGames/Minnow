@@ -1,10 +1,4 @@
-/**
- * Load V2 Builder/Tester/Final Tester system prompts (P2-E / P3-F).
- *
- * Files live under `prompts/{builder,tester,final}/`. The runner never imports
- * them — this module loads a file and the effector passes the string as
- * `systemPrompt`.
- */
+/** Load Builder, Tester, and Final Tester system prompts. */
 
 import fs from 'node:fs/promises';
 import path from 'node:path';

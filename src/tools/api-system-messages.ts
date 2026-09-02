@@ -1,7 +1,3 @@
-/**
- * Build leading system messages for LM Studio (composed prompt + optional user rules).
- */
-
 import type { ApiMessage } from '../types';
 
 export interface OutboundSystemMessageOptions {

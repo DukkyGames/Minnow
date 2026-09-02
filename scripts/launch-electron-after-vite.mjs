@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Wait for Vite, then launch Electron — runs in a separate Node process so
- * fetch() does not deadlock the in-process Vite dev server in server.js.
- */
 
 import { ensureElectronBuild, spawnElectronShell } from './spawn-electron.mjs';
 import { waitForMinnowDev } from './wait-for-minnow-dev.mjs';

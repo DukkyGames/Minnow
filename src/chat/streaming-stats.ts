@@ -1,8 +1,3 @@
-/**
- * Live token metrics during SSE streaming (MIN-413).
- * Estimates completion tokens from partial output when the provider omits usage mid-stream.
- */
-
 import {
   buildClientStats,
   reconcileCompletionStats,
@@ -26,11 +21,6 @@ export interface StreamingStatsSnapshot {
   t0: number;
   tFirst: number | null;
   partialText: string;
-  /**
-   * Streamed reasoning size in characters. Length only — callers must not join
-   * thought-bubble segments (O(thinking) per token). Unused for token estimates
-   * (provider usage reports reasoning); kept so the strip snapshot stays cheap.
-   */
   partialThinkingLength?: number;
   /** Completed usage from earlier tool-loop rounds in the same user turn. */
   priorSegments?: Usage[];
@@ -86,7 +76,6 @@ export function buildLiveStreamUsage(
     ? aggregateTurnUsageSegments(priorSegmentsList)
     : {};
 
-  // Estimate visible assistant prose only; reasoning tokens arrive via provider usage.
   const roundEstimate = estimateTokensFromText(partialText);
 
   const live = streamMeta.usage;

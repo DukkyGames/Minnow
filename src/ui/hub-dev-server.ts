@@ -1,7 +1,3 @@
-/**
- * Vibe Hub Dev Servers cell — status summary + open the Dev Servers screen (MIN-500).
- */
-
 import { fetchDevServers, type DevServerListItem } from '../config/dev-servers-api';
 import { navigateToCodeDevServers } from '../os/router';
 import { isLocalServerAvailable } from '../tools/config';
@@ -106,7 +102,6 @@ export async function stopHubDevServer(): Promise<void> {
   try {
     await postDevServerStop();
   } catch {
-    /* refresh reconciles */
   }
   void refreshDevServerCell();
 }

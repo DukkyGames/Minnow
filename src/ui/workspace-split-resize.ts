@@ -1,7 +1,3 @@
-/**
- * Drag #splitResizer to resize the Code workspace split or collapse the chat column.
- */
-
 import {
   SPLIT_DRAG_CHAT_COLLAPSE_THRESHOLD,
   SPLIT_RATIO_MAX,

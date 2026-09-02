@@ -1,13 +1,3 @@
-/**
- * Whole-blob + narrow sessions repository over sessions.db (Phase A.2 cutover).
- *
- * HTTP GET/PUT still exchange the full SessionState blob; this module is the
- * SQLite-backed read/write path. Narrow helpers are ready for A.3 consumers.
- *
- * CRITICAL: whole-blob writes ignore chat.terminalHistory (server-owned).
- * Only {@link appendTerminalRun} mutates terminal rows.
- */
-
 import path from 'node:path';
 import { defaultSessionStateJson } from './home.js';
 import {
@@ -44,25 +34,16 @@ import {
   validateSessionState,
 } from './validators.js';
 
-/** Cap matches server/terminal-runner.js MAX_TERMINAL_HISTORY. */
 const MAX_TERMINAL_HISTORY = 50;
 
-/** Below this many stored chats a prune is too small to be worth second-guessing. */
 const PRUNE_GUARD_MIN_CHATS = 5;
-/** Above this share of the store, a prune reads as a degraded client, not an intent. */
 const PRUNE_GUARD_MAX_RATIO = 0.5;
 
-/**
- * Monotonic write counter for optimistic concurrency.
- * Clients echo the revision they read; a mismatch means another window wrote in
- * between and the caller must re-hydrate instead of overwriting.
- */
 export function readSessionRevision() {
   const value = readSessionMeta(getSessionsDb(), 'revision');
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
-/** Bump the write counter. Call once per committed transaction. */
 function bumpSessionRevision() {
   const db = getSessionsDb();
   const current = readSessionMeta(db, 'revision');
@@ -72,8 +53,6 @@ function bumpSessionRevision() {
 }
 
 /**
- * Throw 409 when the caller wrote against a revision that is no longer current.
- * `undefined` opts out (migrations, tools, tests).
  * @param {unknown} baseRevision
  */
 function assertSessionRevision(baseRevision) {
@@ -92,55 +71,42 @@ function assertSessionRevision(baseRevision) {
 const readStmtsByDb = new WeakMap();
 
 /**
- * Eleven hoisted SELECT statements — one .all() each, no N+1 per chat/group.
  * @param {import('better-sqlite3').Database} db
  */
 function getReadStmts(db) {
   let stmts = readStmtsByDb.get(db);
   if (stmts) return stmts;
   stmts = {
-    // 1
     chats: db.prepare('SELECT * FROM chats ORDER BY sort_index ASC, id ASC'),
-    // 2
     messages: db.prepare(
       'SELECT chat_id, seq, payload_json FROM messages ORDER BY chat_id ASC, seq ASC',
     ),
-    // 3
     terminal: db.prepare(
       'SELECT * FROM chat_terminal_history ORDER BY chat_id ASC, seq ASC',
     ),
-    // 4
     runs: db.prepare(
       'SELECT chat_id, run_id, payload_json FROM chat_runs ORDER BY chat_id ASC, run_id ASC',
     ),
-    // 5
     subAgentRuns: db.prepare(
       'SELECT chat_id, run_id, payload_json FROM chat_sub_agent_runs ORDER BY chat_id ASC, run_id ASC',
     ),
-    // 6
     loops: db.prepare(
       'SELECT chat_id, loop_id, payload_json FROM chat_loops ORDER BY chat_id ASC, loop_id ASC',
     ),
-    // 7
     groups: db.prepare('SELECT * FROM groups ORDER BY sort_order ASC, id ASC'),
-    // 8
     boardTasks: db.prepare(
       'SELECT group_id, task_id, payload_json FROM board_tasks ORDER BY group_id ASC, task_id ASC',
     ),
-    // 9
     boardLog: db.prepare(
       'SELECT * FROM board_log ORDER BY group_id ASC, seq ASC',
     ),
-    // 10
     sessionMeta: db.prepare('SELECT key, value FROM session_meta'),
-    // 11 — chat id list used by narrow helpers / existence checks without scanning children
     chatIds: db.prepare('SELECT id FROM chats ORDER BY sort_index ASC, id ASC'),
   };
   readStmtsByDb.set(db, stmts);
   return stmts;
 }
 
-/** Parse JSON text with a fallback. */
 function parseJson(raw, fallback) {
   if (typeof raw !== 'string' || !raw) return fallback;
   try {
@@ -151,7 +117,6 @@ function parseJson(raw, fallback) {
 }
 
 /**
- * Bucket rows by a string key into Map<string, T[]>.
  * @template T
  * @param {T[]} rows
  * @param {(row: T) => string} keyFn
@@ -168,7 +133,6 @@ function bucketBy(rows, keyFn) {
   return map;
 }
 
-/** Map a terminal_history row to a TerminalRunRecord plain object. */
 function terminalRowToRecord(row) {
   /** @type {Record<string, unknown>} */
   const record = {
@@ -190,7 +154,6 @@ function terminalRowToRecord(row) {
   return record;
 }
 
-/** Map a board_log row to a board log event. */
 function boardLogRowToEvent(row) {
   const detail = parseJson(row.detail_json, {});
   /** @type {Record<string, unknown>} */
@@ -211,15 +174,8 @@ function boardLogRowToEvent(row) {
 }
 
 /**
- * Reconstruct one Chat from hot columns + meta_json + child payloads.
  * @param {Record<string, any>} row
- * @param {{
- *   messages: unknown[],
- *   terminalHistory: Record<string, unknown>[],
- *   runs: unknown[],
- *   subAgentRuns: unknown[],
- *   activeLoops: unknown[],
- * }} children
+ * @param {{ messages: unknown[], terminalHistory: Record<string, unknown>[], runs: unknown[], subAgentRuns: unknown[], activeLoops: unknown[], }} children
  */
 function stitchChat(row, children) {
   const meta = parseJson(row.meta_json, {});
@@ -263,7 +219,6 @@ function stitchChat(row, children) {
 }
 
 /**
- * Reconstruct one ChatGroup with orchestrateBoard tasks/log stitched back.
  * @param {Record<string, any>} row
  * @param {unknown[]} tasks
  * @param {Record<string, unknown>[]} log
@@ -301,10 +256,6 @@ function stitchGroup(row, tasks, log) {
   return group;
 }
 
-/**
- * Read the full SessionState from SQLite (eleven hoisted .all() queries).
- * Returns the default blob when the DB has no chats yet.
- */
 export function readWholeSessionState() {
   const db = getSessionsDb();
   const stmts = getReadStmts(db);
@@ -322,8 +273,6 @@ export function readWholeSessionState() {
   const groupRows = stmts.groups.all();
   const boardTaskRows = stmts.boardTasks.all();
   const boardLogRows = stmts.boardLog.all();
-  // session_meta is also loaded via the hoisted statement (status / diagnostics);
-  // scalars below use readSessionMeta for typed JSON parsing.
   void stmts.sessionMeta.all();
 
   const messagesByChat = bucketBy(messageRows, (r) => r.chat_id);
@@ -391,16 +340,12 @@ export function readWholeSessionState() {
     raw.codeChangeTotalsByWorkspace = codeChangeTotalsByWorkspace;
   }
 
-  // Normalize through the same validator the PUT path uses so GET===PUT shapes match.
   return validateSessionState(raw);
 }
 
-// Register mirror source once at module load (reads live DB state).
 registerSessionsJsonMirrorSource(() => readWholeSessionState());
 
 /**
- * Whether the wire chat object included an explicit `history` key.
- * Lazy-load metadata-only saves omit it so existing messages are preserved.
  * @param {unknown} raw
  */
 function wireChatIncludesHistory(raw) {
@@ -430,7 +375,6 @@ function indexRawWireChats(rawChats) {
 }
 
 /**
- * Read stored message summary columns when the wire payload omitted history.
  * @param {import('better-sqlite3').Database} db
  * @param {string} chatId
  */
@@ -451,18 +395,11 @@ function readChatMessageDerived(db, chatId) {
 }
 
 /**
- * Upsert chat metadata and optionally sync message rows.
- *
- * A history-omitting write means "preserve the stored messages". That is only
- * meaningful for a chat that already exists: creating a fresh row this way
- * resurrects it with zero messages and no way to ever get them back, which is
- * how lazily-unloaded chats lost their transcripts. Skip those instead.
- *
  * @param {import('better-sqlite3').Database} db
  * @param {Record<string, any>} chat
  * @param {number} sortIndex
  * @param {boolean} syncHistory
- * @returns {boolean} false when the upsert was skipped as an empty resurrection
+ * @returns {boolean}
  */
 function upsertChatWithOptionalHistory(db, chat, sortIndex, syncHistory) {
   const chatId = String(chat.id);
@@ -493,15 +430,9 @@ function upsertChatWithOptionalHistory(db, chat, sortIndex, syncHistory) {
 }
 
 /**
- * Delete chat rows and every child table that does not cascade.
- *
- * `messages` cascades from `chats`, but `messages_fts` is an FTS5 virtual table
- * with no foreign key — a bare `DELETE FROM chats` leaves its rows orphaned and
- * they keep surfacing in search forever.
- *
  * @param {import('better-sqlite3').Database} db
  * @param {string[]} chatIds
- * @returns {number} rows removed from `chats`
+ * @returns {number}
  */
 function deleteChatRows(db, chatIds) {
   const delFts = db.prepare('DELETE FROM messages_fts WHERE chat_id = ?');
@@ -518,10 +449,6 @@ function deleteChatRows(db, chatIds) {
 }
 
 /**
- * Tail-diff sync for a chat's message rows.
- * (1) length + history_digest match → skip
- * (2) else find first differing seq k; DELETE seq>=k; insert tail
- *
  * @param {import('better-sqlite3').Database} db
  * @param {string} chatId
  * @param {Record<string, unknown>[]} history
@@ -550,8 +477,6 @@ export function syncMessages(db, chatId, history) {
     return derived;
   }
 
-  // Shrinking a transcript is legitimate (Clear chat, truncate, fork) but it is also
-  // what every history-loss bug looks like from here. Leave a trail.
   const before = chatRow?.message_count ?? 0;
   if (before > 0 && messages.length < before) {
     console.warn(
@@ -569,12 +494,10 @@ export function syncMessages(db, chatId, history) {
     k += 1;
   }
 
-  // Truncation or any mutation at/after k — drop the suffix then rewrite the tail.
   if (k < existing.length) {
     db.prepare('DELETE FROM messages WHERE chat_id = ? AND seq >= ?').run(chatId, k);
     db.prepare('DELETE FROM messages_fts WHERE chat_id = ? AND seq >= ?').run(chatId, k);
   } else if (messages.length < existing.length) {
-    // Prefix identical but history shortened (should be covered above; belt-and-suspenders).
     db.prepare('DELETE FROM messages WHERE chat_id = ? AND seq >= ?').run(
       chatId,
       messages.length,
@@ -593,7 +516,6 @@ export function syncMessages(db, chatId, history) {
 }
 
 /**
- * Sync runs keyed by run_id — upsert blob rows, delete missing.
  * @param {import('better-sqlite3').Database} db
  * @param {string} chatId
  * @param {Record<string, any>[]} runs
@@ -690,7 +612,6 @@ function syncBoardTasks(db, groupId, tasks) {
 }
 
 /**
- * Wholesale replace board log for a group (blob is authoritative for log events).
  * @param {import('better-sqlite3').Database} db
  * @param {string} groupId
  * @param {Record<string, any>[]} log
@@ -704,7 +625,6 @@ function syncBoardLog(db, groupId, log) {
   trimBoardLog(db, groupId);
 }
 
-/** Write session_meta scalars from a validated SessionState. */
 function writeScalars(db, state) {
   writeSessionMeta(db, 'schemaVersion', state.version ?? 6);
   writeSessionMeta(db, 'activeId', state.activeId ?? '');
@@ -734,22 +654,8 @@ function writeScalars(db, state) {
 }
 
 /**
- * Write a whole SessionState in ONE transaction.
- * Does NOT apply chat.terminalHistory from the client blob (server-owned).
- *
- * Deletion is never inferred from absence. A client that boots lazily holds chat
- * rows it has not hydrated, and a client whose load degraded holds almost none —
- * treating "not in this payload" as "delete" let either of them wipe the store.
- * Callers that genuinely own the complete list opt in via `pruneMissingChats`.
- *
- * @param {Record<string, any>} state  Already validated SessionState
- * @param {{
- *   rawChats?: unknown[],
- *   deleteChatIds?: string[],
- *   deleteGroupIds?: string[],
- *   pruneMissingChats?: boolean,
- *   baseRevision?: number,
- * }} [options]  `rawChats` are the unvalidated wire chats (history-key detection)
+ * @param {Record<string, any>} state
+ * @param {{ rawChats?: unknown[], deleteChatIds?: string[], deleteGroupIds?: string[], pruneMissingChats?: boolean, baseRevision?: number, }} [options]
  */
 export function writeWholeSessionState(state, options = {}) {
   const db = getSessionsDb();
@@ -761,7 +667,6 @@ export function writeWholeSessionState(state, options = {}) {
   const deleteGroupIds = Array.isArray(options.deleteGroupIds) ? options.deleteGroupIds : [];
 
   const tx = db.transaction(() => {
-    // Inside the transaction so the check and the write cannot straddle another one.
     assertSessionRevision(options.baseRevision);
     writeScalars(db, state);
 
@@ -799,7 +704,6 @@ export function writeWholeSessionState(state, options = {}) {
       if (upsertChatWithOptionalHistory(db, chat, sortIndex, hasHistoryKey)) {
         chatIds.push(chatId);
       }
-      // Intentionally skip chat.terminalHistory — preserve existing terminal rows.
     });
 
     if (pruneMissing) {
@@ -817,10 +721,6 @@ export function writeWholeSessionState(state, options = {}) {
 }
 
 /**
- * Refuse an implausible prune. A payload that would drop most of the store is a
- * degraded client, not an intentional bulk delete — bulk deletes arrive as
- * explicit `deleteChatIds`.
- *
  * @param {import('better-sqlite3').Database} db
  * @param {number} storedCount
  * @param {string[]} doomed
@@ -850,7 +750,6 @@ function assertPruneIsSane(db, storedCount, doomed) {
 }
 
 /**
- * Append one TerminalRunRecord for a chat (server-owned write path).
  * @param {string} chatId
  * @param {Record<string, any>} record
  */
@@ -891,7 +790,6 @@ export function appendTerminalRun(chatId, record) {
 }
 
 /**
- * Read terminal history for one chat (ordered by seq).
  * @param {string} chatId
  * @returns {Record<string, unknown>[]}
  */
@@ -908,7 +806,6 @@ export function readTerminalHistory(chatId) {
 }
 
 /**
- * Resolve worktree root + board group id for a chat (A.3 consumer helper).
  * @param {string} chatId
  * @returns {{ worktreeRoot: string | undefined, groupId: string | undefined }}
  */
@@ -946,7 +843,6 @@ export function resolveChatWorktreeContext(chatId) {
 }
 
 /**
- * Resolve board-task ports for a chat and/or worktree cwd.
  * @param {{ chatId?: string, cwd?: string }} params
  * @returns {{ devPort: number, apiPort: number } | undefined}
  */
@@ -1015,7 +911,6 @@ export function resolveBoardTaskPorts({ chatId, cwd } = {}) {
 }
 
 /**
- * Active chat's provider/model binding (scheduler / research / brain).
  * @returns {{ chatId: string, providerId: string, modelId: string } | null}
  */
 export function readActiveChatModelBinding() {
@@ -1033,22 +928,14 @@ export function readActiveChatModelBinding() {
   };
 }
 
-/** All chat ids in sidebar order. */
 export function readAllChatIds() {
   const db = getSessionsDb();
   return getReadStmts(db).chatIds.all().map((row) => row.id);
 }
 
 /**
- * Map a `chats` row + non-message children to a ChatSummary.
- * Merges meta_json via stitchChat; never includes message bodies.
  * @param {Record<string, any>} row
- * @param {{
- *   terminalHistory?: Record<string, unknown>[],
- *   runs?: unknown[],
- *   subAgentRuns?: unknown[],
- *   activeLoops?: unknown[],
- * }} [children]
+ * @param {{ terminalHistory?: Record<string, unknown>[], runs?: unknown[], subAgentRuns?: unknown[], activeLoops?: unknown[], }} [children]
  */
 function chatRowToSummary(row, children = {}) {
   const stitched = stitchChat(row, {
@@ -1058,7 +945,6 @@ function chatRowToSummary(row, children = {}) {
     subAgentRuns: children.subAgentRuns ?? [],
     activeLoops: children.activeLoops ?? [],
   });
-  // Drop empty history placeholder from the wire payload (C.1 contract).
   const { history: _history, ...rest } = stitched;
   void _history;
   /** @type {Record<string, unknown>} */
@@ -1076,9 +962,7 @@ function chatRowToSummary(row, children = {}) {
 }
 
 /**
- * List chat summaries (no message bodies) for sidebar / lazy boot.
- * Includes meta_json + non-message children so boot mutators can run without history.
- * @param {{ workspace?: string }} [filter]  When `workspace` is set, only that path.
+ * @param {{ workspace?: string }} [filter]
  * @returns {Record<string, unknown>[]}
  */
 export function readChatSummaries(filter = {}) {
@@ -1094,7 +978,6 @@ export function readChatSummaries(filter = {}) {
         .all(workspace)
     : stmts.chats.all();
 
-  // Load non-message children in bulk (same pattern as readWholeSessionState).
   const terminalByChat = bucketBy(stmts.terminal.all(), (r) => r.chat_id);
   const runsByChat = bucketBy(stmts.runs.all(), (r) => r.chat_id);
   const subAgentsByChat = bucketBy(stmts.subAgentRuns.all(), (r) => r.chat_id);
@@ -1116,7 +999,6 @@ export function readChatSummaries(filter = {}) {
   );
 }
 
-/** Build an FTS5 MATCH query (AND of prefix terms), matching email cache. */
 export function toSessionsFtsQuery(raw) {
   const terms = String(raw ?? '')
     .split(/\s+/)
@@ -1127,9 +1009,6 @@ export function toSessionsFtsQuery(raw) {
 }
 
 /**
- * Full-text search over chat titles + message bodies (messages_fts).
- * Title hits outrank message hits; then bm25, then recency.
- *
  * @param {{ q: string, workspace?: string, limit?: number }} opts
  * @returns {{ results: Array<Record<string, unknown>> }}
  */
@@ -1149,7 +1028,6 @@ export function searchSessionChats(opts) {
   /** @type {Map<string, Record<string, unknown>>} */
   const byChatId = new Map();
 
-  // Title matches (substring AND across tokens) — weight like client TITLE_WEIGHT.
   const titleRows = workspace
     ? db
         .prepare(
@@ -1181,7 +1059,6 @@ export function searchSessionChats(opts) {
     });
   }
 
-  // Message body matches via FTS5.
   if (ftsQuery) {
     const params = [ftsQuery];
     let workspaceClause = '';
@@ -1217,7 +1094,6 @@ export function searchSessionChats(opts) {
         .slice(start, start + 110)
         .replace(/\s+/g, ' ')
         .trim()}${start + 110 < body.length ? '…' : ''}`;
-      // bm25: lower is better; invert into a positive score band below title hits.
       const bm25 = typeof row.rank === 'number' ? row.rank : 0;
       const score = Math.max(1, 200 - bm25 * 10);
       const existing = byChatId.get(chatId);
@@ -1249,16 +1125,6 @@ export function searchSessionChats(opts) {
 }
 
 /**
- * Load message payloads for one chat.
- *
- * CRITICAL: Chat consumers that compute absolute indices into `chat.history`
- * (archive `startIndex`/`endIndex`, `TurnSnapshot.historyPrefixHash`,
- * `TurnRunRecord.outputHistoryStart`/`End`) MUST load the ENTIRE history.
- * Never feed a paged slice into those pipelines — it corrupts indices/hashes.
- *
- * `offset` / `limit` exist only for a future virtualized renderer and must
- * never feed anything computing absolute indices.
- *
  * @param {string} chatId
  * @param {{ offset?: number, limit?: number }} [opts]
  * @returns {Record<string, unknown>[]}
@@ -1289,7 +1155,6 @@ export function readChatHistory(chatId, opts = {}) {
       params.push(offset);
     }
   } else if (offset > 0) {
-    // OFFSET without LIMIT is unusual; still honor for the virtualized path.
     sql += ' LIMIT -1 OFFSET ?';
     params.push(offset);
   }
@@ -1301,8 +1166,6 @@ export function readChatHistory(chatId, opts = {}) {
 }
 
 /**
- * Session scalars + groups + chat summaries (no `history` on chats).
- * Used by GET /api/config/sessions/summaries.
  * @param {{ workspace?: string }} [filter]
  */
 export function readSessionSummariesState(filter = {}) {
@@ -1332,7 +1195,6 @@ export function readSessionSummariesState(filter = {}) {
 
   /** @type {Record<string, unknown>} */
   const raw = {
-    // Echoed back on write so a second window cannot overwrite this snapshot blindly.
     revision: readSessionRevision(),
     version: readSessionMeta(db, 'schemaVersion') ?? SESSION_SCHEMA_VERSION,
     activeId: readSessionMeta(db, 'activeId') ?? '',
@@ -1361,20 +1223,13 @@ export function readSessionSummariesState(filter = {}) {
   return raw;
 }
 
-/** Export the current SessionState (POST /api/config/sessions/export-json). */
 export function exportSessionStateToJson() {
   return readWholeSessionState();
 }
 
 /**
- * Apply a partial SessionState delta in one transaction (Phase B.0).
- * Absent keys mean unchanged; deletes are explicit id lists.
- * Does NOT apply chat.terminalHistory (server-owned — same rule as whole-blob PUT).
- *
  * @param {unknown} delta
- * @returns {{ ok: true, applied: {
- *   chats: number, deletedChats: number, groups: number, deletedGroups: number, scalars: boolean
- * } }}
+ * @returns {{ ok: true, applied: { chats: number, deletedChats: number, groups: number, deletedGroups: number, scalars: boolean } }}
  */
 export function patchSessionState(delta) {
   if (!delta || typeof delta !== 'object') {
@@ -1398,7 +1253,6 @@ export function patchSessionState(delta) {
     /** @type {Error & { statusCode?: number }} */ (err).statusCode = 400;
     throw err;
   }
-  // Older baseVersion is accepted; rows are normalized to SESSION_SCHEMA_VERSION.
   void SESSION_SCHEMA_VERSION;
 
   const applied = {
@@ -1412,10 +1266,8 @@ export function patchSessionState(delta) {
   const db = getSessionsDb();
   let revision = 0;
   const tx = db.transaction(() => {
-    // Inside the transaction so the check and the write cannot straddle another one.
     assertSessionRevision(body.baseRevision);
 
-    // Explicit deletes first (CASCADE clears child rows; FTS is swept by hand).
     if (Array.isArray(body.deleteChatIds)) {
       applied.deletedChats += deleteChatRows(db, body.deleteChatIds);
     }
@@ -1429,12 +1281,10 @@ export function patchSessionState(delta) {
       }
     }
 
-    // Upsert full dirty chat objects (unknown ids insert at end of sidebar order).
     if (Array.isArray(body.chats)) {
       for (const raw of body.chats) {
         if (!raw || typeof raw !== 'object') continue;
         const chat = normalizeChatRow(raw);
-        // PATCH always lands v6 chat rows (strip legacy expertSelection if present).
         migrateChatRowV5ToV6(chat);
         const chatId = String(chat.id);
         const existing = db
@@ -1452,13 +1302,11 @@ export function patchSessionState(delta) {
 
         const hasHistoryKey = wireChatIncludesHistory(raw);
         if (upsertChatWithOptionalHistory(db, chat, sortIndex, hasHistoryKey)) {
-          // Intentionally skip chat.terminalHistory — preserve existing terminal rows.
           applied.chats += 1;
         }
       }
     }
 
-    // Upsert full dirty group objects.
     if (Array.isArray(body.groups)) {
       for (const raw of body.groups) {
         const group = normalizeGroupRow(raw);
@@ -1471,7 +1319,6 @@ export function patchSessionState(delta) {
       }
     }
 
-    // Partial scalars — only keys present on body.scalars are written.
     if (body.scalars && typeof body.scalars === 'object') {
       const scalars = normalizeSessionScalars(body.scalars, { mode: 'partial' });
       applyPartialScalars(db, scalars);
@@ -1485,7 +1332,6 @@ export function patchSessionState(delta) {
       throw err;
     }
 
-    // Keep activeId pointing at a real chat after deletes.
     const activeId = readSessionMeta(db, 'activeId');
     const activeOk =
       typeof activeId === 'string' &&
@@ -1498,7 +1344,6 @@ export function patchSessionState(delta) {
       if (first?.id) writeSessionMeta(db, 'activeId', first.id);
     }
 
-    // Keep schemaVersion meta aligned with wire version.
     writeSessionMeta(db, 'schemaVersion', SESSION_SCHEMA_VERSION);
     revision = bumpSessionRevision();
   });
@@ -1508,7 +1353,6 @@ export function patchSessionState(delta) {
 }
 
 /**
- * Write only the scalar keys present in a partial normalizeSessionScalars result.
  * @param {import('better-sqlite3').Database} db
  * @param {Record<string, unknown>} scalars
  */
@@ -1562,10 +1406,8 @@ function applyPartialScalars(db, scalars) {
   }
 }
 
-/** Whether the process should use the legacy JSON sessions path. */
 export function useJsonSessionsStore() {
   return process.env.MINNOW_SESSIONS_STORE === 'json';
 }
 
-/** Expose mirror flush for sessions-db closeSessionsDb (and tests). */
 export { flushSessionsJsonMirror };

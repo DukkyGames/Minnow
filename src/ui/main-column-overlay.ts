@@ -1,9 +1,3 @@
-/**
- * Shared main-column overlay chrome — CSS classes and DOM suppression for
- * Code overview, code map, orchestrate hub, the V2 Boards surface, plan screen,
- * and Issues embeds.
- */
-
 import type { CodeSectionId } from '../os/types';
 import { getActiveBoardGroup } from '../state/chat-groups';
 import { emitChatSidebarChanged } from './layout-events';
@@ -57,10 +51,7 @@ export function stripMainColumnOverlayClasses(): void {
   }
 }
 
-/**
- * True when a full-column overlay is showing and chat transcript DOM should not mount.
- * Uses DOM markers only — safe to import from streaming-state without circular deps.
- */
+/** True when a full-column overlay is showing and chat transcript DOM should not mount. */
 export function isMainColumnOverlaySuppressingChatDom(): boolean {
   if (isCodeStageRootHidingChatSidebar()) return true;
 
@@ -94,14 +85,10 @@ function isCodeStageRootHidingChatSidebar(): boolean {
   return false;
 }
 
-/**
- * True while a Code view-bar destination owns the stage and the session list
- * is hidden in CSS (same behaviour as Super Plan).
- */
+/** True while a Code view-bar destination owns the stage and the session list is hidden in CSS (same behaviour as Super Plan). */
 export function isCodeStageViewHidingChatSidebar(): boolean {
   if (isSuperPlanChromeActive()) return true;
   if (isCodeStageRootHidingChatSidebar()) return true;
-  // Board view has `.ob-rail`; the Code session list is a second list.
   if (document.getElementById('orchestrateBoardPage')) return true;
   const boardGroup = getActiveBoardGroup();
   if (boardGroup?.viewMode === 'board') return true;
@@ -109,12 +96,7 @@ export function isCodeStageViewHidingChatSidebar(): boolean {
   return isMainColumnOverlaySuppressingChatDom();
 }
 
-/**
- * True when a Code view-bar overlay owns the stage, including Super Plan chrome.
- * Unlike {@link isCodeStageViewHidingChatSidebar}, this stays true even when a
- * board folder is still in `viewMode: 'board'` — the kanban must not repaint
- * over Overview / Super Plan / hub / map / Dev servers.
- */
+/** True when a Code view-bar overlay owns the stage, including Super Plan chrome. */
 export function isCodeStageOverlayMounted(): boolean {
   if (isSuperPlanChromeActive()) return true;
   return isCodeStageRootHidingChatSidebar();
@@ -123,19 +105,12 @@ export function isCodeStageOverlayMounted(): boolean {
 /** Notify Code view chrome (Chats toggle) after a stage view opens or closes. */
 export function notifyCodeStageViewChanged(): void {
   emitChatSidebarChanged();
-  // Stage views hide the chat rail in CSS; re-measure the preview guest so it
-  // tracks the shifted #previewBody instead of sitting at stale bounds.
   void import('./preview-electron-visibility').then((m) => {
     m.scheduleElectronPreviewHostLayoutSync();
   });
 }
 
-/**
- * Tear down every Code main-column overlay except `keep`.
- * Never restores chat and never writes the hash — the caller owns the destination.
- * Import a view module only when its root is in the DOM so idle switches do not
- * pull the whole Code workspace graph into tests and cold paths.
- */
+/** Tear down every Code main-column overlay except `keep`. */
 export async function closeOtherCodeStageViews(keep?: CodeStageViewKeep): Promise<void> {
   const area = document.getElementById('chatArea');
 
@@ -267,10 +242,6 @@ export async function closeActiveCodeStageView(): Promise<void> {
     return;
   }
 
-  // Board view is not a view-bar overlay root, but it hides the session list
-  // the same way. Chats leaves the kanban and restores the transcript.
-  // Skip when Overview / Super Plan / hub / map still own the stage — a board
-  // folder can stay in viewMode `board` underneath those overlays.
   if (
     !isCodeStageOverlayMounted() &&
     (document.getElementById('orchestrateBoardPage') ||

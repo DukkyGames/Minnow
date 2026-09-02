@@ -1,7 +1,3 @@
-/**
- * Inline issue label editor — add/remove chips with autocomplete from workspace labels.
- */
-
 import {
   collectIssueLabelSuggestions,
   normalizeIssueLabel,
@@ -15,6 +11,8 @@ export type IssuesLabelsFieldOptions = {
   variant: 'detail' | 'row';
   onChange: (labels: string[]) => void;
 };
+
+// ── Focus ────────────────────────────────────────────────────────────────────
 
 /** True when focus is inside a labels field (skip detail re-render while editing). */
 export function isIssuesLabelsFieldFocused(): boolean {
@@ -45,6 +43,8 @@ export function filterIssueLabelSuggestions(
 let openSuggestionsMenu: HTMLUListElement | null = null;
 let openSuggestionsInput: HTMLInputElement | null = null;
 let suggestionsRepositionHandler: (() => void) | null = null;
+
+// ── Menu ─────────────────────────────────────────────────────────────────────
 
 /** Close any open labels suggestion menu (body-mounted). */
 export function closeIssuesLabelsSuggestionsMenu(): void {
@@ -116,6 +116,8 @@ function buildLabelChip(label: string, onRemove: () => void): HTMLElement {
   chip.append(text, remove);
   return chip;
 }
+
+// ── Field ────────────────────────────────────────────────────────────────────
 
 /** Build an interactive labels field for list rows or the detail sticky header. */
 export function createIssuesLabelsField(options: IssuesLabelsFieldOptions): HTMLElement {

@@ -1,7 +1,3 @@
-/**
- * Settings → Appearance: custom color token editor.
- */
-
 import {
   formatCssColor,
   parseCssColorOrDefault,

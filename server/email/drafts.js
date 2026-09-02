@@ -1,16 +1,3 @@
-/**
- * Draft persistence.
- *
- * Before this, closing or discarding a compose pane destroyed whatever had been
- * typed with no way back — the single most expensive thing a mail client can do
- * to someone. Drafts now autosave locally as you type, survive a restart, and
- * optionally get mirrored into the account's IMAP Drafts folder so other
- * clients see them too.
- *
- * The local row is the source of truth: an IMAP mirror that fails (no Drafts
- * folder, offline, permission denied) must never cost the user their text.
- */
-
 import { randomUUID } from 'node:crypto';
 import MailComposer from 'nodemailer/lib/mail-composer/index.js';
 import { getMailDb } from './store.js';
@@ -58,9 +45,6 @@ function rowToDraft(row) {
 }
 
 /**
- * Create or update a draft. Called on every autosave tick, so it must be cheap
- * and must never throw on partial input — a draft is by definition incomplete.
- *
  * @param {string} accountId
  * @param {Record<string, unknown>} input
  */
@@ -69,8 +53,6 @@ export async function saveDraft(accountId, input = {}) {
   const id = String(input.id ?? '').trim() || randomUUID();
   const existing = db.prepare('SELECT created_at FROM drafts WHERE id = ?').get(id);
 
-  // Attachment bytes stay out of the row: only the metadata is persisted, so a
-  // 20MB deck does not get rewritten to disk on every keystroke.
   const attachments = Array.isArray(input.attachments)
     ? input.attachments.map((att) => ({
         filename: String(att?.filename ?? 'attachment'),
@@ -134,7 +116,6 @@ export async function getDraft(accountId, draftId) {
 }
 
 /**
- * Newest first.
  * @param {string} accountId
  * @param {{ threadId?: string, limit?: number }} [options]
  */
@@ -164,7 +145,6 @@ export async function deleteDraft(accountId, draftId) {
 }
 
 /**
- * Build the RFC822 bytes for a draft (also what the IMAP mirror appends).
  * @param {Record<string, unknown>} draft
  * @param {{ fromAddress?: string, username?: string }} account
  */
@@ -185,13 +165,6 @@ export async function composeDraftSource(draft, account) {
 }
 
 /**
- * Mirror a draft into the account's IMAP Drafts folder.
- *
- * Best-effort by design: the local row already holds the text, so a failure
- * here is reported and dropped rather than surfaced as a lost draft. The
- * previous mirror is expunged first so the folder does not fill with one
- * message per autosave.
- *
  * @param {string} accountId
  * @param {string} draftId
  */
@@ -228,15 +201,12 @@ export async function syncDraftToImap(accountId, draftId) {
     });
 
     if (Number.isFinite(previousUid) && previousUid > 0) {
-      // Drop the superseded copy; a failure here is cosmetic clutter, not data
-      // loss, so it must not undo the append we just made.
       try {
         await withMailbox(accountId, target, async (client) => {
           await client.messageFlagsAdd(previousUid, ['\\Deleted'], { uid: true });
           await client.messageDelete(previousUid, { uid: true });
         });
       } catch {
-        /* the stale draft stays visible until the next expunge */
       }
     }
 

@@ -1,7 +1,3 @@
-/**
- * Copy Material Icon Theme SVGs into public/material-icons for static serving.
- * Avoids import.meta.glob (fragile under Electron + Vite dev and bloated JS bundles).
- */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

@@ -59,6 +59,8 @@ export interface WorktreeOpResult {
   currentBranch?: string | null;
 }
 
+// ── Transport ────────────────────────────────────────────────────────────────
+
 async function postWorktree(
   op: string,
   args: Record<string, unknown>,
@@ -81,6 +83,8 @@ async function postWorktree(
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
+// ── Board ops ────────────────────────────────────────────────────────────────
 
 /** Ensure the board integration branch + its worktree exist. */
 export function ensureIntegration(input: {
@@ -245,6 +249,8 @@ export function openIntegrationPr(input: {
 }): Promise<WorktreeOpResult> {
   return postWorktree('open_pr', input);
 }
+
+// ── List chats ───────────────────────────────────────────────────────────────
 
 /** List all git worktrees for the active repo (`git worktree list --porcelain`). */
 export async function listWorktrees(): Promise<WorktreeOpResult> {

@@ -1,7 +1,3 @@
-/**
- * xterm.js palette derived from Minnow --mn-* tokens (PTY ANSI contrast).
- */
-
 import type { ITheme } from '@xterm/xterm';
 
 function readToken(
@@ -187,7 +183,6 @@ export function buildTerminalXtermTheme(style: CSSStyleDeclaration): ITheme {
     const accent = readToken(style, '--mn-accent', '#5b8a72');
     const yellow = pickLightAnsiYellow(style, bg);
 
-    // Dark, saturated ANSI colors for shells that colorize on a light canvas.
     return {
       ...base,
       black: fg,

@@ -1,10 +1,3 @@
-/**
- * Persistent Email-scoped assistant dock.
- *
- * The panel owns Email session switching and view context, while the shared
- * chat loop still owns messages, tools, approvals, attachments, and streaming.
- */
-
 import { renderAttachPreview } from '../../attachments/store';
 import { notifyAskQuestionDisplayContextChanged } from '../../chat/ask-question-display';
 import { resumeIncompleteToolBatchOnChatSwitch } from '../../chat/incomplete-tool-resume';
@@ -83,6 +76,8 @@ export interface EmailAssistantPanelController {
   dispose: () => void;
 }
 
+// ── DOM helpers ──────────────────────────────────────────────────────────────
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -107,6 +102,8 @@ function iconButton(
   return button;
 }
 
+// ── Composer ─────────────────────────────────────────────────────────────────
+
 /** Resize a compact composer without animating its layout. */
 function resizeComposer(input: HTMLTextAreaElement): void {
   input.style.height = '0px';
@@ -129,12 +126,8 @@ function chatLabel(chat: Chat): string {
   return 'New conversation';
 }
 
-/**
- * Mount the assistant once for the lifetime of an Email panel render.
- *
- * The history menu is portalled to `document.body` so neither the dock nor the
- * transcript's overflow can clip it.
- */
+// ── Assistant mount ──────────────────────────────────────────────────────────
+
 export function mountEmailAssistantPanel(
   shell: HTMLElement,
   workspace: HTMLElement,
@@ -366,7 +359,6 @@ export function mountEmailAssistantPanel(
   const switchToChat = (chat: Chat): void => {
     if (!sessionState) return;
     const previousId = sessionState.activeId;
-    // Await history hydrate before painting — lazy-boot chats start empty.
     void activateChatById(chat.id).then(() => {
       if (!sessionState || sessionState.activeId !== chat.id) return;
       switchComposerDraft(previousId, chat);

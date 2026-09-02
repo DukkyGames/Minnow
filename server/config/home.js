@@ -451,6 +451,7 @@ async function chmodSafe(filePath, mode) {
 
 /**
  * Create home layout and default JSON files when missing.
+ * SQLite is the sessions store; only seed state.json when MINNOW_SESSIONS_STORE=json.
  * @returns {Promise<string>} Resolved home path
  */
 export async function ensureMinnowLayout() {
@@ -469,9 +470,6 @@ export async function ensureMinnowLayout() {
     }
   }
 
-  // SQLite is the canonical sessions store (A.2). Only seed legacy state.json
-  // when MINNOW_SESSIONS_STORE=json — otherwise ensureMinnowLayout would recreate
-  // state.json after import renames it to .migrated.
   const defaults = [
     { rel: 'config.json', data: DEFAULT_META },
     ...(process.env.MINNOW_SESSIONS_STORE === 'json'

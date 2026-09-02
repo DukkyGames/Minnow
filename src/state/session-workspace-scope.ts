@@ -8,6 +8,8 @@ import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Chat, SessionState } from '../types';
 
+// ── Visibility ───────────────────────────────────────────────────────────────
+
 /** Legacy Expert Lab sessions stay out of the main sidebar; expert threads are listed normally. */
 export function isSidebarVisibleChat(chat: Chat): boolean {
   return chat.kind !== 'expert-lab' && chat.appScope !== 'email';
@@ -26,8 +28,6 @@ export function hasComposerDraft(chat: Chat): boolean {
 export function chatHasListableContent(chat: Chat): boolean {
   if (hasComposerDraft(chat)) return true;
   if (chat.historyLoaded === false) {
-    // Explicit 0 from summaries → hide empty rows. Missing count → keep visible so a
-    // normalize/passthrough miss cannot empty the rail or feed pruneEphemeralEmptyChats.
     if (chat.messageCount === undefined) return true;
     return chat.messageCount > 0;
   }
@@ -90,6 +90,8 @@ export function getChatLastMessageAt(chat: Chat): number {
   const updated = chat.updatedAt;
   return typeof updated === 'number' && Number.isFinite(updated) ? updated : 0;
 }
+
+// ── App ids ──────────────────────────────────────────────────────────────────
 
 /** Minnow Code app id stored in `lastActiveChatIdByApp`. */
 export const CODE_APP_ID = 'code';
@@ -158,6 +160,8 @@ export function migrateSessionStateV1ToV2(
   }
   return state;
 }
+
+// ── Workspace chats ──────────────────────────────────────────────────────────
 
 /** Chats for the given workspace (newest first); empty workspace key returns none. */
 export function getChatsForWorkspace(workspacePath: string, state: SessionState): Chat[] {
@@ -237,6 +241,8 @@ export function getLastActiveChatIdForApp(state: SessionState, appId: string): s
   if (!id) return undefined;
   return state.lastActiveChatIdByApp?.[id];
 }
+
+// ── Assistant chats ──────────────────────────────────────────────────────────
 
 /** New assistant chat defaults for the Chat app (general mode, chats workspace). */
 export function createAssistantChat(
@@ -425,6 +431,8 @@ export function createFreshChatIdForWorkspaceEntry(
   fresh.lastMessageAt = now;
   return fresh.id;
 }
+
+// ── Resolve active ───────────────────────────────────────────────────────────
 
 /**
  * Pick the active chat id for a workspace: remembered id, else newest scoped chat,

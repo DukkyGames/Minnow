@@ -1,9 +1,5 @@
 /**
- * Isolated sub-agent completion + tool loop (MIN-698).
- *
- * I/O is injected via createSubAgentRunner so this module never imports src/,
- * the session store, or a board. There is one implementation. Renderer wiring
- * is `src/agents/renderer-runner-deps.ts` (HTTP generations + headless tools).
+ * Isolated sub-agent completion + tool loop.
  */
 import {
   extractAssistantCompletionText,
@@ -80,7 +76,8 @@ import {
   MAX_EMPTY_POST_TOOL_RETRIES,
   MAX_PROSE_QUESTION_RETRIES,
   PROSE_QUESTION_RETRY_INSTRUCTION,
-  SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION
+  SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION,
+  buildReportToolNudgeInstruction
 } from "./turn-continuation.js";
 import { mergeThinkingIntoCompletionBody } from "./merge-thinking-body.js";
 import {
@@ -98,7 +95,9 @@ import {
   modelUsesComposerReasoningDropdown,
   resolveEffectiveReasoningEffort
 } from "./reasoning-effort.js";
-/** Compact-and-retry after a provider overflow 400 — then fail the turn. */
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 const MAX_CONTEXT_OVERFLOW_RETRIES = 2;
 
 function errorText(err) {
@@ -111,12 +110,6 @@ function isAbortLikeStreamError(err, signal) {
   return name === "AbortError" || name === "TimeoutError";
 }
 
-/**
- * llama.cpp (and mlx-lm when it enforces n_ctx) count prompt + generation
- * against the loaded window. Cloud providers typically reserve generation
- * separately; leaving max_tokens out of the local reserve is how a 90%
- * message budget still 400s.
- */
 function localGenerationReserveTokens(providerId, maxTokens) {
   if (providerId !== LLAMA_CPP_LOCAL_PROVIDER_ID && providerId !== MLX_LM_LOCAL_PROVIDER_ID) {
     return 0;
@@ -124,6 +117,8 @@ function localGenerationReserveTokens(providerId, maxTokens) {
   const n = Math.floor(maxTokens ?? 0);
   return n > 0 ? n : 0;
 }
+
+// ── Runner ───────────────────────────────────────────────────────────────────
 
 function createSubAgentRunner(deps) {
   const postChatCompletions = (provider, body, signal, options) => deps.postChatCompletions(provider, body, signal, options);
@@ -291,9 +286,6 @@ function createSubAgentRunner(deps) {
     let budgetTripped = false;
     let thinkingChannel;
     let reader = null;
-    // P10-B: the inner loop already merged streamMeta and left the reasoning
-    // channel; those facts used to die here. Emit them so a caller can rebuild
-    // chrome without a second parser. onTurnEvent is optional (headless).
     const onTurnEvent = typeof streamOptions?.onTurnEvent === "function"
       ? streamOptions.onTurnEvent
       : null;
@@ -302,8 +294,6 @@ function createSubAgentRunner(deps) {
     function emitStreamMeta(force = false) {
       if (!onTurnEvent) return;
       const now = Date.now();
-      // Same ~80 ms cadence as live transcript snapshots — 12 Hz is enough
-      // for prompt-progress / usage chrome and will not flood the live bus.
       if (!force && now - lastStreamMetaEmit < LIVE_TRANSCRIPT_EMIT_MS) return;
       lastStreamMetaEmit = now;
       /** @type {Record<string, unknown>} */
@@ -323,7 +313,6 @@ function createSubAgentRunner(deps) {
       onTurnEvent(event);
     }
     function emitReasoningEnd() {
-      // Once per round: the caller uses this to close the thinking timer.
       if (reasoningEnded || !onTurnEvent) return;
       reasoningEnded = true;
       onTurnEvent({ type: "reasoning_end" });
@@ -390,7 +379,6 @@ function createSubAgentRunner(deps) {
       if (!text) {
         return;
       }
-      // First visible prose leaves the reasoning channel for this round.
       emitReasoningEnd();
       proseText += text;
       onDelta?.(proseText);
@@ -461,7 +449,6 @@ function createSubAgentRunner(deps) {
       if (!toolCallPhaseStarted && Object.keys(toolAcc).length > 0) {
         toolCallPhaseStarted = true;
         thinkingBudgetTracker?.endSession();
-        // Tool-call streaming also leaves the reasoning channel.
         emitReasoningEnd();
       }
       const partialTools = finalizeToolCalls(toolAcc);
@@ -497,8 +484,6 @@ function createSubAgentRunner(deps) {
     const toolCalls = mergeContentJsonToolCalls(fullText, streamedToolCalls, {
       harmonyParseText: harmonyRouter.getCommentaryParseText(),
       xmlParseText: toolCallRouter.getToolCallParseText(),
-      // Thinking-side markup: the streamed think span, plus a block the post-stream split
-      // just moved out of `fullText` and into reasoning.
       thinkingXmlParseText: [
         thinkingToolCallRouter.getToolCallParseText(),
         reasoningText,
@@ -538,8 +523,6 @@ function createSubAgentRunner(deps) {
   }
   const defaultSubAgentRunner = {
     async run(input) {
-      // Isolated (no priorMessages): [system, user(task)]. Continue: prior
-      // transcript plus this turn's systemPrompt (P6-C).
       const messages = buildOpeningMessages(
         input.systemPrompt,
         input.task,
@@ -584,6 +567,11 @@ function createSubAgentRunner(deps) {
         subAgentType: typeConfig
       });
       let toolUseNudgeSent = false;
+      let reportToolNudgeSent = false;
+      const reportToolName =
+        typeof input.reportToolName === "string" && input.reportToolName.trim()
+          ? input.reportToolName.trim()
+          : "";
       const contextBudget = input.contextBudget ?? {
         enforcementPolicy: DEFAULT_CONTEXT_ENFORCEMENT_POLICY
       };
@@ -593,16 +581,11 @@ function createSubAgentRunner(deps) {
       let forcedPartialAssistant;
       const usageSegments = [];
       const statsSegments = [];
-      // Report each segment as it lands, not only in the return value. A turn
-      // that unwinds by throwing — which is how `run-turn`'s report tool ends a
-      // successful attempt — never reaches the return, and its tokens would
-      // otherwise be uncountable.
       const noteUsage = (segment) => {
         if (typeof input.onUsage !== "function") return;
         try {
           input.onUsage(segment);
         } catch {
-          /* accounting must never break a run */
         }
       };
       const budgetEvents = [];
@@ -617,9 +600,6 @@ function createSubAgentRunner(deps) {
         if (partial) {
           snapshot.push({ role: "assistant", content: partial });
         }
-        // Forced flush follows a real `messages.push`. The array is the
-        // transcript, not a streaming clone — continue persist can suffix it.
-        // Second arg is optional; older callers ignore it (P10-C / MIN-768).
         input.onMessagesChange(snapshot, { settled: true });
       };
       const emitProgress = (partialAssistant, force = false) => {
@@ -638,8 +618,6 @@ function createSubAgentRunner(deps) {
         if (partialAssistant) {
           snapshot.push({ role: "assistant", content: partialAssistant });
         }
-        // Throttled stream clone — synthetic partial lives on the snapshot
-        // only. Must not be persisted as an extra assistant row.
         input.onMessagesChange(snapshot, { settled: false });
       };
       let liveEmitQueued = false;
@@ -662,9 +640,6 @@ function createSubAgentRunner(deps) {
           currentToolName: pendingLive?.currentToolName,
           ...patch
         };
-        // Phase changes must flush now: a thinking snapshot coalesced with the
-        // first prose generating patch in the same microtask used to vanish,
-        // and runTurn would never see `phase: thinking`.
         const phaseChanged =
           patch.phase !== undefined && patch.phase != null && patch.phase !== prevPhase;
         if (force || phaseChanged) {
@@ -677,12 +652,6 @@ function createSubAgentRunner(deps) {
       };
       emitProgress(void 0, true);
       emitLiveActivity({ phase: "generating", partialReasoning: void 0, currentToolName: null }, true);
-      /**
-       * P10-I: splice caller rows (chat steer) before the next completion.
-       * Boards omit `onRoundBoundary` — this is a no-op there. Consult at
-       * the top of every iteration so a consume after tools is in the body
-       * of the next round, matching loop.ts's pre-`buildApiMessages` slot.
-       */
       const spliceRoundBoundaryRows = () => {
         if (typeof input.onRoundBoundary !== "function") return;
         let extra = null;
@@ -704,15 +673,11 @@ function createSubAgentRunner(deps) {
         }
         if (spliced > 0) emitProgress(void 0, true);
       };
-      // P10-B: round / stream-meta / reasoning-end events the inner loop
-      // already had as locals. Optional — board callers that omit onEvent
-      // never attach onTurnEvent either.
       const emitTurnEvent = (event) => {
         if (typeof input.onTurnEvent !== "function") return;
         try {
           input.onTurnEvent(event);
         } catch {
-          // View seam — must not change the turn outcome.
         }
       };
       let nextRoundIndex = 0;
@@ -1070,8 +1035,6 @@ function createSubAgentRunner(deps) {
                 currentBody = stripResponseFormatFromBody(currentBody);
                 turnResult2 = await runSubTurn(currentBody, streamOpts());
               } else {
-                // Overflow (and every other stream failure) is recovered in the
-                // outer catch so compact-and-retry can rebuild `body.messages`.
                 throw streamErr;
               }
             }
@@ -1134,7 +1097,6 @@ function createSubAgentRunner(deps) {
         try {
           turnResult = await runSubTurnWithThinkingBudget();
         } catch (streamErr) {
-          // Abort is a real cancel — do not mint a degraded complete.
           if (isAbortLikeStreamError(streamErr, input.signal)) throw streamErr;
           const reason = errorText(streamErr);
           if (isContextOverflowText(reason) && overflowRetries < MAX_CONTEXT_OVERFLOW_RETRIES) {
@@ -1161,12 +1123,8 @@ function createSubAgentRunner(deps) {
               });
               continue;
             }
-            // Compact could not shrink — fall through: salvage this round or crash.
           }
           const prose = streamingAssistant.trim();
-          // Only this round's streamed prose / tool turns count as salvage —
-          // prior assistant rows in history used to swallow llama.cpp 400s as
-          // a finished turn (`no_report`).
           const hasPartial = toolTurns > 0 || prose.length > 0;
           if (!hasPartial) throw streamErr;
           if (prose) {
@@ -1276,8 +1234,6 @@ function createSubAgentRunner(deps) {
               emitProgress(void 0, true);
             }
           } finally {
-            // round_end after the last tool_result of this round, including a
-            // report-tool throw that unwinds the loop (TURN_REPORTED).
             emitRoundEnd(turnResult);
           }
           continue;
@@ -1309,6 +1265,18 @@ function createSubAgentRunner(deps) {
           emitProgress(void 0, true);
           continue;
         }
+        if (reportToolName && input.finalizeStructuredOutcome === false && !reportToolNudgeSent) {
+          reportToolNudgeSent = true;
+          if (prose) {
+            messages.push({ role: "assistant", content: prose });
+          }
+          messages.push({
+            role: "user",
+            content: buildReportToolNudgeInstruction(reportToolName)
+          });
+          emitProgress(void 0, true);
+          continue;
+        }
         if (!await enforceContextBudget(turn)) {
           return {
             summary: SUB_AGENT_CONTEXT_BUDGET_ERROR,
@@ -1332,8 +1300,6 @@ function createSubAgentRunner(deps) {
             stats: statsSegments.length ? averageStatsSegments(statsSegments) : void 0
           };
         };
-        // Chat (P6-C) skips structured-outcome finalization. Board / sub-agent
-        // callers leave this unset so today's extra completion still runs.
         if (input.finalizeStructuredOutcome === false) {
           return returnProseWithoutFinalization();
         }
@@ -1370,8 +1336,6 @@ function createSubAgentRunner(deps) {
           const firstFinal = await requestStructuredOutcome(false);
           const finalized = firstFinal.ok ? firstFinal : await requestStructuredOutcome(true);
           if (finalized.ok === false) {
-            // Real prose is enough: ask/research runs often call zero tools
-            // and used to settle `failed` on a JSON miss (P8-A / MIN-754).
             if (prose.trim()) {
               return returnProseFallbackOutcome();
             }
@@ -1413,6 +1377,9 @@ function createSubAgentRunner(deps) {
   };
   return defaultSubAgentRunner;
 }
+
+// ── Clone ────────────────────────────────────────────────────────────────────
+
 function cloneSubAgentMessages(messages) {
   return structuredClone(messages);
 }

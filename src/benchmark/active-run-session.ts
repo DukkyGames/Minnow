@@ -65,17 +65,13 @@ export function loadActiveBenchmarkSession(): ActiveBenchmarkSession | null {
 export function saveActiveBenchmarkSession(session: ActiveBenchmarkSession): void {
   try {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-  } catch {
-    /* quota or private mode */
-  }
+  } catch {}
 }
 
 export function clearActiveBenchmarkSession(): void {
   try {
     sessionStorage.removeItem(SESSION_KEY);
-  } catch {
-    /* ignore */
-  }
+  } catch {}
 }
 
 /** Suites not yet fully present in `completedSuites`. */

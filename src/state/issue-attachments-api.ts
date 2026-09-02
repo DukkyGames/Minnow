@@ -29,7 +29,6 @@ export const MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024;
 function toBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
-  // Chunked: String.fromCharCode(...bytes) blows the argument limit past ~100kB.
   const chunk = 0x8000;
   for (let i = 0; i < bytes.length; i += chunk) {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunk));

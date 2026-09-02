@@ -1,8 +1,3 @@
-/**
- * Minimal YAML front matter parser for prompt markdown files.
- * Supports flat key: value lines and multiline | blocks (no nested objects).
- */
-
 import type { PromptFrontMatter, PromptKind, PromptPartId } from './types';
 
 const FRONT_MATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/;

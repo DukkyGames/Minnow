@@ -24,6 +24,8 @@ import {
   type LibraryModel,
 } from './library';
 
+// ── Keys ─────────────────────────────────────────────────────────────────────
+
 /** Pseudo-provider id for composite #modelSelect keys (not in providers registry). */
 export const LIBRARY_MODEL_PROVIDER_ID = 'minnow-library';
 
@@ -53,9 +55,7 @@ export async function loadableLibraryFromCached(
   try {
     const hw = await fetchHardware();
     backend = hw.backend ?? null;
-  } catch {
-    /* Tool server down or probe failed — MLX stays hidden until backend is known. */
-  }
+  } catch {}
   return loadableLibrary(await buildLibrary(cached), { backend });
 }
 
@@ -96,6 +96,8 @@ export interface LibraryModelSelectMerge {
   library: LibraryModel[];
   serves: ServeRecord[];
 }
+
+// ── Serve state ──────────────────────────────────────────────────────────────
 
 /**
  * Context window a chat actually gets from a running serve.
@@ -157,8 +159,6 @@ export function resolveServedBindingForLibraryId(
   const model = library.find((m) => m.id === libraryId.trim());
   const upstreamId = upstreamProviderForLibraryModel(model);
 
-  // mlx_lm.server keys requests by absolute snapshot directory, not picker ids or
-  // short labels from /v1/models.
   if (upstreamId === MLX_LM_LOCAL_PROVIDER_ID || serve.runtime === 'mlx-lm') {
     const mlxModelId =
       serve.modelPath?.trim() ||
@@ -278,28 +278,41 @@ export function resolveLibraryModelIdForChatBinding(
 }
 
 /**
- * Drop llama-cpp-local catalog rows that duplicate a My Models row already listed
- * under the library optgroup (same served label / display name).
+ * True for Minnow-owned local runtime providers whose `/v1/models` catalogs
+ * must not appear in the picker (users select via My Models instead).
+ */
+export function isLocalRuntimeCatalogProviderId(providerId: string | undefined): boolean {
+  const id = providerId?.trim();
+  return id === LLAMA_CPP_LOCAL_PROVIDER_ID || id === MLX_LM_LOCAL_PROVIDER_ID;
+}
+
+/**
+ * Clear llama-cpp-local / mlx-lm-local catalog rows from picker results.
+ * Those providers stay registered for serve routing; the picker surface is My Models only.
+ */
+export function omitLocalRuntimeCatalogModels(
+  results: ProviderModelsResult[],
+): ProviderModelsResult[] {
+  return results.map((entry) => {
+    if (!isLocalRuntimeCatalogProviderId(entry.provider.id)) return entry;
+    // Empty models → optgroup omitted by buildMultiProviderModelSelectInnerHtml filters.
+    return entry.models.length === 0 ? entry : { ...entry, models: [] };
+  });
+}
+
+/**
+ * @deprecated Prefer {@link omitLocalRuntimeCatalogModels}. Kept so call sites and
+ * test mocks that still pass library/serves keep compiling; library/serves are ignored.
  */
 export function dedupLlamaCppModelsAgainstLibrary(
   results: ProviderModelsResult[],
-  library: LibraryModel[],
-  serves: ServeRecord[],
+  _library?: LibraryModel[],
+  _serves?: ServeRecord[],
 ): ProviderModelsResult[] {
-  const names = new Set(library.map((m) => m.name.trim().toLowerCase()).filter(Boolean));
-  for (const serve of serves) {
-    if (serve.status !== 'running' && serve.status !== 'starting') continue;
-    const label = serve.modelLabel?.trim().toLowerCase();
-    if (label) names.add(label);
-  }
-  if (names.size === 0) return results;
-
-  return results.map((entry) => {
-    if (entry.provider.id !== LLAMA_CPP_LOCAL_PROVIDER_ID) return entry;
-    const models = entry.models.filter((m) => !names.has(m.id.trim().toLowerCase()));
-    return { ...entry, models };
-  });
+  return omitLocalRuntimeCatalogModels(results);
 }
+
+// ── Merge ────────────────────────────────────────────────────────────────────
 
 /**
  * Fetch local weights and build optgroup HTML + modelCache rows for the picker.
@@ -327,12 +340,7 @@ export async function fetchLibraryModelSelectMerge(
       const key = encodeLibraryModelSelectKey(model.id);
       const serve = activeServeFor(model, serves);
       const state = serveLoadState(serve);
-      // Minnow serves these itself (llama-server --mmproj / mlx-lm), so the local
-      // library row is the only place vision can come from — there is no upstream
-      // catalog to read it back off.
       const vision = model.capabilities.includes('vision');
-      // Same for context: only the running serve knows the window it was started
-      // with, and for an uncatalogued GGUF it is the only number there is.
       const loadedContext = servedContextLength(serve);
       cacheEntries.push({
         key,
@@ -390,7 +398,6 @@ export async function loadLibraryModelFromPicker(libraryId: string): Promise<voi
   if (existing?.status === 'running') return;
 
   const { loadModel } = await import('../ui/models/store');
-  // Same inspector drafts as My Models Load — omitting settings used to spawn at 125k.
   await loadModel(model);
 
   const started = Date.now();

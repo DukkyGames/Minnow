@@ -115,6 +115,7 @@ async function resolveFromSessionBlob({ chatId, cwd }, state) {
 
 /**
  * Board-task port env for a command when cwd resolves to an isolated worktree.
+ * Injected state stays in memory for tests; otherwise SQLite first, then state.json.
  * @param {{ chatId?: string, cwd?: string }} params
  * @param {SessionState | null | undefined} [injectedState]
  * @returns {Promise<Record<string, string> | undefined>}
@@ -123,16 +124,13 @@ export async function resolveBoardTaskSpawnEnvForCommand(
   { chatId, cwd },
   injectedState,
 ) {
-  // Injected blob — keep in-memory path so existing unit tests stay green.
   let state = injectedState;
   if (!state) {
-    // Hot path: point lookup + by-cwd variant over board_tasks indexes.
     if (!useJsonSessionsStore()) {
       const ports = resolveBoardTaskPorts({ chatId, cwd });
       if (!ports) return undefined;
       return buildBoardTaskSpawnEnv(ports.devPort, ports.apiPort);
     }
-    // JSON rollback: whole-blob read from state.json.
     const raw = (await readConfigJson('sessions/state.json')) ?? {
       version: 5,
       chats: [],

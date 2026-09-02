@@ -1,26 +1,3 @@
-/**
- * P8-E — durable parent-delivery queue (MIN-758).
- *
- * Pending / delivered / nudged are a fold over the sub-agent journal, not
- * process-lifetime Sets. `src/agents/sub-agent-completion-push.ts` used to
- * hold that queue in renderer memory, so a reload dropped exactly the
- * completions MIN-639 was filed to never lose.
- *
- * ## Ordering (the bug this exists to close)
- *
- * `result.delivered` is appended AFTER `deliverToParent` resolves, never
- * before — the same rule as `attempt.started`. A crash between inject and
- * append re-delivers; a crash before inject re-delivers. Both are safe.
- * The reverse silently drops results.
- *
- * `run.nudged` follows the same rule: recorded after the check-in landed.
- *
- * ## Purity
- *
- * This module is I/O. It must not be imported by derive / plan / policy /
- * graph / evidence. Journal, parent-chat inject, and timers all live here.
- */
-
 import { derive, isTerminal, lastEndedAttempt, pendingDeliveries } from './derive.js';
 import { makeEvent, validateEvent } from './events.js';
 
@@ -191,12 +168,6 @@ function isTransientDeliverError(err) {
 }
 
 /**
- * Create the durable delivery queue.
- *
- * `deliverToParent` is the injectable seam: tests record calls; production
- * either persists onto the parent chat or is the renderer resume until P8-F.
- * The journal — not this process — decides whether a run is still owed.
- *
  * @param {DeliveryOptions} [opts]
  * @returns {DeliveryHandle}
  */
@@ -301,9 +272,6 @@ export function createDelivery(opts = {}) {
     const status = parentStatus(parentChatId) ?? { streaming: false, skip: null };
 
     if (status.skip) {
-      // The parent can never take a resume. Notify (deleted chat) then
-      // journal a skip so the fold stops offering — otherwise reload
-      // re-queues forever.
       for (const run of pending) {
         if (status.skip === 'missing_chat') {
           await notifyUndeliverable(parentChatId, run);
@@ -322,9 +290,6 @@ export function createDelivery(opts = {}) {
     }
 
     if (status.streaming) {
-      // Coalesce: do not inject while the parent is mid-turn. A reload
-      // before stream-end leaves these pending in the journal, which is
-      // the whole point of moving the queue here.
       scheduleRetry(parentChatId);
       return;
     }
@@ -334,19 +299,12 @@ export function createDelivery(opts = {}) {
     try {
       await inject(parentChatId, message, { kind: 'completion', runIds });
     } catch (err) {
-      // MIN-639: a failed inject must not drop the queue. Leave the journal
-      // without result.delivered. A missing SSE viewer is idle — the stream
-      // handler ticks after subscribeDeliver, so a 5s poll would only spam
-      // logs for every unfinished parent under ~/.minnow/agents.
       if (isNoDeliveryListenerError(err)) return;
       scheduleRetry(parentChatId);
       if (opts.onDeliverError) opts.onDeliverError(err);
       return;
     }
 
-    // Re-read before append: if another tick already recorded delivery,
-    // writing again would be a second source of truth. Only ids still
-    // pending get the event — and only AFTER inject resolved.
     const after = await loadState(parentChatId);
     const stillPending = pendingDeliveries(after).filter((r) => runIds.includes(r.runId));
     if (stillPending.length === 0) {
@@ -361,8 +319,6 @@ export function createDelivery(opts = {}) {
         ),
       );
     } catch (err) {
-      // Inject already happened. Leaving these pending re-delivers on the
-      // next tick — that is the safe extra inject, not a drop.
       scheduleRetry(parentChatId);
       if (opts.onDeliverError) opts.onDeliverError(err);
       throw err;

@@ -1,9 +1,3 @@
-/**
- * Auto-update controller (MIN-384): electron-updater against GitHub Releases.
- * Checks on launch + every 4h, downloads in the background, installs on restart.
- * Never blocks app launch; background failures are silent-with-log.
- */
-
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -35,7 +29,8 @@ let checkInFlight = false;
 let firstCheckTimer: NodeJS.Timeout | null = null;
 let intervalTimer: NodeJS.Timeout | null = null;
 
-/** ~/.minnow (or MINNOW_HOME) — same resolution order as crash-log.ts. */
+// ── Channel persist ──────────────────────────────────────────────────────────
+
 function minnowHomeDir(): string {
   const override = process.env.MINNOW_HOME;
   if (typeof override === 'string' && override.trim()) return override.trim();
@@ -67,10 +62,8 @@ function persistChannel(channel: UpdaterChannel): void {
   }
 }
 
-/**
- * Packaged macOS builds must be signed with a Developer ID cert for auto-update.
- * Unsigned/ad-hoc installs keep the legacy unsupported state in Settings.
- */
+// ── Support detect ───────────────────────────────────────────────────────────
+
 function isMacAppSignedForUpdate(): boolean {
   if (process.platform !== 'darwin' || !app.isPackaged) return false;
   try {
@@ -83,10 +76,6 @@ function isMacAppSignedForUpdate(): boolean {
   }
 }
 
-/**
- * Windows NSIS works unsigned; macOS auto-update requires a signed Developer ID build.
- * Dev/unpackaged runs have no install to update.
- */
 function detectSupport(): { supported: boolean; reason: UpdaterUnsupportedReason | null } {
   if (!app.isPackaged) return { supported: false, reason: 'dev' };
   if (process.platform === 'darwin' && !isMacAppSignedForUpdate()) {
@@ -94,6 +83,8 @@ function detectSupport(): { supported: boolean; reason: UpdaterUnsupportedReason
   }
   return { supported: true, reason: null };
 }
+
+// ── Updater events ───────────────────────────────────────────────────────────
 
 function dispatch(event: UpdaterEvent): void {
   if (!status) return;
@@ -156,13 +147,13 @@ function wireAutoUpdaterEvents(): void {
   });
 }
 
+// ── Checks ───────────────────────────────────────────────────────────────────
+
 function startCheck(manual: boolean): void {
   if (!status?.supported || checkInFlight) return;
   if (status.state === 'downloading' || status.state === 'ready') return;
   checkInFlight = true;
   manualCheckInFlight = manual;
-  // Errors surface through the 'error' event above; swallow the rejection so a
-  // failed background check never becomes an unhandledRejection.
   autoUpdater.checkForUpdates().catch(() => {});
 }
 
@@ -191,8 +182,6 @@ function registerUpdaterIpc(): void {
       persistChannel(channel);
       dispatch({ kind: 'channel-changed', channel });
       if (status.supported) {
-        // Beta rides GitHub pre-releases; switching takes effect on the next check,
-        // which we trigger immediately so the change is visible (spec: no reinstall).
         autoUpdater.allowPrerelease = channel === 'beta';
         startCheck(true);
       }
@@ -212,14 +201,11 @@ function registerUpdaterIpc(): void {
   });
 }
 
-/**
- * Initialize the updater. Registers IPC in every environment (so the renderer can
- * always read status) but only schedules checks on supported packaged installs.
- * `prepareQuitForUpdate` must tear down the runtime and mark quit-in-progress so
- * main.ts's before-quit handler lets quitAndInstall proceed.
- */
+// ── Lifecycle ────────────────────────────────────────────────────────────────
+
+// Safe to call again; IPC must register once (macOS activate re-runs bootstrap).
 export function initUpdater(options: { prepareQuitForUpdate: () => Promise<void> }): void {
-  if (status) return; // bootstrap() can re-run on macOS activate; IPC must register once
+  if (status) return;
   prepareQuit = options.prepareQuitForUpdate;
   const { supported, reason } = detectSupport();
   const channel = loadPersistedChannel();
@@ -243,7 +229,6 @@ export function initUpdater(options: { prepareQuitForUpdate: () => Promise<void>
   scheduleBackgroundChecks();
 }
 
-/** Stop scheduled checks (app shutdown). */
 export function disposeUpdater(): void {
   if (firstCheckTimer) clearTimeout(firstCheckTimer);
   if (intervalTimer) clearInterval(intervalTimer);

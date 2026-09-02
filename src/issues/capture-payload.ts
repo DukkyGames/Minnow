@@ -11,6 +11,8 @@
 
 import type { IssueCodeRef, IssueGitLink, IssueRelationKind } from '../types';
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
 /** Drag MIME for a capture payload moving through the shell. */
 export const ISSUE_CAPTURE_MIME = 'application/x-minnow-issue-capture';
 
@@ -59,6 +61,8 @@ function trimTo(value: string, max: number): string {
   return `${collapsed.slice(0, max - 1).trimEnd()}…`;
 }
 
+// ── Seeds ────────────────────────────────────────────────────────────────────
+
 /**
  * The title the popover opens with.
  *
@@ -74,9 +78,6 @@ export function captureTitleSeed(payload: CapturePayload): string {
   const firstLine = text.split('\n').find((line) => line.trim().length > 0);
   if (firstLine) return trimTo(firstLine, 120);
 
-  // A label only makes a title when the item is what the issue is *about*.
-  // Ambient context — the chat you happened to be in — is not, and seeding
-  // "Current chat" as a title is worse than an empty field with a placeholder.
   const subject = payload.items.find((item) => TITLE_BEARING_KINDS.has(item.kind));
   if (subject) return trimTo(subject.label, 120);
   return '';
@@ -184,6 +185,8 @@ export function captureItemsEqual(a: CaptureItem, b: CaptureItem): boolean {
   if (a.issueRef || b.issueRef) return a.issueRef?.issueId === b.issueRef?.issueId;
   return a.label === b.label && a.text === b.text;
 }
+
+// ── Drag data ────────────────────────────────────────────────────────────────
 
 /**
  * Serialize onto a DataTransfer.

@@ -59,9 +59,6 @@ function section(refreshAreas?: SettingsSectionId[]): OverlayEntry {
 
 /** Writable and section-only storage mappings keyed by catalog id. */
 export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
-  // —— General ——
-  // App updates state lives in the Electron main process (~/.minnow/updater.json),
-  // not in config.json, so both keys are section-only for agent tools.
   'general.updates': section(['general']),
   'general.updates.channel': section(['general']),
   'general.notifications': section(['notifications']),
@@ -109,7 +106,6 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
     refreshAreas: ['audio'],
   }),
 
-  // —— Appearance ——
   'appearance.theme': section(['appearance']),
   'appearance.theme.family': browser('themeFamily', 'enum', {
     allowedValues: ['swamp', 'desert', 'ocean', 'coral', 'mono', 'matrix', 'human', 'mint'],
@@ -124,7 +120,6 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'appearance.fonts': section(['appearance']),
   'appearance.customColors': section(['appearance']),
 
-  // —— Apps ——
   'apps.issues.types': resource('issues-taxonomy', 'types', 'json', { refreshAreas: ['issues'] }),
   'apps.issues.statuses': resource('issues-taxonomy', 'statuses', 'json', {
     refreshAreas: ['issues'],
@@ -133,7 +128,6 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
     refreshAreas: ['issues'],
   }),
 
-  // —— Models ——
   'models.providers': section(['providers']),
   'models.providers.add': section(['providers']),
   'models.routing': section(['model-routing']),
@@ -154,7 +148,6 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'models.thinking': section(['thinking']),
   'models.usage': section(['usage']),
 
-  // —— Agents ——
   'agents.center': section(['agent-center']),
   'agents.modes': section(['agent-center']),
   'agents.experts': section(['agent-center']),
@@ -199,7 +192,6 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'agents.rules.addGroup': section(['rules']),
   'agents.rules.deleteGroup': section(['rules']),
 
-  // —— Integrations ——
   'integrations.search': section(['search']),
   'integrations.search.provider': resource('search', 'provider', 'enum', {
     allowedValues: ['searxng', 'tavily', 'brave', 'duckduckgo', 'disabled'],
@@ -238,7 +230,6 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   }),
   'integrations.browser': meta('browser.enabled', 'boolean', { refreshAreas: ['browser'] }),
 
-  // —— Advanced ——
   'advanced.diagnostics.fileErrorsToIssues': browser('fileErrorsToIssues', 'boolean', {
     refreshAreas: ['diagnostics'],
   }),

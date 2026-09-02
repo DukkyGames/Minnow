@@ -1,7 +1,3 @@
-/**
- * Code app Dev Servers screen — multi-server registry, logs, listening ports (MIN-500).
- */
-
 import '../styles/dev-server-screen.css';
 import { cancelSubAgent, getSubAgentRun, spawnSubAgent } from '../agents/orchestrator';
 import { subscribeSubAgentRuns } from '../agents/sub-agent-events';
@@ -659,7 +655,6 @@ async function refreshPorts(manual = false): Promise<void> {
     ports = await fetchListeningPorts();
     renderPorts();
   } catch {
-    /* keep last snapshot */
   } finally {
     if (manual) btn?.classList.remove('is-busy');
   }
@@ -785,11 +780,6 @@ async function onDetectStop(): Promise<void> {
 }
 
 async function onDetect(): Promise<void> {
-  /*
-   * Detect owns a chat per workspace instead of borrowing the open one
-   * (MIN-637). That also removes the old hard failure when no chat was open —
-   * the setup agent can always be given somewhere to report.
-   */
   const { ensureBackgroundChat } = await import('../state/background-chat');
   const workspacePath = getWorkspacePath();
   const chat = ensureBackgroundChat({

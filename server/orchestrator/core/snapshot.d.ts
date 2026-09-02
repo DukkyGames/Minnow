@@ -22,14 +22,12 @@ export function stateToJSON(state: BoardState): unknown;
 export function stateFromJSON(raw: unknown): BoardState;
 
 /**
- * A stable, order-independent digest that streams rather than building a JSON
- * string first. Staleness detection, not security.
+ * A stable, order-independent digest that streams rather than building a JSON string first.
  */
 export function hashState(value: unknown): string;
 
 /**
- * The digest stored on a snapshot. Covers the envelope as well as the state, so
- * a drifted `throughSeq` cannot verify clean and silently skip events.
+ * The digest stored on a snapshot.
  */
 export function hashSnapshot(boardId: string, throughSeq: number, state: BoardState): string;
 
@@ -37,13 +35,11 @@ export function hashSnapshot(boardId: string, throughSeq: number, state: BoardSt
 export function makeSnapshot(boardId: string, state: BoardState, throughSeq: number): Snapshot;
 
 /**
- * Can this snapshot be used to skip part of the fold? `events` is the whole
- * journal, not the tail. On false the caller does a full fold — never a repair.
+ * Can this snapshot be used to skip part of the fold?
  */
 export function isSnapshotUsable(snapshot: unknown, events: readonly unknown[]): boolean;
 
 /**
- * Resume the fold from a snapshot. `events` is the whole journal, not the tail.
- * Equivalent to `derive(events)` by construction.
+ * Resume the fold from a snapshot.
  */
 export function deriveFrom(snapshot: unknown, events: readonly unknown[]): BoardState;

@@ -1,7 +1,3 @@
-/**
- * Human-readable summaries of tool invocations for the approval modal.
- */
-
 import { getFieldByKey } from '../settings/field-registry';
 import { BUILT_IN_TOOLS } from './definitions';
 

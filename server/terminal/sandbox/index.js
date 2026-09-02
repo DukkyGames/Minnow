@@ -1,16 +1,3 @@
-/**
- * Agent shell sandbox adapter (MIN-553 Phase 1 + Phase 3 mode wiring + Phase 6 WSL).
- *
- * Compose *after* resolveOneShotSpawn:
- *   resolveOneShotSpawn(...) → wrapSandbox(...) → spawn / runProcess
- *
- * Enable via toolSecurity.shellSandbox (prefer|require) or MINNOW_SHELL_SANDBOX=1
- * (treats as prefer). Never applied to interactive user PTYs (source !== 'agent').
- *
- * Platforms: darwin → Seatbelt; linux → Landlock helper; win32 → WSL2 + same
- * Landlock helper inside that tree (bare WSL alone is not containment).
- */
-
 import {
   createLandlockAdapter,
   resolveMinnowSandboxHelper,
@@ -86,7 +73,6 @@ export function resolveSandbox(platform = process.platform) {
 }
 
 /**
- * Real execution probe; cached per boot (and per platform key for tests).
  * @param {string} [platform]
  * @returns {Promise<{ ok: boolean, reason?: string, detail?: string }>}
  */
@@ -100,19 +86,17 @@ export async function probeSandbox(platform = process.platform) {
   return result;
 }
 
-/** Reset probe cache (tests only). */
 export function resetSandboxProbeCache() {
   probeCache = null;
   resetWslLandlockProbeCache();
 }
 
 /**
- * Whether createRun / createBackgroundRun should attempt a sandbox wrap.
  * @param {object} params
  * @param {'user'|'agent'} [params.source]
- * @param {boolean} [params.sandbox] explicit override (`false` = never; `true` = force attempt)
+ * @param {boolean} [params.sandbox]
  * @param {'off'|'prefer'|'require'} [params.mode]
- * @param {NodeJS.ProcessEnv} [params.env] legacy: MINNOW_SHELL_SANDBOX=1 when mode omitted
+ * @param {NodeJS.ProcessEnv} [params.env]
  * @returns {boolean}
  */
 export function shouldApplyShellSandbox({
@@ -135,16 +119,11 @@ export function shouldApplyShellSandbox({
 }
 
 /**
- * Wrap an already-resolved one-shot spawn target.
- * Pure wrt argv when the backend binary exists; does not spawn.
- * On unsupported / missing-helper platforms returns the original target with
- * `sandbox.applied: false` and an honest reason.
- *
  * @param {{ command: string, args?: string[], shell?: boolean, cwd?: string, env?: NodeJS.ProcessEnv }} spawnTarget
  * @param {import('./policy.js').SandboxPolicy} policy
  * @param {object} [options]
  * @param {string} [options.platform]
- * @param {object} [options.wsl] Phase 6 test hooks forwarded to composeWslLandlockWrap
+ * @param {object} [options.wsl]
  * @returns {{ command: string, args: string[], shell: boolean, cwd?: string, env?: NodeJS.ProcessEnv, sandbox: SandboxMeta }}
  */
 export function wrapSandbox(spawnTarget, policy, { platform = process.platform, wsl } = {}) {
@@ -191,7 +170,6 @@ export function wrapSandbox(spawnTarget, policy, { platform = process.platform, 
     };
   }
 
-  // Windows: WSL2 + Landlock inside the distro (never bare wsl.exe).
   if (adapter.kind === 'wsl-landlock') {
     const composed = composeWslLandlockWrap(spawnTarget, policy, {
       ...(wsl && typeof wsl === 'object' ? wsl : {}),
@@ -239,15 +217,7 @@ export function wrapSandbox(spawnTarget, policy, { platform = process.platform, 
 }
 
 /**
- * resolveOneShotSpawn → optional sandbox wrap for agent runs.
- * Used by createRun / createBackgroundRun.
- *
- * When mode is require and wrap cannot apply → `sandbox.blocked`.
- * When mode is prefer, wrap cannot apply, and allowUnsandboxed is false →
- * `sandbox.needsEscalation` (Ask strip). When allowUnsandboxed → run bare with
- * `fallbackUnsandboxed` for the NOT-sandboxed trailer.
- *
- * @param {object} spawnTarget from resolveOneShotSpawn
+ * @param {object} spawnTarget
  * @param {object} params
  * @param {'user'|'agent'} [params.source]
  * @param {boolean} [params.sandbox]

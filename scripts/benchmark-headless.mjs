@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Headless Quick benchmark smoke against a running npm start URL.
- * Usage: node scripts/benchmark-headless.mjs http://localhost:5173
- */
 
 const base = process.argv[2] || 'http://localhost:5173';
 

@@ -16,9 +16,7 @@ export interface BenchmarkWorkspaceContext {
 export async function cleanupBenchmarkFixtureDir(workspaceRoot: string): Promise<void> {
   try {
     await executeBenchmarkTool('delete_path', { path: BENCHMARK_FIXTURE_DIR }, { workspaceRoot });
-  } catch {
-    /* fixture dir may not exist */
-  }
+  } catch {}
 }
 
 /**

@@ -96,9 +96,7 @@ export async function cleanupCapabilityMatrixFixtures(workspaceRoot: string): Pr
       { path: CAPABILITY_MATRIX_FIXTURE_DIR },
       { workspaceRoot },
     );
-  } catch {
-    /* missing dir */
-  }
+  } catch {}
 }
 
 async function saveText(
@@ -127,7 +125,6 @@ async function runShell(
 async function seedGitFixture(workspaceRoot: string): Promise<void> {
   const readme = '# cap-matrix fixture repo\n';
   await saveText(workspaceRoot, `${CAP_MATRIX_REPO_DIR}/README.md`, readme);
-  // Git tools run at the benchmark workspace root — init here, not inside matrix/repo.
   await saveText(workspaceRoot, '.gitignore', '.minnow/\n');
   await runShell(workspaceRoot, 'git init -b main');
   await runShell(workspaceRoot, 'git add -A');

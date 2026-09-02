@@ -142,7 +142,6 @@ export function parseRunArgs(argv: string[]): { ok: true; options: HeadlessRunCl
 
   let prompt = typeof values.prompt === 'string' ? values.prompt.trim() : '';
   if (values.stdin) {
-    // Filled by cli-main after parse when stdin flag is set.
     prompt = prompt || '__STDIN__';
   }
   if (!prompt || prompt === '__STDIN__') {

@@ -1,7 +1,3 @@
-/**
- * Draggable width resizers for the chat (left) and file (right) sidebars.
- */
-
 import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
 import { scheduleSaveSessions, sessionState } from '../state/sessions';
 
@@ -13,6 +9,8 @@ export const FILE_SIDEBAR_MIN_W = 220;
 export const FILE_SIDEBAR_MAX_W = 560;
 
 const MOBILE_LAYOUT_MQ = '(max-width: 640px)';
+
+// ── Width ────────────────────────────────────────────────────────────────────
 
 function isMobileLayout(): boolean {
   return window.matchMedia(MOBILE_LAYOUT_MQ).matches;
@@ -65,6 +63,8 @@ function setResizerEnabled(resizer: HTMLElement | null, enabled: boolean): void 
   if (!enabled) resizer.classList.remove('dragging');
 }
 
+// ── Resizers ─────────────────────────────────────────────────────────────────
+
 export function syncChatSidebarResizer(): void {
   const resizer = document.getElementById('chatSidebarResizer');
   const collapsed = sessionState?.sidebarCollapsed === true;
@@ -89,6 +89,8 @@ interface BindSidebarResizerOptions {
   writeWidth: (width: number) => void;
   onDragEnd?: () => void;
 }
+
+// ── Init ─────────────────────────────────────────────────────────────────────
 
 function bindSidebarResizer(options: BindSidebarResizerOptions): void {
   const { resizer, container, side, minWidth, hardMaxWidth, readWidth, writeWidth, onDragEnd } =

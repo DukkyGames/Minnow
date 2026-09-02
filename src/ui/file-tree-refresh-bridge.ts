@@ -1,7 +1,3 @@
-/**
- * Lazy file-tree refresh hooks registered by init-file-panel (avoids pulling file-tree into main).
- */
-
 let refreshRunner: (() => Promise<void>) | null = null;
 let refreshDirectoriesRunner: ((dirs: string[]) => Promise<void>) | null = null;
 let renderRunner: (() => void) | null = null;

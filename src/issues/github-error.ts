@@ -23,8 +23,6 @@ export function isLocalServerOfflineError(message: string | undefined): boolean 
   if (/^failed to fetch$/i.test(text)) return true;
   if (/^load failed$/i.test(text)) return true;
   if (/networkerror/i.test(text)) return true;
-  // 502/503 from the tool server (or a proxy in front of it) are the same
-  // class of "Minnow is not answering" as a dropped connection.
   if (/^HTTP 50[023]$/i.test(text)) return true;
   return false;
 }
@@ -42,8 +40,6 @@ export function userFacingGithubError(
   if (/timed out after/i.test(text)) {
     return 'GitHub did not respond in time. Try again.';
   }
-  // Settings can open before boot finishes loadIssuesFromStorage(); the store's
-  // throw used to land on the status pill and look like a frozen shell.
   if (/issuesState is not initialized/i.test(text)) {
     return 'Issues are still loading. Try again in a moment.';
   }

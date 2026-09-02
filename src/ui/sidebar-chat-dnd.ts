@@ -1,7 +1,3 @@
-/**
- * Sidebar chat drag-and-drop: drop a chat row on a group header to assign it.
- */
-
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { assignChatToGroup } from '../state/chat-groups';
 import { sessionState } from '../state/sessions';

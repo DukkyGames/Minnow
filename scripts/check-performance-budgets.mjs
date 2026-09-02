@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * CI gate: enforce budgets.json bundle ceilings after `vite build`.
- * Usage: node scripts/check-performance-budgets.mjs [--update-baseline]
- */
 
 import { writeFileSync } from 'node:fs';
 import {

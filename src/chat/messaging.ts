@@ -1,11 +1,3 @@
-/**
- * Product chat send: composer + programmatic facades around `runTurn()`.
- *
- * P6-D (MIN-726): the stream/tool loop lives in `server/runner/runTurn()`.
- * This module resolves slash/skills/queue/Super Plan routing, then calls
- * {@link runChatTurn}. Not a second SSE loop.
- */
-
 import type { Attachment } from '../attachments/types';
 import {
   getPendingAttachments,
@@ -98,6 +90,8 @@ export {
 /** Non-tool send (legacy / internal). */
 export { sendMessage as sendMessagePlain } from '../api/chat';
 
+// ── Options ──────────────────────────────────────────────────────────────────
+
 /** Send the composer text with tool calling. */
 export interface ComposerSendOptions extends Partial<ComposerSurface> {
   /** Surface-owned context injected for this turn without adding it to chat history. */
@@ -111,10 +105,6 @@ export interface SendProgrammaticChatTextOptions {
   ephemeralContext?: string;
   validAttachments?: Attachment[];
   composerSurface?: Partial<ComposerSurface>;
-  /**
-   * When true (default), always run {@link parseSlashCommand}.
-   * Composer path passes false unless the skill picker confirmed a skill.
-   */
   parseSlash?: boolean;
   /** Pre-adjusted slash input (orchestrate plan injection); defaults to `text`. */
   slashInput?: string;
@@ -125,10 +115,8 @@ export interface SendProgrammaticChatTextOptions {
   reportStatus?: (level: 'ok' | 'err', message: string) => void;
 }
 
-/**
- * Slash/skill-resolving programmatic send used by /loop fires and the composer path.
- * Resolves skills the same way as a user send so looped prompts can be any `/skill`.
- */
+// ── Programmatic ─────────────────────────────────────────────────────────────
+
 export async function sendProgrammaticChatText(
   chat: Chat,
   text: string,
@@ -265,6 +253,8 @@ export async function sendProgrammaticChatText(
       options.ownsGlobalStreaming ?? chat.id === getActiveChat().id,
   });
 }
+
+// ── Tools ────────────────────────────────────────────────────────────────────
 
 export async function sendMessageWithTools(
   composer?: ComposerSendOptions,
@@ -442,6 +432,8 @@ export async function sendMessageWithTools(
     ownsGlobalStreaming: true,
   });
 }
+
+// ── Send ─────────────────────────────────────────────────────────────────────
 
 /** Send with optional composer surface override (defaults to foreground app). */
 export async function sendMessage(

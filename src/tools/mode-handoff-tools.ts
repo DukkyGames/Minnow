@@ -1,7 +1,3 @@
-/**
- * Browser host tools for structured mode switches (handoff plan).
- */
-
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import { listModes } from '../chat/modes/registry';
 import { enqueuePendingMode } from '../chat/pending-mode';
@@ -32,6 +28,8 @@ type HandoffSituation =
   | 'plan_complete'
   | 'implement_in_wrong_mode'
   | 'plan_in_build';
+
+// ── Propose ──────────────────────────────────────────────────────────────────
 
 /** Preset ask_question payloads per situation. */
 function buildProposeModeSwitchQuestions(
@@ -120,6 +118,8 @@ function buildProposeModeSwitchQuestions(
   throw new Error(`Unknown handoff situation: ${String(situation)}`);
 }
 
+// ── Set ──────────────────────────────────────────────────────────────────────
+
 /** Change active chat operating mode (browser). */
 export function executeSetChatMode(args: Record<string, unknown>): string {
   const modeRaw = typeof args.mode_id === 'string' ? args.mode_id : typeof args.modeId === 'string' ? args.modeId : '';
@@ -187,6 +187,8 @@ function applyPlanCompleteOrchestrateHandoff(
   void launchBoardFromPlan(normalizedPlan);
 }
 
+// ── Create ───────────────────────────────────────────────────────────────────
+
 /** Create a new chat with a given mode and optional plan path (browser). */
 export function executeCreateChatWithMode(args: Record<string, unknown>): string {
   const modeRaw = typeof args.mode_id === 'string' ? args.mode_id : typeof args.modeId === 'string' ? args.modeId : '';
@@ -210,7 +212,6 @@ export function executeCreateChatWithMode(args: Record<string, unknown>): string
         ? args.initialUserMessage.trim()
         : '';
 
-  // Orchestrate opens the V2 Boards surface — never a planner chat (MIN-715).
   if (modeId === 'orchestrate') {
     if (normalizedPlan) {
       void launchBoardFromPlan(normalizedPlan);

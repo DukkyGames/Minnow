@@ -1,7 +1,3 @@
-/**
- * Hand off Source Control commit/merge failures to a new Build-mode chat.
- */
-
 export type GitErrorChatKind = 'commit' | 'merge';
 
 export interface GitErrorChatContext {
@@ -78,10 +74,7 @@ export async function sendGitErrorToChat(
   });
 }
 
-/**
- * Update a git panel status row: message text plus optional Send to chat action.
- * `host` is the outer wrap; `messageEl` is the inner `.git-panel-status` paragraph.
- */
+/** Update a git panel status row: message text plus optional Send to chat action. */
 export function renderGitStatusWithSendToChat(
   host: HTMLElement,
   messageEl: HTMLElement,

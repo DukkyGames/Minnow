@@ -1,7 +1,3 @@
-/**
- * Super Plan artifact slugs — derived from build-spec / plan titles, not raw prompts.
- */
-
 import { randomUUID } from '../../lib/random-id.ts';
 import {
   superPlanPlanPath,

@@ -1,7 +1,3 @@
-/**
- * Local server availability for the file tree (avoids importing tools/client in tests).
- */
-
 let localServerAvailable = false;
 
 /** Mirror detectLocalServer() result for tree CRUD and browse. */

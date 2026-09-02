@@ -1,7 +1,3 @@
-/**
- * Parse tool call `function.arguments` JSON for main chat and sub-agents.
- */
-
 export const TOOL_ARGUMENTS_INVALID_JSON =
   'Tool arguments were not valid JSON.';
 
@@ -18,10 +14,6 @@ export interface ParseToolArgumentsResult {
   parseError?: string;
 }
 
-/**
- * Parse a tool arguments string into a plain object.
- * Legacy mode returns `{}` on failure; constrained mode surfaces an error message.
- */
 export function parseToolArguments(
   raw: string,
   options: ParseToolArgumentsOptions = {},

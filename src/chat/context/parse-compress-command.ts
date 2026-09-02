@@ -1,7 +1,3 @@
-/**
- * Parse `/compress` slash command input.
- */
-
 export interface ParsedCompressCommand {
   kind: 'compress' | 'summarize-alias';
 }

@@ -1,7 +1,3 @@
-/**
- * /goal command dispatch — set, status, and clear handlers.
- */
-
 import type { Chat } from '../../types';
 import { ensureTokenLedger } from '../../usage/token-ledger';
 import {
@@ -41,10 +37,6 @@ function formatGoalStatus(chat: Chat): string {
   return `Goal${achievedLine}: ${goal.conditionText} · ${elapsed} · ${goal.turnCount} turn(s) evaluated · ~${tokensSince} tokens.${reasonLine}`;
 }
 
-/**
- * Handle `/goal` before slash-skill resolution.
- * Returns `set` when a new goal was stored and the first turn should start.
- */
 export function handleGoalCommand(
   chat: Chat,
   rawText: string,

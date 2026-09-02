@@ -112,11 +112,9 @@ const OPS = {
   stashApply: (a) => stashApply(a),
   stashDrop: (a) => stashDrop(a),
   cherryPick: (a) => cherryPick(a),
-  // MIN-409: dangling working-tree snapshots for agent undo (no HEAD move).
   snapshotCreate: (a) => snapshotCreate(a),
   snapshotRestore: (a) => snapshotRestore(a),
   snapshotDiff: (a) => snapshotDiff(a),
-  // Forge layer — pull requests and CI through the user's own `gh` auth.
   forgeStatus: (a) => forgeStatus(a),
   forgeRefresh: (a) => {
     invalidateForgeStatusCache(a?.cwd);
@@ -135,7 +133,6 @@ const OPS = {
   runRerun: (a) => runRerun(a),
   runCancel: (a) => runCancel(a),
   runLog: (a) => runLog(a),
-  // Issues mirror (Phase 5) — same gh auth, no stored tokens.
   issueList: (a) => issueList(a),
   issueView: (a) => issueView(a),
   issueCreate: (a) => issueCreate(a),

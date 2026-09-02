@@ -1,7 +1,3 @@
-/**
- * Settings UI for outbound prompt token estimate (Feature 25).
- */
-
 import {
   computePromptConfigTokenTotal,
   formatTokenEstimateLabel,

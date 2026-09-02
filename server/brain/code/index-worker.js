@@ -1,5 +1,6 @@
 /**
  * Child-process entry for Brain code reindex (keeps Electron main thread responsive).
+ * The per-file results array is dropped here — it is large and unused across the process boundary.
  */
 
 import { createInterface } from 'node:readline';
@@ -40,8 +41,6 @@ rl.once('line', async (line) => {
     if (msg.workspaceRoot) {
       await setWorkspaceRoot(String(msg.workspaceRoot));
     }
-    // Drop the per-file `results` array: it grows with the repo (~160KB here) and no
-    // caller reads it across the process boundary — the summary fields cover reporting.
     const { results, ...summary } = await reindexCode(msg.opts ?? {});
     emitAndExit({ type: 'done', result: summary }, 0);
   } catch (err) {

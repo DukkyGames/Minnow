@@ -1,12 +1,3 @@
-/**
- * Client-side path normalization consistent with server resolveSafePath prefix rules.
- * Used only for approval UX; the server remains authoritative.
- *
- * The server also canonicalizes paths with fs.realpath before prefix checks so
- * symlinks inside the workspace cannot escape the sandbox. The browser cannot
- * replicate that here, so approval may prompt for paths the server later rejects.
- */
-
 /** Normalize a path for stable prefix comparison (slashes, drive letter casing on Windows). */
 export function normalizePathForComparison(fsPath: string): string {
   let p = fsPath.trim().replace(/\\/g, '/');
@@ -20,10 +11,6 @@ export function normalizePathForComparison(fsPath: string): string {
   return p;
 }
 
-/**
- * Resolve a user path against the workspace root the same way server.js does
- * (absolute paths stay absolute; relative paths join workspace).
- */
 export function resolveUserPathLikeServer(userPath: string, workspaceRoot: string): string {
   const up = userPath.trim();
   const ws = workspaceRoot.trim();

@@ -1,7 +1,3 @@
-/**
- * Go to definition — F12 and Mod-click open the target in the file viewer.
- */
-
 import { EditorSelection, Prec, type Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import {

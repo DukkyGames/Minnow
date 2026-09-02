@@ -25,7 +25,6 @@ export function normalizeBodyIndent(completion: string, baseIndent = 4): string 
     .map((line) => {
       if (!line.trim()) return '';
       const ws = line.match(/^\s*/)?.[0].length ?? 0;
-      // HumanEval canonical bodies often mix column-0 and 4-space sibling lines with 8+ nested lines.
       const physical =
         minIndent === 0 && ws <= 4
           ? baseIndent

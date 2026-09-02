@@ -1,15 +1,3 @@
-/**
- * Unified inbox across accounts.
- *
- * Switching accounts used to be the only way to see another mailbox, and it
- * rebuilt the whole surface — so checking two inboxes meant losing your place
- * in the first. "All inboxes" merges them into one date-ordered list, with each
- * row carrying the account it came from.
- *
- * Accounts are fetched in parallel and a failing one is reported rather than
- * failing the whole view: one expired password should not black out the others.
- */
-
 import type { EmailAccount, EmailMessage } from '../../email/client';
 import { fetchEmailMessagesExtended } from '../../email/client-ext';
 
@@ -27,13 +15,7 @@ export interface UnifiedInboxResult {
   failures: Array<{ accountId: string; label: string; error: string }>;
 }
 
-/**
- * Accent tints for the per-account dot.
- *
- * Deliberately a fixed, small set derived from the family accents rather than
- * new hues — per DESIGN.md, colour carries meaning here (which mailbox), not
- * decoration.
- */
+/** Accent tints for the per-account dot. */
 export const ACCOUNT_DOT_CLASSES = [
   'email-account-dot--1',
   'email-account-dot--2',
@@ -47,13 +29,8 @@ export function accountColorIndex(accounts: EmailAccount[], accountId: string): 
   return at < 0 ? 0 : at % ACCOUNT_DOT_CLASSES.length;
 }
 
-/**
- * Merge per-account pages into one date-ordered list.
- *
- * Each account contributes its own newest `limit` messages, so the merged list
- * is the newest across all of them — which is what "all inboxes" has to mean
- * for the ordering to make sense.
- */
+// ── Merge ────────────────────────────────────────────────────────────────────
+
 export function mergeByDate(pages: UnifiedMessage[][], limit: number): UnifiedMessage[] {
   return pages
     .flat()
@@ -65,12 +42,6 @@ export function mergeByDate(pages: UnifiedMessage[][], limit: number): UnifiedMe
     .slice(0, Math.max(1, limit));
 }
 
-/**
- * Load the unified inbox.
- *
- * @param accounts every configured account
- * @param query folder/filter/search applied to each account alike
- */
 export async function loadUnifiedInbox(
   accounts: EmailAccount[],
   query: { folder?: string; limit?: number; filter?: string; search?: string } = {},
@@ -82,8 +53,6 @@ export async function loadUnifiedInbox(
     accounts.map(async (account): Promise<UnifiedMessage[]> => {
       try {
         const result = await fetchEmailMessagesExtended(account.id, {
-          // Each account names its own inbox; the caller's folder is only a
-          // hint, and forcing it would break accounts that use another name.
           folder: query.folder ?? account.folders?.[0] ?? 'INBOX',
           offset: 0,
           limit,
@@ -115,6 +84,8 @@ export async function loadUnifiedInbox(
 /** Sentinel value for the "All inboxes" option in the account select. */
 export const ALL_INBOXES = '__all__';
 
+// ── DOM helpers ──────────────────────────────────────────────────────────────
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -143,13 +114,9 @@ function formatWhen(iso: string): string {
     : when.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
-/**
- * Render the merged inbox.
- *
- * Deliberately read-only: mutating a message needs its account's folder list
- * and session, so a click hands off to that mailbox's own surface rather than
- * half-implementing the actions here.
- */
+// ── Unified inbox ────────────────────────────────────────────────────────────
+
+/** Render the merged inbox. */
 export async function renderUnifiedInbox(
   mount: HTMLElement,
   options: {
@@ -186,8 +153,6 @@ export async function renderUnifiedInbox(
   );
   pane.appendChild(header);
 
-  // A legend so the row dots are decodable, not a guessing game about which
-  // colour is which mailbox.
   const legend = el('div', 'email-unified-legend');
   legend.setAttribute('role', 'list');
   legend.setAttribute('aria-label', 'Mailbox colours');
@@ -203,8 +168,6 @@ export async function renderUnifiedInbox(
   }
   pane.appendChild(legend);
 
-  // A mailbox that failed is named rather than silently missing — otherwise an
-  // expired password looks like an empty inbox.
   for (const failure of result.failures) {
     const warning = el(
       'p',

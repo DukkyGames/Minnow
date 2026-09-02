@@ -1,10 +1,3 @@
-/**
- * P2-G helpers — fixture plan, fake-model scenarios, and wait utilities.
- *
- * The fake host is programmed to emit real `save_file` tool calls then
- * `report_outcome`. Tools still run in-process (P2-D); this is not a stubbed
- * effector. Product source is never the write target.
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,7 +17,6 @@ export const P3E_RELIABILITY_PATH = path.join(HERE, 'p3e-reliability.json');
 
 export const P2G_PLAN = fs.readFileSync(P2G_PLAN_PATH, 'utf8');
 
-/** Files the scripted builders write into the sandbox. Keys are workspace-relative. */
 export const SANDBOX_FILES = {
   'src/greet.js': "export function greet(name) {\n  return 'hello ' + name;\n}\n",
   'src/add.js': 'export function add(a, b) {\n  return a + b;\n}\n',
@@ -47,9 +39,6 @@ const TESTER_PASS = {
 };
 
 /**
- * Happy-path scenario: each builder saves its file then reports pass; testers
- * report pass. Catch-alls cover a retry whose nth walked past the specific steps.
- *
  * @returns {Array<{ match: object, emit: string[] }>}
  */
 export function happyScenario() {
@@ -78,8 +67,6 @@ export function happyScenario() {
       match: { role: 'builder', taskId: 'W2-A', nth: 1 },
       emit: reportOutcomeChunks({ ...BUILDER_PASS, evidence: ['src/index.js'] }, 'call_rep_w2a'),
     },
-    // Unmatched builder nth (a retry after a vanish) still reports rather than
-    // falling through to V1 `board_report`, which V2's report tool would reject.
     {
       match: { role: 'builder' },
       emit: reportOutcomeChunks({ ...BUILDER_PASS, evidence: ['retry'] }, 'call_rep_builder_fallback'),
@@ -91,7 +78,6 @@ export function happyScenario() {
   ];
 }
 
-/** One-task plan for induced-failure tests. parsePlan accepts this shape. */
 export const MINI_PLAN = `---
 name: p2g-mini
 overview: Single-task board for policy routing.
@@ -117,10 +103,6 @@ isProject: true
 
 const MINI_FILE = "export function ok() {\n  return true;\n}\n";
 
-/**
- * Builder fails once, then writes the file and passes. Tester passes.
- * Seed on the retry must be `failure-aware`.
- */
 export function failingBuildScenario() {
   return [
     {
@@ -155,9 +137,6 @@ export function failingBuildScenario() {
   ];
 }
 
-/**
- * Builder passes (and writes). Tester fails once. Next builder uses `fix` seed.
- */
 export function failingTestScenario() {
   return [
     {
@@ -188,7 +167,6 @@ export function failingTestScenario() {
   ];
 }
 
-/** Builder reports `blocked` once, then repairs and passes. */
 export function blockedScenario() {
   return [
     {
@@ -220,7 +198,6 @@ export function blockedScenario() {
   ];
 }
 
-/** After a crash retry, write the file and pass. Used once the hang host is gone. */
 export function afterCrashScenario() {
   return [
     {
@@ -268,8 +245,6 @@ export async function assertSandboxFiles(sandbox) {
 }
 
 /**
- * Count retries (non-initial seeds) and abandonments from a journal.
- *
  * @param {Array<Record<string, unknown>>} events
  */
 export function reliabilityFromEvents(events) {
@@ -287,14 +262,11 @@ export function reliabilityFromEvents(events) {
 }
 
 /**
- * Builder attempt intervals on journal `seq`, never wall-clock `ts`.
- * An open attempt has `endSeq: Infinity` until its ended line exists.
- *
  * @param {Array<Record<string, unknown>>} events
  * @returns {Array<{ taskId: string, attemptId: string, startSeq: number, endSeq: number }>}
  */
 export function builderWindowsBySeq(events) {
-  /** @type {Map<string, { taskId: string, attemptId: string, startSeq: number, endSeq: number }>} */
+/** @type {Map<string, { taskId: string, attemptId: string, startSeq: number, endSeq: number }>} */
   const windows = new Map();
   for (const event of events) {
     const seq = Number(event.seq);
@@ -316,10 +288,6 @@ export function builderWindowsBySeq(events) {
 }
 
 /**
- * True when two builder attempts (usually two tasks) overlap in seq order.
- * `startA < endB && startB < endA` — the same rule as interval overlap, using
- * the journal's sequence instead of timestamps so replay stays the authority.
- *
  * @param {Array<Record<string, unknown>>} events
  * @param {{ distinctTasks?: boolean }} [opts]
  */

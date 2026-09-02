@@ -1,22 +1,3 @@
-/**
- * Assign an issue to an agent: the whole round trip, with no Orchestrator visit.
- *
- * The runtime is the Orchestrator, exactly as the brief locks it — **no second
- * agent runtime**. An issue becomes a one-task board: Issues writes a one-task
- * plan, hands it to `launchBoardFromPlan`, records the resulting group on the
- * issue's `agent` slot, and then only ever *reads* the board back. Waves, slots,
- * quarantine and integration branches stay where they belong.
- *
- * **Open question 1 is closed: one board group per issue, not a shared one.**
- * Board groups are already keyed by plan path, and the plan path is already
- * per-issue (`documentation/plans/issues/<ID>.md`), so per-issue groups fall
- * out of the existing design rather than being imposed on it. It also makes
- * cancel and cleanup a single group teardown, and keeps each issue clear of the
- * board's 100-entry log cap, which one shared "Issues" group would burn through.
- *
- * Phase 4 of `documentation/plans/issues-app-v2.md`.
- */
-
 import { executeTool } from '../../tools/client.ts';
 import {
   findIssueById,
@@ -57,13 +38,6 @@ function codeRefLines(issue: IssueCard): string[] {
   ];
 }
 
-/**
- * A one-task executable plan for a single issue.
- *
- * Deliberately minimal. The board's own planner writes rich multi-wave plans;
- * this exists so "assign an agent" is one keystroke instead of "go write a
- * plan first", and the agent reads the issue body for the actual detail.
- */
 export function buildSingleTaskPlan(issue: IssueCard): string {
   const title = issue.title.trim() || issue.id;
   const body = issue.description.trim();
@@ -117,13 +91,6 @@ async function writePlanFile(planPath: string, contents: string): Promise<string
   }
 }
 
-/**
- * Assign an issue to a work agent and start it.
- *
- * Idempotent against an already-running slot: re-dispatching a running issue is
- * almost always a mis-click, and silently spawning a second worktree for the
- * same issue is expensive to undo.
- */
 export async function dispatchIssueToAgent(
   issueId: string,
   options?: { agentId?: string },
@@ -136,8 +103,6 @@ export async function dispatchIssueToAgent(
 
   const planPath = resolveIssuePlanPath(issue);
 
-  // Reuse a plan the user or a Plan-mode run already wrote; only synthesize one
-  // when the issue has none, so "assign" never overwrites real planning work.
   if (!issue.planPath?.trim()) {
     const failure = await writePlanFile(planPath, buildSingleTaskPlan(issue));
     if (failure) return { ok: false, error: failure, planPath };
@@ -146,14 +111,12 @@ export async function dispatchIssueToAgent(
 
   try {
     const { launchApp } = await import('../../os/router.ts');
-    // Boards live in Code; open it so the board chrome is mounted before launch.
     launchApp('code', { codeSection: 'chat', workspacePath: issue.workspacePath });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const { launchBoardFromPlan } = await import('../../ui/orchestrate-launch.ts');
     const launched = await launchBoardFromPlan(planPath);
 
-    // V2 boards have no planner chat (MIN-715).
     startIssueAgentRun(issueId, {
       agentId: options?.agentId ?? 'builder',
       step: 'Planning the board',
@@ -194,11 +157,8 @@ export async function cancelIssueAgent(issueId: string): Promise<boolean> {
     const { sessionState } = await import('../../state/sessions.ts');
     const group = (sessionState?.groups ?? []).find((g) => g.id === groupId);
     if (!group) return true;
-    // V1 worktree teardown is gone; leftover paths are a cleanup chore, not a broken state.
     return true;
   } catch {
-    // The slot is already canceled as far as Issues is concerned; a worktree
-    // left behind is a cleanup chore, not a broken state.
     return true;
   }
 }

@@ -20,7 +20,6 @@ export async function resolveJobRunModel(storedJob) {
     return { providerId: providerId || undefined, modelId };
   }
 
-  // Hot path: indexed active chat provider/model (decode left to callers if needed).
   if (!useJsonSessionsStore()) {
     const binding = readActiveChatModelBinding();
     if (binding?.modelId?.trim()) {
@@ -32,7 +31,6 @@ export async function resolveJobRunModel(storedJob) {
     return { providerId: undefined, modelId: undefined };
   }
 
-  // JSON rollback: whole-blob resource read.
   const sessions = await readResource('sessions');
   const activeId = typeof sessions?.activeId === 'string' ? sessions.activeId : '';
   const chats = Array.isArray(sessions?.chats) ? sessions.chats : [];

@@ -1,9 +1,3 @@
-/**
- * Issues agent pipelines (MIN-261).
- * Phase 2: Expand with agent (issue-writer).
- * Phase 3: Investigate / Plan / Debug / Send to board workflows.
- */
-
 import {
   getSubAgentRun,
   spawnSubAgent,
@@ -65,10 +59,8 @@ function issueBackgroundChatKey(issue: IssueCard): string {
   return `issue:${issue.id}`;
 }
 
-/**
- * Spawn issue-writer for a triage note; settle leaves status as triage.
- * The writer updates the card via issue_update / issue_link; we only refresh notes on failure.
- */
+// ── Expand ───────────────────────────────────────────────────────────────────
+
 export async function runIssueExpandWithAgent(
   issueId: string,
 ): Promise<{ ok: boolean; error?: string; runId?: string }> {
@@ -78,8 +70,6 @@ export async function runIssueExpandWithAgent(
     return { ok: false, error: 'Expand with agent is only available in triage' };
   }
 
-  // Its own chat, not whatever happens to be open (MIN-637). The writer reports
-  // back into this chat, so the user's conversation stays untouched.
   const parentChatId = ensureIssueWorkflowChat(issue, 'Expand')?.id ?? null;
 
   try {
@@ -96,7 +86,6 @@ export async function runIssueExpandWithAgent(
       'runId' in result && typeof result.runId === 'string' ? result.runId : null;
     if (!runId) return { ok: false, error: 'Failed to spawn issue-writer' };
 
-    // Track run on the card without changing status.
     updateIssue(issueId, { investigateRunId: runId });
 
     const settled = await waitForSubAgent(runId);
@@ -106,7 +95,6 @@ export async function runIssueExpandWithAgent(
       return { ok: false, error: err, runId };
     }
 
-    // Ensure status stayed on triage role even if the model tried to move it.
     const latest = findIssueById(issueId);
     const taxonomy = getIssuesTaxonomySync();
     if (latest && !isTriageStatus(taxonomy, latest.status)) {
@@ -139,6 +127,8 @@ export function resolveIssueSubAgentChatId(
   return last || null;
 }
 
+// ── Activity ─────────────────────────────────────────────────────────────────
+
 /** Open the sub-agent drawer or board chat behind the workflow activity chip. */
 export async function openIssueActivity(issue: IssueCard): Promise<boolean> {
   const target = issueActivityTarget(issue);
@@ -160,13 +150,6 @@ export async function openIssueActivity(issue: IssueCard): Promise<boolean> {
   return true;
 }
 
-/**
- * Create or reuse a workflow chat linked on the issue (Investigate / background Plan).
- *
- * Delegates creation to {@link ensureBackgroundChat}, which never assigns
- * `activeId`. This function used to steal focus and repaint the main column,
- * which is what made background issue work land in whatever chat was open.
- */
 function ensureIssueWorkflowChat(issue: IssueCard, namePrefix: string): Chat | null {
   const existingId = issue.chatIds?.length
     ? issue.chatIds[issue.chatIds.length - 1]
@@ -198,12 +181,10 @@ async function launchCodeSeededChat(options: {
   const { launchApp } = await import('../../os/router.ts');
   const { applyCodeLaunchOptions } = await import('../../os/code-launch.ts');
 
-  // Open Code without consuming the seed so we control applyCodeLaunchOptions.
   launchApp('code', {
     codeSection: 'chat',
     workspacePath: options.workspacePath,
   });
-  // Let hash/route settle before creating the seeded chat.
   await new Promise((r) => setTimeout(r, 0));
 
   return applyCodeLaunchOptions({
@@ -273,10 +254,8 @@ export async function runIssueInvestigate(
   }
 }
 
-/**
- * Interactive Plan: Code Plan-mode chat seeded with issue context + codeRef attachments.
- * Sets planPath + status planned; appends chat id.
- */
+// ── Plan ─────────────────────────────────────────────────────────────────────
+
 export async function runIssuePlanChat(
   issueId: string,
 ): Promise<{ ok: boolean; error?: string; chatId?: string; planPath?: string }> {
@@ -370,6 +349,8 @@ export async function runIssuePlanBackground(
   }
 }
 
+// ── Debug ────────────────────────────────────────────────────────────────────
+
 /**
  * Debug chat: Code Debug-mode seeded with full issue context; status → in_progress.
  */
@@ -427,6 +408,8 @@ export async function runIssueBackgroundChat(
   return runIssuePlanBackground(issueId);
 }
 
+// ── Board ────────────────────────────────────────────────────────────────────
+
 /**
  * Send to board: requires planPath; launchBoardFromPlan; store boardChatId; status → in_progress.
  */
@@ -443,14 +426,12 @@ export async function runIssueSendToBoard(
 
   try {
     const { launchApp } = await import('../../os/router.ts');
-    // Orchestrate boards live in Code; open it first so board chrome mounts.
     launchApp('code', { codeSection: 'chat', workspacePath: issue.workspacePath });
     await new Promise((r) => setTimeout(r, 0));
 
     const { launchBoardFromPlan } = await import('../../ui/orchestrate-launch.ts');
     const launched = await launchBoardFromPlan(planPath);
 
-    // V2 boards have no planner chat (MIN-715). Leftover boardChatId stays unset.
     updateIssue(issueId, {
       status: requireIssueStatusForRole('in_progress'),
     });
@@ -462,10 +443,6 @@ export async function runIssueSendToBoard(
   }
 }
 
-/**
- * Open an issue plan markdown file in the Code viewer.
- * Foregrounds Code when Issues is fullscreen; no-op switch when already in Code (embed).
- */
 export async function openIssuePlanInEditor(
   planPath: string,
   workspacePath?: string,
@@ -480,7 +457,6 @@ export async function openIssuePlanInEditor(
       codeSection: 'chat',
       workspacePath: workspacePath?.trim() || undefined,
     });
-    // Let hash/route settle before opening the viewer tab.
     await new Promise((r) => setTimeout(r, 0));
   }
 

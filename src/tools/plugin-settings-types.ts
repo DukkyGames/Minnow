@@ -1,7 +1,3 @@
-/**
- * Native tool plugin metadata for Settings UI.
- */
-
 export interface PluginListItem {
   id: string;
   label: string;

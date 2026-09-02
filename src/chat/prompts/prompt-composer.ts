@@ -1,7 +1,3 @@
-/**
- * Assemble the system prompt from enabled parts and profile rules.
- */
-
 import { getDefaultWorkAgentForMode } from '../../agents/work-agent-registry';
 import { getMode } from '../modes/registry';
 import { isModeId, type ModeId } from '../modes/types';
@@ -17,6 +13,8 @@ import type {
   PromptPartId,
   PromptProfile,
 } from './types';
+
+// ── Order ────────────────────────────────────────────────────────────────────
 
 /** Mandatory concatenation order for system message parts. */
 export const PART_ORDER: PromptPartId[] = [
@@ -63,6 +61,8 @@ const SUB_AGENT_DELEGATION_MODE_IDS = new Set<ModeId>([
   'debug',
 ]);
 
+// ── Gates ────────────────────────────────────────────────────────────────────
+
 function contextHasBrowserPreviewTools(ctx: ComposeContext): boolean {
   const ids = ctx.enabledToolIds ?? [];
   return ids.some((id) => BROWSER_PREVIEW_TOOL_IDS.has(id));
@@ -75,12 +75,6 @@ function contextHasBrainWriteTools(ctx: ComposeContext): boolean {
   return (ctx.enabledToolIds ?? []).some((id) => BRAIN_WRITE_TOOL_IDS.has(id));
 }
 
-/**
- * Memory part gate: retrieved notes always inject; with no notes (fresh/empty
- * wiki) the part still injects when memory is on and write tools are enabled,
- * so the agent learns how to save — otherwise nothing is ever written and the
- * section never appears (cold-start deadlock).
- */
 function isMemoryPartEnabled(ctx: ComposeContext): boolean {
   if (ctx.memoryBlock?.trim()) return true;
   return ctx.memoryEnabled === true && contextHasBrainWriteTools(ctx);
@@ -109,10 +103,6 @@ export function stripPromptHtmlComments(text: string): string {
   return text.replace(/<!--[\s\S]*?-->/g, '').trim();
 }
 
-/**
- * When the active work-agent is the mode default (builder/planner/…), omit the mode
- * body — the work-agent prompt already carries deliverable instructions.
- */
 export function shouldSuppressModePart(ctx: ComposeContext): boolean {
   const modeId = ctx.modeId?.trim();
   const workAgentId = ctx.workAgentId?.trim();
@@ -170,7 +160,6 @@ function isPartEnabled(
   }
   if (partId === 'info') {
     if (!ctx.infoPresetId) return false;
-    // General-assistant context applies in General and Desktop modes.
     return ctx.modeId === 'general' || ctx.modeId === 'desktop';
   }
   return true;
@@ -197,6 +186,8 @@ function resolvePartId(
   if (partId === 'tool-usage') return 'default';
   return '';
 }
+
+// ── Resolvers ────────────────────────────────────────────────────────────────
 
 function resolvePartBody(
   partId: PromptPartId,
@@ -250,7 +241,6 @@ function resolvePartBody(
     if (loaded.liteBody?.trim()) {
       return stripPromptHtmlComments(loaded.liteBody.trim());
     }
-    // No lite variant — omit the part rather than mid-sentence truncation.
     return '';
   }
 
@@ -480,6 +470,8 @@ function buildInterpolationVars(ctx: ComposeContext): InterpolationVars {
     orchestrate_plan: ctx.orchestratePlanPath ?? '',
   };
 }
+
+// ── Compose ──────────────────────────────────────────────────────────────────
 
 /**
  * Compose the full system prompt string for LM Studio.

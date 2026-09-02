@@ -1,7 +1,3 @@
-/**
- * Filter enabled tools by operating mode tool policy.
- */
-
 import type { ToolDefinition } from '../../tools/definitions';
 import { getMode } from './registry';
 import type { ModeId, ToolPolicyAction } from './types';
@@ -11,10 +7,6 @@ export function isExternalDynamicTool(toolName: string): boolean {
   return toolName.startsWith('mcp__') || toolName.startsWith('plugin__');
 }
 
-/**
- * Resolve effective policy for a tool name (function name === tool id).
- * `ask` is treated as `deny` for API exposure in v1.
- */
 function effectiveAction(
   modeId: ModeId,
   toolName: string,
@@ -39,10 +31,6 @@ export function filterToolsByMode(
   });
 }
 
-/**
- * Whether a tool function name may be sent to the model for this mode.
- * MCP/plugin tools bypass the built-in group matrix; user Settings gate them instead.
- */
 export function isToolAllowedForMode(
   modeId: ModeId,
   toolName: string,

@@ -192,6 +192,8 @@ function taskSpec(id) {
   };
 }
 
+// ── suggestedNextStep ────────────────────────────────────────────────────────
+
 describe('suggestedNextStep', () => {
   it('names a concrete unblock for a blocked abandonment', () => {
     const step = suggestedNextStep({
@@ -205,6 +207,8 @@ describe('suggestedNextStep', () => {
     assert.match(step, /psql refused/);
   });
 });
+
+// ── abandoned task ───────────────────────────────────────────────────────────
 
 describe('writeEndOfRunReport — abandoned task', () => {
   it('names the task, its evidence, and a concrete next step', async () => {
@@ -252,6 +256,8 @@ describe('writeEndOfRunReport — abandoned task', () => {
   });
 });
 
+// ── stateless ────────────────────────────────────────────────────────────────
+
 describe('writeEndOfRunReport — stateless', () => {
   it('sends identical input on two calls over the same journal', async () => {
     const boardId = 'stateless-report';
@@ -270,6 +276,8 @@ describe('writeEndOfRunReport — stateless', () => {
     assert.equal(JSON.stringify(seen[0]), JSON.stringify(seen[1]));
   });
 });
+
+// ── one report per run ───────────────────────────────────────────────────────
 
 describe('engine — one report per run', () => {
   it('a fully successful run produces exactly one report event and one artifact', async () => {
@@ -368,14 +376,14 @@ describe('engine — one report per run', () => {
   it('calls the writer from exactly one function in the engine', () => {
     const engine = fs.readFileSync(path.join(ORCH_DIR, 'engine.js'), 'utf8');
     const graph = fs.readFileSync(path.join(ORCH_DIR, 'board-graph.js'), 'utf8');
-    // P8-B: the engine talks to the injected graph hook, not report.js.
     assert.match(engine, /graph\.writeReport/);
     assert.equal([...engine.matchAll(/\bmaybeWriteEndOfRunReport\s*\(/g)].length, 3);
-    // Board graph is the module that imports the writer and calls it.
     assert.match(graph, /from '\.\/report\.js'/);
     assert.equal([...graph.matchAll(/\bwriteEndOfRunReport\s*\(/g)].length, 1);
   });
 });
+
+// ── report never feeds ───────────────────────────────────────────────────────
 
 describe('report never feeds engine decisions', () => {
   it('plan, derive, policy, and merge-queue do not import report.js', () => {
@@ -416,6 +424,8 @@ describe('report never feeds engine decisions', () => {
     assert.equal(json.includes('prompt_tokens'), false);
   });
 });
+
+// ── journalHasReport / persist ───────────────────────────────────────────────
 
 describe('journalHasReport / persist', () => {
   it('detects the opaque event', () => {

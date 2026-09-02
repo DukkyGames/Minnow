@@ -1,8 +1,3 @@
-/**
- * File / folder icons for the Code file tree and editor tabs.
- * Uses Material Icon Theme (PKief) — colorful SVGs served from public/material-icons/.
- */
-
 import {
   resolveFileIconId,
   resolveFolderIconId,
@@ -44,7 +39,6 @@ function createIconImage(
   img.src = getMaterialIconUrl(iconId);
   img.dataset.iconId = iconId;
 
-  // Fall back to generic file glyph when a specialized asset is missing.
   img.addEventListener('error', () => {
     if (img.dataset.iconId === fallbackId) return;
     img.dataset.iconId = fallbackId;

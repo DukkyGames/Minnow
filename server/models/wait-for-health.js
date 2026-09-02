@@ -14,11 +14,11 @@ import { MODEL_LOAD_TIMEOUT_MS } from './timeouts.js';
  */
 
 /**
+ * Tests may pass `{ status: 200 }` without `ok`; real fetch sets both.
  * @param {Response | { ok?: boolean, status?: number }} res
  */
 function isHealthyResponse(res) {
   if (!res) return false;
-  // Manager unit tests return `{ status: 200 }` without `ok`. Real fetch sets both.
   if (res.status === 200) return true;
   return res.ok === true;
 }
@@ -35,6 +35,7 @@ function joinOriginPath(origin, healthPath) {
 
 /**
  * Poll until a health URL answers, the deadline hits, or an optional run exits.
+ * Backoff starts fast then eases off so a slow spawn is not polled at 1 Hz.
  *
  * @param {object} opts
  * @param {string} opts.healthPath Primary path (manager: `/healthz`, `/v1/models`, …).
@@ -74,7 +75,6 @@ export async function waitForHealth(opts) {
   const label = typeof opts.label === 'string' && opts.label.trim() ? opts.label.trim() : 'server';
   const fetchImpl = opts.fetchImpl ?? fetch;
   const deadline = Date.now() + timeoutMs;
-  // Manager's backoff: snappy first retries, then ease off so a slow spawn is not a 1 Hz hammer.
   let delayMs = 250;
 
   while (Date.now() < deadline) {
@@ -101,7 +101,6 @@ export async function waitForHealth(opts) {
         });
         if (isHealthyResponse(res)) return { ok: true };
       } catch {
-        /* retry */
       }
     }
 

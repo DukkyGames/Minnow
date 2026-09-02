@@ -1,8 +1,3 @@
-/**
- * After successful workspace filesystem tool calls, debounce-refresh the Files tree
- * so agent writes appear without manual Refresh (see executeTool wiring in tools/client).
- */
-
 import type { ToolExecutionResult } from '../types';
 import { getWorkspacePath } from '../state/workspace';
 import { affectedDirsFromTool } from './file-tree-invalidation';
@@ -25,16 +20,10 @@ export const FILE_TREE_MUTATING_TOOLS = new Set<string>([
   'create_word_document',
 ]);
 
-/**
- * Debounce window — resets on every tool call; coalesces a burst of rapid agent
- * writes into one tree reload when the burst pauses for this long.
- */
+/** Debounce window — resets on every tool call; coalesces a burst of rapid agent writes into one tree reload when the burst pauses for this long. */
 export const FILE_TREE_AUTO_REFRESH_DEBOUNCE_MS = 500;
 
-/**
- * Hard ceiling on how long we wait before forcing a refresh even under continuous
- * agent load (pure debounce would never fire if agents write faster than the window).
- */
+/** Hard ceiling on how long we wait before forcing a refresh even under continuous agent load (pure debounce would never fire if agents write faster than the window). */
 export const FILE_TREE_AUTO_REFRESH_MAX_DELAY_MS = 10_000;
 
 /** Delay after tree interaction ends before flushing a deferred refresh. */
@@ -66,6 +55,8 @@ let refreshPending = false;
 let pendingRefreshDirs: Set<string> | null = null;
 let interactionTrackingBound = false;
 
+// ── Schedule ─────────────────────────────────────────────────────────────────
+
 /** True when a mutating tool's workspaceRoot matches the file tree listing root. */
 function toolWorkspaceMatchesFileTreeListing(workspaceRoot?: string): boolean {
   const treeRoot = getFileTreeListingWorkspaceRoot();
@@ -81,11 +72,7 @@ function toolWorkspaceMatchesFileTreeListing(workspaceRoot?: string): boolean {
   return panelPathsEqual(treeRoot, toolRoot);
 }
 
-/**
- * True when a successful mutating tool result should trigger a debounced file tree refresh.
- * Skipped when the tool ran in a different root than the visible file tree (e.g. isolated
- * worktree writes while the tree shows the main workspace).
- */
+/** True when a successful mutating tool result should trigger a debounced file tree refresh. */
 export function shouldScheduleFileTreeRefresh(
   toolName: string,
   result: ToolExecutionResult,
@@ -140,6 +127,8 @@ function clearPendingRefreshIndicator(): void {
   btn.setAttribute('aria-label', 'Refresh file tree');
 }
 
+// ── Flush ────────────────────────────────────────────────────────────────────
+
 function flushDebouncedRefresh(): void {
   if (!refreshPending) {
     return;
@@ -165,7 +154,6 @@ function flushDebouncedRefresh(): void {
   clearPendingRefreshIndicator();
 
   void refreshRunner(dirs).catch(() => {
-    /* refreshFileTree already surfaces errors via UI; avoid unhandled rejection */
   });
 }
 
@@ -184,10 +172,7 @@ function scheduleInteractionFlush(): void {
   }, FILE_TREE_INTERACTION_FLUSH_MS);
 }
 
-/**
- * Track pointer and keyboard focus inside the file tree so agent refreshes can defer
- * until the user finishes browsing (VS Code-style non-disruptive updates).
- */
+/** Track pointer and keyboard focus inside the file tree so agent refreshes can defer until the user finishes browsing (VS Code-style non-disruptive updates). */
 export function initFileTreeAutoRefreshInteractionTracking(): void {
   if (interactionTrackingBound || typeof document === 'undefined') return;
   const host = document.getElementById('fileTreeHost');
@@ -226,13 +211,8 @@ export function initFileTreeAutoRefreshInteractionTracking(): void {
   });
 }
 
-/**
- * Schedules a debounced file tree refresh after a successful mutating tool call.
- * Uses a debounce+throttle pattern: the debounce resets on every call, but the
- * max-delay timer ensures a refresh fires within FILE_TREE_AUTO_REFRESH_MAX_DELAY_MS
- * even when agents write continuously (which would otherwise prevent the debounce
- * from ever firing).
- */
+// ── Public ───────────────────────────────────────────────────────────────────
+
 export function scheduleFileTreeRefreshAfterTool(
   toolName: string,
   result: ToolExecutionResult,
@@ -260,10 +240,7 @@ export function scheduleFileTreeRefreshAfterTool(
   }
 }
 
-/**
- * Runs a tool executor, then applies file-tree auto-refresh rules to the result.
- * Pass the tool context so worktree-scoped calls skip the main workspace file tree refresh.
- */
+/** Runs a tool executor, then applies file-tree auto-refresh rules to the result. */
 export async function runWithFileTreeAutoRefresh<T extends ToolExecutionResult>(
   toolName: string,
   fn: () => Promise<T>,

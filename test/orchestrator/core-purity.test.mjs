@@ -27,22 +27,18 @@ const CORE_DIR = path.join(PROJECT_ROOT, 'server', 'orchestrator', 'core');
  * reproduces the same decisions — and this file is the only thing enforcing it.
  */
 const BANNED_PATTERNS = [
-  // Clocks. Every one of these makes a fold depend on when it ran.
   { re: /\bDate\s*\./, why: 'reads the clock; take time as an argument instead' },
   { re: /\bnew\s+Date\b/, why: 'reads the clock; take time as an argument instead' },
   { re: /(?<![.\w])Date\s*\(/, why: 'reads the clock; take time as an argument instead' },
   { re: /\bperformance\s*\./, why: 'reads the clock; take time as an argument instead' },
   { re: /\bhrtime\b/, why: 'reads the clock; take time as an argument instead' },
 
-  // Randomness.
   { re: /\bMath\.random\s*\(/, why: 'nondeterministic; replay would diverge' },
   { re: /\bcrypto\s*\./, why: 'nondeterministic; replay would diverge' },
 
-  // Host-dependent behaviour: same input, different answer on another machine.
   { re: /\bIntl\s*\./, why: 'locale-dependent; replay would diverge across hosts' },
   { re: /\btoLocale[A-Z]\w*\s*\(/, why: 'locale-dependent; replay would diverge across hosts' },
 
-  // I/O and host access.
   { re: /\bprocess\s*\./, why: 'host access; the core runs in the renderer too' },
   { re: /\bfs\s*\./, why: 'filesystem I/O is not allowed in the core' },
   { re: /\bfetch\s*\(/, why: 'network I/O is not allowed in the core' },
@@ -53,11 +49,9 @@ const BANNED_PATTERNS = [
   { re: /\bdocument\s*\./, why: 'the core has no DOM; it runs on the server too' },
   { re: /\bwindow\s*\./, why: 'the core has no DOM; it runs on the server too' },
 
-  // Timers. Nothing in a pure fold should be scheduling anything.
   { re: /\bset(?:Timeout|Interval|Immediate)\s*\(/, why: 'the core does not schedule work' },
   { re: /\bqueueMicrotask\s*\(/, why: 'the core does not schedule work' },
 
-  // Escape hatches. Each one can reach any of the above without naming it.
   { re: /\brequire\s*\(/, why: 'the core is ESM-only' },
   { re: /\bglobalThis\b/, why: 'reaching the global object bypasses every rule above' },
   { re: /\bnew\s+Function\b/, why: 'evaluated code cannot be checked by this guard' },
@@ -306,10 +300,6 @@ describe('the purity guard itself', () => {
   });
 
   it('catches a violation introduced into a real core file', () => {
-    // MIN-684 asks for exactly this: the guard must fail when an import is added
-    // to a core file and pass once it is removed. Done against the real source
-    // on disk rather than a synthetic string, so the file discovery, the reader,
-    // and the checker are all exercised together.
     const relPath = 'derive.js';
     const original = fs.readFileSync(path.join(CORE_DIR, relPath), 'utf8');
     assert.deepEqual(checkCoreModule(relPath, original), [], 'derive.js is not clean to begin with');

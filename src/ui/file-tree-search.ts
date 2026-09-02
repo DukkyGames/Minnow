@@ -1,7 +1,3 @@
-/**
- * File tree filter input — debounced query, clear control, offline disable.
- */
-
 import { getFilterQuery, setFilterQueryValue } from './file-tree-filter';
 
 const DEBOUNCE_MS = 200;

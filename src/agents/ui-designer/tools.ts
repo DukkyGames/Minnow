@@ -1,7 +1,3 @@
-/**
- * UI Designer tool allowlist and plan-mode guards (Step 15).
- */
-
 import type { OpenAIFunctionDefinition } from '../../tools/definitions';
 import {
   UI_DESIGNER_TOOL_ALLOWLIST,
@@ -11,14 +7,12 @@ import {
 
 const ALLOW_SET = new Set<string>(UI_DESIGNER_TOOL_ALLOWLIST);
 
-/** Filter enabled tool definitions to the UI Designer allowlist. */
 export function filterToolsForUiDesigner(
   tools: OpenAIFunctionDefinition[],
 ): OpenAIFunctionDefinition[] {
   return tools.filter((t) => ALLOW_SET.has(t.function.name));
 }
 
-/** Whether a tool call is allowed for the current UI Designer mode. */
 export function assertUiDesignerToolAllowed(
   toolName: string,
   mode: UiDesignerMode,

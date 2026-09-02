@@ -23,6 +23,8 @@ import {
   resolveEffectiveReasoningEffort,
 } from '../../src/lib/reasoning-effort.ts';
 
+// ── normalizeReasoningAllowedOptions ─────────────────────────────────────────
+
 describe('normalizeReasoningAllowedOptions', () => {
   test('preserves low, medium, and high in canonical order', () => {
     const result = normalizeReasoningAllowedOptions([
@@ -60,6 +62,8 @@ describe('normalizeReasoningAllowedOptions', () => {
   });
 });
 
+// ── modelHasSelectableReasoningEffort ────────────────────────────────────────
+
 describe('modelHasSelectableReasoningEffort', () => {
   test('returns false with zero or one allowed option', () => {
     assert.equal(modelHasSelectableReasoningEffort(null), false);
@@ -85,6 +89,8 @@ describe('modelHasSelectableReasoningEffort', () => {
     );
   });
 });
+
+// ── composer reasoning ───────────────────────────────────────────────────────
 
 describe('composer reasoning control helpers', () => {
   test('dropdown when low/medium/high are allowed', () => {
@@ -124,6 +130,8 @@ describe('composer reasoning control helpers', () => {
     );
   });
 });
+
+// ── inferReasoningOptionsFromModelId ─────────────────────────────────────────
 
 describe('inferReasoningOptionsFromModelId', () => {
   // Bare {id} catalogs (llama.cpp, mlx_lm.server, MTPLX) give no reasoning metadata,
@@ -187,6 +195,8 @@ describe('inferReasoningOptionsFromModelId', () => {
     assert.deepEqual(inferReasoningOptionsFromModelId('llama-3-8b'), []);
   });
 });
+
+// ── resolveEffectiveReasoningEffort ──────────────────────────────────────────
 
 describe('resolveEffectiveReasoningEffort', () => {
   const caps = {
@@ -269,6 +279,8 @@ describe('resolveEffectiveReasoningEffort', () => {
   });
 });
 
+// ── isQwen38ModelId ──────────────────────────────────────────────────────────
+
 describe('isQwen38ModelId', () => {
   test('matches dotted and underscored 3.8 ids, not Qwen3-8B', () => {
     assert.equal(isQwen38ModelId('qwen/qwen3.8-27b'), true);
@@ -302,6 +314,8 @@ describe('isQwen38ModelId', () => {
     assert.equal(normalizeReasoningCatalogValue('nope'), undefined);
   });
 });
+
+// ── isGlm53ModelId ───────────────────────────────────────────────────────────
 
 describe('isGlm53ModelId', () => {
   test('matches GLM-5.3 family ids, not 5.2 / 5.1 / 5 / 4.x', () => {

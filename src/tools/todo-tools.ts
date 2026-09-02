@@ -1,7 +1,3 @@
-/**
- * Client-side todo_write tool — build-mode progress checklist (MIN-273).
- */
-
 import {
   clearChatTodos,
   findChatById,

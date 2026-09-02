@@ -1,7 +1,3 @@
-/**
- * Bounded LRU/TTL cache for editor AI inline completions (Phase 6).
- */
-
 import type { EditorAiCompletionConfig } from '../config/editor-ai-completion';
 import { completionCacheTransportMode } from './editor-completion-transport';
 import { PROMPT_VERSION } from './editor-ai-completion-prompt';
@@ -95,7 +91,6 @@ export class EditorAiCompletionCache {
       this.entries.delete(key);
       return undefined;
     }
-    // Touch for LRU ordering.
     this.entries.delete(key);
     this.entries.set(key, entry);
     return entry.text;

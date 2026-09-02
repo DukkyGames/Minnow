@@ -1,7 +1,3 @@
-/**
- * Experts' Lab — split-pane roster + detail (Minnow layout).
- */
-
 import '../../styles/experts-hub.css';
 import '../../styles/experts-summon.css';
 
@@ -649,7 +645,6 @@ export function closeExpertsHub(options?: { skipNavigate?: boolean }): void {
     const prev = savedActiveChatId;
     savedActiveChatId = null;
     if (sessionState.chats.some((c) => c.id === prev)) {
-      // Hydrate before restore-paint so lazy-boot transcripts are not empty.
       void activateChatById(prev).then(() => {
         void import('../sidebar').then((m) => m.renderSidebar());
         const chat = sessionState?.chats.find((c) => c.id === prev);

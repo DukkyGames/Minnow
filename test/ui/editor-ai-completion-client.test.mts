@@ -54,6 +54,8 @@ afterEach(() => {
   domWindow = null;
 });
 
+// ── validateEditorAiBinding ──────────────────────────────────────────────────
+
 describe('validateEditorAiBinding', () => {
   test('rejects empty provider', () => {
     const result = validateEditorAiBinding({ providerId: '', modelId: 'm1' });
@@ -76,6 +78,8 @@ describe('validateEditorAiBinding', () => {
     assert.equal(result.ok, true);
   });
 });
+
+// ── resolveEditorCompletionRawText ───────────────────────────────────────────
 
 describe('resolveEditorCompletionRawText', () => {
   test('accumulates delta content', () => {
@@ -139,6 +143,8 @@ describe('extractEditorCodeFromReasoning', () => {
   });
 });
 
+// ── resolveEditorCompletionDisplayText ───────────────────────────────────────
+
 describe('resolveEditorCompletionDisplayText', () => {
   test('does not use reasoning while streaming', () => {
     assert.equal(
@@ -154,6 +160,8 @@ describe('resolveEditorCompletionDisplayText', () => {
     );
   });
 });
+
+// ── editor AI completion cache ───────────────────────────────────────────────
 
 describe('editor AI completion cache (Phase 6)', () => {
   test('cache key includes provider, model, and prompt version', () => {
@@ -251,6 +259,8 @@ describe('editor AI completion cache (Phase 6)', () => {
   });
 });
 
+// ── fetchEditorAiCompletion transport ────────────────────────────────────────
+
 describe('fetchEditorAiCompletion transport', () => {
   test('sends structured chat messages, stop sequences, capped max_tokens, and fallback role', async () => {
     const doc = 'const x = ';
@@ -323,6 +333,8 @@ describe('alignCompletionForInsert', () => {
   });
 });
 
+// ── editorAiCompletionRejectionMessage ───────────────────────────────────────
+
 describe('editorAiCompletionRejectionMessage', () => {
   test('maps alignment reasons to user-facing copy', () => {
     assert.equal(editorAiCompletionRejectionMessage('oversized'), EDITOR_AI_COMPLETION_OVERSIZED_MESSAGE);
@@ -337,6 +349,8 @@ describe('editorAiCompletionRejectionMessage', () => {
     );
   });
 });
+
+// ── fetchEditorAiCompletion rejection ────────────────────────────────────────
 
 describe('fetchEditorAiCompletion rejection', () => {
   test('returns prose message when alignment rejects streamed output', async () => {
@@ -375,6 +389,8 @@ describe('fetchEditorAiCompletion rejection', () => {
   });
 });
 
+// ── mergeEditorStreamText ────────────────────────────────────────────────────
+
 describe('mergeEditorStreamText', () => {
   test('returns trimmed content channel text', () => {
     assert.equal(mergeEditorStreamText('  const y = 2;  '), 'const y = 2;');
@@ -387,6 +403,8 @@ describe('mergeEditorStreamText', () => {
     );
   });
 });
+
+// ── fetchEditorAiCompletion abort ────────────────────────────────────────────
 
 describe('fetchEditorAiCompletion abort', () => {
   test('returns null text and cancels generation when aborted', async () => {
@@ -500,6 +518,8 @@ describe('editor AI model binding (MIN-133)', () => {
     assert.equal(preflightEditorAiBinding(binding), EDITOR_AI_NO_MODEL_MESSAGE);
   });
 });
+
+// ── editor AI ghost DOM ──────────────────────────────────────────────────────
 
 describe('editor AI ghost DOM', () => {
   test('ghost widget renders in the editor', () => {

@@ -1,10 +1,3 @@
-/**
- * Sanitized, ephemeral Email view context for assistant turns.
- *
- * The snapshot contains identifiers and short labels only. Message bodies and
- * HTML always travel through fenced mail tools instead.
- */
-
 import { wrapUntrusted } from '../../lib/untrusted.mjs';
 
 export interface EmailAssistantContextSnapshot {

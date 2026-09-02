@@ -1,7 +1,3 @@
-/**
- * xterm.js viewport wired to PTY WebSocket sessions.
- */
-
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -87,7 +83,6 @@ function migrateTabHistoryFromSession(tabId: string): void {
     localStorage.setItem(key, legacy);
     sessionStorage.removeItem(key);
   } catch {
-    /* quota / private mode */
   }
 }
 
@@ -111,7 +106,6 @@ function saveTabHistory(tabId: string, lines: string[]): void {
       JSON.stringify(lines.slice(-MAX_TAB_HISTORY)),
     );
   } catch {
-    /* quota */
   }
 }
 
@@ -122,7 +116,6 @@ export function clearTabHistory(tabId: string): void {
     localStorage.removeItem(key);
     sessionStorage.removeItem(key);
   } catch {
-    /* private mode */
   }
 }
 
@@ -250,9 +243,6 @@ function trackLineBufferInput(data: string): void {
 }
 
 function handleHistoryKeys(data: string): boolean {
-  // Known interactive shells (zsh/bash/PSReadLine) must see the raw arrow so
-  // their own history works. Intercepting and injecting Ctrl+A/Ctrl+K is what
-  // painted ^A^K on used macOS zsh tabs (MIN-670).
   if (
     !shouldInterceptPtyHistoryArrow({
       data,
@@ -292,7 +282,6 @@ function connectWs(sessionId: string, tabId: string): void {
     const msg = parsePtyServerMessage(text);
     if (!msg || !term) return;
     if (msg.type === 'output') {
-      // Keep ArrowUp queued until this chunk is parsed (SMKX / bracketed paste).
       ptyInputGate.beginOutputParse();
       try {
         term.write(msg.data, () => {
@@ -341,7 +330,6 @@ function ensureTerminal(): Terminal | null {
   const activeTerminal = term;
   if (!activeTerminal) return null;
 
-  // Copy selected text on Ctrl/Cmd+C; otherwise Ctrl+C still sends SIGINT to the PTY.
   activeTerminal.attachCustomKeyEventHandler((event) => {
     if (!shouldCopyTerminalSelectionOnKeydown(event, activeTerminal.hasSelection())) {
       return true;
@@ -493,10 +481,7 @@ export function focusTerminalXterm(): void {
   term?.focus();
 }
 
-/**
- * Insert plain text at the shell prompt (file-tree drag-drop, paste helpers).
- * Updates the in-memory line buffer used for per-tab history navigation.
- */
+/** Insert plain text at the shell prompt (file-tree drag-drop, paste helpers). */
 export function insertTextAtTerminalInput(text: string): void {
   if (!text) return;
   const t = ensureTerminal();

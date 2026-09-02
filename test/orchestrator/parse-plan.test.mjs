@@ -1,10 +1,3 @@
-/**
- * P0-F — plan format schema and parsePlan().
- *
- * One test per quality requirement the Planner prompt states, because the
- * parser is now what enforces them. The prompt and this module change together
- * by rule, and the last suite here asserts they have not drifted.
- */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,10 +14,6 @@ const PLANNER_PROMPT = path.join(
   PROJECT_ROOT,
   'src/chat/prompts/work-agents/planner/agent.full.md',
 );
-
-// ---------------------------------------------------------------------------
-// The golden plan
-// ---------------------------------------------------------------------------
 
 const GOLDEN = `---
 name: widget-rollout
@@ -86,13 +75,11 @@ Because the widget does not exist yet.
 - [ ] \`npm test\` passes
 `;
 
-/** Replace one line of the golden plan, matched by a unique substring. */
 function mutate(needle, replacement) {
   assert.equal(GOLDEN.split(needle).length, 2, `needle is not unique: ${needle}`);
   return GOLDEN.replace(needle, replacement);
 }
 
-/** Parse and require failure, returning the errors. */
 function errorsOf(markdown) {
   const result = parsePlan(markdown);
   assert.equal(isParseErrors(result), true, 'expected a parse failure');
@@ -107,12 +94,9 @@ function errorsOf(markdown) {
   return result;
 }
 
-/** The 1-based line a substring appears on. */
 function lineOf(markdown, needle) {
   return markdown.slice(0, markdown.indexOf(needle)).split('\n').length;
 }
-
-// ---------------------------------------------------------------------------
 
 describe('parsePlan — the golden plan', () => {
   const graph = parsePlan(GOLDEN);
@@ -168,8 +152,6 @@ describe('parsePlan — the golden plan', () => {
     assert.deepEqual(parsePlan(GOLDEN.replace(/\n/g, '\r\n')), graph);
   });
 });
-
-// ---------------------------------------------------------------------------
 
 describe('parsePlan — one test per quality requirement', () => {
   it('rejects a task with no Build', () => {
@@ -252,10 +234,6 @@ describe('parsePlan — one test per quality requirement', () => {
   });
 
   it('rejects a glob the scheduler could not reason about', () => {
-    // A pattern `touchesOverlap()` cannot interpret is worse than a rejected
-    // one: it reads as "overlaps nothing" and the concurrency gate opens on two
-    // tasks writing the same file. So the parser only admits syntax the
-    // intersection actually implements.
     for (const [glob, pattern] of [
       ['/etc/passwd', /repo-relative/],
       ['../../secrets/**', /escape the repo/],
@@ -273,8 +251,6 @@ describe('parsePlan — one test per quality requirement', () => {
     }
   });
 });
-
-// ---------------------------------------------------------------------------
 
 describe('parsePlan — document-level failures', () => {
   it('rejects a document with no front matter', () => {
@@ -335,13 +311,8 @@ describe('parsePlan — document-level failures', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-
 describe('parsePlan — field layout variants', () => {
   it('keeps nested list items under an empty - **Build:** bullet', () => {
-    // The failure mode behind "task has no **Build:**" on otherwise valid plans:
-    // Planner writes `- **Build:**` then indented step bullets. Rejecting any
-    // `[-*] ` continuation line dropped the entire Build body.
     const source = GOLDEN.replace(
       '- **Build:** Add `GET /api/widgets` in `server/widgets/routes.js`.\n',
       '- **Build:**\n  - Add `GET /api/widgets` in `server/widgets/routes.js`.\n  - Return an empty list.\n',
@@ -389,8 +360,6 @@ describe('parsePlan — field layout variants', () => {
 
 describe('parsePlan — the retired workaround', () => {
   it('parses an absent and an empty Depends on identically', () => {
-    // Absent Depends-on and empty Depends-on must parse the same. The parser
-    // is the source of truth — prompts must not paper over that.
     const absent = parsePlan(
       mutate('- **Touches:** `server/widgets/**`\n- **Depends on:**\n', '- **Touches:** `server/widgets/**`\n'),
     );
@@ -424,10 +393,6 @@ describe('parsePlan — the retired workaround', () => {
   });
 
   it('keeps every entry of a wrapped Touches or Depends on list', () => {
-    // The continuation handler used to lower-case the field name, writing
-    // `touchesraw` / `dependsraw` — properties nothing read. A wrapped list
-    // silently lost every entry after the first, with no parse error: exactly
-    // the dropped-edge failure this parser exists to prevent.
     const wrapped = GOLDEN.replace(
       '- **Touches:** src/ui/widget-panel.ts\n- **Depends on:** W1-A, W1-B',
       '- **Touches:** src/ui/widget-panel.ts,\n  src/ui/widget-row.ts\n- **Depends on:** W1-A,\n  W1-B',
@@ -453,10 +418,7 @@ describe('parsePlan — the retired workaround', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-
 describe('parsePlan — fuzz', () => {
-  /** Deterministic PRNG so a failure reproduces from its seed. */
   function rng(seed) {
     let a = seed >>> 0;
     return () => {
@@ -467,7 +429,6 @@ describe('parsePlan — fuzz', () => {
     };
   }
 
-  /** Corrupt the golden plan in a seeded, structurally varied way. */
   function corrupt(seed) {
     const r = rng(seed);
     let lines = GOLDEN.split('\n');
@@ -502,8 +463,6 @@ describe('parsePlan — fuzz', () => {
         continue;
       }
 
-      // A graph that parsed must be complete: every task fully specified, every
-      // edge resolved, and acyclic.
       const ids = new Set(result.tasks.map((t) => t.id));
       for (const task of result.tasks) {
         assert.ok(task.id && task.title, `seed ${seed}: incomplete task`);
@@ -514,7 +473,6 @@ describe('parsePlan — fuzz', () => {
         }
       }
     }
-    // The corruptor is only useful if it actually breaks things.
     assert.ok(failures > 100, `only ${failures} of 500 corruptions were rejected`);
   });
 
@@ -535,11 +493,7 @@ describe('parsePlan — fuzz', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-
 describe('the Planner prompt and the parser cannot drift', () => {
-  // The prompt file is CRLF on this checkout; normalise so the fence regexes below
-  // match the same way they would on a LF checkout.
   const prompt = fs.readFileSync(PLANNER_PROMPT, 'utf8').split('\r\n').join('\n');
 
   it('the prompt schema block declares Touches on every task', () => {
@@ -565,15 +519,10 @@ describe('the Planner prompt and the parser cannot drift', () => {
   });
 
   it('the schema block in the prompt parses', () => {
-    // The strongest anti-drift check available: take the schema the Planner is
-    // shown, substitute its placeholders, and run it through the real parser. If
-    // the documented shape stops being a valid plan, this fails.
     const block = /```markdown\n([\s\S]*?)```/.exec(prompt);
     assert.ok(block, 'the prompt has no ```markdown schema block');
 
     const filled = block[1]
-      // Bullet values first, so the generic <...> sweep cannot reach them.
-      // W2-A's sample carries real task ids and must survive; the others are prose.
       .replace(/^- \*\*Depends on:\*\*.*$/gm, (line) =>
         /W1-[AB]/.test(line) ? line : '- **Depends on:**')
       .replace(/^- \*\*Touches:\*\*.*$/gm, '- **Touches:** src/placeholder/**')
@@ -590,7 +539,6 @@ describe('the Planner prompt and the parser cannot drift', () => {
     );
     assert.deepEqual(result.tasks.map((t) => t.id), ['W1-A', 'W1-B', 'W2-A']);
     assert.deepEqual(result.tasks.map((t) => t.wave), [1, 1, 2]);
-    // And the sample demonstrates the cross-wave edge it documents.
     assert.deepEqual(result.tasks[2].dependsOn, ['W1-A', 'W1-B']);
   });
 });

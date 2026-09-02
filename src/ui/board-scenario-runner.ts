@@ -563,7 +563,6 @@ export function renderBoardScenarioRunner(
           syncActions();
           if (isTerminal(currentRun)) await loadResults(runId);
         } catch {
-          // The original renderer failure is the actionable error.
         }
       }
       options.announce?.('err', errorMessage(error, 'Renderer iteration failed'));
@@ -734,7 +733,6 @@ export function renderBoardScenarioRunner(
         populateScenarioSelect();
       })
       .catch(() => {
-        // The catalog endpoint is optional during phased rollout; bundled metadata remains usable.
       });
   }
 

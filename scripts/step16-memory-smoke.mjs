@@ -1,6 +1,3 @@
-/**
- * Step 16 memory API smoke — ping, create, retrieve, delete.
- */
 
 const base = process.argv[2]?.replace(/\/$/, '') ?? 'http://localhost:5173';
 

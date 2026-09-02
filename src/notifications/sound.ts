@@ -51,11 +51,8 @@ export function unlockNotificationAudio(): void {
         audio.volume = 0.65;
       })
       .catch(() => {
-        /* browser may still block until explicit preview */
       });
-  } catch {
-    /* no audio support */
-  }
+  } catch {}
 }
 
 /**
@@ -84,13 +81,10 @@ export function shouldPlayNotificationSound(
     prefs.soundOnActiveChat && Boolean(chatId && !shouldNotifyForChatTurn(chatId));
 
   if (!onActiveChat) {
-    // Agent questions need attention even when this window is focused.
     if (kind !== 'chat_question' && document.hasFocus()) return false;
   }
 
-  // Electron: chime whenever the desktop window loses focus (another app, minimized, etc.).
   if (isMinnowElectronShell()) return true;
-  // Browser tab: skip hidden background tabs; allow visible-but-unfocused edge cases.
   return document.visibilityState === 'visible';
 }
 
@@ -105,11 +99,8 @@ export function playNotificationSound(kind: NotificationKind): void {
     audio.src = url;
     audio.volume = 0.65;
     void audio.play().catch(() => {
-      /* autoplay blocked until user interacts */
     });
-  } catch {
-    /* no audio support */
-  }
+  } catch {}
 }
 
 /** Preview one cue from a pack in settings (always attempts playback). */
@@ -123,11 +114,8 @@ export function previewNotificationSoundCue(packId: string, cue: NotificationSou
     audio.src = url;
     audio.volume = 0.75;
     void audio.play().catch(() => {
-      /* user may need another gesture */
     });
-  } catch {
-    /* no audio support */
-  }
+  } catch {}
 }
 
 /** Reset module state (tests). */

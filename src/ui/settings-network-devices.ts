@@ -1,7 +1,3 @@
-/**
- * Host-side pairing QR and named companion-device management.
- */
-
 import { toCanvas } from 'qrcode';
 import {
   createPairing,

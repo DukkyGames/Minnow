@@ -80,7 +80,6 @@ describe('V2 BoardState autonomy shape', () => {
   });
 
   it('V2 board UI has Running / Stopped controls', () => {
-    // Labels live on the status chip, not the boards-view header comment.
     const render = fs.readFileSync(
       path.join(ROOT, 'src', 'orchestrator', 'board-render.ts'),
       'utf8',

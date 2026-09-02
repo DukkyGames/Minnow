@@ -1,7 +1,3 @@
-/**
- * Ephemeral bottom-center toast notifications for local UI actions.
- */
-
 export type ToastVariant = 'success' | 'error';
 
 const DEFAULT_DURATION_MS = 2800;
@@ -33,7 +29,6 @@ export function showToast(
   document.body.appendChild(el);
   toastEl = el;
 
-  // Prefer rAF for the enter transition; fall back for test / non-browser hosts.
   const reveal = () => el.classList.add('mn-toast--visible');
   if (typeof requestAnimationFrame === 'function') {
     requestAnimationFrame(reveal);

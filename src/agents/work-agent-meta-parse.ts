@@ -1,7 +1,3 @@
-/**
- * Parse Work Agent metadata from agent.full.md front matter.
- */
-
 import {
   DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
   type ContextEnforcementPolicy,
@@ -46,7 +42,6 @@ function parseContextPolicy(value: unknown): ContextEnforcementPolicy | undefine
   return undefined;
 }
 
-/** Parse indented scalar block after a `key:` line (e.g. nested `archive:`). */
 function parseNestedScalarBlock(
   lines: string[],
   startIndex: number,
@@ -80,7 +75,6 @@ function parseNestedScalarBlock(
   return { record, nextIndex: i - 1 };
 }
 
-/** Re-parse extended YAML keys not in PromptFrontMatter. */
 function parseExtendedRecord(raw: string): Record<string, unknown> {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) return {};
@@ -125,9 +119,6 @@ function parseExtendedRecord(raw: string): Record<string, unknown> {
   return record;
 }
 
-/**
- * Build WorkAgentDefinition from agent markdown; null if invalid.
- */
 export function parseWorkAgentMetaFromMarkdown(
   raw: string,
   relativePath: string,

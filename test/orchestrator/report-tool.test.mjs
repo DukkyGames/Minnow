@@ -55,6 +55,8 @@ const TESTER_FAIL = {
   testOutput: 'FAIL test/api/health.test.ts\n  expected 200, got 500',
 };
 
+// ── report tool identity ─────────────────────────────────────────────────────
+
 describe('report tool identity', () => {
   it('uses the same name runTurn injects by default', () => {
     assert.equal(REPORT_TOOL_NAME, DEFAULT_REPORT_TOOL_NAME);
@@ -76,6 +78,8 @@ describe('report tool identity', () => {
     ]);
   });
 });
+
+// ── valid ────────────────────────────────────────────────────────────────────
 
 describe('parseBuilderReport — valid', () => {
   it('accepts pass, fail, and blocked', () => {
@@ -110,6 +114,8 @@ describe('parseBuilderReport — valid', () => {
     assert.equal(parsed.result.outcome, 'pass');
   });
 });
+
+// ── malformed ────────────────────────────────────────────────────────────────
 
 describe('parseBuilderReport — malformed', () => {
   const cases = [

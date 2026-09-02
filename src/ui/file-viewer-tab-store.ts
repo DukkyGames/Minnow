@@ -1,7 +1,3 @@
-/**
- * In-memory tab model for the file viewer (workspace + ephemeral attachment tabs).
- */
-
 import {
   MAX_OPEN_VIEWER_TABS,
   getFilePanelState,
@@ -9,10 +5,9 @@ import {
 } from '../state/file-panel';
 import { basename, isAncestorPath, normalizeTreePath } from './file-tree-path';
 
-/**
- * CodeMirror 6 stores documents with LF line breaks only. Disk/fetch may return CRLF
- * (common on Windows). Normalize so dirty checks compare the same representation.
- */
+// ── Dirty ────────────────────────────────────────────────────────────────────
+
+/** CodeMirror 6 stores documents with LF line breaks only. */
 export function normalizeViewerDocText(text: string): string {
   return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
@@ -90,6 +85,8 @@ function emitChange(): void {
   }
 }
 
+// ── Queries ──────────────────────────────────────────────────────────────────
+
 /** Subscribe to tab list / active tab changes (UI refresh). */
 export function onViewerTabStoreChange(listener: TabStoreListener): () => void {
   listeners.add(listener);
@@ -144,7 +141,6 @@ function persistWorkspaceTabs(): void {
     activeViewerTab: active,
     selectedPath: activeTabPath,
   };
-  // Never stomp browser preview mode when editor tabs persist asynchronously.
   if (panel.rightPaneMode !== 'preview') {
     patch.rightPaneMode = tabOrder.length > 0 ? 'viewer' : undefined;
   }
@@ -164,12 +160,9 @@ function setActiveInternal(path: string | null): void {
   });
 }
 
-/**
- * Point the global "active tab" at a slot's active path when split focus moves.
- *
- * The active path doubles as "which tab keyboard/save commands act on", so it must
- * follow the focused pane. Content stays keyed per tab, so this never loads anything.
- */
+// ── Snapshots ────────────────────────────────────────────────────────────────
+
+/** Point the global "active tab" at a slot's active path when split focus moves. */
 export function adoptActiveViewerTabPath(path: string | null): void {
   const key = path ? tabKey(path) : null;
   if (key !== null && !tabs.has(key)) return;
@@ -223,14 +216,12 @@ export function updateActiveTabFromEditor(content: string, dirty: boolean): void
 export function markViewerTabSaved(path: string, content: string): void {
   const tab = getViewerTab(path);
   if (!tab) return;
-  // Keep baseline in CM's LF form so a no-op leave does not look dirty.
   const normalized = normalizeViewerDocText(content);
   tab.originalContent = normalized;
   tab.cachedEditorContent = normalized;
   tab.isDirty = false;
   emitChange();
 }
-
 
 /** Apply load result to a specific tab (by path) so async loads cannot land on the wrong tab. */
 export function setViewerTabLoadState(
@@ -283,10 +274,7 @@ export function setActiveTabLoadState(
   setViewerTabLoadState(active, status, payload);
 }
 
-/**
- * After CodeMirror mounts, adopt its exact doc string as the clean baseline.
- * CM may normalize EOLs further; this prevents false dirty on the next leave.
- */
+/** After CodeMirror mounts, adopt its exact doc string as the clean baseline. */
 export function rebaselineViewerTabFromEditor(path: string, editorText: string): void {
   const tab = getViewerTab(path);
   if (!tab || tab.readOnlyExcerpt) return;
@@ -312,7 +300,6 @@ function createTabState(path: string, options?: OpenViewerTabOptions): ViewerTab
   const viewMode =
     options?.viewMode ??
     (shouldUseMarkdownPreview(path, options?.asCode) ? 'markdown-preview' : 'editor');
-  // Normalize preloaded content so CRLF attachments/restores match CM docs.
   const seededContent =
     options?.content !== undefined ? normalizeViewerDocText(options.content) : undefined;
   return {
@@ -336,11 +323,10 @@ export interface OpenViewerTabResult {
   tab: ViewerTabState;
 }
 
-/**
- * Open or focus a tab. Returns whether an existing tab was focused.
- * When `confirmUnsaved` returns false, open is aborted.
- */
+/** Open or focus a tab. */
 export type ViewerUnsavedGuard = () => boolean | Promise<boolean>;
+
+// ── Open ─────────────────────────────────────────────────────────────────────
 
 export function openViewerTab(
   path: string,
@@ -454,6 +440,8 @@ async function activateViewerTabInternal(
   persistWorkspaceTabs();
   return true;
 }
+
+// ── Close ────────────────────────────────────────────────────────────────────
 
 /** Reorder a tab to a new index in the strip (0-based). */
 export function reorderViewerTab(path: string, toIndex: number): void {

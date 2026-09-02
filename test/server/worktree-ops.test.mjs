@@ -37,6 +37,8 @@ import { setWorkspaceRoot } from '../../server/workspace/root.js';
 const execFileAsync = promisify(execFile);
 const BOARD_ID = 'test-board-11111111';
 
+// ── worktree commit ──────────────────────────────────────────────────────────
+
 describe('worktree commit and merge checks', () => {
   let repoDir;
   let minnowHome;
@@ -259,6 +261,8 @@ describe('worktree commit and merge checks', () => {
     assert.equal(again.alreadyUpToDate, true);
   });
 });
+
+// ── worktree conflict merge ──────────────────────────────────────────────────
 
 describe('worktree conflict merge and verification', () => {
   let repoDir;
@@ -519,6 +523,9 @@ describe('worktree conflict merge and verification', () => {
  * Each test gets its own temp repo + MINNOW_HOME so histories do not leak.
  * Workspace root and home cache are process-global; this describe is sequential.
  */
+
+// ── rebaseOntoIntegration ────────────────────────────────────────────────────
+
 describe('rebaseOntoIntegration (MIN-706)', { concurrency: false }, () => {
   let previousHome;
 

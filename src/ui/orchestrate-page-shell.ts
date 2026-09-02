@@ -1,8 +1,3 @@
-/**
- * Shared Orchestrate page shell (ob-* twin of Super Plan / Research).
- * Builds rail + main chrome used by the hub ask pane and live board run pane.
- */
-
 import {
   getGroupsForWorkspace,
   isLeftoverBoardRunning,
@@ -19,11 +14,8 @@ import {
 } from './chat-item-dot';
 import { shortPlanLabel } from './orchestrate-plan-picker';
 
-/**
- * Boards/plans linked to this workspace (shared with hub list helpers).
- * Running boards pin to the top — a board doing work is the one you came back
- * for — then most recently active first within each half.
- */
+// ── Board lists ──────────────────────────────────────────────────────────────
+
 function listWorkspaceBoards(workspacePath: string): ChatGroup[] {
   if (!sessionState) return [];
   return getGroupsForWorkspace(workspacePath)
@@ -122,11 +114,7 @@ function chatRoleForTask(task: LeftoverBoardTask, chatId: string): string | null
   return null;
 }
 
-/**
- * Rows for a board's chats: planner first, then every task-linked chat grouped
- * by wave. Mirrors the sidebar's board folder ordering so moving the list into
- * the rail does not reshuffle what people already learned.
- */
+/** Rows for a board's chats: planner first, then every task-linked chat grouped by wave. */
 export function listBoardChatRailRows(
   group: ChatGroup,
   chats: readonly Chat[],
@@ -220,10 +208,7 @@ function boardTileTitle(group: ChatGroup): string {
   return 'Board';
 }
 
-/**
- * Auto-hide the overlay rail on narrow pages. While a board chat is open the rail
- * must stay reachable so you can switch task chats without backing out to kanban.
- */
+/** Auto-hide the overlay rail on narrow pages. */
 export function syncOrchestratePageRailVisibility(page: HTMLElement): void {
   const width = page.clientWidth;
   if (width <= 0) return;
@@ -232,10 +217,8 @@ export function syncOrchestratePageRailVisibility(page: HTMLElement): void {
   page.classList.toggle('is-rail-hidden', narrow && !chatOpen);
 }
 
-/**
- * Build the empty Orchestrate page chrome: `.ob-page > .ob-shell > rail + main`.
- * Caller fills `main` (ask or run) and paints the rail.
- */
+// ── Page shell ───────────────────────────────────────────────────────────────
+
 export function buildOrchestratePageShell(options: {
   rootId: string;
   ariaLabel: string;
@@ -276,7 +259,6 @@ export function buildOrchestratePageShell(options: {
   filterWrap.appendChild(filterInput);
 
   const railList = el('div', 'ob-rail__list');
-  // Dual-class: hub tests still look for .orchestrate-hub__board-list
   railList.classList.add('orchestrate-hub__board-list');
   railList.id = 'orchestrateHubBoardsRow';
   railList.setAttribute('role', 'list');
@@ -287,7 +269,6 @@ export function buildOrchestratePageShell(options: {
   shell.append(rail, main);
   page.appendChild(shell);
 
-  // Auto-collapse rail when the page is narrow (Super Plan pattern).
   if (typeof ResizeObserver === 'function') {
     let wasNarrow: boolean | null = null;
     const applyNarrow = scheduleAnimationFrame(() => {
@@ -317,10 +298,9 @@ export function disposeOrchestratePageShell(page: HTMLElement | null): void {
   delete (page as HTMLElement & { __obRailObserver?: ResizeObserver }).__obRailObserver;
 }
 
-/**
- * Paint board library rows into the rail list.
- * Dual-classes keep orchestrate-hub tests green during the migrate.
- */
+// ── Board rail ───────────────────────────────────────────────────────────────
+
+/** Paint board library rows into the rail list. */
 export function paintOrchestrateBoardRail(
   container: HTMLElement,
   options: PaintOrchestrateRailOptions,
@@ -353,7 +333,6 @@ export function paintOrchestrateBoardRail(
         counts.total,
         counts.done,
         pct,
-        // Without this the live dot never appears or clears on its own.
         isBoardGroupRunning(g) ? 'running' : 'idle',
       ].join('|');
     }),
@@ -432,7 +411,6 @@ export function paintOrchestrateBoardRail(
       }, updated ${when}`,
     );
     row.addEventListener('click', () => {
-      // Collapse overlay rail on narrow layouts after pick (SP pattern).
       const page = container.closest('.ob-page');
       if (page && page.clientWidth > 0 && page.clientWidth < 660) {
         page.classList.add('is-rail-hidden');
@@ -444,18 +422,9 @@ export function paintOrchestrateBoardRail(
   }
 }
 
-/**
- * Skip a rail rebuild when nothing it draws has changed.
- *
- * A live board emits a change per stream token, so both rail levels repaint on
- * every animation frame of a run. Rebuilding ~90 rows at that rate saturated the
- * main thread and swapped nodes out from under in-flight clicks, which is what
- * made an open board chat feel frozen. Same idiom as the kanban's
- * `lastKanbanRefreshKey`; the key covers every value the rows render.
- */
+/** Skip a rail rebuild when nothing it draws has changed. */
 function shouldRepaintRail(container: HTMLElement, paintKey: string): boolean {
   if (container.dataset.obRailKey === paintKey) {
-    // Key can outlive the DOM if something cleared the list without resetting it.
     if (container.childElementCount > 0) return false;
     delete container.dataset.obRailKey;
   }
@@ -511,13 +480,9 @@ function appendChatRailRow(
   container.appendChild(wrap);
 }
 
-/**
- * Paint the rail's chat level for one board: back row, planner, then waves.
- *
- * The rail shows one level at a time. A board with 31 tasks would otherwise
- * bury the board library it sits above, which is the sidebar tree this surface
- * exists to replace.
- */
+// ── Chat rail ────────────────────────────────────────────────────────────────
+
+/** Paint the rail's chat level for one board: back row, planner, then waves. */
 export function paintOrchestrateChatRail(
   container: HTMLElement,
   options: PaintOrchestrateChatRailOptions,
@@ -593,7 +558,6 @@ export function paintOrchestrateChatRail(
     appendChatRailRow(container, row, options, dotCtx, byId.get(row.chatId));
   }
 
-  // Group the rest by wave, in board wave order, then anything unwaved (final test).
   const waved = rows.filter((r) => !r.isPlanner);
   const order: string[] = [];
   const buckets = new Map<string, OrchestrateChatRailRow[]>();
@@ -608,8 +572,6 @@ export function paintOrchestrateChatRail(
 
   for (const key of order) {
     const bucket = buckets.get(key)!;
-    // A filter that matches only a few rows should show them, not hide them
-    // behind a collapsed wave the user cannot see the contents of.
     const collapsed = !filter && (options.collapsedWaves?.has(key) ?? false);
 
     if (key !== 'none') {

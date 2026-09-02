@@ -1,8 +1,3 @@
-/**
- * Material Icon Theme association resolver (no DOM / Vite).
- * Associations come from material-icon-theme/dist/material-icons.json.
- */
-
 import materialIcons from 'material-icon-theme/dist/material-icons.json';
 
 type AssociationMap = Record<string, string>;
@@ -29,10 +24,6 @@ function basenameOf(pathOrName: string): string {
   return (pathOrName.split(/[/\\]/).pop() ?? pathOrName).toLowerCase();
 }
 
-/**
- * Resolve a Material Icon Theme icon id for a file path / basename.
- * Matches VS Code order: exact fileNames, then longest compound extension.
- */
 export function resolveFileIconId(
   pathOrName: string,
   options?: { light?: boolean },

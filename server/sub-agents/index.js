@@ -1,15 +1,3 @@
-/**
- * Sub-agent graph barrel (P8-C / MIN-756).
- *
- * Rules for the *graph* modules in this directory: no I/O, no clock, no
- * randomness, no imports outside this folder, and no model call. See README.md.
- * Enforced by `test/sub-agents/core-purity.test.mjs`.
- *
- * I/O siblings (config / journal / prompts / effector-runner / delivery) are
- * P8-D / P8-E and are not re-exported here, so importing the graph cannot
- * pull the runner or the parent-chat inject.
- */
-
 export const GRAPH_VERSION = 1;
 
 export {

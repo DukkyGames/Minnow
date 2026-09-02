@@ -12,7 +12,6 @@ export function ensureCodeWorkspaceModules(): Promise<void> {
   if (!initPromise) {
     initPromise = (async () => {
       const { detectLocalServer } = await import('../tools/client');
-      // Code can foreground while startApp is still probing; file tree needs the flag set.
       await detectLocalServer();
 
       const filePanel = await import('../ui/init-file-panel');
@@ -47,9 +46,6 @@ export function ensureCodeWorkspaceModules(): Promise<void> {
       const { initCodeChangeStrip } = await import('../ui/code-change-strip');
       initCodeChangeStrip();
 
-      // V1 board live-stats refresh and renderer lifecycle repair are gone
-      // (MIN-714). The engine is `derive(journal)` on the server; a hidden
-      // window is not a correctness problem.
 
       terminal.registerTerminalKeyboardShortcut();
       initialized = true;

@@ -1,7 +1,3 @@
-/**
- * Parse combined `git show` stdout into commit header fields and unified patch.
- */
-
 export function splitCommitOutput(stdout: string): {
   subject: string;
   body: string;
@@ -30,7 +26,6 @@ export function splitCommitOutput(stdout: string): {
       continue;
     }
     if (/^Merge:\s*/.test(line)) continue;
-    // `git show --stat` summary sits between the message and the unified diff.
     if (/^\d+ files? changed/.test(line.trim())) break;
     if (/^\s*\S.*\|\s*\d+/.test(line)) continue;
     messageLines.push(line.replace(/^ {4}/, ''));

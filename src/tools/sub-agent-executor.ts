@@ -1,7 +1,3 @@
-/**
- * Parent-facing spawn/cancel sub-agent tools (Step 09).
- */
-
 import {
   assertSubAgentRunReadableByParent,
   buildSubAgentStatusPayload,
@@ -22,11 +18,6 @@ export {
 
 const BOARD_CATEGORIES = new Set<BoardCategory>(['build', 'fix', 'test', 'research']);
 
-/** Execute spawn/cancel/list/status sub-agent parent tools.
- *
- * No AbortSignal parameter: the parent chat signal lives on executeTool
- * context and must not cancel a spawned wait:true run (P10-L / MIN-777).
- */
 export async function executeSubAgentTool(
   name: string,
   args: Record<string, unknown>,
@@ -51,8 +42,6 @@ export async function executeSubAgentTool(
           : undefined;
 
     try {
-      // Chat execute (P10-H) already filled the latch; spawn must not guess
-      // the active chat if the user switched mid-POST (P10-K / MIN-776).
       const parent = getSubAgentExecutorContext();
       const result = await spawnSubAgent({
         type,

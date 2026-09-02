@@ -1,7 +1,3 @@
-/**
- * Debounced staleness recompute for accepted intent regions (advisory chrome).
- */
-
 import { ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { docChangeTouchesRegionWindow } from './intent-context';
 import {

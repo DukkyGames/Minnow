@@ -45,7 +45,6 @@ export function resolveChatToolWorkspaceRoot(
   chat: Pick<Chat, 'worktreeRoot' | 'boardGroupId' | 'workspacePath'>,
   groups?: ChatGroup[],
 ): string | undefined {
-  // Isolated worktree when set — ignore case/slash twins of the Code workspace.
   const direct = resolveChatWorktreeRoot(chat, groups);
   if (direct) return direct;
 
@@ -141,7 +140,6 @@ export async function detachChatWorktree(chat: Chat): Promise<void> {
   delete chat.worktreeRoot;
   delete chat.chatWorktreeManaged;
   if (!managed && wt) {
-    // Attached to a foreign worktree — leave filesystem intact.
   }
 }
 
@@ -163,7 +161,6 @@ export async function createManagedChatWorktree(
   branch: string,
   baseRef?: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  // Auto-fix invalid names at the client so the UI toast matches the git ref.
   const branchName = slugifyGitRefName(branch, GIT_REF_FALLBACK_WORKTREE);
   const res = await createChatWorktree({
     chatId: chat.id,

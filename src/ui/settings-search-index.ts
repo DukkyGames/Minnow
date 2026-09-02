@@ -1,7 +1,3 @@
-/**
- * Registry-driven settings search index (no live DOM scan).
- */
-
 import DEFAULT_SUB_AGENTS from '../agents/defaults/sub-agents.json';
 import { listWorkAgents } from '../agents/work-agent-registry';
 import { listExperts } from '../chat/experts/registry';
@@ -152,6 +148,8 @@ const BRAIN_CODE_SEARCH: SettingsSearchEntry[] = [
   },
 ];
 
+// ── Nav ──────────────────────────────────────────────────────────────────────
+
 function sectionEntry(sectionId: SettingsSectionId): SettingsSearchEntry {
   const label = SETTINGS_SECTION_LABELS[sectionId];
   return {
@@ -183,6 +181,8 @@ function navGroupEntries(): SettingsSearchEntry[] {
     hint: 'Group',
   }));
 }
+
+// ── Tools ────────────────────────────────────────────────────────────────────
 
 function toolCategoryEntries(): SettingsSearchEntry[] {
   const seen = new Set<ToolCategory>();
@@ -246,6 +246,8 @@ function expertEntries(): SettingsSearchEntry[] {
   }));
 }
 
+// ── Agents ───────────────────────────────────────────────────────────────────
+
 function workAgentEntries(): SettingsSearchEntry[] {
   return listWorkAgents(true).map((agent) => ({
     id: `work-agent:${agent.id}`,
@@ -305,6 +307,8 @@ function catalogFieldEntries(): SettingsSearchEntry[] {
     hint: SETTINGS_CATEGORY_LABELS[field.category],
   }));
 }
+
+// ── Index ────────────────────────────────────────────────────────────────────
 
 /** Build the full searchable catalog from registries and field catalog. */
 export function buildSettingsSearchIndex(): SettingsSearchEntry[] {

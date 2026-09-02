@@ -1,8 +1,3 @@
-/**
- * Global keyboard shortcuts help overlay (`?`).
- * Per-app shortcuts (mail triage, file tree, board) are listed in context sections.
- */
-
 import { isDeveloperReleased } from '../os/app-registry';
 import type { AppId } from '../os/types';
 import { isTypingTarget } from './a11y/typing-target';
@@ -46,8 +41,7 @@ const CHAT_SHORTCUTS: ShortcutDoc[] = [
   { section: 'Chat', keys: '1 / 2 / 3', label: 'Tool approval: allow once, always allow, cancel' },
 ];
 
-// Ctrl/Cmd+P ("Go to file") was listed here for a long time with nothing behind
-// it. The palette is real; a fuzzy file switcher is not, so it is not claimed.
+// Ctrl/Cmd+P is omitted: there is no fuzzy file switcher, only the palette.
 const CODE_SHORTCUTS: ShortcutDoc[] = [
   {
     section: 'Code',
@@ -319,7 +313,6 @@ export function initShellKeyboardHelp(): void {
     if (event.key !== '?') return;
     if (event.altKey || event.ctrlKey || event.metaKey) return;
     if (isTypingTarget(event.target)) return;
-    // Shift+? is the typical physical key; unshifted ? also works on some layouts.
     event.preventDefault();
     showShellKeyboardHelp();
   });

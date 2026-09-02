@@ -48,9 +48,6 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   'core-tool-loop': {
     kind: 'tool-chain',
     maxToolRounds: 16,
-    // Without an explicit list the loop was offered `get_datetime` alone, so no model
-    // could ever chain four rounds. Git tools are omitted — they run at workspace root,
-    // not inside matrix/repo, which traps small models in .git/ read loops.
     toolIds: ['list_directory', 'read_file', 'grep', 'find_files'],
     requires: ['workspace'],
     verdict: (out) => {
@@ -81,7 +78,6 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   'core-json-args': {
     kind: 'derived',
     maxToolRounds: 6,
-    // Tools with several typed arguments — a single no-arg tool proves nothing.
     toolIds: ['grep', 'get_datetime'],
     verdict: (out) => {
       const calls = out.rounds.flatMap((r) => r.toolCalls);
@@ -89,8 +85,6 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
         const args = parseToolArgs(call);
         if (args === null) return fail(`Invalid JSON args for ${call.function.name}`);
         for (const [key, value] of Object.entries(args)) {
-          // A stringified object ("{\"path\":…}") parses at the top level but breaks
-          // every executor that expects a real value.
           if (typeof value === 'string' && /^\s*[{[]/.test(value)) {
             return partial(`Stringified object in ${call.function.name}.${key}`);
           }
@@ -103,7 +97,6 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   'core-no-hallucinated-tools': {
     kind: 'derived',
     maxToolRounds: 4,
-    // The prompt asks for Slack and reminders, which Minnow has no tool for.
     toolIds: ['get_datetime', 'save_memory'],
     verdict: (out) => {
       const invented = hallucinatedToolNames(out);
@@ -118,7 +111,6 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'core-system-prompt': {
     kind: 'text',
-    // Prompt asks for exactly three lowercase colour words, comma-separated, nothing else.
     verdict: (out) => {
       const t = (out.contentText || out.text).trim();
       if (!t) return fail('Empty response');
@@ -133,8 +125,6 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'core-long-context': {
     kind: 'text',
-    // The needle rides in the prompt (~34k tokens), so this measures the model's context
-    // window rather than the host's read_file cap.
     verdict: (out) => {
       const t = (out.contentText || out.text).toLowerCase();
       if (t.includes(CAP_MATRIX_HAYSTACK_NEEDLE)) return pass('Recalled the buried needle');
@@ -152,8 +142,6 @@ export const CORE_AND_FILES_PROBES: Record<string, CapabilityProbeSpec> = {
   },
   'core-reasoning': {
     kind: 'text',
-    // The old regex `/|<think|.../` had an empty leading alternative, so it matched every
-    // string and this row always scored partial.
     verdict: (out) => {
       const leaked = /<think>|<\/think>|\[thinking\]|◁think▷/i.test(out.contentText);
       const answered = /(^|\D)0?\.0?5\b|5 cents|five cents/i.test(out.contentText || out.text);

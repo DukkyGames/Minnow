@@ -1,7 +1,3 @@
-/**
- * Tokenize /goal slash input (stateful command — not a SKILL.md skill).
- */
-
 export const MAX_GOAL_CONDITION_CHARS = 4000;
 
 const GOAL_CLEAR_ALIASES = new Set([
@@ -23,10 +19,6 @@ export function isGoalSlashCommand(text: string): boolean {
   return /(?:^|\s)\/goal\b/i.test(text.trim());
 }
 
-/**
- * Parse `/goal`, `/goal clear`, or `/goal <condition>`.
- * Returns null when the text is not a goal command.
- */
 export function parseGoalSlashInput(text: string): ParsedGoalSlash | null {
   const trimmed = text.trim();
   const match = trimmed.match(/(?:^|\s)\/goal\b/i);

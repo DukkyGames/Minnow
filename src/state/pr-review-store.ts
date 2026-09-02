@@ -100,9 +100,7 @@ function emitPrReviewsChange(): void {
   for (const fn of listeners) {
     try {
       fn();
-    } catch {
-      /* ignore subscriber errors */
-    }
+    } catch {}
   }
 }
 
@@ -128,9 +126,7 @@ async function savePrReviewsNow(): Promise<void> {
   }
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    /* ignore quota */
-  }
+  } catch {}
 }
 
 /** Load from ~/.minnow or localStorage. Safe to call more than once. */

@@ -29,7 +29,6 @@ const UNSAFE_FILENAME_CHARS = new RegExp('[\\\\/<>:"|?*\\u0000-\\u001f\\u007f]',
 export function safeAttachmentFilename(raw) {
   const base = String(raw ?? '')
     .replace(UNSAFE_FILENAME_CHARS, '_')
-    // Leading dots would hide the file; `..` would climb a directory.
     .replace(/^\.+/, '')
     .trim();
   return base.slice(0, 200) || 'attachment';

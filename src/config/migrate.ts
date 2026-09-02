@@ -27,26 +27,20 @@ function readLegacyLocalStorage(): {
     const sessions =
       localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(legacySessionsKey);
     if (sessions) out.sessions = sessions;
-  } catch {
-    /* ignore */
-  }
+  } catch {}
 
   try {
     const tools =
       localStorage.getItem(TOOL_CONFIG_STORAGE_KEY) ?? localStorage.getItem(legacyToolsKey);
     if (tools) out.tools = tools;
-  } catch {
-    /* ignore */
-  }
+  } catch {}
 
   try {
     const systemPrompt =
       localStorage.getItem(PRESET_STORAGE_KEY) ??
       localStorage.getItem(legacySystemPromptKey);
     if (systemPrompt) out.systemPrompt = systemPrompt;
-  } catch {
-    /* ignore */
-  }
+  } catch {}
 
   return out;
 }
@@ -67,9 +61,7 @@ function clearLegacyLocalStorage(): void {
   ];
   try {
     for (const key of keys) localStorage.removeItem(key);
-  } catch {
-    /* ignore */
-  }
+  } catch {}
 }
 
 /**

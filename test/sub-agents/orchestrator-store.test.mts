@@ -62,6 +62,8 @@ function runningRun(): SubAgentRun {
   };
 }
 
+// ── orchestrator SSE store ───────────────────────────────────────────────────
+
 describe('orchestrator SSE store (spawn / cancel / wait)', () => {
   const posts: Array<{ method: string; url: string; body: string }> = [];
 
@@ -334,6 +336,8 @@ describe('orchestrator SSE store (spawn / cancel / wait)', () => {
   });
 });
 
+// ── cancel origin wiring ─────────────────────────────────────────────────────
+
 describe('cancel origin wiring (P10-L / MIN-777)', () => {
   const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -436,6 +440,8 @@ describe('cancel origin wiring (P10-L / MIN-777)', () => {
   });
 });
 
+// ── fold merge ───────────────────────────────────────────────────────────────
+
 describe('fold merge and Agent activity listing', () => {
   beforeEach(() => {
     resetSubAgentOrchestrator();
@@ -503,6 +509,8 @@ describe('fold merge and Agent activity listing', () => {
     assert.equal(listActiveSubAgentRuns().length, 1);
   });
 });
+
+// ── transcript hydrate fills ─────────────────────────────────────────────────
 
 describe('transcript hydrate fills Activity without the empty placeholder', () => {
   const PLACEHOLDER = 'Sub-agent completed with no text output.';

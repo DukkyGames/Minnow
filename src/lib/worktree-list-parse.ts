@@ -84,7 +84,6 @@ export function worktreePathsEqual(a: string, b: string): boolean {
   const nb = normalizeWorktreePath(b);
   if (!na || !nb) return false;
   if (na === nb) return true;
-  // Windows paths are case-insensitive (git porcelain vs folder-picker casing).
   if (/^[a-zA-Z]:\//.test(na) || /^[a-zA-Z]:\//.test(nb)) {
     return na.toLowerCase() === nb.toLowerCase();
   }
@@ -128,12 +127,10 @@ export function formatWorktreeOptionLabel(
       ? '(detached)'
       : '(unknown)';
 
-  // Code workspace folder — may itself be a linked worktree.
   if (worktreePathsEqual(wt.path, workspaceRoot)) {
     return `${branchLabel} — workspace`;
   }
 
-  // Git principal checkout when the Code workspace is a different folder (MIN-780).
   if (options?.principalPath && worktreePathsEqual(wt.path, options.principalPath)) {
     return `${branchLabel} — main worktree`;
   }
@@ -209,7 +206,6 @@ export function filterUserFacingWorktrees(
   const rootKey = root.toLowerCase();
   const expectedKey = repoKeyFromWorkspacePath(root);
   const expectedBase = expectedKey.replace(/-[0-9a-f]{8}$/i, '');
-  // First porcelain entry is always the principal — never hide it (MIN-780).
   const principalKey = worktrees[0]?.path
     ? posixPath(worktrees[0].path).toLowerCase()
     : '';
@@ -224,8 +220,6 @@ export function filterUserFacingWorktrees(
     if (slotKey == null) return true;
     if (slotKey === expectedKey) return true;
     const slotBase = slotKey.replace(/-[0-9a-f]{8}$/i, '');
-    // Same folder name, hash may differ (realpath vs UI path). Other basenames
-    // are a different workspace's slots — hide them.
     return slotBase === expectedBase;
   });
 }

@@ -1,8 +1,3 @@
-/**
- * Pure UI Designer model resolution (no provider fetch — unit tested).
- */
-
-/** Persisted uiDesigner block in config.json. */
 export interface UiDesignerConfig {
   providerId?: string;
   modelId?: string;
@@ -30,7 +25,6 @@ const DEFAULT_UI_DESIGNER: UiDesignerConfig = {
   fallbackToChatModel: true,
 };
 
-/** Normalize uiDesigner config from API meta. */
 export function normalizeUiDesignerConfig(raw: unknown): UiDesignerConfig {
   if (!raw || typeof raw !== 'object') {
     return { ...DEFAULT_UI_DESIGNER };
@@ -44,10 +38,6 @@ export function normalizeUiDesignerConfig(raw: unknown): UiDesignerConfig {
   };
 }
 
-/**
- * Resolve provider + model for UI Designer.
- * Priority: configured uiDesigner → chat (when fallback) → error.
- */
 export function resolveUiDesignerModel(
   input: ResolveUiDesignerModelInput,
 ): ResolvedUiDesignerModel | { error: string } {

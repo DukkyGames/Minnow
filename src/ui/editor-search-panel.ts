@@ -1,8 +1,3 @@
-/**
- * Minnow-styled find/replace panel for the file viewer CodeMirror instance.
- * Replaces the default flat CM6 layout with a structured bar that matches app chrome.
- */
-
 import {
   SearchQuery,
   closeSearchPanel,

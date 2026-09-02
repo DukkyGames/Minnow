@@ -22,7 +22,6 @@ export const calendarStep: OnboardingStep = {
   id: 'calendar',
   title: 'Calendar',
   canSkip: true,
-  // Skip when the Calendar app is off (Choose your apps / Settings → Apps).
   isApplicable: (ctx) => ctx.serverAvailable && isAppEnabled('calendar'),
 
   render(container, _ctx, actions) {

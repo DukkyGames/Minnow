@@ -117,7 +117,6 @@ export async function writeDevServerSettings(workspaceRoot, patch) {
   byPath[key] = { port: next.port, network: next.network };
   existingWs.devServerSettingsByPath = byPath;
 
-  // Keep the multi-server primary registry row in sync with legacy hub settings.
   const serversByPath =
     existingWs.devServersByPath && typeof existingWs.devServersByPath === 'object'
       ? { .../** @type {Record<string, unknown>} */ (existingWs.devServersByPath) }

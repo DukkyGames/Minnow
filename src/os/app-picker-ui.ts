@@ -7,6 +7,8 @@ import { createAppIcon } from './icons';
 import type { AppDefinition } from './app-registry';
 import type { AppId } from './types';
 
+// ── Card ─────────────────────────────────────────────────────────────────────
+
 export type AppPickerCardMode = 'selectable' | 'always-on';
 
 export interface AppPickerCardOptions {
@@ -48,7 +50,6 @@ export function createAppPickerCard(options: AppPickerCardOptions): HTMLButtonEl
   if (searchKey) card.dataset.settingsSearchKey = searchKey;
 
   if (locked) {
-    // Legacy always-on cards (tests / rare hosts). Prefer appendAppPickerCoreNote.
     card.classList.add('is-always-on', 'is-selected');
     card.setAttribute('aria-disabled', 'true');
     card.tabIndex = 0;
@@ -81,6 +82,8 @@ export function createAppPickerCard(options: AppPickerCardOptions): HTMLButtonEl
 
   return card;
 }
+
+// ── Notes ────────────────────────────────────────────────────────────────────
 
 /**
  * Collapsed read-only line for always-on core apps.
@@ -155,6 +158,8 @@ function syncGridSelection(
   }
 }
 
+// ── Group ────────────────────────────────────────────────────────────────────
+
 /** Render a labeled group of optional app picker cards into a host. */
 export function appendAppPickerGroup(
   host: HTMLElement,
@@ -196,7 +201,6 @@ export function appendAppPickerGroup(
     disableAll.type = 'button';
 
     enableAll.addEventListener('click', () => {
-      // Host updates prefs / working set first; then cards mirror isSelected.
       options.onBulkSet?.(true);
       syncGridSelection(grid, options.isSelected);
     });

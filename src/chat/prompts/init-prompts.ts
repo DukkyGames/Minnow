@@ -1,7 +1,3 @@
-/**
- * Bootstrap prompt registry: built-ins via Vite glob + optional server user overrides.
- */
-
 import {
   loadBuiltinExpertsFromPromptRaw,
   syncExpertRegistryFromServer,
@@ -24,7 +20,5 @@ export async function initPromptSystem(): Promise<void> {
       setUserPromptRegistry(userOnly);
     }
     await syncExpertRegistryFromServer();
-  } catch {
-    /* Vite-only dev: built-ins only */
-  }
+  } catch {}
 }

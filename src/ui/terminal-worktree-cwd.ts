@@ -1,16 +1,9 @@
-/**
- * Terminal cwd resolution — mirrors file explorer / git panel worktree (MIN-349).
- */
-
 import { getWorkspacePath } from '../state/workspace';
 import { getGitPanelCwd } from './git-panel';
 import { getFileTreeListingWorkspaceRoot } from './file-tree-listing-root';
 import { normalizePanelPath, panelPathsEqual } from './panel-worktree-cwd';
 
-/**
- * Absolute cwd for new PTY sessions: same root as the file explorer
- * (listing worktree when set, else git panel cwd, else main workspace).
- */
+/** Absolute cwd for new PTY sessions: same root as the file explorer (listing worktree when set, else git panel cwd, else main workspace). */
 export function resolveFileExplorerTerminalCwd(): string {
   const listingRoot = getFileTreeListingWorkspaceRoot()?.trim();
   if (listingRoot) return listingRoot;

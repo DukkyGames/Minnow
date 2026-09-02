@@ -1,11 +1,3 @@
-/**
- * P1-C — `/api/boards` REST and SSE.
- *
- * Driven through a real HTTP server rather than by calling the handler, because
- * the properties that matter here are transport properties: reconnect with
- * `Last-Event-ID`, an abruptly destroyed socket, and the guarantee that no route
- * exists through which a client can write board state.
- */
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import fs from 'node:fs/promises';
@@ -23,8 +15,6 @@ import { disposeEngines } from '../../server/orchestrator/engine.js';
 import { appendEvent, resetJournalCache } from '../../server/orchestrator/journal.js';
 import { createBoardsMiddleware, matchRoute, ROUTES, setEffectorFactory } from '../../server/orchestrator/middleware.js';
 import { getWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
-
-// ---------------------------------------------------------------------------
 
 const PLAN = `---
 name: demo-board
@@ -76,8 +66,6 @@ beforeEach(async () => {
   resetJournalCache();
   disposeEngines();
 
-  // Long delays keep attempts running so the transport can be observed against
-  // a board that is mid-flight rather than one that has already finished.
   setEffectorFactory(() =>
     createScriptedEffector({ script: [{ emit: { outcome: 'pass', delayMs: 60_000 } }] }),
   );
@@ -106,8 +94,6 @@ after(() => {
   disposeEngines();
 });
 
-// ---------------------------------------------------------------------------
-
 /**
  * @param {string} method
  * @param {string} pathname
@@ -121,11 +107,9 @@ async function call(method, pathname, body) {
       : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   });
   const text = await response.text();
-  /** @type {any} */
+/** @type {any} */
   let parsed = null;
   if (text.length > 0) {
-    // An unmatched verb falls through to the next middleware, which answers in
-    // plain text. That is the correct outcome, not a parse failure.
     try {
       parsed = JSON.parse(text);
     } catch {
@@ -135,7 +119,6 @@ async function call(method, pathname, body) {
   return { status: response.status, body: parsed };
 }
 
-/** Create the demo board and return its id. */
 async function createBoard(markdown = PLAN) {
   const created = await call('POST', '/api/boards', { planPath: 'demo.md', markdown });
   assert.equal(created.status, 201, JSON.stringify(created.body));
@@ -143,15 +126,13 @@ async function createBoard(markdown = PLAN) {
 }
 
 /**
- * Read an SSE stream, resolving once `stop(frames)` says it has enough.
- *
  * @param {string} pathname
  * @param {(frames: Array<{ id?: string, event: string, data: any }>) => boolean} enough
  * @param {Record<string, string>} [headers]
  */
 function readSse(pathname, enough, headers = {}) {
   return new Promise((resolve, reject) => {
-    /** @type {Array<{ id?: string, event: string, data: any }>} */
+/** @type {Array<{ id?: string, event: string, data: any }>} */
     const frames = [];
     const request = http.get(`${base}${pathname}`, { headers }, (response) => {
       if (response.statusCode !== 200) {
@@ -166,8 +147,8 @@ function readSse(pathname, enough, headers = {}) {
         while ((split = buffer.indexOf('\n\n')) !== -1) {
           const raw = buffer.slice(0, split);
           buffer = buffer.slice(split + 2);
-          if (raw.startsWith(':')) continue; // heartbeat
-          /** @type {any} */
+          if (raw.startsWith(':')) continue;
+/** @type {any} */
           const frame = {};
           for (const line of raw.split('\n')) {
             if (line.startsWith('id: ')) frame.id = line.slice(4);
@@ -195,7 +176,7 @@ function readSse(pathname, enough, headers = {}) {
   });
 }
 
-// ---------------------------------------------------------------------------
+// ── POST boards ──────────────────────────────────────────────────────────────
 
 describe('POST /api/boards', () => {
   it('creates a board from a plan and returns its derived state', async () => {
@@ -264,6 +245,8 @@ describe('POST /api/boards', () => {
   });
 });
 
+// ── GET boards ───────────────────────────────────────────────────────────────
+
 describe('GET /api/boards', () => {
   it('lists boards with their status', async () => {
     await createBoard();
@@ -281,7 +264,6 @@ describe('GET /api/boards', () => {
   });
 
   it('serves a state that always equals the fold of its own journal', async () => {
-    // The HTTP surface cannot be allowed to disagree with the fold.
     const boardId = await createBoard();
     await call('POST', `/api/boards/${boardId}/start`, { concurrency: 2 });
 
@@ -290,6 +272,8 @@ describe('GET /api/boards', () => {
     assert.deepEqual(stateFromJSON(state.body.state), derive(journal.body.events));
   });
 });
+
+// ── commands ─────────────────────────────────────────────────────────────────
 
 describe('commands', () => {
   it('starts, changes concurrency, and stops', async () => {
@@ -342,13 +326,10 @@ describe('commands', () => {
   });
 
   it('runs a hand-started task on a stopped board — Manual mode', async () => {
-    // PRD §6: Manual = Stopped, with the user starting individual tasks by hand.
     const boardId = await createBoard();
     const started = await call('POST', `/api/boards/${boardId}/tasks/W1-A/start`);
     assert.equal(started.status, 200);
 
-    // The attempt is still there after the board has been read back, which is
-    // what proves the reconcile loop did not immediately undo it.
     const after = await call('GET', `/api/boards/${boardId}`);
     const state = stateFromJSON(after.body.state);
     assert.equal(state.status, 'created');
@@ -358,14 +339,9 @@ describe('commands', () => {
   });
 
   it('survives four concurrent commands against a cold board', async () => {
-    // A cold board is what every first page load after a server restart hits.
-    // The race this covers lives in the engine registry and is pinned down
-    // deterministically there ("never hands out an engine that has not finished
-    // loading"); over HTTP the requests rarely arrive close enough together to
-    // reproduce it, so this is the integration check, not the regression test.
     const boardId = await createBoard();
     await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
-    disposeEngines(); // as cold as a fresh process
+    disposeEngines();
 
     const responses = await Promise.all([
       call('POST', `/api/boards/${boardId}/stop`),
@@ -393,6 +369,8 @@ describe('commands', () => {
     assert.equal(journal.status, 200);
   });
 });
+
+// ── SSE ──────────────────────────────────────────────────────────────────────
 
 describe('SSE', () => {
   it('opens with a snapshot frame carrying the current seq and state', async () => {
@@ -450,7 +428,6 @@ describe('SSE', () => {
       { 'Last-Event-ID': '1' },
     );
 
-    // No snapshot, no re-fold from zero: just the events after seq 1.
     assert.equal(frames.every((f) => f.event === 'event'), true, 'a snapshot was re-sent');
     const seqs = frames.map((f) => f.data.seq);
     assert.deepEqual(seqs, journal.slice(1, seqs.length + 1).map((e) => e.seq));
@@ -468,7 +445,6 @@ describe('SSE', () => {
     request.destroy();
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // The engine must be entirely unaffected by a dead client.
     const started = await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
     assert.equal(started.status, 200);
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -477,9 +453,6 @@ describe('SSE', () => {
   });
 
   it('sends a snapshot whose seq the state actually contains', async () => {
-    // The frame's `id` is what a reconnect resumes from. If the seq came from a
-    // journal read while the state came from the engine, the two could disagree
-    // and a resume would skip the difference forever.
     const boardId = await createBoard();
     await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -502,8 +475,6 @@ describe('SSE', () => {
     const boardId = await createBoard();
     await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
 
-    // Connect and hammer the board at the same time, so appends land during the
-    // window between subscribing and the baseline being taken.
     const streamed = readSse(`/api/boards/${boardId}/events`, (f) => f.length >= 12);
     for (let i = 0; i < 12; i += 1) {
       await call('POST', `/api/boards/${boardId}/concurrency`, { n: 1 + (i % 3) });
@@ -527,6 +498,8 @@ describe('SSE', () => {
     await response.text();
   });
 });
+
+// ── Surface ──────────────────────────────────────────────────────────────────
 
 describe('the surface itself', () => {
   it('exposes exactly the documented routes', async () => {
@@ -557,13 +530,6 @@ describe('the surface itself', () => {
   });
 
   it('has no route that writes board state', async () => {
-    // Locked decision 2 made enforceable: there is no mutation verb the renderer
-    // can reach that is not a command the engine chose to expose.
-    //
-    // P9-E adds the only PATCH and the only DELETE, and neither is a state
-    // write: the PATCH journals `board.renamed` like every other command, and
-    // the DELETE removes the journal outright rather than editing it. Anything
-    // else with a mutation verb still has to not exist.
     const lifecycle = new Set(['PATCH rename', 'DELETE delete']);
     for (const route of ROUTES) {
       if (lifecycle.has(`${route.method} ${route.name}`)) continue;
@@ -575,8 +541,6 @@ describe('the surface itself', () => {
 
     const boardId = await createBoard();
     assert.equal((await call('PUT', `/api/boards/${boardId}`)).status, 404, 'PUT');
-    // A PATCH carrying anything other than a name is refused, so the verb is a
-    // rename command and not a door into board state.
     const bad = await call('PATCH', `/api/boards/${boardId}`, { status: 'running' });
     assert.equal(bad.status, 400);
   });
@@ -615,6 +579,8 @@ describe('the surface itself', () => {
     assert.equal(response.body.error, 'the run has finished; rerun it instead');
   });
 });
+
+// ── Workspace scope ──────────────────────────────────────────────────────────
 
 describe('GET /api/boards — workspace scope (MIN-752)', () => {
   it('lists only boards stamped for the live workspace and 409s start from another', async () => {

@@ -1,10 +1,3 @@
-/**
- * Local mail store access (~/.minnow/email/mail-<accountId>.db).
- *
- * Keeps the async API the rest of server/email was written against; the backing
- * store is now SQLite (see store.js) instead of one big rewritten JSON file.
- */
-
 import fs from 'node:fs/promises';
 import { emailCacheMessagesPath } from './paths.js';
 import { harvestMessageContacts } from './contacts.js';
@@ -26,13 +19,11 @@ import { sanitizePreviewText } from './parse-body.js';
  * @property {boolean} [answered]
  */
 
-/** Columns needed for the metadata (no-body) message shape. */
 const MESSAGE_COLUMNS = `message_row_id, id, folder, uid, message_id, thread_id, from_addr,
   to_json, reply_to, subject, date, date_ms, body_preview, body_hash, has_attachments,
   in_reply_to, references_json, seen, flagged, answered, snooze_until, category,
   category_source, triage_json, reply_variants_json`;
 
-/** Same, joined with bodies for reader/agent paths that need the text. */
 const MESSAGE_COLUMNS_WITH_BODY = `m.message_row_id, m.id, m.folder, m.uid, m.message_id,
   m.thread_id, m.from_addr, m.to_json, m.reply_to, m.subject, m.date, m.date_ms,
   m.body_preview, m.body_hash, m.has_attachments, m.in_reply_to, m.references_json,
@@ -50,7 +41,6 @@ function toMs(date) {
 }
 
 /**
- * Locate one message row by stable id, `folder:uid`, or (when unambiguous) bare uid.
  * @param {import('better-sqlite3').Database} db
  * @param {string} messageKey
  * @param {boolean} [withBody]
@@ -77,23 +67,15 @@ function findRow(db, messageKey, withBody = false) {
     if (byFolderUid) return byFolderUid;
   }
 
-  // Legacy bare-uid callers: only honored when it resolves to exactly one row,
-  // so UID 5 in INBOX can no longer shadow UID 5 in Sent (MIN-350 D4).
   const byUid = db.prepare(`${select} WHERE ${alias}uid = ? LIMIT 2`).all(needle);
   return byUid.length === 1 ? byUid[0] : null;
 }
 
-/** Row id lookup without materializing the whole row. */
 function findRowId(db, messageKey) {
   const row = findRow(db, messageKey);
   return row ? row.message_row_id : null;
 }
 
-/**
- * Pick a stable, never-rewritten public id for a new message.
- * Base form matches the historical `${folder}:${uid}`; a moved-away row keeps
- * its id, so a later message reusing that folder/uid gets a suffixed one.
- */
 function allocateMessageId(db, folder, uid) {
   const base = `${folder}:${uid}`;
   const exists = db.prepare('SELECT 1 FROM messages WHERE id = ?');
@@ -106,8 +88,7 @@ function allocateMessageId(db, folder, uid) {
 }
 
 /**
- * Insert or update one parsed message. Runs inside the caller's transaction.
- * @returns {number} message_row_id
+ * @returns {number}
  */
 function upsertMessageRow(db, message) {
   const folder = String(message.folder ?? 'INBOX');
@@ -193,7 +174,6 @@ function upsertMessageRow(db, message) {
     });
   }
 
-  // Deterministic inbox tab — runs for every envelope, independent of AI triage.
   applyMessageCategory(db, rowId, {
     fromHeader: values.from_addr,
     bulkSignals: message.categorySignals ?? null,
@@ -202,18 +182,11 @@ function upsertMessageRow(db, message) {
 
   reindexMessageFts(db, rowId);
   recomputeThread(db, values.thread_id);
-  // Every message that lands teaches the address book a little more; doing it
-  // here means autocomplete needs no separate scan over the mailbox.
   harvestMessageContacts(db, message);
   return rowId;
 }
 
 /**
- * Replace the attachment rows for a message.
- *
- * `idx` is the message's own part ordering — the download route addresses parts
- * by it, so it must match the order `simpleParser` returns.
- *
  * @param {import('better-sqlite3').Database} db
  * @param {number} rowId
  * @param {Array<Record<string, unknown>>} attachments
@@ -237,11 +210,8 @@ function replaceAttachmentRows(db, rowId, attachments) {
   });
 }
 
-/** Upsert the lazily-fetched body for a message row. */
 function saveBodyRow(db, rowId, { bodyText, bodyHtml, complete }) {
   const existing = db.prepare('SELECT * FROM bodies WHERE message_row_id = ?').get(rowId);
-  // A re-sync carries only the preview text; it must not overwrite a body that
-  // was already fully downloaded (which would drop the HTML part).
   if (existing?.complete && !complete) {
     return;
   }
@@ -262,13 +232,9 @@ function saveBodyRow(db, rowId, { bodyText, bodyHtml, complete }) {
   );
 }
 
-// ---------------------------------------------------------------------------
 // JSON → SQLite migration (one-time, idempotent)
-// ---------------------------------------------------------------------------
 
 /**
- * Import a pre-Phase-1 `messages.json` cache once. The JSON file is kept (and
- * renamed to `.migrated`) so a bad import can be replayed by hand.
  * @param {string} accountId
  */
 export async function migrateJsonCacheIfNeeded(accountId) {
@@ -306,7 +272,6 @@ export async function migrateJsonCacheIfNeeded(accountId) {
   });
   tx();
 
-  // Integrity check before retiring the JSON file (Part 7 constraint).
   const count = db.prepare('SELECT COUNT(*) AS n FROM messages').get()?.n ?? 0;
   if (count >= messages.length) {
     await fs.rename(filePath, `${filePath}.migrated`).catch(() => {});
@@ -315,12 +280,8 @@ export async function migrateJsonCacheIfNeeded(accountId) {
   return { migrated: true, messages: messages.length };
 }
 
-// ---------------------------------------------------------------------------
-// Legacy JSON-shaped API (metadata only — bodies are loaded on demand)
-// ---------------------------------------------------------------------------
 
 /**
- * Read the whole account store in the historical cache-file shape.
  * @param {string} accountId
  */
 export async function readMessageCache(accountId) {
@@ -340,15 +301,12 @@ export async function readMessageCache(accountId) {
 }
 
 /**
- * Replace the whole store with the given cache object (tests, recovery).
  * @param {string} accountId
  * @param {{ messages?: Array<Record<string, unknown>>, folderCursors?: Record<string, { highestUid?: number }>, inboxSummary?: object }} cache
  */
 export async function writeMessageCache(accountId, cache) {
   const db = getMailDb(accountId);
   const tx = db.transaction(() => {
-    // A whole-store replace must drop the sync cursors too, or the next sync
-    // asks for `UID cursor+1:*` against an empty store and skips everything.
     db.exec('DELETE FROM messages; DELETE FROM messages_fts; DELETE FROM threads; DELETE FROM sync_state;');
     for (const message of cache.messages ?? []) {
       upsertMessageRow(db, message);
@@ -362,7 +320,6 @@ export async function writeMessageCache(accountId, cache) {
 }
 
 /**
- * Merge fetched messages into the store and advance the folder cursor.
  * @param {string} accountId
  * @param {Array<Record<string, unknown>>} incoming
  * @param {string} folder
@@ -388,7 +345,6 @@ export async function mergeMessagesIntoCache(accountId, incoming, folder, highes
 }
 
 /**
- * List cached messages with folder filter, flag filter, FTS query, pagination.
  * @param {string} accountId
  * @param {{ folder?: string, offset?: number, limit?: number, query?: string, filter?: string, includeSnoozed?: boolean }} options
  */
@@ -412,8 +368,6 @@ export async function listCachedMessages(accountId, options = {}) {
     where.push("snooze_until != ''");
   }
 
-  // A snoozed message is hidden from the ordinary list until it comes due —
-  // except in the snoozed view itself, where hiding it would be absurd.
   if (filter !== 'snoozed' && options.includeSnoozed !== true) {
     where.push("(snooze_until = '' OR snooze_until <= ?)");
     params.push(new Date().toISOString());
@@ -440,10 +394,8 @@ export async function listCachedMessages(accountId, options = {}) {
 }
 
 /**
- * Recent messages from one sender outside a given thread — context recall for
- * draft prompts (§3.6): "what did we last talk about with this person".
  * @param {string} accountId
- * @param {string} senderAddress — bare lowercased address
+ * @param {string} senderAddress
  * @param {{ excludeThreadId?: string, limit?: number }} [options]
  */
 export async function listRecentMessagesFromSender(accountId, senderAddress, options = {}) {
@@ -466,7 +418,6 @@ export async function listRecentMessagesFromSender(accountId, senderAddress, opt
 }
 
 /**
- * Turn a user query into a safe FTS5 MATCH expression (prefix-matched terms).
  * @param {string} raw
  */
 export function toFtsQuery(raw) {
@@ -481,7 +432,6 @@ export function toFtsQuery(raw) {
 }
 
 /**
- * Full-text search across folders (D10 — bodies are indexed too).
  * @param {string} accountId
  * @param {{ query: string, folder?: string, offset?: number, limit?: number }} options
  */
@@ -526,7 +476,6 @@ export async function searchCachedMessages(accountId, options) {
 }
 
 /**
- * Conversation rollups for the thread list.
  * @param {string} accountId
  * @param {{ folder?: string, offset?: number, limit?: number, filter?: string, query?: string, includeSnoozed?: boolean, category?: string }} options
  */
@@ -541,7 +490,6 @@ export async function listCachedThreads(accountId, options = {}) {
     params.push(folder);
   }
 
-  // Inbox tab filter (Primary / Social / Other) — ANDs with folder/filter/query.
   const category = String(options.category ?? '').trim().toLowerCase();
   if (isInboxCategory(category)) {
     where.push('t.category = ?');
@@ -557,8 +505,6 @@ export async function listCachedThreads(accountId, options = {}) {
     where.push("t.thread_id IN (SELECT thread_id FROM messages WHERE snooze_until != '')");
   }
 
-  // A conversation disappears only when every message in it is snoozed —
-  // otherwise snoozing one reply would hide the whole exchange.
   if (filter !== 'snoozed' && options.includeSnoozed !== true) {
     where.push(
       `t.thread_id IN (
@@ -587,8 +533,6 @@ export async function listCachedThreads(accountId, options = {}) {
     .prepare(`SELECT t.* FROM threads t ${clause} ORDER BY t.last_date_ms DESC LIMIT ? OFFSET ?`)
     .all(...params, limit, offset);
 
-  // Folder-scoped action ids so bulk ops never touch Sent/Archive copies that
-  // share a thread id with the active mailbox folder.
   const messageIdsStmt = folder
     ? db.prepare(
         'SELECT id FROM messages WHERE thread_id = ? AND folder = ? ORDER BY date_ms ASC',
@@ -610,10 +554,8 @@ export async function listCachedThreads(accountId, options = {}) {
       lastDate: row.last_date,
       folders: JSON.parse(row.folders_json || '[]'),
       snippet: sanitizePreviewText(row.snippet ?? ''),
-      // Local inbox tab rolled up from messages (primary > social > other).
       category: row.category || '',
       messageIds,
-      // Stored as JSON by thread-summary.js; the API exposes just the text.
       summary: (() => {
         if (typeof row.summary !== 'string' || !row.summary) return null;
         try {
@@ -629,9 +571,6 @@ export async function listCachedThreads(accountId, options = {}) {
 }
 
 /**
- * Stable message ids for unseen mail in a folder (optional FTS query).
- * Used by mark-all-read so Unread "Read all" is not limited to the visible page.
- *
  * @param {string} accountId
  * @param {{ folder?: string, query?: string }} [options]
  * @returns {string[]}
@@ -665,7 +604,7 @@ export function listUnreadMessageIds(accountId, options = {}) {
 
 /**
  * @param {string} accountId
- * @param {string} compositeId — stable message id or `${folder}:${uid}`
+ * @param {string} compositeId
  */
 export async function getCachedMessage(accountId, compositeId) {
   const db = getMailDb(accountId);
@@ -691,7 +630,6 @@ export async function listCachedThread(accountId, threadId) {
 }
 
 /**
- * Update triage metadata on a cached message.
  * @param {string} accountId
  * @param {string} messageKey
  * @param {object} triage
@@ -710,7 +648,6 @@ export async function updateMessageTriage(accountId, messageKey, triage) {
 }
 
 /**
- * Update IMAP flags on a cached message.
  * @param {string} accountId
  * @param {string} messageKey
  * @param {EmailMessageFlags} flags
@@ -735,8 +672,6 @@ export async function updateMessageFlags(accountId, messageKey, flags) {
 }
 
 /**
- * Move a cached message to another folder. The stable `id` is deliberately
- * left alone so triage/variants/dashboard references survive the move (D4).
  * @param {string} accountId
  * @param {string} messageKey
  * @param {string} destFolder
@@ -749,7 +684,6 @@ export async function updateMessageFolder(accountId, messageKey, destFolder, new
     throw new Error('Cached message not found');
   }
   const tx = db.transaction(() => {
-    // A stale row already sitting at the destination uid would break UNIQUE.
     db.prepare('DELETE FROM messages WHERE folder = ? AND uid = ? AND message_row_id != ?').run(
       destFolder,
       String(newUid),
@@ -767,7 +701,6 @@ export async function updateMessageFolder(accountId, messageKey, destFolder, new
 }
 
 /**
- * Remove a message from the store after a permanent delete.
  * @param {string} accountId
  * @param {string} messageKey
  */
@@ -787,7 +720,6 @@ export async function removeMessageFromCache(accountId, messageKey) {
 }
 
 /**
- * Store reply variant drafts on a message.
  * @param {string} accountId
  * @param {string} messageKey
  * @param {Array<{ id: string, label: string, body: string, createdAt: string }>} variants
@@ -806,7 +738,6 @@ export async function updateReplyVariants(accountId, messageKey, variants) {
 }
 
 /**
- * Persist inbox dashboard summary for an account.
  * @param {string} accountId
  * @param {Record<string, unknown>} summary
  */
@@ -816,7 +747,6 @@ export async function updateInboxSummary(accountId, summary) {
 }
 
 /**
- * Read stored inbox summary (if any).
  * @param {string} accountId
  */
 export async function getInboxSummary(accountId) {
@@ -824,7 +754,6 @@ export async function getInboxSummary(accountId) {
 }
 
 /**
- * Count unread messages per folder.
  * @param {string} accountId
  */
 export async function getFolderUnreadCounts(accountId) {
@@ -840,9 +769,6 @@ export async function getFolderUnreadCounts(accountId) {
 }
 
 /**
- * Count conversations with unread mail, grouped by inbox tab.
- * Scoped to a folder (typically INBOX) so Sent/Archive stay out of the badges.
- *
  * @param {string} accountId
  * @param {{ folder?: string }} [options]
  * @returns {Promise<{ primary: number, social: number, other: number }>}
@@ -882,20 +808,12 @@ export async function getCategoryUnreadCounts(accountId, options = {}) {
   return counts;
 }
 
-// ---------------------------------------------------------------------------
 // Snooze
-// ---------------------------------------------------------------------------
 
 /**
- * Hide a message until a point in time.
- *
- * Snoozing is local: the message stays exactly where it is on the server, so
- * another client still shows it and nothing is lost if the snooze is forgotten.
- * Passing an empty `until` un-snoozes.
- *
  * @param {string} accountId
  * @param {string} messageKey
- * @param {string} until — ISO timestamp, or '' to clear
+ * @param {string} until
  */
 export async function setMessageSnooze(accountId, messageKey, until) {
   const db = getMailDb(accountId);
@@ -923,7 +841,6 @@ export async function setMessageSnooze(accountId, messageKey, until) {
 }
 
 /**
- * Messages whose snooze has elapsed — the poller wakes them and announces it.
  * @param {string} accountId
  * @param {string} [now]
  */
@@ -940,7 +857,6 @@ export async function listDueSnoozes(accountId, now = new Date().toISOString()) 
 }
 
 /**
- * Clear the snooze on every message that is now due.
  * @param {string} accountId
  * @param {string} [now]
  */
@@ -951,12 +867,9 @@ export async function clearDueSnoozes(accountId, now = new Date().toISOString())
   return { woken: info.changes };
 }
 
-// ---------------------------------------------------------------------------
 // Bodies (lazy fetch support)
-// ---------------------------------------------------------------------------
 
 /**
- * Read the cached body for a message, if one has been downloaded.
  * @param {string} accountId
  * @param {string} messageKey
  */
@@ -975,7 +888,6 @@ export async function getCachedBody(accountId, messageKey) {
 }
 
 /**
- * Persist a downloaded body (and refresh the FTS entry so search sees it).
  * @param {string} accountId
  * @param {string} messageKey
  * @param {{ bodyText?: string, bodyHtml?: string, complete?: boolean, attachments?: Array<Record<string, unknown>>, bodyHash?: string }} body
@@ -996,8 +908,6 @@ export async function saveCachedBody(accountId, messageKey, body) {
     }
     if (Array.isArray(body.attachments)) {
       replaceAttachmentRows(db, row.message_row_id, body.attachments);
-      // Inline images (a signature logo, say) must not make a message read as
-      // "has attachments" — only real attachment dispositions count.
       const visible = body.attachments.filter((att) => !att?.inline).length;
       db.prepare('UPDATE messages SET has_attachments = ? WHERE message_row_id = ?').run(
         visible ? 1 : 0,
@@ -1010,9 +920,7 @@ export async function saveCachedBody(accountId, messageKey, body) {
   return getCachedMessage(accountId, messageKey);
 }
 
-// ---------------------------------------------------------------------------
 // Sync state / folder cache
-// ---------------------------------------------------------------------------
 
 function setSyncStateRow(db, folder, patch) {
   const existing = db.prepare('SELECT * FROM sync_state WHERE folder = ?').get(folder);
@@ -1043,7 +951,6 @@ function setSyncStateRow(db, folder, patch) {
 }
 
 /**
- * Per-folder sync cursor (uidvalidity / highest uid / modseq).
  * @param {string} accountId
  * @param {string} folder
  */
@@ -1063,13 +970,7 @@ export async function getSyncState(accountId, folder) {
 /**
  * @param {string} accountId
  * @param {string} folder
- * @param {{
- *   uidValidity?: string | number,
- *   highestUid?: number,
- *   highestModseq?: string | number,
- *   lowestUid?: number,
- *   backfillComplete?: boolean,
- * }} patch
+ * @param {{ uidValidity?: string | number, highestUid?: number, highestModseq?: string | number, lowestUid?: number, backfillComplete?: boolean, }} patch
  */
 export async function setSyncState(accountId, folder, patch) {
   setSyncStateRow(getMailDb(accountId), folder, patch ?? {});
@@ -1077,7 +978,6 @@ export async function setSyncState(accountId, folder, patch) {
 }
 
 /**
- * Lowest UID cached for a folder — used to resume a partial backfill.
  * @param {string} accountId
  * @param {string} folder
  */
@@ -1090,7 +990,6 @@ export async function getMinCachedUid(accountId, folder) {
 }
 
 /**
- * Drop every cached message for a folder after a UIDVALIDITY reset.
  * @param {string} accountId
  * @param {string} folder
  */
@@ -1114,7 +1013,6 @@ export async function resetFolderCache(accountId, folder) {
 }
 
 /**
- * Cached message count, optionally scoped to one folder.
  * @param {string} accountId
  * @param {string} [folder]
  */
@@ -1126,7 +1024,6 @@ export async function countCachedMessages(accountId, folder = '') {
 }
 
 /**
- * Cached IMAP folder list (avoids a LIST round-trip per archive/move).
  * @param {string} accountId
  */
 export async function getCachedFolders(accountId) {
@@ -1145,7 +1042,6 @@ export async function setCachedFolders(accountId, folders) {
 }
 
 /**
- * UIDs cached for a folder within the reconcile window (newest first).
  * @param {string} accountId
  * @param {string} folder
  * @param {number} limit
@@ -1159,8 +1055,6 @@ export async function listCachedUids(accountId, folder, limit = 200) {
 }
 
 /**
- * Apply a FLAGS-only reconcile pass: update flags for uids the server still
- * reports, delete cached rows the server no longer has (external move/delete).
  * @param {string} accountId
  * @param {string} folder
  * @param {Map<number, { seen: boolean, flagged: boolean, answered: boolean }>} serverFlags

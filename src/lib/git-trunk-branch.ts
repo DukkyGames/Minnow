@@ -85,6 +85,5 @@ export function shouldShowMergeToMain(input: {
   const onTrunk = branch === input.trunkBranch;
   if (onTrunk) return false;
 
-  // Feature branch on main or secondary worktree.
   return true;
 }

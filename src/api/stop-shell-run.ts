@@ -1,7 +1,3 @@
-/**
- * Stop an agent shell run (blocking terminal SSE or background spawn).
- */
-
 import { cancelTerminalRun } from './terminal';
 
 /** Kill a shell process by run id. Returns true when the server accepted the cancel. */

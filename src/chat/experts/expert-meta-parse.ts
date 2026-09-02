@@ -1,7 +1,3 @@
-/**
- * Parse expert metadata from markdown front matter (flat YAML keys).
- */
-
 import { parsePromptMarkdown } from '../prompts/parse-front-matter';
 import {
   EXPERT_ACCENT_VALUES,

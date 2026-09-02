@@ -1,7 +1,3 @@
-/**
- * Minnow Scheduler app — recurring local agent jobs and reminders.
- */
-
 import '../styles/scheduler-page.css';
 import '../styles/scheduler-editor-window.css';
 import '../styles/settings-controls.css';

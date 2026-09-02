@@ -146,9 +146,7 @@ export async function expandFileSystemEntries(
     try {
       const file = await fileFromEntry(entry);
       entries.push({ kind: 'file', relativePath, file });
-    } catch {
-      /* Skip unreadable files (locked, permission, broken symlink). */
-    }
+    } catch {}
   };
 
   for (const root of roots) {
@@ -181,7 +179,6 @@ export function entriesFromFileList(files: File[]): DroppedTreeResult {
     const relativePath = sanitizeRelativeDropPath(raw);
     if (!relativePath) continue;
 
-    // Directory File objects have no nested listing without the entries API.
     if (!nested && isLikelyDirectoryDrop(file)) {
       skippedFolders += 1;
       continue;

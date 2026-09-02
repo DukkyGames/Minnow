@@ -1,17 +1,6 @@
-/**
- * Symlink dependency directories from the main workspace into new git worktrees.
- *
- * Links are validated on every provisioning pass and repaired in place: a dangling,
- * looping or drifted link is removed and recreated. Nothing throws, but failures are
- * *reported* rather than swallowed — a link that cannot be made to resolve must reach
- * the caller, because a silently broken `node_modules` junction is what makes every
- * later `npm run` in that worktree die with `spawn ELOOP`.
- */
-
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-/** Manifest files → dependency dirs to link when the manifest exists in sourceRoot. */
 export const ECOSYSTEM_ENTRIES = [
   {
     manifests: ['package.json'],
@@ -89,26 +78,17 @@ async function pathExists(targetPath) {
 
 const errMessage = (err) => (err instanceof Error ? err.message : String(err));
 
-/** True when `a` and `b` name the same path (case-insensitive on win32, via path.relative). */
 function samePath(a, b) {
   return path.relative(a, b) === '';
 }
 
-/** True when `child` lives underneath `parent` (and is not `parent` itself). */
 function isInside(child, parent) {
   const rel = path.relative(parent, child);
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
 /**
- * Health of a dependency dir slot in a worktree.
- *
- * The `fs.stat` call is the whole point: `lstat` (and therefore `fs.access` /
- * `pathExists`) reports a dangling or self-referential junction as present, which is
- * how a broken link survived every provisioning pass. `stat` follows the link and
- * throws — ELOOP, ENOENT, EPERM, UNKNOWN — which is the signal we act on.
- *
- * @param {string} linkPath — absolute path of the dep dir inside the worktree
+ * @param {string} linkPath
  * @returns {Promise<'missing' | 'real-dir' | 'link-ok' | 'broken'>}
  */
 export async function inspectDepDir(linkPath) {
@@ -119,7 +99,6 @@ export async function inspectDepDir(linkPath) {
     return 'missing';
   }
   if (!st.isSymbolicLink()) {
-    // A real directory is a materialized install; a stray file in its place is broken.
     return st.isDirectory() ? 'real-dir' : 'broken';
   }
   try {
@@ -131,25 +110,19 @@ export async function inspectDepDir(linkPath) {
 }
 
 /**
- * Remove a link/junction (never a real dir — callers short-circuit on `real-dir`) and
- * confirm it is actually gone. Windows keeps the entry when a handle is open, so the
- * post-check is what stops us from treating a surviving link as removed.
- * @returns {Promise<boolean>} true when the path no longer exists
+ * @returns {Promise<boolean>}
  */
 async function removeDepLink(target) {
   try {
     await fs.rm(target, { force: true, maxRetries: 3, retryDelay: 100 });
   } catch {
-    /* the lstat below is the authority, not the rm */
   }
   if (!(await pathExists(target))) return true;
 
-  // Windows junctions answer to rmdir rather than unlink; try both before giving up.
   for (const remove of [() => fs.unlink(target), () => fs.rmdir(target)]) {
     try {
       await remove();
     } catch {
-      /* try the next form */
     }
     if (!(await pathExists(target))) return true;
   }
@@ -157,16 +130,8 @@ async function removeDepLink(target) {
 }
 
 /**
- * Ensure the known dependency dirs of `sourceRoot` are present and *resolving* in
- * `wtPath`, linking, relinking or repairing as needed. Idempotent, so it is safe to
- * run on every provisioning pass — which is how already-broken worktrees heal.
- *
- * Per dir: a real directory is left alone (a materialized install), a healthy link is
- * left alone unless it drifted off the current source, and a broken link is removed
- * and recreated.
- *
- * @param {string} sourceRoot — dependency source root (main workspace or integration)
- * @param {string} wtPath — worktree path (absolute)
+ * @param {string} sourceRoot
+ * @param {string} wtPath
  * @returns {Promise<{ ok: boolean, linked: string[], repaired: string[], failed: Array<{ dir: string, reason: string }> }>}
  */
 export async function ensureDependencyDirs(sourceRoot, wtPath) {
@@ -189,14 +154,9 @@ export async function ensureDependencyDirs(sourceRoot, wtPath) {
       const sourceDir = path.join(sourceRoot, dir);
       const targetLink = path.join(wtPath, dir);
 
-      // A source that simply is not installed is not an error — there is nothing to
-      // link. A source that exists but does not resolve is: linking from it would
-      // silently leave the worktree with no deps at all.
       const sourceState = await inspectDepDir(sourceDir);
       if (sourceState === 'missing' || sourceState === 'broken') {
         const targetState = await inspectDepDir(targetLink);
-        // Drop a leftover looping/dangling target even when there is nothing
-        // healthy to copy from. Leaving it behind is the spawn-ELOOP class.
         if (targetState === 'broken' && !(await removeDepLink(targetLink))) {
           failed.push({
             dir,
@@ -208,7 +168,6 @@ export async function ensureDependencyDirs(sourceRoot, wtPath) {
         continue;
       }
 
-      // Cheap self-link guard, before touching anything on disk.
       if (samePath(sourceDir, targetLink)) {
         failed.push({ dir, reason: `refusing to link ${dir} to itself (${targetLink})` });
         continue;
@@ -219,7 +178,6 @@ export async function ensureDependencyDirs(sourceRoot, wtPath) {
 
       let realSource;
       try {
-        // Collapse seed junctions (integration → main) so tasks get a single-hop link.
         realSource = await fs.realpath(sourceDir);
       } catch (err) {
         failed.push({ dir, reason: `source ${sourceDir} does not resolve: ${errMessage(err)}` });
@@ -246,7 +204,6 @@ export async function ensureDependencyDirs(sourceRoot, wtPath) {
         } catch {
           current = null;
         }
-        // Already pointing at the intended source — nothing to do.
         if (current && samePath(current, realSource)) continue;
       }
 
@@ -265,8 +222,6 @@ export async function ensureDependencyDirs(sourceRoot, wtPath) {
         continue;
       }
 
-      // A link that does not resolve must never be left behind: the next pass would
-      // see it through lstat and report the worktree as already provisioned.
       if ((await inspectDepDir(targetLink)) !== 'link-ok') {
         await removeDepLink(targetLink);
         failed.push({ dir, reason: `created ${dir} link does not resolve (${realSource})` });
@@ -286,9 +241,6 @@ export async function ensureDependencyDirs(sourceRoot, wtPath) {
 }
 
 /**
- * True when any known dependency dir under `root` is a dangling, looping, or
- * otherwise unresolvable link. Used by worktree allocate to fail closed only
- * on the ELOOP class — not on "the source had nothing to copy".
  * @param {string} root
  * @returns {Promise<boolean>}
  */
@@ -305,24 +257,16 @@ export async function hasBrokenDepDir(root) {
 }
 
 /**
- * Link known dependency dirs from `sourceRoot` into `wtPath` when manifests match.
- * Thin wrapper kept for existing callers — see `ensureDependencyDirs`.
- * @param {string} sourceRoot — main workspace root (absolute)
- * @param {string} wtPath — new worktree path (absolute)
+ * @param {string} sourceRoot
+ * @param {string} wtPath
  */
 export async function symlinkDependencyDirs(sourceRoot, wtPath) {
   return ensureDependencyDirs(sourceRoot, wtPath);
 }
 
 /**
- * Replace symlink/junction dep dirs with nothing so the next install creates a real
- * directory in `root` instead of writing through into the link target (e.g. main
- * workspace `node_modules`). Real directories are left untouched.
- *
- * Reports what survived: on Windows an open handle turns the `rm` into a no-op, and
- * installing through a surviving junction writes into the *source* workspace.
- * @param {string} root — worktree root (absolute)
- * @param {string[]} dirs — dependency dir names (e.g. `node_modules`)
+ * @param {string} root
+ * @param {string[]} dirs
  * @returns {Promise<{ removed: string[], failed: string[] }>}
  */
 export async function materializeDepDirs(root, dirs) {
@@ -335,7 +279,7 @@ export async function materializeDepDirs(root, dirs) {
     try {
       st = await fs.lstat(depPath);
     } catch {
-      continue; /* missing dir — installer will create it */
+      continue; 
     }
     if (!st.isSymbolicLink()) continue;
 

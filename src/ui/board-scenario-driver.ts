@@ -1,9 +1,3 @@
-/**
- * Types for the Settings AFK scenario runner.
- * The V1 product driver mutated the deleted board store; callers get a stub
- * that reports harness_error so the Settings UI still compiles (P4-A).
- */
-
 import type {
   BoardLogViolation,
   BoardScenarioRunClassification,

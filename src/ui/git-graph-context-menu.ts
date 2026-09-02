@@ -50,6 +50,8 @@ let menuEl: HTMLDivElement | null = null;
 let dismissBound = false;
 let activeSubmenuEl: HTMLDivElement | null = null;
 
+// ── Menu shell ───────────────────────────────────────────────────────────────
+
 function hideGitGraphContextMenu(): void {
   activeSubmenuEl?.remove();
   activeSubmenuEl = null;
@@ -92,6 +94,8 @@ function positionMenu(el: HTMLElement, clientX: number, clientY: number): void {
   el.style.left = `${left}px`;
   el.style.top = `${top}px`;
 }
+
+// ── Items ────────────────────────────────────────────────────────────────────
 
 function renderSubmenuItems(
   container: HTMLElement,
@@ -225,6 +229,8 @@ function renderMenuItems(items: MenuItemDef[], onAction: () => void): void {
   }
 }
 
+// ── Actions ──────────────────────────────────────────────────────────────────
+
 async function runCheckout(
   ctx: GitGraphContextMenuCtx,
   branch: string,
@@ -302,6 +308,8 @@ async function runCherryPick(ctx: GitGraphContextMenuCtx, sha: string): Promise<
   showToast('Cherry-pick completed', 'success');
   await ctx.onRefresh();
 }
+
+// ── Build ────────────────────────────────────────────────────────────────────
 
 async function buildMenuItems(
   visual: CommitVisual,

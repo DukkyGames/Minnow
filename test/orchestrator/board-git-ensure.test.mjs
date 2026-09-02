@@ -206,7 +206,6 @@ describe('board git ensure at Start', { concurrency: false }, () => {
   });
 
   test('git init failure is a 400 on Start and does not start the board', async () => {
-    // A file named `.git` makes `git init` fail while still looking like "no repo".
     await fs.writeFile(path.join(repoDir, '.git'), 'not a repository\n', 'utf8');
     const created = await call('POST', '/api/boards', {
       planPath: 'demo.md',

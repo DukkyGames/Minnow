@@ -99,8 +99,6 @@ describe('browser driver — launch/teardown cycles', { skip: skipReason }, () =
       const session = launched.session;
       pids.push(session.status().pid);
 
-      // Do a little real work each cycle — a driver that only ever launches and
-      // exits would not exercise the socket teardown path.
       assert.equal(await session.evaluate('1 + 1'), 2);
       await session.close();
       assert.equal(session.status().alive, false);
@@ -109,11 +107,6 @@ describe('browser driver — launch/teardown cycles', { skip: skipReason }, () =
     assert.equal(pids.length, CYCLES);
     assert.equal(new Set(pids).size, CYCLES, 'each cycle should be its own process');
 
-    // Wait for Windows to reap the trees, rather than guessing how long that
-    // takes. A fixed grace period passes on an idle machine and fails when the
-    // rest of the suite is running beside it — measured: green standalone, one
-    // survivor under full parallel load. Poll to a deadline instead, so the
-    // test asserts "they all exit", not "they all exit within one second".
     const reapDeadline = Date.now() + 30_000;
     /** @type {number[]} */
     let alive = pids.filter((pid) => isPidAlive(pid));
@@ -141,16 +134,6 @@ describe('browser driver — launch/teardown cycles', { skip: skipReason }, () =
   });
 
   test('a host that exits without closing leaves no browser behind', async () => {
-    // The engine crashing is not a reason for a browser to survive the night.
-    // A child process launches one and exits immediately without calling
-    // close(); the driver's `process.on('exit')` drain is what is meant to
-    // clean that up.
-    //
-    // Honest caveat: this asserts the *property*, not the mechanism. On win32,
-    // Chromium also exits on its own when the parent's stdio pipes close, so
-    // this test would pass here even with the drain removed. It is still worth
-    // keeping — the property is the requirement, and it is the platforms where
-    // Chromium does *not* self-terminate that this would catch.
     const scriptPath = path.join(homeDir, 'orphan-host.mjs');
     const driverIndex = path
       .resolve(import.meta.dirname, '..', '..', 'server', 'browser-driver', 'index.js')
@@ -175,7 +158,6 @@ describe('browser driver — launch/teardown cycles', { skip: skipReason }, () =
     const { pid } = JSON.parse(String(out.stdout).trim().split('\n').at(-1));
     assert.ok(Number.isInteger(pid) && pid > 0, `expected a pid, got ${out.stdout}`);
 
-    // The hook is synchronous work on `exit`; give the OS a moment to reap.
     const deadline = Date.now() + 15_000;
     while (isPidAlive(pid) && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 200));

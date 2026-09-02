@@ -1,7 +1,3 @@
-/**
- * Settings UI for file editor fundamentals (font, tabs, wrap, whitespace).
- */
-
 import {
   loadEditorSettings,
   saveEditorSettings,

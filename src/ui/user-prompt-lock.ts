@@ -1,8 +1,3 @@
-/**
- * Refcount lock that keeps the composer disabled while tool approval or ask_question UI is open.
- * Prevents click-through on Send/Stop between sequential prompts (e.g. tool approval → allowlist cards).
- */
-
 import { syncComposerFromStreamingState } from './composer-send';
 
 let lockDepth = 0;

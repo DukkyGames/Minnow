@@ -26,26 +26,20 @@ function readStorage(key: string): string | null {
 function writeStorage(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
-  } catch {
-    /* private mode */
-  }
+  } catch {}
 }
 
 function removeStorage(key: string): void {
   try {
     localStorage.removeItem(key);
-  } catch {
-    /* private mode */
-  }
+  } catch {}
 }
 
 function emitChange(): void {
   for (const fn of listeners) {
     try {
       fn();
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   }
 }
 
@@ -104,7 +98,6 @@ function maybeRepairStoredSuccess(map: CustomThemeTokens): CustomThemeTokens {
   if (isCustomThemeAdvanced()) return map;
   const repaired = repairLegacyMirroredSuccess(map);
   if (repaired === map) return map;
-  // Persist so the next boot does not re-detect the legacy clone.
   writeStorage(APPEARANCE_STORAGE_KEYS.customTokens, JSON.stringify(repaired));
   return repaired;
 }
@@ -209,7 +202,6 @@ export function readEffectiveThemeTokens(): Record<CoreThemeTokenKey, string> {
 export function exportCustomThemeJson(): string {
   const enabled = isCustomThemeEnabled();
   const stored = getCustomThemeTokens();
-  // When custom colors are on, include the full effective palette (not only persisted partials).
   const tokens =
     enabled && typeof getComputedStyle === 'function'
       ? { ...readEffectiveThemeTokens(), ...stored }

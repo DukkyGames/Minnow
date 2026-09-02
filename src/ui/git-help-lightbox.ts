@@ -1,7 +1,3 @@
-/**
- * Source Control help lightbox: visual explainer for git branches vs worktrees.
- */
-
 import {
   registerChromePopover,
   unregisterChromePopover,
@@ -20,6 +16,8 @@ let isOpen = false;
 let previousFocus: HTMLElement | null = null;
 let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
 let chromePopoverRegistered = false;
+
+// ── State ────────────────────────────────────────────────────────────────────
 
 /** Whether the git help lightbox is open. */
 export function isGitHelpLightboxOpen(): boolean {
@@ -50,6 +48,8 @@ function detachListeners(): void {
   }
   document.removeEventListener('keydown', trapFocus, true);
 }
+
+// ── Diagrams ─────────────────────────────────────────────────────────────────
 
 /** Build the branch timeline SVG used in the diagram. */
 function createBranchTimelineSvg(): SVGSVGElement {
@@ -261,6 +261,8 @@ function createMinnowTips(): HTMLElement {
   return section;
 }
 
+// ── Shell ────────────────────────────────────────────────────────────────────
+
 function buildBody(): HTMLElement {
   const body = document.createElement('div');
   body.className = 'git-help-body';
@@ -328,6 +330,8 @@ function ensureShell(): void {
     if (e.target === overlayEl) closeGitHelpLightbox();
   });
 }
+
+// ── Lifecycle ────────────────────────────────────────────────────────────────
 
 /** Open the worktrees & branches help lightbox. */
 export function openGitHelpLightbox(): void {

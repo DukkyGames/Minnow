@@ -343,6 +343,7 @@ async function readPackWorkAgentPrompt(agentId, profile) {
   }
 }
 
+// Overrides are often raw markdown without YAML front matter.
 export async function readWorkAgentPrompt(projectRoot, agentId, profile) {
   const overridePath = (() => {
     try {
@@ -365,7 +366,6 @@ export async function readWorkAgentPrompt(projectRoot, agentId, profile) {
         const parsed = parsePromptMarkdown(content, overridePath);
         return { content: parsed.body.trim(), source: 'override' };
       } catch {
-        // User overrides are often raw markdown without YAML front matter.
         return { content: content.trim(), source: 'override' };
       }
     } catch {

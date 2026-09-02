@@ -1,7 +1,3 @@
-/**
- * Commit diff review panel in the workspace split (side-by-side per file).
- */
-
 import { gitDiff, gitShow } from '../state/git-api';
 import { showViewerSplit, hideViewerSplit } from './file-layout';
 import { basename } from './file-tree-path';
@@ -51,6 +47,8 @@ let fileTabsEl: HTMLElement | null = null;
 let wrapToggleBtn: HTMLButtonElement | null = null;
 let diffMountEl: HTMLElement | null = null;
 
+// ── Queries ──────────────────────────────────────────────────────────────────
+
 function getViewerPane(): HTMLElement | null {
   return document.getElementById('fileViewerPane');
 }
@@ -68,6 +66,8 @@ export function isGitCommitDiffPanelOpen(): boolean {
 export function getOpenGitCommitDiffSha(): string | null {
   return openSha;
 }
+
+// ── Tabs ─────────────────────────────────────────────────────────────────────
 
 function appendFileTabStats(parent: HTMLElement, entry: GitPatchFileEntry): void {
   const { additions, deletions } = countPatchLineStats(entry.patch);
@@ -195,6 +195,8 @@ function buildFileTabs(): void {
   });
 }
 
+// ── Chrome ───────────────────────────────────────────────────────────────────
+
 function markViewerPane(): void {
   const pane = getViewerPane();
   if (!pane || paneMarked) return;
@@ -315,6 +317,8 @@ function mountWorkingFilePanelChrome(path: string, staged: boolean): void {
 export type GitCommitDiffOpenResult =
   | { ok: true }
   | { ok: false; error?: string; cancelled?: boolean };
+
+// ── Open ─────────────────────────────────────────────────────────────────────
 
 /** Open or focus the commit diff panel for `sha`. Re-clicking the same sha closes it. */
 export async function openGitCommitDiffPanel(

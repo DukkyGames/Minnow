@@ -27,6 +27,8 @@ interface FieldSpec {
   showWhen?: (config: VoiceSttLocalConfig, catalog?: SttCatalogEntry) => boolean;
 }
 
+// ── STT fields ───────────────────────────────────────────────────────────────
+
 const COMPOSER_MIC_FIELDS: FieldSpec[] = [
   {
     key: 'streamingEnabled',
@@ -350,6 +352,8 @@ export interface RenderSttSettingsFormOptions {
   onBackendChange?: (backend: 'local' | 'provider') => void;
 }
 
+// ── STT form ─────────────────────────────────────────────────────────────────
+
 /** Render backend toggle + capability-gated STT settings groups. */
 export function renderSttSettingsForm(options: RenderSttSettingsFormOptions): void {
   const { mount, config, catalogEntry, onBackendChange } = options;
@@ -461,7 +465,7 @@ export function setSttBackendUi(backend: 'local' | 'provider'): void {
   }
 }
 
-// --- TTS settings form ---
+// ── TTS form ─────────────────────────────────────────────────────────────────
 
 type TtsBackend = 'local' | 'provider' | 'browser';
 
@@ -1009,6 +1013,8 @@ export function renderTtsSettingsForm(options: RenderTtsSettingsFormOptions): vo
   mount.appendChild(localPanel);
   setTtsModePanels(config.tts.local.mode);
 }
+
+// ── TTS readback ─────────────────────────────────────────────────────────────
 
 function readTtsNestedValue(
   local: VoiceTtsLocalConfig,

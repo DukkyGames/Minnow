@@ -1,7 +1,3 @@
-/**
- * File viewer context menu items for selection + markdown preview (Phase 4).
- */
-
 import type { FilePanelContextMenuItem } from '../file-tree-context-menu';
 
 export interface FileViewerContextMenuInput {
@@ -15,10 +11,7 @@ export interface FileViewerContextMenuInput {
   onSwitchToPreview: () => void;
   /** Optional: link editor selection to an Issues app card (MIN-261). */
   onLinkToIssue?: () => void;
-  /**
-   * Capture rows contributed by the menu registry ("Create issue…", "Add to
-   * issue…"). Passed in rather than imported so this stays a pure builder.
-   */
+  /** Capture rows contributed by the menu registry ("Create issue…", "Add to issue…"). */
   captureItems?: FilePanelContextMenuItem[];
 }
 
@@ -39,9 +32,6 @@ export function buildFileViewerContextMenuItems(
         action: input.onQuickEdit,
       },
     );
-    // Capture supersedes the old prompt-for-an-id flow when it is available;
-    // `onLinkToIssue` stays as the fallback so nothing regresses if capture
-    // has not been wired on this surface.
     if (input.captureItems?.length) {
       items.push(...input.captureItems);
     } else if (input.onLinkToIssue) {

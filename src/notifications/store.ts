@@ -22,9 +22,7 @@ function emit(): void {
   for (const fn of listeners) {
     try {
       fn(snap);
-    } catch {
-      /* ignore subscriber errors */
-    }
+    } catch {}
   }
 }
 

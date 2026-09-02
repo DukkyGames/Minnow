@@ -1,8 +1,3 @@
-/**
- * Named sandbox policy profiles for agent one-shot shells (MIN-553).
- * Phase 1 ships the `workspace` profile: filesystem containment, network allowed.
- */
-
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -18,17 +13,15 @@ import { getWorkspaceRoot } from '../../workspace/root.js';
  * @property {string} home
  * @property {string} minnowHome
  * @property {string} workspaceRoot
- * @property {string | null} worktreeRoot active board/chat worktree under ~/.minnow/worktrees, if any
- * @property {string[]} writeRoots absolute dirs the child may write under
- * @property {string[]} denyReadRoots absolute dirs/files the child must not read
- * @property {string[]} allowReadExceptions absolute paths re-allowed after a parent deny (worktree + terminal logs)
+ * @property {string | null} worktreeRoot
+ * @property {string[]} writeRoots
+ * @property {string[]} denyReadRoots
+ * @property {string[]} allowReadExceptions
  * @property {boolean} networkAllow
  * @property {string} platform
  */
 
 /**
- * Resolve a path to a real absolute path when the target exists; otherwise path.resolve.
- * Seatbelt `subpath` matches the kernel path, so symlinks matter on macOS.
  * @param {string} p
  * @returns {string}
  */
@@ -42,8 +35,6 @@ export function resolvePolicyPath(p) {
 }
 
 /**
- * Credential / secret locations under the user home (relative segments).
- * Files use a trailing note via build — see `isFileDeny`.
  * @type {Array<{ rel: string, file?: boolean }>}
  */
 export const CREDENTIAL_DENY_ENTRIES = Object.freeze([
@@ -54,7 +45,6 @@ export const CREDENTIAL_DENY_ENTRIES = Object.freeze([
   { rel: path.join('.docker', 'config.json'), file: true },
   { rel: '.npmrc', file: true },
   { rel: '.pypirc', file: true },
-  // Browser profiles — high-value cookies / tokens
   { rel: path.join('Library', 'Application Support', 'Google', 'Chrome') },
   { rel: path.join('Library', 'Application Support', 'Chromium') },
   { rel: path.join('Library', 'Application Support', 'Firefox') },
@@ -64,7 +54,6 @@ export const CREDENTIAL_DENY_ENTRIES = Object.freeze([
 ]);
 
 /**
- * Package-manager / toolchain caches that `workspace` profile may write.
  * @param {string} home
  * @param {string} platform
  * @returns {string[]}
@@ -85,7 +74,6 @@ export function packageCacheWriteRoots(home, platform = process.platform) {
 }
 
 /**
- * Temp directories the child may write (os.tmpdir + common Unix aliases).
  * @returns {string[]}
  */
 export function tempWriteRoots() {
@@ -99,7 +87,6 @@ export function tempWriteRoots() {
 }
 
 /**
- * True when `absPath` is under `root` (or equal). Does not consult live Minnow home.
  * @param {string} absPath
  * @param {string} root
  * @returns {boolean}
@@ -112,7 +99,6 @@ function isUnderRoot(absPath, root) {
 }
 
 /**
- * When cwd lives under ~/.minnow/worktrees, treat it as the active worktree write root.
  * @param {string} cwd
  * @param {string} [worktreesRoot]
  * @returns {string | null}
@@ -121,8 +107,6 @@ export function detectWorktreeRoot(cwd, worktreesRoot = getWorktreesRoot()) {
   if (!cwd || typeof cwd !== 'string') return null;
   const resolved = resolvePolicyPath(cwd);
   const root = resolvePolicyPath(worktreesRoot);
-  // Prefer the injected root comparison so unit tests can pass a fake worktrees dir
-  // without mutating MINNOW_HOME. Fall back to the live helper for production paths.
   if (!isUnderRoot(resolved, root) && !isPathUnderWorktreesRoot(resolved)) {
     return null;
   }
@@ -130,17 +114,15 @@ export function detectWorktreeRoot(cwd, worktreesRoot = getWorktreesRoot()) {
 }
 
 /**
- * Build the Phase-1 `workspace` policy (filesystem containment, network allowed).
- *
  * @param {object} [params]
  * @param {SandboxProfileName} [params.profile]
  * @param {string} [params.workspaceRoot]
- * @param {string} [params.cwd] run cwd — used to detect an active worktree slot
- * @param {string} [params.worktreeRoot] explicit worktree root (overrides cwd detection)
+ * @param {string} [params.cwd]
+ * @param {string} [params.worktreeRoot]
  * @param {string} [params.home]
  * @param {string} [params.minnowHome]
  * @param {string} [params.platform]
- * @param {boolean} [params.networkAllow] ignored for `strict` (always false); default true for workspace
+ * @param {boolean} [params.networkAllow]
  * @returns {SandboxPolicy}
  */
 export function buildPolicy({
@@ -162,13 +144,10 @@ export function buildPolicy({
     worktreeAbs = detectWorktreeRoot(cwd, path.join(minnowAbs, 'worktrees'));
   }
 
-  /** Primary checkout the agent may mutate. */
   const primaryWrite = worktreeAbs ?? workspaceAbs;
 
   const writeRoots = new Set();
   writeRoots.add(primaryWrite);
-  // When running inside a worktree, still allow the main workspace (read-mostly tools
-  // sometimes write build artifacts next to the repo the board was opened from).
   writeRoots.add(workspaceAbs);
 
   for (const t of tempWriteRoots()) writeRoots.add(t);
@@ -176,12 +155,10 @@ export function buildPolicy({
   const allowNetwork = profile === 'strict' ? false : networkAllow !== false;
   if (profile === 'workspace') {
     for (const c of packageCacheWriteRoots(homeAbs, platform)) writeRoots.add(c);
-    // Terminal run logs under ~/.minnow (parent process writes these; allow for parity)
     writeRoots.add(resolvePolicyPath(path.join(minnowAbs, 'logs', 'terminal')));
   }
 
   const denyReadRoots = [];
-  // Whole Minnow home is denied; narrower allows re-open the active slot + logs.
   denyReadRoots.push(minnowAbs);
   for (const entry of CREDENTIAL_DENY_ENTRIES) {
     denyReadRoots.push(resolvePolicyPath(path.join(homeAbs, entry.rel)));
@@ -207,7 +184,6 @@ export function buildPolicy({
   };
 }
 
-/** Convenience alias matching the plan's naming. */
 export function buildWorkspacePolicy(params = {}) {
   return buildPolicy({ ...params, profile: 'workspace' });
 }

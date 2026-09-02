@@ -1,19 +1,7 @@
-/**
- * Pure classification of an editor line as intent prose, code, or neither.
- *
- * Auto-triggering intent on prose is a guess, so the rules are deliberately
- * conservative: anything that carries a syntactic marker of code is `code`. The
- * escape hatches are a configurable sigil (explicit-only mode) and Mod-Enter,
- * which forces a resolve regardless of what this returns.
- */
-
 export type IntentLineKind = 'intent' | 'code' | 'skip';
 
 export interface ClassifyIntentOptions {
-  /**
-   * When set, only lines starting with this prefix are intent — the heuristic
-   * below is skipped entirely.
-   */
+  /** When set, only lines starting with this prefix are intent — the heuristic below is skipped entirely. */
   sigil?: string;
   /** Line-comment token for the file's language (e.g. `//`, `#`). */
   lineComment?: string;
@@ -94,10 +82,7 @@ export function lineCommentForLanguage(languageName: string | null | undefined):
   return LINE_COMMENT_BY_LANGUAGE[key] ?? null;
 }
 
-/**
- * True when intent may auto-trigger for a language. Prose formats are excluded
- * because ordinary sentences there would fire on every paragraph.
- */
+/** True when intent may auto-trigger for a language. */
 export function isIntentEligibleLanguage(languageName: string | null | undefined): boolean {
   const key = languageName?.trim().toLowerCase();
   if (!key) return false;
@@ -117,17 +102,14 @@ export function looksLikeIntentProse(text: string): boolean {
   const tokens = body.split(/\s+/).filter(Boolean);
   if (tokens.length < 3) return false;
 
-  // Structural code markers.
   if (/[;{},)]$/.test(body)) return false;
   if (/(=>|::|->)/.test(body)) return false;
   if (/=/.test(body)) return false;
-  // Call-shaped `ident(`.
   if (/[A-Za-z_$][\w$]*\s*\(/.test(body)) return false;
 
   const first = tokens[0].toLowerCase().replace(/[^a-z]/g, '');
   if (LEADING_KEYWORDS.has(first)) return false;
 
-  // Plain lowercase words only — camelCase, dots and underscores read as code.
   const wordy = tokens.filter((token) => /^[A-Za-z][a-z]*$/.test(token)).length;
   return wordy / tokens.length >= 0.6;
 }

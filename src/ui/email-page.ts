@@ -1,7 +1,3 @@
-/**
- * Minnow Email app — agent-first inbox dashboard and mail client.
- */
-
 import '../styles/email.css';
 
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';

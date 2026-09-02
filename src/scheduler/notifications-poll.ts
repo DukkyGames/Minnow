@@ -36,9 +36,7 @@ async function deliverNotification(
 
   try {
     await ackSchedulerNotification(row.id);
-  } catch {
-    /* best-effort ack */
-  }
+  } catch {}
 }
 
 /** Single poll pass for unacked scheduler reminders. */
@@ -53,9 +51,7 @@ export async function pollSchedulerNotifications(): Promise<void> {
     for (const row of rows) {
       await deliverNotification(row);
     }
-  } catch {
-    /* server unavailable — skip silently */
-  }
+  } catch {}
 }
 
 /** Start background polling while the SPA is open. */

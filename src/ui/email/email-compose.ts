@@ -1,7 +1,3 @@
-/**
- * Inline compose block for the reading pane footer.
- */
-
 import { appConfirm } from "../app-dialog";
 import type { EmailAccount, EmailMessage } from "../../email/client";
 import {
@@ -72,6 +68,8 @@ function extractEmail(header: string): string {
   return extractEmailAddress(header);
 }
 
+// ── Recipients ───────────────────────────────────────────────────────────────
+
 function collectRecipients(
   messages: EmailMessage[],
   accountEmail: string,
@@ -121,6 +119,8 @@ function headAction(label: string, title: string): HTMLButtonElement {
   button.title = title;
   return button;
 }
+
+// ── Compose mount ────────────────────────────────────────────────────────────
 
 export function mountEmailCompose(
   mount: HTMLElement,
@@ -232,8 +232,6 @@ export function mountEmailCompose(
 
   fieldRow("To", toField.root, { labelledBy: "email-compose-to-label" });
 
-  // Cc/Bcc stay collapsed until asked for — most messages need neither, and
-  // three always-present recipient rows push the body off a short pane.
   const ccRow = el("div", "email-compose-optional-recipients");
   const showCcBtn = el("button", "email-compose-head-btn", "Cc") as HTMLButtonElement;
   showCcBtn.type = "button";
@@ -271,15 +269,12 @@ export function mountEmailCompose(
     bccInput.focus();
   });
 
-  // Reply-all and forward normally carry a Cc, so open it up front.
   if (options.mode === "replyAll" || options.mode === "forward") {
     revealCc();
   }
 
   fieldRow("Subject", subjectInput);
 
-  // Subject suggestion (§3.6) — offered only for new mail once the body has
-  // enough substance to name, and only while the subject is still empty.
   if (options.mode === "new") {
     const suggestRow = el("div", "email-compose-subject-suggest");
     suggestRow.hidden = true;
@@ -342,13 +337,7 @@ export function mountEmailCompose(
     headStatus.textContent = message;
   };
 
-  /**
-   * Put the account signature below an empty body.
-   *
-   * Only ever applied to a blank editor, so it cannot duplicate itself or
-   * clobber a restored draft — and the `-- ` separator is the RFC 3676
-   * convention other clients use to fold it away.
-   */
+  /** Put the account signature below an empty body. */
   const appendSignature = (): void => {
     const signature = options.account.signature?.trim();
     if (!signature || bodyEditor.getPlainText().trim()) return;
@@ -356,8 +345,6 @@ export function mountEmailCompose(
   };
 
   const applyModeDefaults = () => {
-    // A restored draft is what the user actually typed, so it wins over
-    // anything the reply/forward defaults would compute.
     if (options.draft) {
       const { to, cc, bcc, subject, body } = options.draft;
       if (to !== undefined) toInput.value = to;
@@ -589,10 +576,6 @@ export function mountEmailCompose(
     }
   });
 
-  // ---------------------------------------------------------------------
-  // Attachments
-  // ---------------------------------------------------------------------
-
   const attachmentTray = createAttachmentTray({
     onStatus: options.onStatus,
     onChange: () => scheduleDraftSave(),
@@ -600,14 +583,9 @@ export function mountEmailCompose(
   mount.appendChild(attachmentTray.root);
   const teardownDrop = enableAttachmentDrop(mount, attachmentTray);
 
-  // ---------------------------------------------------------------------
-  // Draft autosave
-  // ---------------------------------------------------------------------
-
   let draftId = options.draftId ?? "";
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
   let discarded = false;
-  // A send in flight must not be resurrected by a late autosave tick.
   let sending = false;
 
   const currentDraft = () => ({
@@ -637,7 +615,6 @@ export function mountEmailCompose(
   };
 
   const saveDraftNow = async (): Promise<void> => {
-    // An untouched composer should not litter the drafts list.
     if (discarded || sending || isBlank()) return;
 
     try {
@@ -651,9 +628,6 @@ export function mountEmailCompose(
       });
       draftId = draft.id;
     } catch {
-      // Autosave is a safety net, not a user-facing operation: a failed tick
-      // will be retried by the next keystroke, and shouting about it while
-      // someone is mid-sentence would be worse than staying quiet.
     }
   };
 
@@ -680,8 +654,6 @@ export function mountEmailCompose(
 
   const actions = el("div", "email-compose-actions");
 
-  // Inline notices that sit just above the action row instead of interrupting
-  // with a dialog: an attachment warning and the send-later scheduler.
   const warnRow = el("div", "email-compose-warning");
   warnRow.hidden = true;
   warnRow.setAttribute("role", "alert");
@@ -693,8 +665,6 @@ export function mountEmailCompose(
   discardBtn.type = "button";
   discardBtn.addEventListener("click", () => {
     void (async () => {
-      // Discard is only destructive once the user has confirmed it, and even
-      // then the autosaved row is what gets removed — not unsaved text.
       if (!isBlank()) {
         const sure = await appConfirm(
           "Discard this draft? It will not be recoverable.",
@@ -743,8 +713,6 @@ export function mountEmailCompose(
       return;
     }
 
-    // Catch the classic mistake before it goes out — an inline warning, not a
-    // dialog. "Send anyway" re-dispatches with force set.
     if (attachments.length === 0 && ATTACHMENT_INTENT.test(body) && !force) {
       showAttachmentWarning(sendAt);
       return;
@@ -764,7 +732,6 @@ export function mountEmailCompose(
     clearTimeout(saveTimer);
 
     try {
-      // Queued, not sent: the undo window below is what confirms the send.
       const { entry } = await sendEmailMessage({
         accountId: options.account.id,
         to,
@@ -779,7 +746,6 @@ export function mountEmailCompose(
         sendAt,
       });
 
-      // The message is on its way, so the draft row has served its purpose.
       if (draftId) {
         await deleteEmailDraft(options.account.id, draftId).catch(() => {});
         draftId = "";
@@ -787,8 +753,6 @@ export function mountEmailCompose(
 
       showSendUndoToast(entry, {
         onStatus: options.onStatus,
-        // Put the draft back in front of the user rather than silently
-        // discarding what they just wrote.
         onUndo: () => {
           teardown();
           mountEmailCompose(mount, {
@@ -934,7 +898,6 @@ export function mountEmailCompose(
   mount.appendChild(warnRow);
   mount.appendChild(actions);
 
-  // Cmd/Ctrl+Enter sends from anywhere in the composer.
   mount.addEventListener("keydown", (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
@@ -942,6 +905,8 @@ export function mountEmailCompose(
     }
   });
 }
+
+// ── Send later ───────────────────────────────────────────────────────────────
 
 /** Tomorrow at 9am, local time, as a `datetime-local` input value. */
 function defaultSendLater(): string {

@@ -64,8 +64,6 @@ export function isAllowedWorkspaceRoot(rootPath) {
     return false;
   }
   const resolved = path.resolve(rootPath.trim());
-  // Board task worktrees (MIN-275) live under ~/.minnow/worktrees and are valid
-  // per-request tool roots so isolated task chats run inside their worktree.
   if (isPathUnderWorktreesRoot(resolved)) {
     return true;
   }

@@ -1,7 +1,3 @@
-/**
- * Shared thinking budget numeric input for Settings (global + per-agent overrides).
- */
-
 import { clampThinkingBudgetTokens } from '../agents/thinking-types';
 
 export interface ThinkingBudgetFieldInputs {

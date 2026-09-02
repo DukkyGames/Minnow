@@ -1,9 +1,3 @@
-/**
- * In-app browser preview panel (workspace files + arbitrary URLs).
- * Electron: WebContentsView via window.minnow.preview (MIN-112).
- * Browser (npm start): same-origin iframe in #previewFrame (MIN-105).
- */
-
 import { loadBrowserMeta } from '../config/browser-meta';
 import type { MinnowPreviewApi } from '../electron';
 import {
@@ -118,6 +112,8 @@ let unsubscribeDevToolsState: (() => void) | null = null;
 const iframesByTabId = new Map<string, HTMLIFrameElement>();
 const loadedTabGuests = new Set<string>();
 
+// ── Frames ───────────────────────────────────────────────────────────────────
+
 function getActivePreviewSource(): PreviewSource | null {
   return getActivePreviewTab()?.source ?? getFilePanelState().previewSource;
 }
@@ -142,9 +138,6 @@ function getOrCreateFrame(tabId: string): HTMLIFrameElement | null {
   if (!frame) {
     frame = document.createElement('iframe');
     frame.className = 'preview-frame';
-    // allow-same-origin is required for Design Mode: the element picker and anchor
-    // resolution read the guest document, which an opaque-origin sandbox forbids even
-    // for same-origin workspace pages. External URLs stay cross-origin protected by SOP.
     frame.setAttribute(
       'sandbox',
       'allow-scripts allow-forms allow-popups allow-modals allow-same-origin',
@@ -235,17 +228,9 @@ function getPreviewDesignChrome(): HTMLElement | null {
   return document.getElementById('previewDesignChrome');
 }
 
-/**
- * Electron hides the native guest while Design Mode drives a same-origin iframe under the SVG
- * overlay. That swap only works when the iframe can actually read/interact with the guest — i.e.
- * a same-origin page (workspace HTML, or a URL on Minnow's own origin).
- *
- * On a CROSS-ORIGIN preview (a hosted/public URL, or a dev server on another origin) the iframe
- * can't be introspected, so element Select must fall back to CDP inspect on the native
- * WebContentsView — which only receives hover/click while it is visible. So when Select is armed
- * on a cross-origin preview we keep the native view (return false); Draw/Comment (and disarmed/no
- * tool) still use the iframe guest so their coordinate-anchored DOM overlay stacks on top.
- */
+// ── Design mode ──────────────────────────────────────────────────────────────
+
+/** Electron hides the native guest while Design Mode drives a same-origin iframe under the SVG overlay. */
 export function usesDesignModeIframeGuest(): boolean {
   if (!usesElectronPreview() || !isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) return false;
   if (!isCrossOriginPreview()) return true;
@@ -341,11 +326,9 @@ async function syncDesignModeElectronGuest(): Promise<void> {
   const session = getDesignModeSession(DESIGN_MODE_INSTANCE_ID);
   if (designOn && session) {
     if (usingIframe) {
-      // Iframe guest: native view is hidden — float the strip over the preview like browser mode.
       chrome?.setAttribute('hidden', '');
       relocateDesignModeStrip(DESIGN_MODE_INSTANCE_ID, body);
     } else {
-      // Native WebContentsView covers #previewBody — dock the strip in the footer below it.
       chrome?.removeAttribute('hidden');
       if (chrome) relocateDesignModeStrip(DESIGN_MODE_INSTANCE_ID, chrome);
     }
@@ -366,13 +349,10 @@ async function syncDesignModeElectronGuest(): Promise<void> {
   } else {
     body.classList.remove('preview-body--design-mode');
     if (usesElectronPreview()) {
-      // Native WebContentsView is the guest (Design Mode off, or cross-origin Select where CDP
-      // inspect needs the native view visible and on top). Park every DOM iframe.
       for (const frame of iframesByTabId.values()) {
         frame.hidden = true;
       }
     } else {
-      // Browser mode: iframes ARE the preview; keep the active tab's frame visible.
       showActiveTabFrame();
     }
   }
@@ -392,10 +372,7 @@ export async function isPreviewDesignModeAvailable(): Promise<boolean> {
   return true;
 }
 
-/**
- * Show or hide Design Mode chrome based on whether preview is hosted in Code vs the desktop drawer.
- * Tears down an active session when the surface switches to desktop.
- */
+/** Show or hide Design Mode chrome based on whether preview is hosted in Code vs the desktop drawer. */
 export async function syncPreviewDesignToolbarForSurface(): Promise<void> {
   const available = await isPreviewDesignModeAvailable();
   const designBtn = getDesignToggleButton();
@@ -446,16 +423,9 @@ async function toggleDesignModeFromToolbar(): Promise<void> {
     onClearAll: () => void refreshAnnotationsPanel(),
   });
   syncAnnotationsToggleVisibility(true);
-  // Guest sync already ran via onArmedToolChange during enable (before the Select picker binds).
-  // A second sync here re-bound the picker while CDP enable was still in flight →
-  // "target closed while handling command".
 }
 
-/**
- * Open a page (workspace path or http(s) URL) in the preview panel and ensure Design Mode is
- * on for it (MIN-368 transcript → page navigation). No-ops the design-mode enable if it's
- * already on for this instance.
- */
+/** Open a page (workspace path or http(s) URL) in the preview panel and ensure Design Mode is on for it (MIN-368 transcript → page navigation). */
 export async function openPreviewPageAndEnableDesignMode(pageUrl: string): Promise<void> {
   const isUrl = HTTP_URL_RE.test(pageUrl.trim());
   if (isUrl) {
@@ -482,6 +452,8 @@ export async function openPreviewPageAndEnableDesignMode(pageUrl: string): Promi
   });
   syncAnnotationsToggleVisibility(true);
 }
+
+// ── DevTools ─────────────────────────────────────────────────────────────────
 
 function getDevToolsButton(): HTMLButtonElement | null {
   return document.getElementById('btnPreviewDevTools') as HTMLButtonElement | null;
@@ -526,7 +498,6 @@ export async function syncPreviewDevToolsDockToHost(): Promise<void> {
   try {
     await api.devtools.setDock(getFilePanelState().previewDevToolsDock);
   } catch {
-    /* guest not ready */
   }
   syncDevToolsDockButton();
 }
@@ -545,7 +516,6 @@ async function syncDevToolsButtonState(): Promise<void> {
   try {
     setDevToolsButtonPressed(await api.devtools.isOpen(tabId));
   } catch {
-    /* stale guest during teardown */
   }
 }
 
@@ -558,7 +528,6 @@ async function toggleDevToolsFromToolbar(): Promise<void> {
     const { open } = await api.devtools.toggle(tabId);
     setDevToolsButtonPressed(open);
   } catch {
-    /* guest not ready yet */
   }
 }
 
@@ -567,6 +536,8 @@ function isDevToolsShortcut(e: KeyboardEvent): boolean {
   if (e.key === 'F12') return true;
   return (e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'i';
 }
+
+// ── Navigation ───────────────────────────────────────────────────────────────
 
 function getAutoReloadCheckbox(): HTMLInputElement | null {
   return document.getElementById('previewAutoReload') as HTMLInputElement | null;
@@ -663,7 +634,6 @@ function syncAddressBarFromNavigation(url: string): void {
         return;
       }
     } catch {
-      /* keep generic URL below */
     }
   }
 
@@ -717,7 +687,6 @@ function onPreviewNavigation(url: string, tabId?: string): void {
       else commitActivePreviewSource(source);
     }
   } catch {
-    /* ignore malformed URLs */
   }
 }
 
@@ -778,6 +747,8 @@ function onPreviewLoadFailed(
         : undefined;
   showPreviewStatus(message, externalUrl);
 }
+
+// ── Electron host ────────────────────────────────────────────────────────────
 
 function startBoundsObserver(): void {
   const body = getPreviewBody();
@@ -861,7 +832,6 @@ async function loadSourceInPreview(
   const url = resolvePreviewLoadUrl(source, cacheBust, getFileTreeListingWorkspaceRoot());
 
   await ensureElectronPreviewTab(id);
-  // Remember bounds before navigation so the main-process guest can attach with size.
   await showPreviewHost();
 
   if (api.navigateAndWait) {
@@ -889,6 +859,8 @@ async function loadSourceInPreview(
   await showPreviewHost();
   scheduleElectronPreviewHostVisibilitySync();
 }
+
+// ── Embed checks ─────────────────────────────────────────────────────────────
 
 function clearFrameBlockedTimer(): void {
   if (frameBlockedTimer) {
@@ -963,7 +935,6 @@ function checkExternalUrlEmbedAfterLoad(tabId?: string): void {
       return;
     }
   } catch {
-    // Cross-origin embed allowed — cannot read document; treat as success.
   }
 
   hideEmbedBlockedNotice();
@@ -1043,6 +1014,8 @@ function applySourceToPreview(source: PreviewSource, cacheBust?: number, tabId?:
   showActiveTabFrame();
 }
 
+// ── Tabs and panel ───────────────────────────────────────────────────────────
+
 export async function activatePreviewTabGuest(
   tabId: string,
   options?: { forceLoad?: boolean; slot?: PaneSlotId },
@@ -1052,8 +1025,6 @@ export async function activatePreviewTabGuest(
   const split = await import('./right-pane-split');
   const splitLayout = split.isRightPaneSplitLayoutEnabled();
 
-  // Ownership decides the pane: a tab already living in the other group is revealed
-  // there rather than yanked into the focused one.
   const slotTabs = await import('./right-pane-slot-tabs');
   const targetSlot = splitLayout
     ? slotTabs.registerPreviewTabOpened(tabId, options?.slot)
@@ -1062,7 +1033,6 @@ export async function activatePreviewTabGuest(
   showPreviewSplit({ tabId, slot: targetSlot });
 
   if (splitLayout && targetSlot === 'secondary') {
-    // The primary header/address bar belongs to the other group — leave it alone.
     const tab = getPreviewTab(tabId);
     if (!tab) return;
     const { renderSecondaryPreviewSlot } = await import('./preview-secondary-slot');
@@ -1156,7 +1126,6 @@ export async function closePreviewTabUi(tabId: string): Promise<void> {
 
   if (usesElectronPreview()) {
     const api = getPreviewApi();
-    // Close the guest in the instance that owns it, not always the primary one.
     const instanceId = owningSlot ? split.previewInstanceIdForSlot(owningSlot) : undefined;
     if (api?.tabs?.close) {
       await api.tabs.close(tabId, instanceId);
@@ -1203,11 +1172,7 @@ export function loadPreviewSource(source: PreviewSource, options?: { cacheBust?:
   applySourceToPreview(source, bust, tabId);
 }
 
-/**
- * Show the preview split + Electron guest when browser_navigate runs on Code / Orchestrate.
- * Does not load the URL — caller uses navigateAndWait (avoids double fetch).
- * On Issues / other apps / wiki: background navigation only; never paint the guest overlay.
- */
+/** Show the preview split + Electron guest when browser_navigate runs on Code / Orchestrate. */
 export async function revealPreviewPanelForAgentNavigation(url: string): Promise<void> {
   const trimmed = url.trim();
   if (!trimmed) return;
@@ -1224,7 +1189,6 @@ async function applyAgentPreviewNavigation(url: string, desktopHosted: boolean):
   if (!desktopHosted && !(await dismissFileViewerForPreview())) return;
 
   const tabId = getActivePreviewTabId() ?? ensureDefaultPreviewTab().id;
-  // Persist intended URL without loading — Electron navigation is navigateAndWait.
   updatePreviewTabSource(tabId, { kind: 'url', url });
   hidePreviewStatus();
   setPreviewLoading(true);
@@ -1233,7 +1197,6 @@ async function applyAgentPreviewNavigation(url: string, desktopHosted: boolean):
 
   const allowedToShow = desktopHosted || canAgentRevealPreviewPanel();
   if (!allowedToShow) {
-    // Issues / Settings / wiki / other apps: keep the guest hidden; do not open the pane.
     if (usesElectronPreview()) {
       const api = getPreviewApi();
       await api?.hide();
@@ -1250,7 +1213,6 @@ async function applyAgentPreviewNavigation(url: string, desktopHosted: boolean):
     return;
   }
 
-  // Wait for stable #previewBody bounds so show(bounds) is the only paint path.
   await syncElectronPreviewHostLayout(tabId);
 }
 
@@ -1340,10 +1302,7 @@ export function closePreviewPanel(): void {
   setPreviewLoading(false);
 }
 
-/**
- * Collapse the preview split on Code app entry without discarding previewSource (MIN-342).
- * Clears the Electron guest so a stale page cannot overlay the workspace.
- */
+/** Collapse the preview split on Code app entry without discarding previewSource (MIN-342). */
 export function collapsePreviewPanelKeepingSource(): void {
   resetRightSplitForCodeEntry();
   cancelDeferredPreviewLoad();
@@ -1367,6 +1326,8 @@ export function togglePreviewPanel(): void {
   }
   openPreviewPanel(state.previewSource);
 }
+
+// ── Reload and IPC ───────────────────────────────────────────────────────────
 
 function reloadPreview(): void {
   const now = Date.now();
@@ -1448,12 +1409,7 @@ function pathsMatchForReload(savedPath: string, previewPath: string): boolean {
   return a === b;
 }
 
-/**
- * Before/after diff capture (MIN-370 P1): only meaningful while Design Mode is on for this
- * instance (the proxy this module uses for "the user is doing iterative visual work" — there's
- * no direct signal here for which chat turn "owns" a given tool-driven file save). Captures the
- * pre-reload viewport immediately; {@link onPreviewReloadSettled} captures the post-reload side.
- */
+/** Before/after diff capture (MIN-370 P1): only meaningful while Design Mode is on for this instance (the proxy this module uses for "the user is doing iterative visual work" — there's no direct signal here for which chat turn "owns" a given tool-driven file save). */
 function notifyDesignFileSavedIfLinked(path: string): void {
   if (!isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) return;
   const chat = getActiveChat();
@@ -1462,12 +1418,6 @@ function notifyDesignFileSavedIfLinked(path: string): void {
   void notifyDesignFileSaved(chat.id, turnId, path);
 }
 
-/**
- * Fired once the preview guest's post-save auto-reload has visibly settled (Electron's
- * `api.onLoading(false)` or the iframe fallback's `load` event) — re-runs anchor healing
- * (MIN-370 P2) for every mark on the page and finalizes any pending before/after pair
- * (MIN-370 P1), re-rendering the transcript if the pair landed on the active chat.
- */
 function onPreviewReloadSettled(): void {
   if (!isDesignModeEnabled(DESIGN_MODE_INSTANCE_ID)) return;
   if (getDesignModeSession(DESIGN_MODE_INSTANCE_ID)?.getArmedToolId() === 'select') {
@@ -1562,7 +1512,6 @@ function goBackInFrame(): void {
   try {
     frame?.contentWindow?.history.back();
   } catch {
-    /* cross-origin history may be inaccessible */
   }
 }
 
@@ -1571,7 +1520,6 @@ function goForwardInFrame(): void {
   try {
     frame?.contentWindow?.history.forward();
   } catch {
-    /* cross-origin history may be inaccessible */
   }
 }
 
@@ -1607,7 +1555,6 @@ function bindPreviewControls(): void {
     .getElementById('btnPreviewAnnotationsToggle')
     ?.addEventListener('click', () => void toggleAnnotationsPanel());
 
-  // Docked DevTools is a WebContentsView feature — the button stays hidden in the plain browser build.
   const devToolsBtn = getDevToolsButton();
   if (devToolsBtn && getPreviewApi()?.devtools) {
     devToolsBtn.hidden = false;
@@ -1724,10 +1671,7 @@ async function restorePreviewPanelFromPrefs(): Promise<void> {
   applyPersistedPreviewGuest(active?.source ?? null, { deferLoad: true });
 }
 
-/**
- * Re-attach the Electron guest (or iframe) after the preview pane is visible again.
- * Call on Code foreground and when split DOM is reconciled without a full restore.
- */
+/** Re-attach the Electron guest (or iframe) after the preview pane is visible again. */
 export function resyncOpenPreviewPanelFromState(options?: { reload?: boolean }): void {
   const state = getFilePanelState();
   if (state.rightPaneMode !== 'preview') return;
@@ -1793,6 +1737,8 @@ function applyPersistedPreviewGuest(
   }
 }
 
+// ── Init ─────────────────────────────────────────────────────────────────────
+
 /** Wire preview UI after file panel boot. */
 export async function initPreviewPanel(): Promise<void> {
   const state = getFilePanelState();
@@ -1808,7 +1754,6 @@ export async function initPreviewPanel(): Promise<void> {
   }
 
   bindPreviewControls();
-  // Electron guest right-click → Minnow DOM menu (no-op outside desktop shell).
   void import('./preview-context-menu-handler').then((m) => m.initPreviewContextMenuHandler());
   await syncPreviewDesignToolbarForSurface();
   await syncPreviewDevToolsDockToHost();

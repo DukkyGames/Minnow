@@ -1,41 +1,10 @@
-/**
- * P0-B — the journal event vocabulary.
- *
- * The journal *is* the state, so this schema is load-bearing rather than
- * diagnostic. V1 had 35 log event types capped at 100 entries and used only for
- * debugging; V2 has a closed known vocabulary, and every one of them is folded.
- *
- * ## The invariant
- *
- * **Every event records a completed side effect, never an intent.** You do not
- * log "starting task"; you log `task.attempt.started` *after* the process exists.
- * That is what makes replay safe: replaying a journal never re-attempts something
- * that never happened, and never skips something that did.
- *
- * An event type ending in `.requested`, `.pending`, `.starting`, or `.will` is a
- * bug. `test/orchestrator/events.test.mjs` asserts it mechanically.
- *
- * ## Tolerance
- *
- * Validation rejects malformed *known* events. It does **not** reject unknown
- * types or future envelope versions — PRD §12 requires the fold to survive schema
- * churn, so an unrecognised line passes through as opaque and `derive()` ignores it.
- */
+/** Journal event shapes and validation. */
 
 /** Envelope version this build writes. Readers tolerate anything >= 1. */
 export const ENVELOPE_VERSION = 1;
 
 /**
  * Field type vocabulary used by {@link EVENT_SCHEMAS}.
- *
- * - `id` — a non-empty string. Missing ids are the failure this catches.
- * - `str` — any string, empty allowed (summaries legitimately are).
- * - `int` — a safe integer.
- * - `posint` — a safe integer >= 1.
- * - `str[]` / `obj[]` — arrays, possibly empty.
- * - `obj` — a plain object.
- * - `{ enum: [...] }` — one of a fixed set.
- *
  * @typedef {'id' | 'str' | 'int' | 'posint' | 'str[]' | 'obj[]' | 'obj' | { enum: string[] }} FieldType
  */
 
@@ -57,17 +26,10 @@ export const STOP_REASONS = /** @type {const} */ (['user', 'complete', 'terminal
 
 /**
  * The event vocabulary.
- *
- * `task.attempt.ended` carries `taskId` and `role` even though `attemptId` alone
- * would identify the attempt. That is deliberate: it keeps the fold local — a
- * single pass, no back-reference to the matching `started` — and it is what lets
- * `attemptCount(state, taskId, role)` be one `filter` rather than a join.
  */
 export const EVENT_SCHEMAS = /** @type {const} */ ({
   'board.created': {
     required: { boardId: 'id', planPath: 'str', tasks: 'obj[]', waves: 'obj[]' },
-    // workspacePath: the Code workspace at create time (MIN-752). Optional so
-    // older journals still validate; the list filter infers those at read time.
     optional: { name: 'str', workspacePath: 'str' },
   },
   'board.started': {
@@ -89,8 +51,6 @@ export const EVENT_SCHEMAS = /** @type {const} */ ({
       role: { enum: ROLES },
       outcome: { enum: ATTEMPT_OUTCOMES },
     },
-    // `usage`: tokens this attempt spent. Optional, because a provider may
-    // report none and because every journal written before P5-D has none.
     optional: { summary: 'str', evidence: 'obj', usage: 'obj' },
   },
   'merge.enqueued': {
@@ -99,8 +59,6 @@ export const EVENT_SCHEMAS = /** @type {const} */ ({
   },
   'merge.succeeded': {
     required: { taskId: 'id', sha: 'id' },
-    // beforeSha: integration tip snapped before this merge (P3-C). Optional
-    // so older journals still fold; the merge queue writes it when it has one.
     optional: { beforeSha: 'id' },
   },
   'merge.conflicted': {
@@ -135,8 +93,6 @@ export const EVENT_SCHEMAS = /** @type {const} */ ({
     required: { name: 'str' },
     optional: {},
   },
-  // Human override after a finished run. Same family as
-  // `task.abandoned { reason: 'user' }`: a completed side effect, not an intent.
   'board.reopened': {
     required: { taskIds: 'str[]', reason: 'str' },
     optional: {},
@@ -152,10 +108,6 @@ export const EVENT_TYPES = Object.keys(EVENT_SCHEMAS);
 
 /**
  * Is this a type the fold understands?
- *
- * Unknown types are tolerated, not rejected — callers use this to decide whether
- * a line is opaque, never to decide whether it is valid.
- *
  * @param {unknown} type
  * @returns {boolean}
  */
@@ -210,14 +162,6 @@ function isPlainObject(value) {
 
 /**
  * Validate one raw journal line.
- *
- * `seq` and `ts` are optional here because the journal writer stamps them just
- * before the append, and this same function validates the event on the way in
- * and on the way back out. They are type-checked when present.
- *
- * `ts` is wall-clock and **display-only**. No derivation may read it, or replay
- * stops being deterministic.
- *
  * @param {unknown} raw
  * @returns {{ ok: true, event: Record<string, unknown>, known: boolean }
  *          | { ok: false, error: string }}
@@ -240,7 +184,6 @@ export function validateEvent(raw) {
   }
 
   if (!isKnownEventType(event.type)) {
-    // Tolerated, not accepted: opaque to the fold, but it may sit in the journal.
     return { ok: true, event, known: false };
   }
 

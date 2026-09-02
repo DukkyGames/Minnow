@@ -1,8 +1,3 @@
-/**
- * In-process HTTP server for packaged Electron (MIN-111).
- * Connect API middleware + sirv static dist + PTY WebSocket on a dynamic localhost port.
- */
-
 import http from 'node:http';
 import path from 'node:path';
 import connect from 'connect';
@@ -14,9 +9,6 @@ export interface InProcessServerHandle {
   close(): Promise<void>;
 }
 
-/**
- * Start Minnow API + static dist on a dynamic localhost port (production Electron).
- */
 export async function startInProcessServer(): Promise<InProcessServerHandle> {
   const [
     { applyMinnowMiddlewares },
@@ -57,13 +49,10 @@ export async function startInProcessServer(): Promise<InProcessServerHandle> {
 
   const connectApp = connect();
 
-  // Register /api/* handlers before the SPA fallback (same order as server.js + Vite).
   applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPathAccess });
 
   const distDir = path.join(getAppRoot(), 'dist');
 
-  // The packaged host is loopback-only, but shares the same request-aware
-  // navigation middleware so a future LAN bind cannot leak the host token.
   connectApp.use(
     createSpaAuthHtmlMiddleware({
       indexPath: path.join(distDir, 'index.html'),

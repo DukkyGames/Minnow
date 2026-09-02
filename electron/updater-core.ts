@@ -1,12 +1,5 @@
-/**
- * Pure auto-update state machine (MIN-384) — no Electron imports so it can be unit tested.
- * electron/updater.ts feeds electron-updater events through reduceUpdaterStatus and
- * broadcasts the resulting status to renderers.
- */
-
 export type UpdaterChannel = 'stable' | 'beta';
 
-/** Why updates are unavailable on this install. */
 export type UpdaterUnsupportedReason = 'dev' | 'macos-signing';
 
 export type UpdaterStateName =
@@ -25,11 +18,9 @@ export interface UpdaterStatus {
   channel: UpdaterChannel;
   pendingVersion: string | null;
   releaseNotes: string | null;
-  /** 0–100 while downloading, 100 when ready, null otherwise. */
   progressPercent: number | null;
   lastCheckedAt: number | null;
   nextCheckAt: number | null;
-  /** Set only for user-visible (manual) failures; background failures stay silent. */
   errorMessage: string | null;
 }
 
@@ -43,18 +34,12 @@ export type UpdaterEvent =
   | { kind: 'channel-changed'; channel: UpdaterChannel }
   | { kind: 'next-check-scheduled'; at: number };
 
-/** Default background re-check cadence (spec: fixed 4h, not configurable in v1). */
 export const UPDATER_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
-/** Coerce a persisted/IPC value to a valid channel. */
 export function normalizeUpdaterChannel(value: unknown): UpdaterChannel {
   return value === 'beta' ? 'beta' : 'stable';
 }
 
-/**
- * Flatten electron-updater releaseNotes (string | ReleaseNoteInfo[] | null) to plain text.
- * HTML tags are stripped — renderers show an excerpt, not rich markup.
- */
 export function releaseNotesToText(notes: unknown): string | null {
   const parts: string[] = [];
   if (typeof notes === 'string') {
@@ -96,15 +81,8 @@ export function createInitialUpdaterStatus(options: {
   };
 }
 
-/**
- * Apply one updater event. Rules from MIN-384:
- * - Background check failures are silent (state returns to idle, no errorMessage).
- * - Manual failures surface inline (state 'error' + message).
- * - A downloaded update is never lost to a later failed or empty check.
- */
 export function reduceUpdaterStatus(status: UpdaterStatus, event: UpdaterEvent): UpdaterStatus {
   if (!status.supported) {
-    // Unsupported installs only track channel/schedule bookkeeping.
     if (event.kind === 'channel-changed') return { ...status, channel: event.channel };
     return status;
   }
@@ -162,7 +140,6 @@ export function reduceUpdaterStatus(status: UpdaterStatus, event: UpdaterEvent):
     case 'check-error':
       if (status.state === 'ready') return { ...status, lastCheckedAt: event.at };
       if (!event.manual) {
-        // Silent-with-log: corrupt/failed background work retries next cycle.
         return {
           ...status,
           state: 'idle',

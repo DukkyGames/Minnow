@@ -1,31 +1,15 @@
-/**
- * Pure llama-server failure classifier. No I/O — logs and exit codes in, a
- * title / cause / remediation out. `classifyServeExit` wraps this so Phase 2
- * restart policy still keys off `oom_vram` / `port_conflict` / `unknown`.
- *
- * Signatures below are harvested from real llama.cpp / ggml stderr (b104xx).
- * Matching is first-hit in the order listed in `FAILURE_RULES`: more specific
- * GPU OOM strings before generic alloc failures, corrupt GGUF before mmap.
- */
-
 import {
   planLlamaLaunch,
   snapContextToLadder,
 } from '../../src/models/launch-plan.mjs';
 import { specNeedsDraftModel } from '../../src/models/spec-decode.mjs';
 
-/** Windows `STATUS_STACK_BUFFER_OVERRUN` / abort — llama.cpp hits this on RAM OOM. */
 const WIN_FASTFAIL = 0xc0000409;
-/** Windows `STATUS_DLL_NOT_FOUND` — missing cudart / VC runtime. */
 const WIN_DLL_NOT_FOUND = 0xc0000135;
-/** Windows `ERROR_EXE_MACHINE_TYPE_MISMATCH` — ARM64 llama-server on AMD64 (or the reverse). */
 const WIN_EXE_MACHINE_MISMATCH = 216;
-/** Windows `ERROR_BAD_EXE_FORMAT`. */
 const WIN_BAD_EXE_FORMAT = 193;
-/** Unix SIGKILL (128 + 9). Node reports 137; some platforms report a null code — we only trust 137. */
 const UNIX_SIGKILL = 137;
 
-/** Cut applied when re-planning after VRAM OOM so the retry is not the same budget. */
 const OOM_VRAM_BUDGET_SCALE = 0.85;
 
 /**
@@ -41,8 +25,8 @@ const OOM_VRAM_BUDGET_SCALE = 0.85;
  * @property {number} [trainCtx]
  * @property {number} [parallel]
  * @property {number} [splitCount]
- * @property {string} [spec_type] `--spec-type` the launch asked for.
- * @property {string} [spec_draft_model] `--spec-draft-model` path, when one was set.
+ * @property {string} [spec_type]
+ * @property {string} [spec_draft_model]
  */
 
 /**
@@ -53,12 +37,10 @@ const OOM_VRAM_BUDGET_SCALE = 0.85;
  * @property {string} remediation
  * @property {boolean} retryable
  * @property {Record<string, unknown>} [suggestedSettings]
- * @property {string[]} [chatTemplateFields] First-class chat_template keys (no invented template).
+ * @property {string[]} [chatTemplateFields]
  */
 
 /**
- * Pull a short, user-facing snippet from llama-server stderr/stdout.
- * Same 280-char grepped excerpt Phase 2 used as the entire error string.
  * @param {string | null | undefined} tail
  */
 export function summarizeLlamaLogTail(tail) {
@@ -75,7 +57,6 @@ export function summarizeLlamaLogTail(tail) {
 }
 
 /**
- * Node on Windows may surface NTSTATUS as a signed int32. Compare as unsigned.
  * @param {unknown} exitCode
  * @returns {number | null}
  */
@@ -95,9 +76,6 @@ function has(haystack, pattern) {
 }
 
 /**
- * Scale VRAM/RAM figures so `planLlamaLaunch` sees a 15% tighter budget.
- * We cannot pass a raw byte budget into the planner, so the hardware snapshot
- * is the quantitative knob.
  * @param {Record<string, unknown>} hardware
  * @param {number} scale
  */
@@ -121,9 +99,6 @@ function degradeCache(cacheType) {
 }
 
 /**
- * Re-run the planner at 85% of the last budget when we still have geometry.
- * Falls back to stepping the failed ctx down the ladder so a plan without
- * hardware still produces a Retry payload.
  * @param {DiagnosePlan} plan
  * @returns {Record<string, unknown> | undefined}
  */
@@ -148,7 +123,6 @@ function suggestedSettingsForOomVram(plan) {
       ctx: next.ctx,
       cache_type: next.cache_type,
     };
-    // CPU plans must keep `-ngl 0`. GPU leaves ngl unset so `--fit on` can still split.
     if (next.n_gpu_layers != null) settings.n_gpu_layers = next.n_gpu_layers;
     return settings;
   }
@@ -182,7 +156,6 @@ function splitCountOf(plan) {
  * @returns {LlamaFailureDiagnosis | null}
  */
 function matchFailure(log, exit, plan) {
-  // VRAM OOM — CUDA malloc and ggml backend alloc, plus Vulkan device alloc.
   if (
     has(log, /cudaMalloc failed:\s*out of memory/i) ||
     has(log, /ggml_backend_cuda_buffer_type_alloc_buffer/i) ||
@@ -204,7 +177,6 @@ function matchFailure(log, exit, plan) {
     };
   }
 
-  // System RAM OOM / abort. 0xC0000409 is the Windows fast-fail llama.cpp uses when new[] fails.
   if (has(log, /std::bad_alloc/i) || exit === WIN_FASTFAIL) {
     return {
       code: 'oom_ram',
@@ -216,7 +188,6 @@ function matchFailure(log, exit, plan) {
     };
   }
 
-  // Linux OOM killer. Prefer 137 — a null exit is too common to treat as SIGKILL.
   if (exit === UNIX_SIGKILL) {
     return {
       code: 'killed_by_os',
@@ -228,7 +199,6 @@ function matchFailure(log, exit, plan) {
     };
   }
 
-  // ARM64 llama-server on AMD64 (or the reverse) exits before any log line.
   if (
     exit === WIN_EXE_MACHINE_MISMATCH ||
     exit === WIN_BAD_EXE_FORMAT ||
@@ -247,7 +217,6 @@ function matchFailure(log, exit, plan) {
     };
   }
 
-  // Missing CUDA / GPU driver libs. Diagnose stays I/O-free; Settings → Servers is the fix.
   if (
     exit === WIN_DLL_NOT_FOUND ||
     (has(log, /cudart64_[\w.]+\.dll/i) && has(log, /not found/i)) ||
@@ -291,8 +260,6 @@ function matchFailure(log, exit, plan) {
     };
   }
 
-  // minja is llama.cpp's Jinja engine. Bare "minja" also appears on success, so
-  // require a parse/error nearby rather than the token alone.
   if (
     has(log, /Failed to parse chat template/i) ||
     has(log, /minja.*(?:fail|error|exception)/i) ||
@@ -305,8 +272,6 @@ function matchFailure(log, exit, plan) {
       remediation:
         'Minnow will retry once without --jinja. If it still fails, set chat_template or chat_template_file (llama-server --chat-template / --chat-template-file) on the launch settings — do not paste a guessed template.',
       retryable: true,
-      // First-class keys so the UI can point at --chat-template. No suggestedSettings
-      // payload: we do not invent a template, and an empty retry must not force manual.
       chatTemplateFields: ['chat_template', 'chat_template_file'],
     };
   }
@@ -342,11 +307,6 @@ function matchFailure(log, exit, plan) {
     };
   }
 
-  // Speculative decoding with a mode that needs a draft model but has none. Verified
-  // against b9628: llama-server registers the implementation and then dies in the
-  // loader with **no error line at all** (SIGSEGV / STATUS_ACCESS_VIOLATION), so this
-  // has to be matched on the launch settings rather than on a log signature. Last
-  // before the generic fallback so any real signature above still wins.
   if (specNeedsDraftModel(plan?.spec_type, plan?.spec_draft_model)) {
     return {
       code: 'spec_missing_draft_model',
@@ -363,12 +323,9 @@ function matchFailure(log, exit, plan) {
 }
 
 /**
- * Classify a llama-server death from its log tail and exit code.
- *
  * @param {string | null | undefined} logTail
  * @param {number | null | undefined} exitCode
- * @param {DiagnosePlan | null | undefined} plan LlamaLaunchPlan plus optional
- *   geometry / weights / hardware so VRAM OOM can re-plan quantitatively.
+ * @param {DiagnosePlan | null | undefined} plan
  * @returns {LlamaFailureDiagnosis}
  */
 export function diagnoseLlamaFailure(logTail, exitCode, plan) {

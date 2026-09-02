@@ -1,7 +1,3 @@
-/**
- * Context usage breakdown popover (MIN-13) — section token rows with bars.
- */
-
 import type { ContextBudget, ContextUsageSection } from '../chat/context-usage';
 import {
   getPromptMetaSettingsSync,

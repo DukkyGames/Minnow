@@ -1,7 +1,3 @@
-/**
- * Settings → Search — provider, SearXNG URL, API keys, fallback chain, result count.
- */
-
 import '../styles/settings-general.css';
 
 import {
@@ -31,6 +27,8 @@ import {
 import { setStatus } from './status';
 import { isLocalServerAvailable } from '../tools/config';
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -55,6 +53,8 @@ const FALLBACK_OPTIONS: { value: SearchFallbackProvider; label: string }[] = [
   { value: 'brave', label: 'Brave' },
   { value: 'duckduckgo', label: 'DuckDuckGo' },
 ];
+
+// ── Searxng ──────────────────────────────────────────────────────────────────
 
 /** Managed SearXNG row: canonical label column + status panel in the control column. */
 function appendManagedSearxngRow(container: HTMLElement): {
@@ -100,6 +100,8 @@ function appendManagedSearxngRow(container: HTMLElement): {
 
   return { managedWrap, endpoint };
 }
+
+// ── Render ───────────────────────────────────────────────────────────────────
 
 /** Render Settings → Search into the section mount. */
 export async function renderSearchSettingsSection(mount: HTMLElement): Promise<void> {

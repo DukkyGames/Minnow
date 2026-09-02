@@ -1,7 +1,3 @@
-/**
- * Orchestrate mode: plan picker in the composer toolbar (plan strip hidden in chat view).
- */
-
 import '../styles/orchestrate-plan-selector.css';
 
 import { isActiveChatStreaming } from '../chat/streaming-state';
@@ -36,6 +32,8 @@ export function shouldMountOrchestratePlanInInputRow(_chat: Chat): boolean {
   return false;
 }
 
+// ── Layout ───────────────────────────────────────────────────────────────────
+
 function getInputBar(): HTMLElement | null {
   return document.querySelector('.input-bar');
 }
@@ -52,14 +50,10 @@ function getComposerControls(): HTMLElement | null {
 function insertPlanStripInToolbar(strip: HTMLElement): void {
   const toolbar = getComposerControls();
   if (!toolbar) return;
-  // Compact parks the strip (and the work-agent anchor) in the cog sheet;
-  // pulling it back here would undo that parking.
   if (toolbar.classList.contains('composer-controls--compact') && !toolbar.contains(strip)) {
     return;
   }
   const anchor = document.getElementById('workAgentDev');
-  // The anchor is parked in the cog sheet while compact, so it is not always
-  // a child of the toolbar — insertBefore would throw NotFoundError.
   if (anchor?.parentNode === toolbar) {
     toolbar.insertBefore(strip, anchor);
   } else {
@@ -106,6 +100,8 @@ function getPlanHint(): HTMLElement | null {
   }
   return planHintEl;
 }
+
+// ── Sync ─────────────────────────────────────────────────────────────────────
 
 /** Disables plan select while streaming or recovery (mirrors expert select). */
 export function refreshOrchestratePlanSelectorDisabled(): void {
@@ -179,10 +175,7 @@ function onPlanSelectChange(): void {
   syncViewModeToggleFromActiveChat();
 }
 
-/**
- * When the user drops an executable plan from the file tree, persist it and refresh the strip.
- * @returns true when the path was applied (Orchestrate mode + valid executable plan).
- */
+/** When the user drops an executable plan from the file tree, persist it and refresh the strip. */
 export function applyOrchestratePlanFromWorkspacePath(workspacePath: string): boolean {
   const norm = normalizeOrchestratePlanPath(workspacePath);
   if (!norm || !isExecutableOrchestratePlan(norm)) return false;
@@ -195,6 +188,8 @@ export function applyOrchestratePlanFromWorkspacePath(workspacePath: string): bo
   syncViewModeToggleFromActiveChat();
   return true;
 }
+
+// ── Init ─────────────────────────────────────────────────────────────────────
 
 /** Wires refresh button, change handler, and first sync (idempotent). */
 export function initOrchestratePlanSelector(): void {

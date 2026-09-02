@@ -1,8 +1,3 @@
-/**
- * Pure view models for the Dev Servers Code screen (and shared hub helpers).
- * Hub re-exports formatters from here so existing tests stay green.
- */
-
 import {
   DEFAULT_DEV_SERVER_PORT,
   type DevServerLifecycleStatus,
@@ -81,7 +76,6 @@ export function formatHubDevServerOpenUrl(
       u.port = String(port);
       return u.toString();
     } catch {
-      /* fall through */
     }
   }
   return `http://localhost:${port}/`;

@@ -1,7 +1,3 @@
-/**
- * Step 01 UI smoke: static checks against index.html and messages.css.
- * Usage: node scripts/step01-ui-smoke.mjs http://localhost:5173
- */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

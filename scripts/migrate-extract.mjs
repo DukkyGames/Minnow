@@ -1,7 +1,3 @@
-/**
- * One-time extractor: splits index.html into CSS, HTML body, and raw app JS.
- * Run from repo root: node scripts/migrate-extract.mjs
- */
 import fs from 'fs';
 import path from 'path';
 
@@ -25,12 +21,11 @@ if (!styleMatch || !bodyMatch || !appJs) {
 }
 
 let css = styleMatch[1].trim();
-// Drop Google Fonts @import; Vite will load via link in index.html
 css = css.replace(/@import url\([^)]+\);\s*\n?/, '');
 
 const cssSections = [
   { file: 'tokens.css', start: ':root', end: '/* ─── TOPBAR' },
-  { file: 'global.css', start: '/* ─── TOPBAR', end: '/* ─── TOPBAR' }, // fixed below
+  { file: 'global.css', start: '/* ─── TOPBAR', end: '/* ─── TOPBAR' },
 ];
 
 const markers = [
@@ -65,7 +60,6 @@ for (const { file, fromMarker, toMarker } of markers) {
   console.log('Wrote', file, chunk.length, 'chars');
 }
 
-// HTML body without CDN scripts at end
 let body = bodyMatch[1].trim();
 body = body.replace(
   /<!-- Markdown[\s\S]*$/,

@@ -44,6 +44,7 @@ Rules:
 
 /**
  * Parse strict triage JSON from an LLM response.
+ * Keep only ISO calendar dates; drop vague deadlines like "next week".
  * @param {string} raw
  */
 export function parseTriageJson(raw) {
@@ -91,8 +92,6 @@ export function parseTriageJson(raw) {
   const categoryRaw = String(parsed.category ?? '').trim().toLowerCase();
   const category = TRIAGE_CATEGORIES.includes(categoryRaw) ? categoryRaw : 'fyi';
 
-  // Only a real calendar date survives; anything vague ("next week") is
-  // dropped rather than stored as an unparseable string.
   let deadline = '';
   const deadlineRaw = String(parsed.deadline ?? '').trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(deadlineRaw) && !Number.isNaN(Date.parse(deadlineRaw))) {
@@ -103,7 +102,6 @@ export function parseTriageJson(raw) {
     ? parsed.people.map((name) => String(name).trim()).filter(Boolean).slice(0, 5)
     : [];
 
-  // Inbox tab hint — unknown / missing collapses to '' so deterministic rules win.
   const bucketRaw = String(parsed.bucket ?? '').trim().toLowerCase();
   const bucket = ['primary', 'social', 'other'].includes(bucketRaw) ? bucketRaw : '';
 
@@ -178,7 +176,6 @@ export async function triageMessage(accountId, messageKey) {
     };
 
     await updateMessageTriage(accountId, messageKey, triage);
-    // Refine the local inbox tab when the deterministic pass left it ambiguous.
     if (triage.bucket) {
       await reclassifyWithAiBucket(accountId, messageKey, triage.bucket);
     }

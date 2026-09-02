@@ -58,11 +58,9 @@ export function isGenericReportHeading(text) {
   if (GENERIC_HEADINGS.has(normalized)) {
     return true;
   }
-  // TL;DR variants with descriptive parentheticals, e.g. "TL;DR (Executive Summary)"
   if (/^tl;dr\b/.test(normalized)) {
     return true;
   }
-  // Suggested follow-ups variants, e.g. "Suggested follow-ups on market gaps"
   if (/^suggested follow[- ]?ups?\b/.test(normalized)) {
     return true;
   }

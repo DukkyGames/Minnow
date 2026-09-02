@@ -46,7 +46,6 @@ export function setStatsStripOpen(open: boolean): void {
     try {
       localStorage.setItem(STATS_STRIP_OPEN_KEY, open ? '1' : '0');
     } catch {
-      /* ignore quota / private mode */
     }
   }
 }
@@ -120,7 +119,6 @@ export function updateStatsExpandPreview(): void {
   const disabledChip = archiveDisabled ? ` · archive: disabled — ${archiveDisabled}` : '';
   preview.textContent = `${tps} t/s · ${total} tokens${archiveChip}${disabledChip}`;
 
-  // Status bar carries the short form; the strip itself keeps the detail.
   const barPreview = document.getElementById('statusMetricPreview');
   if (barPreview) barPreview.textContent = `${tps || '—'} t/s`;
 }
@@ -146,7 +144,6 @@ export function updateStrip(
     if (!el) return;
     el.innerHTML = html;
     el.classList.toggle('blank', blank);
-    // Native tooltip carries the precise count when the label is compacted.
     if (title) el.setAttribute('title', title);
     else el.removeAttribute('title');
   }
@@ -204,7 +201,6 @@ export function updateStrip(
   if (barPrompt && barCompletion && cntPrompt && cntCompletion) {
     barPrompt.style.setProperty('--fill-scale', String(p / t || 0));
     barCompletion.style.setProperty('--fill-scale', String(c / t || 0));
-    // Match Total Tokens: commas under 1M, M/B above, full count on hover.
     const promptFmt = formatStatCount(p || null);
     const completionFmt = formatStatCount(c || null);
     cntPrompt.textContent = p ? promptFmt.display : '—';
@@ -233,12 +229,7 @@ export function updateStrip(
   updateStatsExpandPreview();
 }
 
-/**
- * Paint the metrics strip from one chat's lastStats.
- *
- * V1 board-wide rollup across planner + member chats is gone (MIN-714). V2
- * attempt tokens live on the journal / live SSE, not leftover session chats.
- */
+/** Paint the metrics strip from one chat's lastStats. */
 export function refreshMetricsStripForChat(chat: Chat): void {
   const mid = chat.modelId?.trim() || '';
   const ls = chat.lastStats;

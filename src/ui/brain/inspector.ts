@@ -14,6 +14,8 @@ export type InspectorNavigateFn = (relPath: string) => void;
 export type InspectorEditFn = (relPath: string) => void;
 export type InspectorDeletedFn = () => void | Promise<void>;
 
+// ── Archive ──────────────────────────────────────────────────────────────────
+
 /** Parse workspace/chat ids from an archive page path. */
 function parseArchiveFromPath(relPath: string): { workspaceKey: string; chatId: string } | null {
   const match = relPath.match(/^workspaces\/([^/]+)\/archive\/([^/]+)(?:\/|$)/);
@@ -46,6 +48,8 @@ function resolveLinkTarget(
   );
 }
 
+// ── Metrics ──────────────────────────────────────────────────────────────────
+
 /** One label/value cell in the inspector metric strip. */
 function buildMetric(label: string, value: string): HTMLElement {
   const cell = document.createElement('div');
@@ -60,12 +64,7 @@ function buildMetric(label: string, value: string): HTMLElement {
   return cell;
 }
 
-/**
- * One group of relations (backlinks, outbound links, similar pages).
- *
- * Unresolved targets stay visible but inert — a broken wikilink is information,
- * not something to hide.
- */
+/** One group of relations (backlinks, outbound links, similar pages). */
 function buildRelationGroup(
   title: string,
   glyph: string,
@@ -122,6 +121,8 @@ function getInspectorContent(mount: HTMLElement): HTMLElement {
   }
   return content;
 }
+
+// ── Inspector render ─────────────────────────────────────────────────────────
 
 /** Mount or refresh the right-hand node inspector for a wiki page. */
 export async function renderBrainInspector(

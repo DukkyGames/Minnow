@@ -1,7 +1,3 @@
-/**
- * Design Mode for the secondary workspace preview (`workspace-preview-secondary`).
- */
-
 import {
   disableDesignMode,
   isDesignModeEnabled,

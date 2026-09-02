@@ -13,6 +13,8 @@ import type {
   TurnSnapshot,
 } from '../types';
 
+// ── Branches ─────────────────────────────────────────────────────────────────
+
 function ensureRunsArray(chat: Chat): TurnRunRecord[] {
   if (!chat.runs) {
     chat.runs = [];
@@ -105,6 +107,8 @@ export interface CreateRunOptions {
     Pick<TurnSnapshot, 'providerId' | 'modelId' | 'temperature' | 'maxTokens'>
   >;
 }
+
+// ── Create ───────────────────────────────────────────────────────────────────
 
 /** Append a new run; supersede prior non-superseded runs at the same fork. */
 export function createRun(
@@ -222,6 +226,8 @@ export interface FinalizeRunOptions {
   errorMessage?: string;
 }
 
+// ── Finalize ─────────────────────────────────────────────────────────────────
+
 export function finalizeRun(
   chat: Chat,
   runId: TurnRunId,
@@ -274,8 +280,6 @@ export function pruneSupersededRunsAfterTruncate(chat: Chat, cutIndex: number): 
   for (const run of runs) {
     const outStart = run.outputHistoryStart;
     const outEnd = run.outputHistoryEnd;
-    // Indices past the cut no longer point into history — drop them but keep
-    // the message payload so the branch picker can restore the reply.
     if (outStart !== undefined && outStart > cutIndex) {
       run.status = 'superseded';
       delete run.outputHistoryStart;
@@ -284,7 +288,6 @@ export function pruneSupersededRunsAfterTruncate(chat: Chat, cutIndex: number): 
         run.endedAt = Date.now();
       }
     } else if (outEnd !== undefined && outEnd > cutIndex) {
-      // Partial overlap: clamp end or clear stale range; keep messages for redo.
       delete run.outputHistoryStart;
       delete run.outputHistoryEnd;
     }
@@ -303,7 +306,6 @@ export function pruneSupersededRunsAfterTruncate(chat: Chat, cutIndex: number): 
   for (const [forkKey, branchId] of Object.entries(chat.activeBranchByFork)) {
     const fork = Number(forkKey);
     if (!Number.isFinite(fork) || fork > cutIndex) continue;
-    // No materialized reply after the fork → transcript has no active branch.
     if (chat.history.length <= fork + 1) continue;
     const run = runs.find((r) => r.branchId === branchId);
     if (run && isBranchActivatable(chat, run)) {
@@ -341,6 +343,8 @@ export function persistActiveBranchSuffix(
   active.outputHistoryEnd = chat.history.length - 1;
   return true;
 }
+
+// ── Activate ─────────────────────────────────────────────────────────────────
 
 /**
  * Rebuild chat.history from shared prefix through fork + selected branch output.

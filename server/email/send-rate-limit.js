@@ -45,7 +45,6 @@ export function consumeSendAllowance(accountId, now = Date.now()) {
     const err = new Error(
       `Send rate limit reached for this account (${MAX_SENDS_PER_WINDOW}/min). Try again in ${Math.ceil(retryAfterMs / 1000)}s.`,
     );
-    // Surfaced as HTTP 429 by the middleware.
     /** @type {Error & { status?: number, retryAfterMs?: number }} */ (err).status = 429;
     /** @type {Error & { status?: number, retryAfterMs?: number }} */ (err).retryAfterMs =
       retryAfterMs;

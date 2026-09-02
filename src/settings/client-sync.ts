@@ -45,7 +45,6 @@ export async function applySettingsClientPatches(
     } else if (patchKey === 'notifications.soundPackId' && typeof value === 'string') {
       saveNotificationPref('soundPackId', value);
     } else if (patchKey === 'notifications.soundId' && typeof value === 'string') {
-      // Legacy patch key: map single-sound ids to pack ids.
       saveNotificationPref('soundPackId', value === 'none' ? 'none' : 'default');
     } else if (patchKey === 'theme.family' && typeof value === 'string') {
       setThemeFamily(value as ThemeFamily);

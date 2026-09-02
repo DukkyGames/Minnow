@@ -34,7 +34,6 @@ function notificationApi(): NotificationCtor | null {
 export function isWindowUnfocused(): boolean {
   if (typeof document === 'undefined') return false;
   if (document.visibilityState === 'hidden') return true;
-  // `hasFocus` is the one that catches "visible but behind another window".
   return typeof document.hasFocus === 'function' ? !document.hasFocus() : false;
 }
 
@@ -49,9 +48,6 @@ export function notifyOs(input: OsNotificationInput): boolean {
   if (!Ctor) return false;
   if (!isWindowUnfocused()) return false;
 
-  // Never prompt. A permission dialog appearing because an agent finished a
-  // background task is the wrong trade; Electron grants this by default and a
-  // browser that has not granted it simply gets the in-app bell.
   const permission = (Ctor as unknown as { permission?: string }).permission;
   if (permission === 'denied' || permission === 'default') return false;
 

@@ -1,7 +1,3 @@
-/**
- * Shared git-panel / file-tree worktree cwd resolution (avoids circular imports).
- */
-
 import {
   normalizeWorktreePath,
   worktreePathsEqual,
@@ -20,10 +16,7 @@ export function panelPathsEqual(a: string, b: string): boolean {
   return worktreePathsEqual(a, b);
 }
 
-/**
- * Effective worktree root for panel-scoped git/file ops.
- * Returns undefined when panel cwd is empty or equals the main workspace.
- */
+/** Effective worktree root for panel-scoped git/file ops. */
 export function resolvePanelWorktreeCwd(panelCwd?: string): string | undefined {
   const ws = getWorkspacePath().trim();
   if (!panelCwd?.trim()) return undefined;
@@ -41,10 +34,7 @@ export type PanelBrowseRunTargetSeed =
   | { kind: 'local' }
   | { kind: 'worktree'; worktreeRoot: string; gitBranch?: string };
 
-/**
- * Map a manual git-panel worktree pick to a composer run-target for new chats.
- * Returns null when browse override is off (new chats keep default Local).
- */
+/** Map a manual git-panel worktree pick to a composer run-target for new chats. */
 export function resolvePanelBrowseRunTargetSeed(
   panelCwd: string | undefined,
   panelCwdUserOverride: boolean,
@@ -61,11 +51,6 @@ export function resolvePanelBrowseRunTargetSeed(
   };
 }
 
-/**
- * Resolve git-panel browse cwd from the active chat.
- * Follows the chat's own `worktreeRoot` when set; otherwise the workspace.
- * V1 board-task / integration-worktree lookups are gone.
- */
 export function resolvePanelBrowseCwd(input: {
   chat: Chat;
   groups?: ChatGroup[];

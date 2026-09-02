@@ -1,40 +1,23 @@
-/**
- * Guard against agent shell commands that would kill the running Minnow host.
- *
- * Work-agents sometimes try to "free a port from a prior run" by killing
- * electron.exe / Minnow.exe or whatever owns the dev port — but that process is
- * the live app hosting this very agent, so the agent ends up killing Minnow.
- * Block those commands before they reach the shell (agent path only; the user's
- * manual terminal is unaffected).
- */
-
 import { resolveMinnowPort } from '../constants/minnow-port.js';
 import { getSchedulerServerBaseUrl } from '../scheduler/server-base-url.js';
 
-/** Process kill verbs across PowerShell / cmd / POSIX shells. */
 const KILL_VERB = /\b(taskkill|tskill|stop-process|spps|pkill|killall|kill|fuser)\b/i;
 
-/** Image names that belong to the Minnow host (UI shell + electron runtime). */
 const HOST_IMAGE = /\b(minnow|electron)(\.exe)?\b/i;
 
-/** Port-inspection tools that are commonly piped into a kill. */
 const PORT_TOOL = /\b(get-nettcpconnection|netstat|lsof|fuser)\b|-localport\b/i;
 
-/** Resolve the dev port the running server actually bound to. */
 function liveDevPort() {
   try {
     const { port } = new URL(getSchedulerServerBaseUrl());
     if (port) return port;
   } catch {
-    /* fall through to env/default */
   }
   return String(resolveMinnowPort());
 }
 
-/** True when the command references the live dev port in a port position. */
 function mentionsPort(command, port) {
   if (!port) return false;
-  // :9473 | LocalPort 9473 | lsof -ti:9473 | port 9473 | 9473/tcp
   const re = new RegExp(
     `(?::|\\bport\\s+|-localport\\s+|-ti:)${port}\\b|\\b${port}/(?:tcp|udp)\\b`,
     'i',
@@ -42,7 +25,6 @@ function mentionsPort(command, port) {
   return re.test(command);
 }
 
-/** PIDs whose death takes down the host (the node server process tree). */
 function protectedPids() {
   const pids = new Set();
   if (process.pid) pids.add(String(process.pid));
@@ -50,9 +32,7 @@ function protectedPids() {
   return pids;
 }
 
-/** True when a PID-targeted kill names one of the host's own PIDs. */
 function targetsHostPid(command, pids) {
-  // Allow up to 10 digits so Windows DWORD PIDs (often 8+) still match.
   const matches = command.matchAll(
     /(?:\/pid\s+|-id\s+|\bkill(?:\s+-\w+)*\s+)(\d{2,10})/gi,
   );
@@ -73,7 +53,6 @@ function hostKillError(port) {
 }
 
 /**
- * Whether a PID / port pair belongs to the live Minnow host (UI disables kill).
  * @param {number} pid
  * @param {number} [port]
  */
@@ -86,10 +65,9 @@ export function isProtectedPortOwner(pid, port) {
 }
 
 /**
- * Refuse killing a PID that would take down Minnow (ports screen + API).
  * @param {number} pid
  * @param {number} [port]
- * @returns {string | null} Error message when refused, else null.
+ * @returns {string | null}
  */
 export function assessPortOwnerKill(pid, port) {
   if (!Number.isFinite(Number(pid)) || Number(pid) <= 0) {
@@ -102,9 +80,7 @@ export function assessPortOwnerKill(pid, port) {
 }
 
 /**
- * Returns an error message when a command would kill the Minnow host, else null.
- *
- * @param {string} command Raw shell command an agent wants to run.
+ * @param {string} command
  * @returns {string | null}
  */
 export function assessHostKillCommand(command) {
@@ -114,19 +90,14 @@ export function assessHostKillCommand(command) {
   const hasKillVerb = KILL_VERB.test(text);
   const port = liveDevPort();
 
-  // Image-name kills: taskkill /IM electron.exe, pkill -f electron, killall Minnow.
   if (hasKillVerb && HOST_IMAGE.test(text)) {
     return hostKillError(port);
   }
 
-  // Port-owner kills: Get-NetTCPConnection -LocalPort <livePort> | Stop-Process,
-  // lsof -ti:<livePort> | xargs kill, fuser -k <livePort>/tcp. A stale prior run lives on a
-  // *different* (auto-incremented) port, so matching only the live port is safe.
   if ((hasKillVerb || PORT_TOOL.test(text)) && mentionsPort(text, port)) {
     return hostKillError(port);
   }
 
-  // PID kills aimed at the host server process tree.
   if (hasKillVerb && targetsHostPid(text, protectedPids())) {
     return hostKillError(port);
   }

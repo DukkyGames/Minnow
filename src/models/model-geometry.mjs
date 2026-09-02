@@ -1,45 +1,28 @@
 /**
- * Attention geometry — the shape that actually decides how much memory a model needs.
- *
- * The previous estimates derived KV cache from parameter count (`0.000008 * paramsB * ctx`),
- * a constant fitted to Llama-3-8B and then extrapolated linearly. Parameter count does not
- * predict KV size. Qwen3-0.6B and Qwen3-8B have near-identical KV geometry (28 vs 36 layers
- * of 8x128 GQA), so a linear fit lands 22x low on the small one while Llama-3.3-70B comes out
- * 1.9x high. What sets KV size is `layers x kv_heads x head_dim`, and whether the model uses
- * sliding-window attention — Gemma 3 and gpt-oss keep full attention on only 1-in-6 and
- * 1-in-2 layers respectively, which the old formula could not express at all.
- *
- * Geometry is resolved best-effort, in descending order of confidence:
- *   'gguf'      exact, read out of the file's own header (see server/models/gguf-metadata.js)
- *   'family'    a shipped model in the table below matched on architecture + parameter count
- *   'heuristic' fitted fallback from parameter count alone
- */
-
-/**
  * @typedef {object} ModelGeometry
- * @property {number} nLayers Transformer blocks.
- * @property {number} nKvHeads Key/value heads per block (GQA width).
- * @property {number} headDim Size of one attention head.
- * @property {number} nEmbd Hidden size.
- * @property {number} nVocab Vocabulary size — drives the logits buffer.
- * @property {number} nExperts MoE expert count; 0 for dense models.
- * @property {number} swaWindow Sliding-window size in tokens; 0 when every layer is full attention.
- * @property {number} swaPeriod One full-attention layer every N layers; 1 when there is no SWA.
- * @property {GeometrySource} source Where the numbers came from.
- * @property {number} [nFullAttentionLayers] Exact full-attention layer count; overrides swaPeriod.
- * @property {number} [swaHeadDim] Head size on sliding-window layers, when it differs.
- * @property {number} [layerBytes] Exact bytes of repeating `blk.*` tensors (GGUF only).
- * @property {number} [fixedBytes] Exact bytes of embeddings / output tensors (GGUF only).
+ * @property {number} nLayers
+ * @property {number} nKvHeads
+ * @property {number} headDim
+ * @property {number} nEmbd
+ * @property {number} nVocab
+ * @property {number} nExperts
+ * @property {number} swaWindow
+ * @property {number} swaPeriod
+ * @property {GeometrySource} source
+ * @property {number} [nFullAttentionLayers]
+ * @property {number} [swaHeadDim]
+ * @property {number} [layerBytes]
+ * @property {number} [fixedBytes]
  */
 
 /** @typedef {'gguf' | 'family' | 'heuristic'} GeometrySource */
 
 /**
  * @typedef {object} GeometryInput
- * @property {string} [architecture] HF `model_type` (catalog `architecture` field).
- * @property {string} [name] Model or file name, used when architecture is missing.
- * @property {number} [paramsB] Total parameters in billions.
- * @property {number} [activeParamsB] Active parameters in billions (MoE).
+ * @property {string} [architecture]
+ * @property {string} [name]
+ * @property {number} [paramsB]
+ * @property {number} [activeParamsB]
  * @property {number} [nExperts]
  */
 
@@ -55,7 +38,7 @@
 
 /**
  * @typedef {object} Family
- * @property {number} nKvHeads Default key/value head count for the family.
+ * @property {number} nKvHeads
  * @property {number} headDim
  * @property {number} nVocab
  * @property {number} [swaWindow]
@@ -63,15 +46,9 @@
  * @property {FamilySize[]} sizes
  */
 
-/**
- * Shipped model geometry, read from each model's published `config.json`.
- *
- * Only families that are actually common in the catalog are listed; anything else falls
- * through to `heuristicGeometry`. Sizes are matched on parameter count, so variants of the
- * same architecture that differ only in size (Llama 2 7B vs Llama 3 8B) stay distinguishable.
- *
- * @type {Record<string, Family>}
- */
+// ── Families ─────────────────────────────────────────────────────────────────
+
+/** @type {Record<string, Family>} */
 export const GEOMETRY_FAMILIES = {
   qwen3: {
     nKvHeads: 8,
@@ -96,8 +73,6 @@ export const GEOMETRY_FAMILIES = {
       { paramsB: 480, nLayers: 62, nEmbd: 6144, nExperts: 160 },
     ],
   },
-  // Gated DeltaNet: 3 linear-attention layers per full-attention layer. Linear layers hold a
-  // constant-size state rather than a growing cache, approximated here as a zero-width window.
   qwen3_next: {
     nKvHeads: 2,
     headDim: 256,
@@ -106,8 +81,6 @@ export const GEOMETRY_FAMILIES = {
     swaPeriod: 4,
     sizes: [{ paramsB: 80, nLayers: 48, nEmbd: 2048, nExperts: 512 }],
   },
-  // Qwen3.5 / 3.8 hybrid (Gated DeltaNet 3:1). HF model_type is qwen3_5; GGUF arch is qwen35.
-  // 1 of every 4 layers is full attention; linear layers hold a constant-size state.
   qwen3_5: {
     nKvHeads: 4,
     headDim: 256,
@@ -140,9 +113,9 @@ export const GEOMETRY_FAMILIES = {
     sizes: [
       { paramsB: 1.24, nLayers: 16, nEmbd: 2048, headDim: 64 },
       { paramsB: 3.21, nLayers: 28, nEmbd: 3072 },
-      { paramsB: 6.74, nLayers: 32, nEmbd: 4096, nKvHeads: 32 }, // Llama 2 7B — MHA, not GQA
+      { paramsB: 6.74, nLayers: 32, nEmbd: 4096, nKvHeads: 32 },
       { paramsB: 8.03, nLayers: 32, nEmbd: 4096 },
-      { paramsB: 13.0, nLayers: 40, nEmbd: 5120, nKvHeads: 40 }, // Llama 2 13B — MHA
+      { paramsB: 13.0, nLayers: 40, nEmbd: 5120, nKvHeads: 40 },
       { paramsB: 70.6, nLayers: 80, nEmbd: 8192 },
       { paramsB: 405, nLayers: 126, nEmbd: 16384 },
     ],
@@ -167,7 +140,6 @@ export const GEOMETRY_FAMILIES = {
       { paramsB: 141, nLayers: 56, nEmbd: 6144, nExperts: 8 },
     ],
   },
-  // 1 full-attention layer per 6; the other 5 use a 1024-token sliding window.
   gemma3: {
     nKvHeads: 8,
     headDim: 256,
@@ -193,7 +165,6 @@ export const GEOMETRY_FAMILIES = {
       { paramsB: 27.2, nLayers: 46, nEmbd: 4608, nKvHeads: 16, headDim: 128 },
     ],
   },
-  // Alternating dense / 128-token sliding-window attention.
   gpt_oss: {
     nKvHeads: 8,
     headDim: 64,
@@ -261,8 +232,6 @@ export const GEOMETRY_FAMILIES = {
       { paramsB: 34.4, nLayers: 60, nEmbd: 7168, nKvHeads: 8 },
     ],
   },
-  // Dense DeepSeek (deepseek-llm / deepseek-coder). The MoE V2/V3 line uses multi-head latent
-  // attention, whose compressed cache this model does not describe — those fall through.
   deepseek: {
     nKvHeads: 32,
     headDim: 128,
@@ -294,13 +263,9 @@ export const GEOMETRY_FAMILIES = {
   },
 };
 
-/**
- * How far a geometry can be off, by where it came from. Used to require headroom before
- * claiming a model fits: a heuristic geometry that guesses GQA on an older multi-head model
- * understates KV by up to 4x, and reporting a confident number there is how users end up
- * loading something that OOMs.
- * @type {Record<import('./model-geometry.d.mts').GeometrySource, number>}
- */
+// ── Aliases ──────────────────────────────────────────────────────────────────
+
+/** @type {Record<import('./model-geometry.d.mts').GeometrySource, number>} */
 export const GEOMETRY_UNCERTAINTY = {
   gguf: 1.0,
   family: 1.05,
@@ -357,7 +322,6 @@ const ARCH_ALIASES = {
 /** Ordered name probes for catalog rows with no usable `architecture`. */
 const NAME_TO_FAMILY = [
   ['qwen3.8', 'qwen3_5'],
-  // Underscore ids (GGUF / some providers) — keep ahead of generic `qwen3`.
   ['qwen3_8', 'qwen3_5'],
   ['qwen3.5', 'qwen3_5'],
   ['qwen3.6', 'qwen3_5'],
@@ -388,11 +352,7 @@ const NAME_TO_FAMILY = [
   ['yi-', 'yi'],
 ];
 
-/**
- * Layer count fitted over the shipped models in `GEOMETRY_FAMILIES`.
- * Used only when neither the GGUF header nor a family match is available.
- * @param {number} paramsB
- */
+/** @param {number} paramsB */
 export function heuristicLayerCount(paramsB) {
   const p = paramsB > 0 ? paramsB : 7;
   if (p < 1.5) return 24;
@@ -417,8 +377,9 @@ function normalizeArch(value) {
     .replace(/^_|_$/g, '');
 }
 
+// ── Resolve ──────────────────────────────────────────────────────────────────
+
 /**
- * Family key for a catalog row, from `architecture` first and the name as a fallback.
  * @param {GeometryInput} input
  * @returns {string | null}
  */
@@ -436,9 +397,7 @@ export function resolveFamilyKey(input) {
 }
 
 /**
- * Hidden size implied by a parameter count, from the standard dense-transformer budget of
- * roughly 12 * nLayers * nEmbd^2 weights, rounded to a plausible multiple of 128.
- * @param {number} paramsB parameters (billions) attributable to the dense trunk
+ * @param {number} paramsB
  * @param {number} nLayers
  */
 function heuristicEmbeddingSize(paramsB, nLayers) {
@@ -448,21 +407,19 @@ function heuristicEmbeddingSize(paramsB, nLayers) {
   return Math.min(16384, Math.max(512, rounded));
 }
 
+// ── Heuristic ────────────────────────────────────────────────────────────────
+
 /**
- * Fallback geometry from parameter count alone.
  * @param {GeometryInput} input
- * @param {Family} [family] family constants, when the family is known but the size is not
+ * @param {Family} [family]
  * @returns {ModelGeometry}
  */
 export function heuristicGeometry(input, family) {
   const paramsB = input.paramsB && input.paramsB > 0 ? input.paramsB : 7;
   const isMoe = Boolean(input.nExperts) || (input.activeParamsB ?? paramsB) < paramsB * 0.9;
-  // For MoE the attention trunk is sized by the active path, not the full expert bank.
   const trunkB = isMoe && input.activeParamsB ? input.activeParamsB : paramsB;
   const nLayers = heuristicLayerCount(paramsB);
   const nEmbd = heuristicEmbeddingSize(trunkB, nLayers);
-  // 8 KV heads of 128 is the near-universal GQA width on current models; never wider
-  // than the hidden size, which is what multi-head attention on a tiny model degrades to.
   const headDim = family?.headDim ?? 128;
   const defaultKvHeads = family?.nKvHeads ?? 8;
   const nKvHeads = Math.max(1, Math.min(defaultKvHeads, Math.floor(nEmbd / headDim) || 1));
@@ -480,10 +437,6 @@ export function heuristicGeometry(input, family) {
 }
 
 /**
- * Best-known geometry for a catalog or library model.
- *
- * Prefer `geometryFromGgufMetadata` when the weights are on disk — this path is for models
- * that have not been downloaded yet, where the header cannot be read.
  * @param {GeometryInput} input
  * @returns {ModelGeometry}
  */
@@ -494,7 +447,6 @@ export function resolveGeometry(input) {
 
   if (!family || !paramsB) return heuristicGeometry(input, family);
 
-  // Nearest shipped size on a log scale, so 8B matches 8.19B rather than 4B.
   let best = null;
   let bestDistance = Infinity;
   for (const size of family.sizes) {
@@ -504,7 +456,6 @@ export function resolveGeometry(input) {
       best = size;
     }
   }
-  // ~30% either way. Beyond that the row is a different model wearing a familiar name.
   if (!best || bestDistance > 0.3) return heuristicGeometry(input, family);
 
   return {
@@ -521,8 +472,7 @@ export function resolveGeometry(input) {
 }
 
 /**
- * Exact geometry from a parsed GGUF header.
- * @param {Record<string, unknown>} meta output of `readGgufMetadata`
+ * @param {Record<string, unknown>} meta
  * @returns {ModelGeometry | null}
  */
 export function geometryFromGgufMetadata(meta) {
@@ -532,9 +482,6 @@ export function geometryFromGgufMetadata(meta) {
   const headDim = Number(meta.headDim);
   if (!(nLayers > 0) || !(nKvHeads > 0) || !(headDim > 0)) return null;
 
-  // A file can declare a window without saying how often full attention returns. When the
-  // header gives neither an exact per-layer count nor a scalar period, fall back to the family
-  // table, then to "no windowing" — which overstates the cache rather than understating it.
   const swaWindow = Number(meta.swaWindow) > 0 ? Number(meta.swaWindow) : 0;
   const fullLayers = Number(meta.nFullAttentionLayers);
   let swaPeriod = Number(meta.swaPeriod) > 0 ? Number(meta.swaPeriod) : 0;
@@ -545,9 +492,6 @@ export function geometryFromGgufMetadata(meta) {
     const family = familyKey ? GEOMETRY_FAMILIES[familyKey] : undefined;
     const familyPeriod = family?.swaPeriod ?? 0;
     if (familyPeriod > 1) {
-      // SWA families (Gemma) need a window before we apply the period; hybrid linear-attention
-      // families (Qwen3.5) publish period without a window. Applying Gemma's period with a
-      // missing window would understate KV.
       if (swaWindow > 0 || !(family?.swaWindow > 0)) swaPeriod = familyPeriod;
     }
     if (swaWindow > 0 && !swaPeriod) swaPeriod = 1;
@@ -567,8 +511,6 @@ export function geometryFromGgufMetadata(meta) {
     source: 'gguf',
     layerBytes: Number(meta.layerBytes) > 0 ? Number(meta.layerBytes) : undefined,
     fixedBytes: Number(meta.fixedBytes) > 0 ? Number(meta.fixedBytes) : undefined,
-    // Only the header can tell us this, so it is undefined for family-derived geometry —
-    // which is why the MTP option is offered only for models we actually parsed.
     nextnPredictLayers:
       Number(meta.nextnPredictLayers) > 0 ? Number(meta.nextnPredictLayers) : undefined,
   };

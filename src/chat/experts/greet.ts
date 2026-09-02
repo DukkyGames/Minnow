@@ -1,8 +1,3 @@
-/**
- * Seed the first assistant turn when opening a new expert chat.
- * Uses authored frontmatter greeting — never invokes a model.
- */
-
 import type { ExpertMeta } from './types';
 
 /** Deterministic fallback when no authored greeting exists. */

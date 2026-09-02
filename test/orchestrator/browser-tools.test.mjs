@@ -1,19 +1,3 @@
-/**
- * P5-B — Browser driver tool surface (MIN-720).
- *
- * Nothing here launches a browser. Every test that needs a session installs a
- * fake through `setBrowserToolLauncher`, which is what lets the properties the
- * issue actually cares about — the allowlist verdict, the output cap, the
- * per-call deadline, the Final-Tester-only gate — be asserted on any machine,
- * including one with no Chromium at all.
- *
- * What is *not* faked is the dispatch. Every tool call below goes through
- * `executeInProcessTool` (P2-D) → the HTTP-layer guards → `executeServerTool`
- * → the registry, because "the tools arrive through the standard dispatch" is
- * the claim under test, not an implementation detail.
- *
- * The live counterpart is `browser-tools-live.test.mjs`.
- */
 
 import assert from 'node:assert/strict';
 import fsp from 'node:fs/promises';
@@ -62,8 +46,6 @@ before(async () => {
   process.env.MINNOW_HOME = homeDir;
   resetMinnowHomeCache();
   resetBrowserConfigCache();
-  // The chats sandbox is an allowed tool `workspaceRoot`, so it stands in for
-  // an attempt worktree without needing git.
   cwd = path.join(homeDir, 'chats');
   await fsp.mkdir(cwd, { recursive: true });
 });
@@ -84,7 +66,6 @@ afterEach(async () => {
 });
 
 /**
- * Call a tool the way the runner does.
  * @param {string} name
  * @param {Record<string, unknown>} [args]
  * @param {{ allowedToolNames?: readonly string[] }} [opts]
@@ -99,11 +80,10 @@ async function callTool(name, args = {}, opts = {}) {
 }
 
 /**
- * A `BrowserSession` shaped just enough for the tool layer.
  * @param {Partial<Record<string, unknown>>} [overrides]
  */
 function fakeSession(overrides = {}) {
-  /** @type {Record<string, unknown>} */
+/** @type {Record<string, unknown>} */
   const session = {
     client: {
       on() {},
@@ -162,7 +142,7 @@ function launcherFor(session) {
   return async () => ({ ok: true, session, capability: { available: true } });
 }
 
-// ------------------------------------------------------------------ the gate
+// ── Final-Tester-only gating ─────────────────────────────────────────────────
 
 describe('Final-Tester-only gating', () => {
   test('Builder and Tester tool lists contain no browser tool', () => {
@@ -183,9 +163,6 @@ describe('Final-Tester-only gating', () => {
   });
 
   test('the two copies of the id list agree', () => {
-    // `server/runner/tool-set.js` must stay import-free (the package guard
-    // pins the shared runner's closure to server/runner/), so the names are
-    // duplicated there. This is the pin.
     assert.deepEqual([...BROWSER_TOOL_IDS], [...BROWSER_DRIVER_TOOL_IDS]);
   });
 
@@ -216,7 +193,7 @@ describe('Final-Tester-only gating', () => {
   });
 });
 
-// -------------------------------------------------------------- the dispatch
+// ── standard tool dispatch ───────────────────────────────────────────────────
 
 describe('standard tool dispatch', () => {
   test('every browser tool is dispatchable, not "Not implemented"', async () => {
@@ -237,7 +214,7 @@ describe('standard tool dispatch', () => {
   });
 });
 
-// -------------------------------------------------------------- the allowlist
+// ── allowlist ────────────────────────────────────────────────────────────────
 
 describe('allowlist', () => {
   test('a disallowed origin is blocked, with the same verdict as the renderer path', async () => {
@@ -253,9 +230,6 @@ describe('allowlist', () => {
     for (const url of cases) {
       const content = await callTool('browser_drive_navigate', { url });
       const blocked = content.startsWith(BROWSER_BLOCKED_PREFIX);
-      // `isNavigationAllowed` is the single source of truth: it is what
-      // `/api/browser/allowlist/check` answers the renderer with. The tool must
-      // agree with it for every url — there is no board exception.
       assert.equal(
         blocked,
         !isNavigationAllowed(url, config.allowedOriginPatterns),
@@ -288,12 +262,10 @@ describe('allowlist', () => {
   });
 });
 
-// ------------------------------------------------------------------ the caps
+// ── output caps ──────────────────────────────────────────────────────────────
 
 describe('output caps', () => {
   test('a large DOM read is truncated and says so', async () => {
-    // Sized from the configured cap: MIN-667 raised the default to 128k, and a
-    // literal that no longer exceeds it would stop testing truncation at all.
     const huge = `<html><body>${'x'.repeat(DEFAULT_MAX_OUTPUT_CHARS * 2)}</body></html>`;
     setBrowserToolLauncher(launcherFor(fakeSession({ async html() { return huge; } })));
     await callTool('browser_drive_navigate', { url: 'http://localhost:5173/' });
@@ -304,8 +276,6 @@ describe('output caps', () => {
       content.length < DEFAULT_MAX_OUTPUT_CHARS * 1.05,
       `expected a capped read, got ${content.length}`,
     );
-    // Page-controlled text is fenced: a page can carry instructions aimed at
-    // the agent reading it, exactly like a fetched URL.
     assert.match(content, /UNTRUSTED_SOURCE_DATA/);
   });
 
@@ -322,7 +292,7 @@ describe('output caps', () => {
   });
 });
 
-// -------------------------------------------------------------- the deadlines
+// ── per-call timeouts ────────────────────────────────────────────────────────
 
 describe('per-call timeouts', () => {
   test('a hung navigation fails one tool call and the attempt continues', async () => {
@@ -330,8 +300,6 @@ describe('per-call timeouts', () => {
       launcherFor(
         fakeSession({
           navigate() {
-            // Never settles: the page that accepts the connection and answers
-            // nothing. Only the tool's own deadline can end this call.
             return new Promise(() => {});
           },
         }),
@@ -349,7 +317,6 @@ describe('per-call timeouts', () => {
     assert.match(content, /this call failed, the attempt did not/);
     assert.ok(elapsed < 10_000, `the call must end on its own deadline, took ${elapsed}ms`);
 
-    // The attempt continues: the very next tool call still works.
     const after = await callTool('browser_drive_read_console', {});
     assert.match(after, /console: \(no entries\)/);
   });
@@ -389,7 +356,7 @@ describe('per-call timeouts', () => {
   });
 });
 
-// ---------------------------------------------------------------- determinism
+// ── deterministic normalizers ────────────────────────────────────────────────
 
 describe('deterministic normalizers', () => {
   test('console lines drop the timestamp that would make two reads differ', () => {
@@ -456,7 +423,7 @@ describe('deterministic normalizers', () => {
   });
 });
 
-// ------------------------------------------------------------- uid discipline
+// ── uid-addressed interaction ────────────────────────────────────────────────
 
 describe('uid-addressed interaction', () => {
   test('click before a snapshot is refused rather than guessed at', async () => {

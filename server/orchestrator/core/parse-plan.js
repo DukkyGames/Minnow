@@ -1,32 +1,4 @@
-/**
- * P0-F — `parsePlan(markdown) -> TaskGraph | ParseError[]`. Board intake with no
- * model call.
- *
- * V1 used an LLM in the control plane to read a plan the Planner had already
- * emitted in a specified format — a model deserializing something the producer
- * already structured. That round trip forced a prompt workaround for empty
- * `dependsOn` arrays (a failure mode a parser cannot have). The old intake
- * schema required only `id, title, wave, category`, so dependency edges — the
- * thing the entire scheduler runs on — were optional and re-inferred from prose
- * on every load, even though the Planner was required to state them.
- *
- * ## What a parser buys that a model cannot
- *
- * Determinism, which §5.1 requires · loud failure with a line number instead of a
- * silently dropped task · **cycle detection at parse time** rather than deadlock
- * discovery at runtime · validation against reality, since `dependsOn` ids must
- * resolve · free and instant on every board load.
- *
- * ## Scope
- *
- * This module validates glob *syntax* only. Matching declared globs against the
- * real repo is I/O and lives in P3-D (`expandTouches` + middleware).
- *
- * The preferred emit form is the one Plan / Super Plan / Planner prompts specify
- * (`- **Build:**` / `- **Test:**` / `- **Accept:**` / `- **Touches:**`). The
- * matcher also accepts plain labels and bare headings so older plans and nested
- * Build step-lists still board-intake. Prompt and parser change together by rule.
- */
+/** Parse a plan markdown document into a task graph. */
 
 /** Bullet fields a task must carry. */
 const REQUIRED_FIELDS = /** @type {const} */ (['Build', 'Test', 'Accept', 'Touches']);
@@ -41,8 +13,6 @@ export function parsePlan(markdown) {
   try {
     return parseUnsafe(markdown);
   } catch (error) {
-    // The fuzz requirement: a corrupt document produces errors, never a throw and
-    // never a partial graph.
     return [
       {
         line: 1,
@@ -118,9 +88,6 @@ function parseUnsafe(markdown) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Front matter
-// ---------------------------------------------------------------------------
 
 /**
  * @param {string[]} lines
@@ -251,9 +218,6 @@ function readFrontMatter(lines, errors) {
   return result;
 }
 
-// ---------------------------------------------------------------------------
-// Body
-// ---------------------------------------------------------------------------
 
 /**
  * @param {string[]} lines
@@ -274,7 +238,6 @@ function readBody(lines, from, errors) {
   let currentWave = 0;
   /** @type {any} */
   let task = null;
-  /** Property of `task` the next continuation line appends to. */
   /** @type {string | null} */
   let field = null;
 
@@ -365,15 +328,6 @@ function readBody(lines, from, errors) {
 
     if (!task) continue;
 
-    // Task fields accept several layouts so Plan / Super Plan output and older
-    // hand-authored plans all board-intake without a rewrite:
-    //   - **Build:** value   (preferred)
-    //   - **Build** value
-    //   - Build: value
-    //   **Build:** / Build:  (bare headings; body on following lines)
-    // Nested markdown list items under an empty `- **Build:**` are continuation
-    // content — rejecting any `[-*] ` line here was dropping every Build body
-    // that used step bullets (the common Planner shape).
     const matched = matchTaskField(raw);
     if (matched) {
       finishField();
@@ -393,12 +347,6 @@ function readBody(lines, from, errors) {
       continue;
     }
 
-    // A continuation line belongs to the field above it. Keep nested list items
-    // (`  - step…`) and wrapped prose. `field` is already the property name —
-    // lower-casing it here silently wrote `touchesraw` and `dependsraw`, so a
-    // wrapped `Touches:` or `Depends on:` list dropped every entry after the
-    // first with no parse error. That is the silently-dropped-edge failure this
-    // parser exists to make impossible.
     if (field && trimmed.length > 0) {
       task[field] = `${task[field]}\n${trimmed}`;
       continue;
@@ -481,8 +429,6 @@ function validateTasks(body, errors) {
       }
     }
 
-    // `Depends on:` absent and `Depends on:` empty must parse identically
-    // (no extra prompt workaround — the parser is the source of truth).
     task.dependsOn = splitList(task.dependsRaw);
     task.touches = splitList(task.touchesRaw);
 
@@ -493,22 +439,8 @@ function validateTasks(body, errors) {
           line: task.line,
           column: 1,
           message: `task ${task.id} declares an invalid glob \`${glob}\`: ${problem}`,
-          hint: 'touches are repo-relative globs, e.g. `src/ui/**`, `server/orchestrator/*.js`',
-        });
-      }
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Cross-checks
-// ---------------------------------------------------------------------------
-
-/**
- * The front-matter `todos` and the `#### Task` headings must each account for
- * the other. A task with no todo entry, or a todo with no task, is a plan the
- * Planner half-wrote — and in V1 that silently dropped work.
- *
+          hint: 'touches are repo-relative globs, e.g. `src/ui/**
+ * `, `server/orchestrator/*.js`', }); } } } } /** The front-matter `todos` and the `#### Task` headings must each account for the other.
  * @param {{ todos: Array<{ id: string, line: number }> }} frontMatter
  * @param {{ tasks: any[] }} body
  * @param {import('./types').ParseError[]} errors
@@ -575,17 +507,14 @@ function resolveDependencies(body, errors) {
 }
 
 /**
- * Cycles must be impossible downstream — `plan()` assumes an acyclic graph and
- * would simply never schedule a cycle, which is a deadlock discovered six hours
- * into a run instead of at parse time.
- *
+ * Cycles must be impossible downstream — `plan()` assumes an acyclic graph and would simply never schedule a cycle, which is a deadlock.
  * @param {{ tasks: any[] }} body
  * @param {import('./types').ParseError[]} errors
  */
 function detectCycles(body, errors) {
   const byId = new Map(body.tasks.map((t) => [t.id, t]));
   /** @type {Map<string, number>} */
-  const colour = new Map(); // 0 unvisited, 1 on stack, 2 done
+  const colour = new Map();
   /** @type {string[]} */
   const stack = [];
   /** @type {Set<string>} */
@@ -617,35 +546,22 @@ function detectCycles(body, errors) {
     colour.set(id, 2);
   };
 
-  // Deterministic entry order, so the same plan always names the same cycle.
   for (const task of body.tasks) {
     if ((colour.get(task.id) ?? 0) === 0) visit(task.id);
   }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /**
- * Recognised task-field labels (case-insensitive). Preferred emit form is
- * `- **Label:** value`; the matcher also accepts plain labels and bare headings.
- *
+ * Recognised task-field labels (case-insensitive).
  * @param {string} raw
  * @returns {{ label: string, value: string } | null}
  */
 function matchTaskField(raw) {
-  // Preferred emit is `- **Build:** value` — the colon sits *inside* the bold
-  // markers (`**Build:**`), which is why `:?)` comes before the closing `\*\*`.
-  // Also accept `- **Build** value`, plain `- Build:`, and bare headings.
   const patterns = [
-    // Bullet + bold label: - **Build:** value | - **Build** value | - **Build**: value
     /^\s*[-*]\s+\*\*(Build|Test|Accept|Touches|Depends\s+on):?\*\*:?\s*(.*)$/i,
-    // Bullet + plain label, colon required: - Build: value
     /^\s*[-*]\s+(Build|Test|Accept|Touches|Depends\s+on):\s*(.*)$/i,
-    // Bare bold heading: **Build:** value | **Build** value
     /^\s*\*\*(Build|Test|Accept|Touches|Depends\s+on):?\*\*:?\s*(.*)$/i,
-    // Bare plain heading, colon required: Build: value
     /^\s*(Build|Test|Accept|Touches|Depends\s+on):\s*(.*)$/i,
   ];
   for (const pattern of patterns) {
@@ -668,10 +584,7 @@ function titleCaseLabel(label) {
 }
 
 /**
- * Peel wrapping markup and trailing sentence punctuation so LLM/placeholder
- * spellings (`none.`, `(none)`, `` `none` ``, `**nothing**`) compare as the
- * same token. Real task ids are left intact aside from those wrappers.
- *
+ * Peel wrapping markup and trailing sentence punctuation so LLM/placeholder spellings (`none.`, `(none)`, `` `none` ``, `**nothing**`).
  * @param {string} part
  * @returns {string}
  */
@@ -683,7 +596,6 @@ function normalizeListToken(part) {
   let previous = '';
   while (token && token !== previous) {
     previous = token;
-    // Bold wrappers only (`**none**`). Trailing `*` is glob syntax (`src/**`).
     if (token.startsWith('**') && token.endsWith('**') && token.length >= 4) {
       token = token.slice(2, -2).trim();
       continue;
@@ -712,12 +624,7 @@ function normalizeListToken(part) {
 }
 
 /**
- * Split a comma-separated bullet value. Placeholders the Planner prompt allows
- * for "no dependencies" collapse to an empty list rather than to a fake id.
- *
- * Touches uses the same splitter; a glob literally named `none` is vanishingly
- * rare. Unknown real ids stay errors in `resolveDependencies`.
- *
+ * Split a comma-separated bullet value.
  * @param {string} value
  * @returns {string[]}
  */
@@ -738,14 +645,6 @@ function globProblem(glob) {
   if (glob.split(/[/\\]/).includes('..')) return 'globs may not escape the repo with `..`';
   if (countOf(glob, '[') !== countOf(glob, ']')) return 'unbalanced [ ]';
 
-  // Only syntax `touchesOverlap()` can actually reason about is allowed through.
-  //
-  // The scheduler runs two tasks concurrently exactly when their declared globs
-  // do not intersect, so a pattern the intersection cannot interpret is worse
-  // than a rejected one: it silently reads as "overlaps nothing" and the
-  // concurrency gate opens on two tasks writing the same file. Brace expansion
-  // and negation both need alternation the segment matcher does not implement,
-  // so they are refused here rather than mis-answered there.
   if (/[{}]/.test(glob)) {
     return 'brace expansion is not supported — write one glob per alternative';
   }
@@ -767,9 +666,7 @@ function countOf(text, char) {
 }
 
 /**
- * Ids are compared case-insensitively so `w1-a` in the todos matches
- * `#### Task W1-A:` — the declared casing is what the graph keeps.
- *
+ * Ids are compared case-insensitively so `w1-a` in the todos matches `#### Task W1-A:` — the declared casing is what the graph keeps.
  * @param {string} id
  * @returns {string}
  */

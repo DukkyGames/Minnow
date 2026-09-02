@@ -1,9 +1,3 @@
-/**
- * Composer reasoning effort dropdown — low / medium / high / max beside the brain toggle.
- * Off/on-only models use the brain toggle alone (see composer-thinking.ts).
- * Always-on models (GLM-5.3) hide the brain and keep the level dropdown visible.
- */
-
 import { resolveThinkingMode } from '../agents/resolve-thinking';
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import {
@@ -33,6 +27,8 @@ let selectEl: HTMLSelectElement | null = null;
 let wrapEl: HTMLElement | null = null;
 let segmentsEl: HTMLElement | null = null;
 
+// ── Options ──────────────────────────────────────────────────────────────────
+
 function effectiveCapabilities(): ReturnType<typeof resolveSendCapabilities> {
   const chat = getActiveChat();
   const modelId = chat.modelId?.trim();
@@ -56,7 +52,6 @@ function validateAndClearInvalidEffort(): void {
   if (!chat.reasoningEffort) return;
   const caps = effectiveCapabilities();
   const levels = getLevelOptions();
-  // Always-on models (GLM-5.3) cannot persist Off or Medium from a previous model.
   if (chat.reasoningEffort === 'off' && !modelUsesAlwaysOnReasoning(caps)) return;
   if (isComposerReasoningLevel(chat.reasoningEffort) && levels.includes(chat.reasoningEffort)) {
     return;
@@ -83,6 +78,8 @@ function resolveDisplayEffort(levels: EffortOption[]): EffortOption | undefined 
   if (effort && levels.includes(effort)) return effort;
   return levels.includes('medium') ? 'medium' : levels[0];
 }
+
+// ── Populate ─────────────────────────────────────────────────────────────────
 
 function populateSelect(options: EffortOption[], display: EffortOption | undefined): void {
   if (!selectEl) return;
@@ -142,10 +139,11 @@ function onSelectChange(): void {
 function isLevelDropdownVisible(): boolean {
   const caps = effectiveCapabilities();
   if (!modelUsesComposerReasoningLevelDropdown(caps)) return false;
-  // Always-on models have no Off — keep Low/High/Max visible.
   if (modelUsesAlwaysOnReasoning(caps)) return true;
   return getActiveChat().reasoningEffort !== 'off';
 }
+
+// ── Init ─────────────────────────────────────────────────────────────────────
 
 /** Wire composer reasoning effort select. */
 export function initComposerReasoningEffort(): void {

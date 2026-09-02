@@ -1,7 +1,3 @@
-/**
- * Goal achieved chip on history rows (analogous to steer affordance).
- */
-
 const GOAL_ACHIEVED_CHIP_CLASS = 'msg-goal-achieved-chip';
 
 /** Add a compact "Goal achieved" chip to a user message bubble. */

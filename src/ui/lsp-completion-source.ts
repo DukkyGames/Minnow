@@ -1,7 +1,3 @@
-/**
- * Testable helpers for LSP → CodeMirror completion mapping and trigger detection.
- */
-
 import {
   type Completion,
   type CompletionContext,
@@ -218,7 +214,6 @@ export function toCmCompletion(
   if (inlineInfo != null) {
     completion.info = inlineInfo;
   } else if (item.data != null) {
-    // CodeMirror calls info when an option is selected — lazy resolve via LSP.
     completion.info = async (): Promise<CompletionInfo> => {
       const resolved = await resolveCompletion(filePath, item);
       const text = completionInfoFromDocumentation(resolved?.documentation);

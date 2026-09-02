@@ -1,7 +1,3 @@
-/**
- * Resolve merged thinking mode for work agents and sub-agents at send time.
- */
-
 import WORK_AGENT_THINKING_DEFAULTS from './defaults/work-agent-thinking.json';
 import SUB_AGENT_DEFAULTS from './defaults/sub-agents.json';
 import { getThinkingMetaSync } from '../config/thinking-meta';
@@ -19,17 +15,13 @@ export type ThinkingResolveKind = 'work-agent' | 'sub-agent';
 
 export interface ResolveThinkingInput {
   kind: ThinkingResolveKind;
-  /** Work agent id or sub-agent type id. */
   agentKey: string | null;
-  /** Chat override; explicit on/off wins for main + sub-agents when set. */
   chatThinkingMode?: ThinkingTriState | null;
-  /** Sub-agent merged type row. */
   subAgentType?: SubAgentTypeConfig | null;
 }
 
 export interface ResolvedThinking {
   mode: ThinkingResolvedMode;
-  /** Label source for composer inherit hint. */
   sourceLabel: string;
 }
 
@@ -40,7 +32,6 @@ export interface ResolveThinkingBudgetInput {
 }
 
 export interface ResolvedThinkingBudget {
-  /** Positive budget, or null when off / not configured. */
   budgetTokens: number | null;
   sourceLabel: string;
 }
@@ -78,9 +69,6 @@ function userWorkAgentBudget(agentId: string | null): number | null | undefined 
   return raw;
 }
 
-/**
- * Merge budget layers: later explicit values win; `0` at any tier turns budget off.
- */
 function mergeThinkingBudgetLayers(
   ...layers: Array<number | null | undefined>
 ): number | null {
@@ -137,10 +125,6 @@ function sourceForSubAgent(agentKey: string | null, subAgentType?: SubAgentTypeC
   return 'global default';
 }
 
-/**
- * Resolve thinking for main chat or sub-agent completions.
- * Parent chat on/off overrides sub-agent type when chatThinkingMode is explicit.
- */
 export function resolveThinkingMode(input: ResolveThinkingInput): ResolvedThinking {
   const chatMode = normalizeThinkingTriState(input.chatThinkingMode, 'inherit');
   if (chatMode === 'on' || chatMode === 'off') {
@@ -177,10 +161,6 @@ export function resolveThinkingMode(input: ResolveThinkingInput): ResolvedThinki
   };
 }
 
-/**
- * Resolve per-thinking-session token budget for main chat or sub-agents.
- * Precedence: sub-agent type → work-agent user override → global; `0` disables at any tier.
- */
 export function resolveThinkingBudgetTokens(
   input: ResolveThinkingBudgetInput,
 ): ResolvedThinkingBudget {

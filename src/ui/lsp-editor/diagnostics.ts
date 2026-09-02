@@ -1,7 +1,3 @@
-/**
- * CodeMirror linter + gutter for LSP publishDiagnostics.
- */
-
 import { linter, lintGutter, type Diagnostic } from '@codemirror/lint';
 import type { Extension } from '@codemirror/state';
 import {

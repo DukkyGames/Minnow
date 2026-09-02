@@ -1,7 +1,3 @@
-/**
- * Build API messages for the title completion from bundled / user prompts.
- */
-
 import { loadPromptById } from '../prompts/prompt-loader';
 import type { ApiMessage } from '../../types';
 
@@ -14,10 +10,6 @@ function applyUserMessageToken(template: string, seed: string): string {
   return template.replace(/\{\{userMessage\}\}/g, seed);
 }
 
-/**
- * System + user messages for a non-streaming title request.
- * User content is the first-message seed only (no chat history).
- */
 export function buildTitleMessages(seed: string): ApiMessage[] {
   const trimmedSeed = seed.trim() || 'Attachment';
   const loaded = loadPromptById('title', 'default', 'full');

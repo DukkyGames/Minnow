@@ -1,10 +1,3 @@
-/**
- * Sub-agent overlay — an inset sheet that rises over the chat column (read-only).
- * Shows the active run's prompt, structured outcome, and live activity, plus a
- * switcher across the chat's sub-agents and an expand-to-full-column toggle.
- * Subscribes to orchestrator events while open so the view updates live.
- */
-
 import {
   cancelSubAgent,
   getSubAgentRun,
@@ -42,7 +35,6 @@ interface OverlayState {
   expanded: boolean;
   returnFocus: HTMLElement | null;
   onKey: (e: KeyboardEvent) => void;
-  // Live-updated regions.
   switcher: HTMLElement;
   headingType: HTMLElement;
   statusDot: HTMLElement;
@@ -60,6 +52,8 @@ interface OverlayState {
 
 let overlay: OverlayState | null = null;
 let subscriptionBound = false;
+
+// ── Status helpers ───────────────────────────────────────────────────────────
 
 /** Terminal-state check shared by cancel-affordance and details defaults. */
 function isTerminal(status: string): boolean {
@@ -96,6 +90,8 @@ function taskPreview(task: string, max = 90): string {
   return t.length > max ? `${t.slice(0, max)}…` : t;
 }
 
+// ── Run list ─────────────────────────────────────────────────────────────────
+
 /** All runs for a chat (persisted + live store), de-duped, ordered by start time. */
 function listChatRuns(chatId: string): Array<{ run: AnyRun; live: boolean }> {
   const byId = new Map<string, { run: AnyRun; live: boolean }>();
@@ -103,9 +99,6 @@ function listChatRuns(chatId: string): Array<{ run: AnyRun; live: boolean }> {
   for (const row of chat?.subAgentRuns ?? []) {
     byId.set(row.runId, { run: row, live: false });
   }
-  // The store is the reload source of truth — include completed runs, not
-  // only in-flight ones. A run that finished with the drawer closed must
-  // still appear when it is next opened.
   for (const run of listSubAgentRunsForParentChat(chatId)) {
     const live = run.status === 'running' || run.status === 'queued';
     byId.set(run.runId, { run, live });
@@ -126,11 +119,7 @@ function resolveRunSnapshot(
   return persisted ? { run: persisted, live: false } : null;
 }
 
-/**
- * Real structured answer only — same rule as spawn cards.
- * A blank fold summary must not become the placeholder outcome; that
- * string was painted as the answer and collapsed Activity.
- */
+/** Real structured answer only — same rule as spawn cards. */
 export function resolveOutcome(run: AnyRun, _live = false): SubAgentStructuredOutcome | null {
   if (run.structuredOutcome) return run.structuredOutcome;
   if (run.summary?.trim()) return legacyOutcomeFromSummary(run.summary);
@@ -147,12 +136,13 @@ function liveStatusLine(run: SubAgentRun): string {
   return subAgentLiveStatusLine(run, true);
 }
 
+// ── Render ───────────────────────────────────────────────────────────────────
+
 /** Structured summary / findings / artifacts above the activity stream. */
 function renderStructuredBlock(root: HTMLElement, run: AnyRun, live: boolean): void {
   root.replaceChildren();
   const outcome = resolveOutcome(run, live);
   if (!outcome) {
-    // In-flight: live status. Terminal: message preview or fold error — never the placeholder.
     const line = !isTerminal(run.status)
       ? live
         ? liveStatusLine(run as SubAgentRun)
@@ -269,8 +259,6 @@ function renderActiveRun(state: OverlayState, opts: { scroll: 'end' | 'sticky' }
   const { run, live } = resolved;
   const { label, tone } = statusMeta(run.status);
 
-  // On live updates, keep the scroll pinned only if the reader is already near
-  // the bottom, so scrolling up to review earlier activity isn't interrupted.
   const wasNearBottom =
     state.scroll.scrollHeight - state.scroll.scrollTop - state.scroll.clientHeight <
     48;
@@ -279,7 +267,6 @@ function renderActiveRun(state: OverlayState, opts: { scroll: 'end' | 'sticky' }
   state.headingType.textContent = run.type;
   const liveRunHeader = run as SubAgentRun;
   if (live && liveRunHeader.startError) {
-    // Consecutive start failures are a counter, not one toast per tick (P9-A).
     state.statusText.textContent = `Start failed (${liveRunHeader.startError.consecutive})`;
   } else {
     state.statusText.textContent = label;
@@ -291,7 +278,6 @@ function renderActiveRun(state: OverlayState, opts: { scroll: 'end' | 'sticky' }
   state.endedEl.textContent = ended ? `Ended ${ended}` : '';
   state.endedEl.hidden = !ended;
 
-  // Prompt / task block (clamp toggle recomputed after layout).
   state.promptText.textContent = run.task?.trim() || '(no task provided)';
   state.promptText.classList.add('is-clamped');
   state.promptToggle.hidden = true;
@@ -321,7 +307,6 @@ function renderActiveRun(state: OverlayState, opts: { scroll: 'end' | 'sticky' }
     subAgentTranscriptLiveFromRun(run, live),
   );
 
-  // Footer: cancel affordance only for an in-flight live run.
   state.footer.replaceChildren();
   const cancellable = live && (run.status === 'running' || run.status === 'queued');
   state.footer.hidden = !cancellable;
@@ -350,6 +335,8 @@ function renderActiveRun(state: OverlayState, opts: { scroll: 'end' | 'sticky' }
     state.scroll.scrollTop = state.scroll.scrollHeight;
   }
 }
+
+// ── Overlay ──────────────────────────────────────────────────────────────────
 
 /** Switch the overlay to a different run in the same chat without reopening. */
 function setActiveRun(runId: string): void {
@@ -410,11 +397,12 @@ function bindSubscription(): void {
     if (run.runId === overlay.activeRunId) {
       renderActiveRun(overlay, { scroll: 'sticky' });
     } else {
-      // Another run in this chat changed: refresh the switcher status only.
       renderSwitcher(overlay);
     }
   });
 }
+
+// ── Open drawer ──────────────────────────────────────────────────────────────
 
 /** Wire overlay refresh to orchestrator pub/sub (called from initSubAgentUi). */
 export function initSubAgentDrawerLiveUpdates(): void {
@@ -448,10 +436,7 @@ export function closeSubAgentDrawer(): void {
   window.setTimeout(finish, 260);
 }
 
-/**
- * Opens the overlay for one sub-agent run (live or persisted on the given chat).
- * Hydrates from the server first so a reload shows every run in its fold state.
- */
+/** Opens the overlay for one sub-agent run (live or persisted on the given chat). */
 export async function openSubAgentDrawer(runId: string, chatId: string): Promise<void> {
   bindSubscription();
   await hydrateSubAgentRunsForParentChat(chatId);
@@ -480,7 +465,6 @@ function mountSubAgentDrawer(runId: string, chatId: string): void {
   sheet.setAttribute('role', 'dialog');
   sheet.setAttribute('aria-modal', 'true');
 
-  // ── Header ──
   const header = document.createElement('header');
   header.className = 'sub-agent-overlay__header';
 
@@ -527,7 +511,6 @@ function mountSubAgentDrawer(runId: string, chatId: string): void {
   header.appendChild(heading);
   header.appendChild(tools);
 
-  // ── Meta row (run id + ended) ──
   const meta = document.createElement('div');
   meta.className = 'sub-agent-overlay__meta';
   const runIdEl = document.createElement('span');
@@ -538,12 +521,10 @@ function mountSubAgentDrawer(runId: string, chatId: string): void {
   meta.appendChild(runIdEl);
   meta.appendChild(endedEl);
 
-  // ── Switcher rail ──
   const switcher = document.createElement('nav');
   switcher.className = 'sub-agent-overlay__switcher';
   switcher.setAttribute('aria-label', 'Sub-agents in this chat');
 
-  // ── Prompt / task block ──
   const promptWrap = document.createElement('section');
   promptWrap.className = 'sub-agent-overlay__prompt';
   const promptLabel = document.createElement('span');
@@ -566,7 +547,6 @@ function mountSubAgentDrawer(runId: string, chatId: string): void {
   promptWrap.appendChild(promptText);
   promptWrap.appendChild(promptToggle);
 
-  // ── Scroll body: structured outcome + activity ──
   const scroll = document.createElement('div');
   scroll.className = 'sub-agent-overlay__scroll';
   const structuredRoot = document.createElement('div');
@@ -582,7 +562,6 @@ function mountSubAgentDrawer(runId: string, chatId: string): void {
   scroll.appendChild(structuredRoot);
   scroll.appendChild(transcriptDetails);
 
-  // ── Footer (cancel affordance) ──
   const footer = document.createElement('footer');
   footer.className = 'sub-agent-overlay__footer';
   footer.hidden = true;
@@ -626,7 +605,6 @@ function mountSubAgentDrawer(runId: string, chatId: string): void {
 
   renderActiveRun(overlay, { scroll: 'end' });
 
-  // Rise-in on the next frame (CSS drives translate + opacity).
   requestAnimationFrame(() => {
     if (overlay?.root === root) root.classList.add('is-open');
   });

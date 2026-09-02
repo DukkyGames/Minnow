@@ -1,8 +1,3 @@
-/**
- * Open capability-matrix probe transcript from Settings grid, with the
- * manual-verdict editor folded into the same side panel.
- */
-
 import type { BenchmarkCampaign } from '../../benchmark/campaign-types.ts';
 import {
   resolveCapabilityProbeLookup,
@@ -167,10 +162,7 @@ function mountCellEditorExtra(
     });
 }
 
-/**
- * Open the transcript drawer for a matrix cell and mount the verdict editor
- * in the pinned extra slot. Always opens, even when no probe data exists.
- */
+/** Open the transcript drawer for a matrix cell and mount the verdict editor in the pinned extra slot. */
 export function openCapabilityCellTranscript(
   cell: MergedCapabilityCell,
   options: OpenCapabilityCellPanelOptions,
@@ -196,10 +188,7 @@ export function openCapabilityCellTranscript(
   });
 }
 
-/**
- * Refresh the open drawer when a probe completes or the sweep is cancelled
- * while the user is watching that cell.
- */
+/** Refresh the open drawer when a probe completes or the sweep is cancelled while the user is watching that cell. */
 export function refreshCapabilityCellTranscript(
   cell: MergedCapabilityCell,
   options: OpenCapabilityCellPanelOptions & {

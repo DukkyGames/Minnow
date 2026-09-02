@@ -1,7 +1,3 @@
-/**
- * Desktop-only browser tools for Minnow appearance (theme, fonts).
- */
-
 import {
   getCustomThemeTokens,
   isCustomThemeAdvanced,
@@ -53,10 +49,10 @@ function dispatchAppearanceChanged(keys: string[]): void {
     window.dispatchEvent(
       new CustomEvent('minnow:settings-changed', { detail: { keys } }),
     );
-  } catch {
-    /* non-browser or happy-dom without CustomEvent support */
-  }
+  } catch {}
 }
+
+// ── Get ──────────────────────────────────────────────────────────────────────
 
 /** Snapshot of current browser-local appearance state for agents. */
 export function toolGetAppearance(): string {
@@ -110,6 +106,8 @@ interface FontUploadPatch {
   assetId: string;
   familyName?: string;
 }
+
+// ── Update ───────────────────────────────────────────────────────────────────
 
 /** Apply a batch appearance patch and refresh the DOM. */
 export async function toolUpdateAppearance(args: Record<string, unknown>): Promise<string> {
@@ -225,6 +223,8 @@ export async function toolUpdateAppearance(args: Record<string, unknown>): Promi
     2,
   );
 }
+
+// ── Upload ───────────────────────────────────────────────────────────────────
 
 /** Upload a workspace file into IndexedDB appearance storage. */
 export async function toolUploadAppearanceAsset(
@@ -433,6 +433,8 @@ async function readWorkspaceFileBytes(
 let readWorkspaceFileBytesImpl = readWorkspaceFileBytes;
 let saveAppearanceAssetImpl = saveAppearanceAsset;
 let localServerAvailableImpl = getLocalServerAvailable;
+
+// ── Tests ────────────────────────────────────────────────────────────────────
 
 export function setAppearanceToolTestHooks(hooks: {
   readWorkspaceFile?: typeof readWorkspaceFileBytes;

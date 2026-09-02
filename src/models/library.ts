@@ -34,6 +34,8 @@ export {
   sortFromPreset,
 } from './library-sort';
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
 export type LibraryFormat = 'GGUF' | 'MLX' | 'SafeTensors' | 'Diffusion' | 'Ollama' | 'Unknown';
 export type LibrarySource = 'downloaded' | 'hf-cache' | 'local-dir' | 'ollama';
 
@@ -150,6 +152,8 @@ function displayNameFromFile(fileName: string): string {
   return fileName.replace(/\.gguf$/i, '').replace(/-\d+-of-\d+$/i, '');
 }
 
+// ── Infer ────────────────────────────────────────────────────────────────────
+
 /** Billions of parameters parsed out of a model or file name. */
 export function inferParamsFromName(name: string): number | null {
   const match = name.match(/(?:^|[-_./])(\d+(?:\.\d+)?)\s*b(?:[-_./]|$)/i);
@@ -230,7 +234,6 @@ export function matchCatalogEntry(repoId: string, fileName?: string | null): Cat
     const hit = index.get(candidate.toLowerCase());
     if (hit) return hit;
   }
-  // GGUF file names carry a quant suffix the catalog never has — retry on the stem.
   if (fileName) {
     const stem = displayNameFromFile(fileName).replace(
       /[-_.](?:UD-)?(?:IQ\d+_[A-Z0-9_]+|Q\d(?:_[A-Z0-9]+)+|BF16|F16|FP16|F32)$/i,
@@ -281,6 +284,8 @@ function ggufPath(row: CachedModelRow, relPath: string, source: LibrarySource): 
   return joinPath(row.path, relPath);
 }
 
+// ── Build ────────────────────────────────────────────────────────────────────
+
 /**
  * Flatten cached repo rows into one library row per loadable weight file.
  */
@@ -298,9 +303,6 @@ export async function buildLibrary(cached: CachedModelRow[]): Promise<LibraryMod
       const entry = matchCatalogEntry(row.repo_id);
       const displayName = row.repo_id.split('/').pop() || row.repo_id;
       const producer = libraryProducer(entry, row.repo_id, displayName);
-      // An MLX repo is servable as a whole directory — mlx-lm loads the snapshot,
-      // not one weights file — so it gets a real path where other non-GGUF
-      // formats get null.
       const isMlx = Boolean(row.mlx_root) && !row.is_ollama;
       out.push({
         id: isMlx ? `mlx:${row.repo_id}` : `repo:${row.repo_id}`,
@@ -311,9 +313,6 @@ export async function buildLibrary(cached: CachedModelRow[]): Promise<LibraryMod
         producerName: producer.name,
         producerLogoId: producer.logoId,
         format: row.is_ollama ? 'Ollama' : nonGgufFormat(row),
-        // No weights file on disk, so any catalog quant would describe a build
-        // that is not actually here. MLX is the exception: the scanner read the
-        // bit width straight out of config.json.
         quant: isMlx ? (row.mlx_quant ?? '') : '',
         arch: entry?.architecture ?? inferArchFromName(row.repo_id),
         domain: entry ? inferUseCase(entry) : inferUseCase({ name: row.repo_id } as CatalogModel),
@@ -324,7 +323,6 @@ export async function buildLibrary(cached: CachedModelRow[]): Promise<LibraryMod
         path: isMlx ? (row.mlx_root ?? null) : null,
         fileName: null,
         source,
-        // Ollama-managed tags are not shown in My Models (use the Ollama provider instead).
         servable: isMlx,
         incomplete: row.has_incomplete,
         isMoe: entry?.is_moe ?? false,
@@ -386,6 +384,8 @@ export function activeServeFor(
 
 /** Toolbar preset ids for My Models sort (maps to {@link LibraryListSort}). */
 export type LibrarySortKey = LibrarySortPreset;
+
+// ── Filter ───────────────────────────────────────────────────────────────────
 
 /**
  * Rows the My Models table lists: GGUF with a resolved path, plus MLX repos on

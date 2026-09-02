@@ -1,9 +1,3 @@
-/**
- * Intent neighbor context and staleness hashing (Track C).
- * Prompt context uses real neighboring source lines; staleness hashes use
- * resolved-neighbor lines only.
- */
-
 import type { Text } from '@codemirror/state';
 
 /** Metadata for code that replaced an intent line after accept. */

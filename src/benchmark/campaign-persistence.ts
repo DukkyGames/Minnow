@@ -94,9 +94,7 @@ export async function listCampaignSummaries(): Promise<BenchmarkCampaignSummary[
           String(b.startedAt).localeCompare(String(a.startedAt)),
         );
       }
-    } catch {
-      /* fall through */
-    }
+    } catch {}
   }
   return localSummaries;
 }
@@ -111,9 +109,7 @@ export async function loadCampaign(id: string): Promise<BenchmarkCampaign | null
         { cache: 'no-store' },
       );
       if (res.ok) return (await res.json()) as BenchmarkCampaign;
-    } catch {
-      /* fall through */
-    }
+    } catch {}
   }
   return readLocalCampaigns().find((c) => c.id === id) ?? null;
 }
@@ -128,9 +124,7 @@ export async function fetchModelScoreIndex(): Promise<ModelScoreIndexRow[]> {
         const data = (await res.json()) as { models?: ModelScoreIndexRow[] };
         if (Array.isArray(data.models) && data.models.length) return data.models;
       }
-    } catch {
-      /* fall through */
-    }
+    } catch {}
   }
   return buildModelScoreIndex(readLocalCampaigns());
 }

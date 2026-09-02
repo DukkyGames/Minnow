@@ -22,9 +22,6 @@ export type NotificationKind =
   | 'scheduler'
   | 'research'
   | 'synthesis'
-  // Issues agent workflow. Deliberately narrow: Issues shows assigned, running,
-  // asked a question, opened a PR, failed — and nothing about waves, slots or
-  // integration branches, which stay the Orchestrator's business.
   | 'issue_agent_started'
   | 'issue_agent_question'
   | 'issue_agent_pr'

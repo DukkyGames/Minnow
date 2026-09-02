@@ -1,7 +1,3 @@
-/**
- * Tool allowlist and pass-gate constants for the agentic /goal evaluator.
- */
-
 import { getEnabledToolDefinitions } from '../../tools/client';
 import type { OpenAIFunctionDefinition } from '../../tools/definitions';
 
@@ -46,10 +42,6 @@ export function isGoalEvalVerificationTool(name: string): boolean {
   return allowlistSet.has(name);
 }
 
-/**
- * Enabled tool definitions intersected with the verifier allowlist.
- * Disabled or unavailable tools are omitted so the model only sees runnable checks.
- */
 export function getGoalEvalToolDefinitions(): OpenAIFunctionDefinition[] {
   return getEnabledToolDefinitions().filter((def) =>
     allowlistSet.has(def.function.name),

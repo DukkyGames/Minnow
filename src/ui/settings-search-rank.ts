@@ -1,7 +1,3 @@
-/**
- * Pure ranking for settings finder queries.
- */
-
 import type { SettingsSearchEntry } from './settings-search-types';
 
 const MAX_RESULTS = 12;

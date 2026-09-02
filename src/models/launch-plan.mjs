@@ -1,15 +1,3 @@
-/**
- * Pure llama.cpp launch planner: Minnow sizes context; llama.cpp sizes the GPU split.
- *
- * Shared by the Node tool server and the SPA (same `.mjs` + `.d.mts` convention as
- * memory-model.mjs). This module must not spawn processes, touch the filesystem, or
- * import `server/` — wired into `buildLlamaServerLaunch` (Phase 1c).
- *
- * Auto mode leaves `n_gpu_layers` unset (`null`) so llama.cpp `--fit` can pick a split.
- * We still compute `-c` because trainCtx is a semantic ceiling the fitter does not know.
- * `--swa-full` is never planned: sliding-window savings already live in kvCacheBytes().
- */
-
 import {
   estimateRunMemory,
   GIB,
@@ -17,16 +5,8 @@ import {
 } from './memory-model.mjs';
 import { GEOMETRY_UNCERTAINTY } from './model-geometry.mjs';
 
-/**
- * Comfortable default context. 125k (`DEFAULT_CONTEXT_TOKENS`) OOMs mid-size cards;
- * 32k is long enough for agent turns without being the first thing that blows VRAM.
- */
 export const PREFERRED_CONTEXT_TOKENS = 32_768;
 
-/**
- * Context sizes we will actually pass as `-c` (per slot). Non-power-of-two rungs exist
- * because VRAM often lands between 8k and 16k; snapping those to 8k wasted a lot of card.
- */
 export const CONTEXT_LADDER = [
   4096, 6144, 8192, 12288, 16384, 24576, 32768, 49152, 65536, 98304, 131072, 196608, 262144,
 ];
@@ -135,8 +115,6 @@ export function launchBudgetBytes(hardware, variant) {
   const gpuVramGb = Number(hardware?.gpuVramGb) || 0;
   if (!isCpuLlamaVariant(variant) && gpuVramGb > 0) {
     const vram = gpuVramGb * GIB;
-    // 0.9 GiB floor matters on Windows (WDDM + Minnow UI) where 8% of a 6–8 GB card
-    // is only ~0.5 GB and is not enough headroom in practice.
     const reserve = Math.max(0.9 * GIB, vram * 0.08);
     return Math.max(0, vram - reserve);
   }
@@ -184,24 +162,17 @@ export function planLlamaLaunch(input) {
   const variant = input.variant ?? 'cpu';
   const hardware = input.hardware ?? {};
   const requested = input.requested ?? {};
-  // `--parallel` divides `-c` across slots. Default 1. Getting the multiply backwards
-  // silently quarters usable context, so ctx is always ctxPerSlot * parallel.
   const parallel = Math.max(1, Math.trunc(Number(input.parallel) || 1));
   const cpu = isCpuLlamaVariant(variant);
-  // GPU auto: leave -ngl unset so llama.cpp `--fit` picks the split. Never emit 999.
   const n_gpu_layers = cpu ? 0 : null;
   const backend = backendForVariant(variant);
   const flash_attn = flashAttnForVariant(variant);
 
   const budgetBytes = launchBudgetBytes(hardware, variant);
   const uncertainty = GEOMETRY_UNCERTAINTY[geometry.source] ?? GEOMETRY_UNCERTAINTY.heuristic;
-  // Guessed geometry understates KV; spend only budget/uncertainty so a heuristic 8-head
-  // guess on an MHA model does not plan a context that OOMs.
   const effectiveBudget = budgetBytes / uncertainty;
 
   const trainCeiling = Number(input.trainCtx) > 0 ? Math.trunc(Number(input.trainCtx)) : MISSING_TRAIN_CTX;
-  // Target is the per-slot wish before VRAM talks. trainCtx (or 8192 if missing) is a
-  // hard ceiling — exceeding it produces garbage even when the card has room.
   let target = Math.min(trainCeiling, PREFERRED_CONTEXT_TOKENS);
   if (Number(requested.ctx) > 0) {
     target = Math.min(target, Math.trunc(Number(requested.ctx)));
@@ -214,7 +185,6 @@ export function planLlamaLaunch(input) {
       ctx,
       cacheType,
       backend,
-      // Unset nGpuLayers ⇒ full offload, matching "auto leaves -ngl unset".
       nGpuLayers: cpu ? 0 : undefined,
     });
 
@@ -242,8 +212,6 @@ export function planLlamaLaunch(input) {
     if (fittedTotal <= 0) return 0;
 
     let ctxPerSlot = snapContextToLadder(Math.min(Math.floor(fittedTotal / parallel), target, trainCeiling));
-    // Linear KV solve and estimateRunMemory can disagree by a few bytes (SWA floor,
-    // rounding). Walk down the ladder until the real estimate fits — still a ladder snap.
     while (ctxPerSlot >= MIN_LADDER && estimateAt(ctxPerSlot * parallel, cacheType).totalBytes > effectiveBudget) {
       ctxPerSlot = lowerLadderRung(ctxPerSlot);
     }
@@ -263,7 +231,6 @@ export function planLlamaLaunch(input) {
 
   const fits = ctxPerSlot >= MIN_LADDER;
   if (!fits) {
-    // Still emit a concrete plan so Phase 3 can attach it as suggestedSettings.
     ctxPerSlot = snapContextToLadder(Math.min(MIN_LADDER, target, trainCeiling)) || Math.min(MIN_LADDER, trainCeiling);
     cache_type = typesToTry[typesToTry.length - 1];
   }

@@ -1,11 +1,4 @@
 /**
- * In-memory transcript store — the server-side stand-in for `src/state/sessions.ts`.
- *
- * The runner never imports the session store. Renderer callers wrap `findChatById`;
- * the Node runner (and tests) pass this implementation.
- */
-
-/**
  * @typedef {{ role: string, content?: unknown, [key: string]: unknown }} TranscriptMessage
  * @typedef {{ thinkingMode?: unknown, reasoningEffort?: unknown, [key: string]: unknown }} TranscriptMeta
  * @typedef {{ messages: TranscriptMessage[], meta: TranscriptMeta }} TranscriptRecord

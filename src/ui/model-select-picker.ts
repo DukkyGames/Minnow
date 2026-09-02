@@ -1,8 +1,3 @@
-/**
- * Custom model picker list: load-state dots in menu + trigger synced to #modelSelect.
- * Groups models by producer (Qwen, Google, Llama, …) with logos in the popover UI.
- */
-
 import { modelCache } from '../app-state';
 import { isServerStorageMode } from '../config/storage-mode';
 import { decodeModelSelectKey, encodeModelSelectKey } from '../lib/model-select-key';
@@ -157,7 +152,6 @@ function closeExternalModelMenus(): void {
     try {
       close();
     } catch {
-      /* ignore subscriber errors */
     }
   }
 }
@@ -186,7 +180,6 @@ function saveCollapsedProducers(slugs: Set<string>): void {
   try {
     localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify([...slugs]));
   } catch {
-    /* ignore quota / private mode */
   }
 }
 
@@ -195,7 +188,6 @@ function loadModelHostFilter(): ModelHostFilter {
     const raw = localStorage.getItem(HOST_FILTER_STORAGE_KEY);
     if (raw === 'all' || raw === 'local' || raw === 'cloud') return raw;
   } catch {
-    /* ignore private mode */
   }
   return 'all';
 }
@@ -206,7 +198,6 @@ function loadModelLocalLoadFilter(): ModelLocalLoadFilter {
     if (raw === 'loaded') return 'loaded';
     if (raw === 'unloaded') return 'all';
   } catch {
-    /* ignore private mode */
   }
   return 'all';
 }
@@ -216,7 +207,6 @@ function loadModelLibraryFilter(): ModelLibraryFilter {
     const raw = localStorage.getItem(LIBRARY_FILTER_STORAGE_KEY);
     if (raw === 'library') return 'library';
   } catch {
-    /* ignore private mode */
   }
   return 'all';
 }
@@ -231,7 +221,6 @@ export function setModelHostFilter(filter: ModelHostFilter): void {
   try {
     localStorage.setItem(HOST_FILTER_STORAGE_KEY, filter);
   } catch {
-    /* ignore quota / private mode */
   }
   syncAllModelHostFilterBars();
 }
@@ -246,7 +235,6 @@ export function setModelLocalLoadFilter(filter: ModelLocalLoadFilter): void {
   try {
     localStorage.setItem(LOCAL_LOAD_FILTER_STORAGE_KEY, filter);
   } catch {
-    /* ignore quota / private mode */
   }
   syncAllModelHostFilterBars();
 }
@@ -267,7 +255,6 @@ export function setModelLibraryFilter(filter: ModelLibraryFilter): void {
   try {
     localStorage.setItem(LIBRARY_FILTER_STORAGE_KEY, filter);
   } catch {
-    /* ignore quota / private mode */
   }
   syncAllModelHostFilterBars();
 }
@@ -711,10 +698,7 @@ function resolveSelectOption(
   return [...sel.options].find((o) => o.value === key) ?? sel.options[sel.selectedIndex];
 }
 
-/**
- * Keep the model popover open after pick when the provider supports load/unload
- * and the model is not loaded yet (Load is the expected next action).
- */
+/** Keep the model popover open after pick when the provider supports load/unload and the model is not loaded yet (Load is the expected next action). */
 export function shouldKeepModelMenuOpenAfterSelect(modelIdOrKey: string): boolean {
   if (!isServerStorageMode()) return false;
   const sel = document.getElementById('modelSelect') as HTMLSelectElement | null;
@@ -836,10 +820,7 @@ export function syncAuxiliaryModelSelectCombobox(select: HTMLSelectElement): voi
   });
 }
 
-/**
- * Wrap a native model &lt;select&gt; with the same custom list UI as the top-bar picker.
- * Safe to call once per element; subsequent calls are no-ops.
- */
+/** Wrap a native model &lt;select&gt; with the same custom list UI as the top-bar picker. */
 export function mountAuxiliaryModelSelectCombobox(select: HTMLSelectElement): void {
   if (auxiliaryPickers.has(select)) return;
   ensureAuxiliaryPickerGlobals();
@@ -982,8 +963,6 @@ function appendModelOptionRow(
   label.textContent = opt.text;
   label.title = rowTitle;
 
-  // Live runtime activity for local serves — empty (and invisible) for every other row.
-  // Prefill shows a token count, not a percentage: /slots reports no total to divide by.
   const activityEl = document.createElement('span');
   activityEl.className = 'model-select-option-activity';
   activityEl.dataset.activityFor = canonicalModelId;

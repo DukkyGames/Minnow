@@ -1,17 +1,13 @@
-/**
- * Legacy template generator — superseded by hand-maintained
- * server/research/visual-report.js + visual-report-*.css (Minnow-themed).
- * Do not run unless re-porting from extract JSON.
- */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+// ── Template ─────────────────────────────────────────────────────────────────
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const extractPath = path.resolve(__dirname, '../server/research/_visual-report-template-extract.json');
 const { template, palettes, styles } = JSON.parse(fs.readFileSync(extractPath, 'utf8'));
 
-// Minnow branding + v1: drop legacy inline script (replaced after sanitize).
 const htmlTemplate = template
   .replace(/<script>[\s\S]*<\/script>\s*(?=<\/body>)/, '');
 
@@ -103,6 +99,8 @@ if (document.body.classList.contains('category-comparison')) {
     else if (mid.test(t)) td.classList.add('cmp-mid');
   });
 }`;
+
+// ── Generated source ─────────────────────────────────────────────────────────
 
 const logic = `/**
  * Markdown research report → standalone editorial HTML page (text-only v1).
@@ -217,7 +215,6 @@ function makeSlug(text, seenSlugs) {
 }
 
 /**
- * Pull h2/h3 headings from markdown for table of contents.
  * @param {string} mdText
  * @returns {Array<{ level: number, text: string, slug: string }>}
  */
@@ -225,9 +222,9 @@ export function extractHeadings(mdText) {
   if (typeof mdText !== 'string') {
     return [];
   }
-  /** @type {Array<{ level: number, text: string, slug: string }>} */
+/** @type {Array<{ level: number, text: string, slug: string }>} */
   const headings = [];
-  /** @type {Record<string, number>} */
+/** @type {Record<string, number>} */
   const seenSlugs = {};
 
   for (const m of mdText.matchAll(/^(#{2,3})\\s+(.+)$/gm)) {
@@ -251,7 +248,6 @@ export function extractHeadings(mdText) {
 }
 
 /**
- * Force rendered h2/h3 IDs to match generated sidebar links.
  * @param {string} reportHtml
  * @param {Array<{ level: number, slug: string }>} headings
  * @returns {string}
@@ -273,7 +269,6 @@ export function applyHeadingIds(reportHtml, headings) {
 }
 
 /**
- * Pull a real title from the report's first heading; strip duplicate from body.
  * @param {string} markdownText
  * @param {string} fallback
  * @returns {{ title: string, markdown: string }}
@@ -283,7 +278,7 @@ export function extractReportTitle(markdownText, fallback) {
     return { title: fallback, markdown: markdownText };
   }
 
-  /** @type {Array<{ level: number, start: number, end: number, text: string }>} */
+/** @type {Array<{ level: number, start: number, end: number, text: string }>} */
   const candidates = [];
   for (const level of [1, 2]) {
     const hashes = '#'.repeat(level);
@@ -311,7 +306,6 @@ export function extractReportTitle(markdownText, fallback) {
 }
 
 /**
- * Promote bold-only lines to ## headings when no markdown headings exist.
  * @param {string} markdown
  * @returns {string}
  */
@@ -323,7 +317,6 @@ export function promoteBoldHeadings(markdown) {
 }
 
 /**
- * Category-specific CSS (palette block + structural rules).
  * @param {string | null | undefined} category
  * @returns {string}
  */
@@ -381,7 +374,6 @@ function fillTemplate(template, vars) {
  */
 
 /**
- * Generate a self-contained editorial HTML report page.
  * @param {string} question
  * @param {string} reportMarkdown
  * @param {ResearchSource[]} [sources]
@@ -398,7 +390,7 @@ export function generateVisualReport(
   category = null,
   researchId = null,
 ) {
-  void researchId; // Phase 5b: hero/section images, hide/reroll endpoints
+  void researchId;
 
   let markdown = stripThinking(reportMarkdown) ?? '';
   const { title: synthesized, markdown: bodyMarkdown } = extractReportTitle(markdown, question);
@@ -408,7 +400,6 @@ export function generateVisualReport(
   const headings = extractHeadings(markdown);
   reportHtml = applyHeadingIds(reportHtml, headings);
 
-  // Product quick-links bar (no OG images in v1)
   if (category === 'product' && headings.length) {
     const productHeadings = headings.filter((h) => h.level === 3);
     if (productHeadings.length) {
@@ -499,13 +490,14 @@ export function generateVisualReport(
     spare_images_js: '[]',
   });
 
-  // First-party export/print script is injected AFTER sanitization (not from model output).
   return html.replace(
     '</body>',
     \`<script>\\n\${REPORT_SCRIPT}\\n</script>\\n</body>\`,
   );
 }
 `;
+
+// ── Write file ───────────────────────────────────────────────────────────────
 
 const outPath = path.resolve(__dirname, '../server/research/visual-report.js');
 fs.writeFileSync(outPath, logic);

@@ -1,10 +1,3 @@
-/**
- * Source Control Center — Branches, Stashes, and Worktrees.
- *
- * Three list sections that share one row vocabulary: a name, a state line,
- * and actions that only appear on hover or focus so the list stays quiet.
- */
-
 import { appConfirm } from './app-dialog';
 import {
   gitBranches,
@@ -572,10 +565,7 @@ export function createWorktreesView(
     const frag = document.createDocumentFragment();
 
     for (const worktree of worktrees) {
-      // Code workspace folder (may be a linked worktree).
       const isWorkspace = Boolean(workspace && panelPathsEqual(worktree.path, workspace));
-      // Git principal checkout — always listed and labeled even when the Code
-      // workspace is a different linked worktree (MIN-780).
       const isPrincipal = Boolean(
         principal?.path && worktreePathsEqual(worktree.path, principal.path),
       );
@@ -594,14 +584,12 @@ export function createWorktreesView(
           button({
             label: 'Work here',
             onClick: () => {
-              // Local browse when selecting the Code workspace path.
               options.onSelectWorktree(isWorkspace ? undefined : worktree.path);
               void ctx.refreshAll();
             },
           }),
         );
       }
-      // Never offer remove for the git principal or the Code workspace folder.
       if (!isPrincipal && !isWorkspace) {
         actions.push(
           button({
@@ -641,7 +629,6 @@ export function createWorktreesView(
     if (!confirmed) return;
 
     const from = ctx.getCwd();
-    // Leave the worktree we are about to delete before deleting it.
     if (panelPathsEqual(path, from ?? workspace)) options.onSelectWorktree(undefined);
 
     const removed = await run(

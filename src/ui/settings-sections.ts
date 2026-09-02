@@ -150,6 +150,8 @@ import {
 } from '../config/terminal-meta';
 import { fetchShellProfiles } from '../api/terminal-pty';
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 /** Normalize workspace path keys for shell profile overrides (matches server). */
 function workspaceShellProfileKey(absPath: string): string {
   const trimmed = absPath.trim();
@@ -213,6 +215,8 @@ function clearMount(id: string): HTMLElement | null {
   return mount;
 }
 
+// ── Terminal ─────────────────────────────────────────────────────────────────
+
 /** Terminal panel behavior when agents run shell commands (MIN-242). */
 async function appendTerminalControls(mount: HTMLElement): Promise<void> {
   await loadTerminalMeta();
@@ -226,7 +230,6 @@ async function appendTerminalControls(mount: HTMLElement): Promise<void> {
     configuredDefault =
       meta.defaultShellProfileId ?? fetched.defaultShellProfileId ?? shellProfiles[0]?.id;
   } catch {
-    /* shell profile picker hidden when server is offline */
   }
 
   const wslProfiles = shellProfiles.filter((p) => p.runtime === 'wsl');
@@ -297,7 +300,6 @@ async function appendTerminalControls(mount: HTMLElement): Promise<void> {
         }
       }
     } catch {
-      /* workspace override row omitted when workspace API is unavailable */
     }
   }
 
@@ -389,6 +391,8 @@ async function appendToolCallDefaults(mount: HTMLElement): Promise<void> {
   });
 }
 
+// ── General ──────────────────────────────────────────────────────────────────
+
 async function renderNotificationsSection(): Promise<void> {
   const mount = clearMount('settingsNotificationsBody');
   if (!mount) return;
@@ -459,7 +463,6 @@ async function renderGeneralSection(): Promise<void> {
     );
   }
 
-  // App updates leads the section: it is about the installed shell, not chat behavior.
   const updates = appendSettingsGroup(
     shell,
     'App updates',
@@ -547,6 +550,8 @@ async function renderGeneralSection(): Promise<void> {
   );
 
 }
+
+// ── Prompting ────────────────────────────────────────────────────────────────
 
 function defaultCustomConfig(id: string, label: string): PromptConfig {
   const parts: PromptConfig['parts'] = {};
@@ -978,6 +983,8 @@ async function mountPlanGranularityField(container: HTMLElement): Promise<void> 
   };
 }
 
+// ── Modes ────────────────────────────────────────────────────────────────────
+
 async function renderModesSection(): Promise<void> {
   const mount = clearMount('settingsModesBody');
   if (!mount) return;
@@ -1056,6 +1063,8 @@ async function renderServersSettingsSectionWrapper(): Promise<void> {
   await renderServersSettingsSection(mount);
   if (isAsyncSectionRenderStale('servers', generation)) return;
 }
+
+// ── Agents ───────────────────────────────────────────────────────────────────
 
 async function renderWorkAgentsSection(): Promise<void> {
   const mount = clearMount('settingsWorkAgentsBody');
@@ -1281,6 +1290,8 @@ async function renderSubAgentsSection(): Promise<void> {
   });
 
 }
+
+// ── Tools ────────────────────────────────────────────────────────────────────
 
 async function renderAutopilotSection(): Promise<void> {
   const mount = clearMount('settingsAutopilotBody');
@@ -1667,6 +1678,8 @@ async function renderToolsSection(): Promise<void> {
 /** Test fixture server — hidden from settings UI. */
 const MCP_SETTINGS_HIDDEN_IDS = new Set(['fixture']);
 
+// ── MCP ──────────────────────────────────────────────────────────────────────
+
 function sortMcpServersForDisplay(
   servers: McpServerSummary[],
 ): McpServerSummary[] {
@@ -1688,7 +1701,6 @@ function createMcpSettingsRow(
   row.setAttribute('role', 'listitem');
   row.dataset.serverId = server.id;
 
-  // Top line: enable toggle + display name on the left, built-in badge or remove on the right.
   const head = document.createElement('div');
   head.className = 'settings-mcp-row-head';
 
@@ -1723,7 +1735,6 @@ function createMcpSettingsRow(
 
   row.append(head);
 
-  // Secondary block: description, then a compact status line (dot + label), then optional hints.
   const detail = document.createElement('div');
   detail.className = 'settings-mcp-detail';
 
@@ -2226,6 +2237,8 @@ async function renderMcpSection(): Promise<void> {
   }
 }
 
+// ── Other sections ───────────────────────────────────────────────────────────
+
 async function renderAgentPacksSection(): Promise<void> {
   const mount = clearMount('settingsAgentPacksBody');
   if (!mount) return;
@@ -2371,6 +2384,8 @@ async function renderIssuesSettingsPanel(): Promise<void> {
   if (!mount) return;
   renderIssuesSettingsSection(mount);
 }
+
+// ── Refresh ──────────────────────────────────────────────────────────────────
 
 /** Load or refresh one settings section from live APIs. */
 export async function refreshSettingsSection(

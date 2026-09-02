@@ -131,7 +131,6 @@ function isTextFile(file: File): boolean {
   if (file.type.startsWith('text/')) return true;
   const ext = fileExtension(file.name);
   if (TEXT_EXTENSIONS.has(ext)) return true;
-  // Common config filenames without a dotted extension.
   const lower = file.name.toLowerCase();
   return lower === 'dockerfile' || lower === 'makefile' || lower === 'license';
 }

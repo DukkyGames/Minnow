@@ -1,8 +1,3 @@
-/**
- * Settings → Tools: permission rows for the tools each connected MCP server
- * exposes, one collapsible group per server.
- */
-
 import { fetchMcpToolCatalog, type McpToolCatalogEntry } from '../mcp/tool-catalog';
 import { isToolPermissionMode, loadToolConfig } from '../tools/config';
 import { bindToolsListChange, createDynamicToolGroup } from './tools-list';
@@ -29,7 +24,6 @@ function createPermissionSelect(toolLabel: string, mode: string): HTMLSelectElem
     opt.textContent = optDef.label;
     select.appendChild(opt);
   }
-  // Unlisted MCP ids resolve to `ask` at call time; show the same default here.
   select.value = isToolPermissionMode(mode) ? mode : 'ask';
   return select;
 }
@@ -59,8 +53,6 @@ function createMcpToolRow(
 
   if (tool.description) {
     const desc = document.createElement('p');
-    // MCP descriptions are written for the model and run to hundreds of words;
-    // the row clamps them (see settings.css) and keeps the rest on hover.
     desc.className = 'tool-desc tool-desc--clamped';
     desc.textContent = tool.description;
     if (tool.description.length > CLAMP_HINT_CHARS) {
@@ -82,10 +74,6 @@ function createServerNotice(entry: McpToolCatalogEntry): HTMLElement {
   return hint;
 }
 
-/**
- * Append one group per enabled MCP server to a tools list container.
- * Replaces any groups from a previous render.
- */
 export async function appendMcpToolsToList(listId: string): Promise<void> {
   const container = document.getElementById(listId);
   if (!container) return;

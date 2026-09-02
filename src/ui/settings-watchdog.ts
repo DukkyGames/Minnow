@@ -1,12 +1,3 @@
-/**
- * Settings → Agents → Watchdog: generation stream limits.
- *
- * Sub-agent hang recovery is the journal reconcile tick (P8-G), not a
- * heartbeat/stall watchdog. Wall-clock per run is `defaultTimeoutMs` /
- * per-type `timeoutMs` under Sub-agents. This page no longer describes
- * heartbeat, stall, or repeated-tool recovery for sub-agents.
- */
-
 import { appendSettingsGroup, linkToSettingsSection } from './settings-layout';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -20,10 +11,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-/**
- * Note under generation timeouts: sub-agents are recovered by reconcile,
- * not by the deleted heartbeat/stall supervisor.
- */
+/** Note under generation timeouts: sub-agents are recovered by reconcile, not by the deleted heartbeat/stall supervisor. */
 export async function renderAgentSupervisionSection(
   mount: HTMLElement,
   options?: { emphasis?: boolean },

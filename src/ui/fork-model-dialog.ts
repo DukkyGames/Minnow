@@ -1,7 +1,3 @@
-/**
- * Model picker for "Fork with different model…" (same combobox UI as the top bar).
- */
-
 import { populateMultiProviderModelSelect } from '../api/models';
 import type { ForkOverrides } from '../chat/fork-from-run';
 import { readGlobalSamplerForSend } from '../config/sampler-meta';

@@ -29,7 +29,6 @@ async function refreshCodeChatSurface(): Promise<void> {
   );
   await ensureSessionsReady();
   const chat = getActiveChat();
-  // Lazy-boot chats ship with empty history until the history GET lands.
   await ensureChatHistoryLoaded(chat.id);
   const { renderChatFromHistory, renderStatsForChat } = await import('../ui/messages');
   const { renderSidebar } = await import('../ui/sidebar');
@@ -78,8 +77,6 @@ export async function restoreCodeSessionOnForeground(): Promise<void> {
     !activeIsAssistant &&
     normalizeWorkspacePath(active.workspacePath ?? '') === workspaceKey;
 
-  // Honor an explicit workspace chat selection (e.g. overview session row) instead of
-  // reverting to lastActiveChatIdByWorkspace.
   if (activeInCurrentWorkspace) {
     await refreshCodeChatSurface();
     return;
@@ -129,9 +126,7 @@ export async function applyCodeLaunchOptions(
   if (targetPath && targetPath !== getWorkspacePath()) {
     try {
       await executeWorkspaceSwitch(targetPath);
-    } catch {
-      /* continue with current workspace when switch fails */
-    }
+    } catch {}
   }
 
   if (!shouldSend) {
@@ -150,7 +145,6 @@ export async function applyCodeLaunchOptions(
   const created = createChatWithMode({ modeId });
   if (!created.ok || !seed) return {};
 
-  // Attach issue code refs synchronously when possible so they ride with the send.
   const { addCodeReferenceToComposer } = await import('../attachments/code-ref');
   for (const ref of options.codeRefs ?? []) {
     const path = ref.path?.trim().replace(/\\/g, '/');
@@ -176,9 +170,7 @@ export async function applyCodeLaunchOptions(
   try {
     await sendMessageWithTools();
     clearForegroundSeed();
-  } catch {
-    /* leave seed in composer for manual send when provider/tools are unavailable */
-  } finally {
+  } catch {} finally {
     syncComposerFromStreamingState();
   }
 

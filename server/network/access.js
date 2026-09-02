@@ -1,25 +1,18 @@
-/**
- * Minnow dev-server network access — local (loopback) vs LAN (all interfaces).
- */
-
 import net from 'node:net';
 import os from 'node:os';
 import { isPrivateIpAddress } from '../webhooks/ssrf.js';
 
 /** @typedef {'local' | 'lan'} NetworkAccess */
 
-/** Active bind mode set once at server boot. */
 /** @type {NetworkAccess} */
 let activeNetworkAccess = 'local';
 
-/** Last known value from config.json (ignores env override). */
 /** @type {NetworkAccess} */
 let configNetworkAccess = 'local';
 
 const NETWORK_ACCESS_VALUES = new Set(['local', 'lan']);
 
 /**
- * Normalize persisted config value.
  * @param {unknown} value
  * @returns {NetworkAccess | null}
  */
@@ -30,7 +23,6 @@ export function normalizeNetworkAccess(value) {
 }
 
 /**
- * Resolve network mode from config only (no env).
  * @param {unknown} configMeta
  * @returns {NetworkAccess}
  */
@@ -43,7 +35,6 @@ export function resolveConfigNetworkAccess(configMeta) {
 }
 
 /**
- * Resolve active network mode — MINNOW_NETWORK env wins, else config, default local.
  * @param {unknown} configMeta
  * @returns {NetworkAccess}
  */
@@ -54,7 +45,6 @@ export function resolveNetworkAccess(configMeta) {
 }
 
 /**
- * Record boot-time and config values for WS policy and restart detection.
  * @param {unknown} configMeta
  */
 export function initNetworkAccess(configMeta) {
@@ -63,7 +53,6 @@ export function initNetworkAccess(configMeta) {
 }
 
 /**
- * Update persisted config value after PUT /api/config/meta (active bind unchanged until restart).
  * @param {NetworkAccess} mode
  */
 export function setConfigNetworkAccess(mode) {
@@ -82,13 +71,11 @@ export function getConfigNetworkAccess() {
   return configNetworkAccess;
 }
 
-/** True when saved config differs from the running bind mode. */
 export function isNetworkRestartRequired() {
   return configNetworkAccess !== activeNetworkAccess;
 }
 
 /**
- * Vite `server.host` for the resolved mode.
  * @param {NetworkAccess} networkAccess
  * @returns {string | boolean}
  */
@@ -110,8 +97,6 @@ function isLoopbackAddress(address) {
 }
 
 /**
- * Whether a WebSocket upgrade client may connect.
- * Loopback is always allowed; LAN mode also allows private-network addresses.
  * @param {import('http').IncomingMessage} req
  * @param {NetworkAccess} [networkAccess]
  * @returns {boolean}
@@ -128,7 +113,7 @@ export function isClientAllowed(req, networkAccess = activeNetworkAccess) {
 }
 
 /**
- * @param {string} hostname - already lowercased, port stripped
+ * @param {string} hostname
  * @returns {boolean}
  */
 function isLoopbackHostname(hostname) {
@@ -136,9 +121,6 @@ function isLoopbackHostname(hostname) {
 }
 
 /**
- * Strip a trailing `:port` from a `Host` header value. Handles bracketed
- * IPv6 literals (`[::1]:9473`) and bare IPv6 (`::1`, no port — browsers
- * always bracket IPv6 literals that carry a port).
  * @param {string} host
  * @returns {string}
  */
@@ -160,9 +142,6 @@ function stripHostPort(host) {
 let cachedOwnLanHostnames = null;
 
 /**
- * This machine's own hostname plus non-internal interface addresses,
- * lowercased. Used to allow LAN clients that reach us via our real LAN IP
- * while still rejecting an attacker-chosen Host header (DNS rebinding).
  * @returns {Set<string>}
  */
 function getOwnLanHostnames() {
@@ -178,17 +157,12 @@ function getOwnLanHostnames() {
   return names;
 }
 
-/** Reset cached LAN hostname set (tests only). */
 export function resetOwnLanHostnamesCache() {
   cachedOwnLanHostnames = null;
 }
 
 /**
- * Anti-DNS-rebinding `Host` header check for /api/* requests. Loopback
- * hostnames are always allowed; in LAN mode, this machine's own hostname/IPs
- * are also allowed. Everything else (including an attacker's domain that
- * merely *resolves* to a local address) is rejected.
- * @param {string} hostHeader - raw `Host` header value (may include :port)
+ * @param {string} hostHeader
  * @param {NetworkAccess} [networkAccess]
  * @returns {boolean}
  */

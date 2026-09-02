@@ -1,21 +1,3 @@
-/**
- * Email automation rules v2 (spec Part 4 / Phase 5).
- *
- * A rule is `{ conditions: [{ field, op, value }], trigger, actions: [...] }`:
- * a trigger picks the moment (new mail, high urgency, tag), the conditions
- * AND-narrow which messages qualify, and one or more actions run against each
- * match. Rules persist in ~/.minnow/email/automations.json; every execution is
- * recorded in the per-account `automation_runs` table (the audit log, surfaced
- * as the Runs tab).
- *
- * Guardrails (Part 7, absolute):
- *  - Automations never send mail. `forward_to` writes a *draft* for the user to
- *    review and send by hand — it never reaches SMTP on its own.
- *  - Mail-op actions (archive/move/read/flag) route through the Phase 4 review
- *    queue by default; only a rule the user explicitly marks `trusted` executes
- *    them directly. `delete` is not an automation action at all.
- */
-
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { emailAutomationsPath } from './paths.js';
@@ -27,16 +9,12 @@ import { bulkMessageAction } from './mail-actions.js';
 import { enqueuePendingAction } from './pending-actions.js';
 import { enqueueSchedulerNotification } from '../scheduler/delivery.js';
 
-/** Fields a condition may test against a message. */
 export const CONDITION_FIELDS = ['sender', 'domain', 'subject', 'has_attachment', 'category', 'urgency'];
 
-/** Comparison operators a condition may use. */
 export const CONDITION_OPS = ['contains', 'not_contains', 'equals', 'not_equals', 'is_true', 'is_false'];
 
-/** Triggers that pick the moment a rule is considered. */
 export const AUTOMATION_TRIGGERS = ['on_new_message', 'on_high_urgency', 'on_tag_match'];
 
-/** Every action type a rule may carry. */
 export const ACTION_TYPES = [
   'triage',
   'generate_variants',
@@ -49,7 +27,6 @@ export const ACTION_TYPES = [
   'run_scheduler_job',
 ];
 
-/** Mail-op actions that collapse onto the review-queue / bulk pipeline. */
 const MAIL_OP_ACTIONS = {
   mark_read: 'read',
   flag: 'flag',
@@ -105,8 +82,6 @@ function normalizeCondition(raw) {
 }
 
 /**
- * Coerce a stored/legacy action into the v2 shape. A legacy rule stored a bare
- * `action` string plus a `config`; the old `notify` maps onto `os_notify`.
  * @param {unknown} raw
  * @param {Record<string, unknown>} [legacyConfig]
  */
@@ -139,7 +114,6 @@ function normalizeAction(raw, legacyConfig) {
 }
 
 /**
- * Migrate any stored rule (v1 single-action or v2) to the v2 shape.
  * @param {Record<string, any>} rule
  * @returns {EmailAutomation}
  */
@@ -152,7 +126,6 @@ export function normalizeRule(rule) {
   if (Array.isArray(rule.actions) && rule.actions.length > 0) {
     actions = rule.actions.map((action) => normalizeAction(action)).filter(Boolean);
   } else if (rule.action) {
-    // v1 rule: one action string plus a loose config bag.
     const legacy = normalizeAction(rule.action, rule.config);
     if (legacy) actions = [legacy];
   }
@@ -176,7 +149,6 @@ export function normalizeRule(rule) {
   };
 }
 
-/** Read the raw rules array exactly as stored. */
 async function readRulesFromDisk() {
   const filePath = emailAutomationsPath();
   try {
@@ -274,7 +246,6 @@ export async function deleteAutomation(id) {
 }
 
 /**
- * Remove all automation rules bound to an email account (sign-out cleanup).
  * @param {string} accountId
  */
 export async function deleteAutomationsForAccount(accountId) {
@@ -287,12 +258,9 @@ export async function deleteAutomationsForAccount(accountId) {
   return { removed: rules.length - next.length };
 }
 
-// ---------------------------------------------------------------------------
 // Matching
-// ---------------------------------------------------------------------------
 
 /**
- * The lowercased value a condition field reads off a message.
  * @param {string} field
  * @param {Record<string, any>} message
  */
@@ -309,7 +277,6 @@ function fieldValue(field, message) {
     case 'subject':
       return String(message.subject ?? '').toLowerCase();
     case 'category':
-      // Prefer local inbox tab when set; fall back to triage category.
       return String(message.category || message.triage?.category || '').toLowerCase();
     case 'urgency':
       return String(message.triage?.urgency ?? '').toLowerCase();
@@ -321,8 +288,6 @@ function fieldValue(field, message) {
 }
 
 /**
- * Match a category condition against either the inbox tab or triage category
- * so rules like `equals newsletter` and `equals other` both keep working.
  * @param {string} op
  * @param {string} value
  * @param {Record<string, any>} message
@@ -378,7 +343,6 @@ export function matchCondition(cond, message) {
 }
 
 /**
- * All conditions must hold (AND). An empty condition list matches everything.
  * @param {AutomationCondition[]} conditions
  * @param {Record<string, any>} message
  */
@@ -390,7 +354,6 @@ export function matchesConditions(conditions, message) {
 }
 
 /**
- * Whether the rule's trigger fires for this message.
  * @param {EmailAutomation} rule
  * @param {Record<string, any>} message
  */
@@ -418,9 +381,7 @@ export function triggerMatches(rule, message) {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Audit log
-// ---------------------------------------------------------------------------
 
 /** @param {Record<string, any>} row */
 function rowToRun(row) {
@@ -468,8 +429,6 @@ export async function listAutomationRuns(accountId, ruleId, options = {}) {
 }
 
 /**
- * Runs for a rule, resolving the owning account from the rule itself so the
- * route does not need the account id in the URL.
  * @param {string} ruleId
  * @param {{ limit?: number }} [options]
  */
@@ -482,13 +441,9 @@ export async function listAutomationRunsForRule(ruleId, options = {}) {
   return listAutomationRuns(rule.accountId, ruleId, options);
 }
 
-// ---------------------------------------------------------------------------
 // Execution
-// ---------------------------------------------------------------------------
 
 /**
- * Build a forward draft. Never sends — the draft is the "confirm queue" the
- * guardrail requires: the user opens it and clicks Send themselves.
  * @param {string} accountId
  * @param {string} to
  * @param {Record<string, any>} message
@@ -513,8 +468,6 @@ async function createForwardDraft(accountId, to, message) {
 }
 
 /**
- * Run one action against one message and record the outcome. Never throws:
- * a failing action is logged to the audit table, not propagated.
  * @param {string} accountId
  * @param {EmailAutomation} rule
  * @param {AutomationAction} action
@@ -555,7 +508,6 @@ async function runAutomationAction(accountId, rule, action, message, messageKey)
           break;
         }
         if (rule.trusted) {
-          // Explicitly trusted: apply the mail-op straight away.
           const result = await bulkMessageAction(accountId, {
             ids: [messageKey],
             action: mailAction,
@@ -566,8 +518,6 @@ async function runAutomationAction(accountId, rule, action, message, messageKey)
             detail = `${result.failed} of 1 failed`;
           }
         } else {
-          // Default: route through the Phase 4 review queue for the user to
-          // Apply / Dismiss. The pending row is the second audit trail.
           await enqueuePendingAction(accountId, {
             source: `automation:${rule.id}`,
             label: `${rule.name}: ${action.type.replace(/_/g, ' ')}`,
@@ -588,7 +538,6 @@ async function runAutomationAction(accountId, rule, action, message, messageKey)
           detail = 'recipient required';
           break;
         }
-        // Absolute guardrail: never send. A forward becomes a draft to review.
         const draft = await createForwardDraft(accountId, to, message);
         outcome = 'drafted';
         detail = `Forward draft to ${to} (${draft.id})`;
@@ -603,7 +552,6 @@ async function runAutomationAction(accountId, rule, action, message, messageKey)
           label: title,
           message: bodyText,
         });
-        // Keep the in-app SSE too, so an open dashboard can flash the toast.
         emitEmailEvent('automation_notify', {
           accountId,
           messageId: messageKey,
@@ -652,7 +600,6 @@ async function runAutomationAction(accountId, rule, action, message, messageKey)
 }
 
 /**
- * Run matching automations for one new message.
  * @param {string} accountId
  * @param {Record<string, any>} message
  */
@@ -671,8 +618,6 @@ export async function evaluateAutomationsForMessage(accountId, message) {
       continue;
     }
     for (const action of rule.actions) {
-      // Each action records its own run and swallows its own errors, so one
-      // bad action never aborts the rest of the rule.
       // eslint-disable-next-line no-await-in-loop
       await runAutomationAction(accountId, rule, action, message, messageKey);
     }
@@ -680,8 +625,6 @@ export async function evaluateAutomationsForMessage(accountId, message) {
 }
 
 /**
- * Preview how many recently stored messages a (possibly unsaved) rule would
- * have matched — trigger + conditions, no actions run.
  * @param {string} accountId
  * @param {Record<string, unknown>} ruleInput
  * @param {{ days?: number }} [options]
@@ -695,7 +638,6 @@ export async function dryRunAutomation(accountId, ruleInput, options = {}) {
     .all(since);
   const messages = hydrateAttachments(db, rows).filter(Boolean);
 
-  // Force enabled so a disabled draft still previews; scope to this account.
   const rule = normalizeRule({ ...ruleInput, accountId, enabled: true });
 
   const matched = [];

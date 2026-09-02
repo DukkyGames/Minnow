@@ -1,7 +1,3 @@
-/**
- * File-tree → composer: workspace file/image preview chips (MIN-410).
- */
-
 import { isImageFilePath } from '../attachments/image-path';
 import {
   addWorkspaceFileReference,

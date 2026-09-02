@@ -1,8 +1,3 @@
-/**
- * Keyboard shortcut helpers for copying xterm selection without breaking SIGINT.
- */
-
-/** True when the event is the platform copy chord (Ctrl+C or Cmd+C). */
 export function isTerminalCopyShortcut(event: {
   key: string;
   ctrlKey: boolean;
@@ -13,7 +8,6 @@ export function isTerminalCopyShortcut(event: {
   const key = event.key.toLowerCase();
   if (key !== 'c') return false;
   if (event.shiftKey || event.altKey) return false;
-  // Windows/Linux: Ctrl+C. macOS: Cmd+C (Ctrl+C remains SIGINT in shells).
   return (event.ctrlKey && !event.metaKey) || (event.metaKey && !event.ctrlKey);
 }
 

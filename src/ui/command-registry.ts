@@ -1,13 +1,3 @@
-/**
- * Registry of commands reachable from the global palette.
- *
- * Surfaces contribute commands the same way they contribute context-menu items
- * (see `menu-registry.ts`): register a source once, and it appears wherever the
- * palette is opened from. A source returns its commands fresh on every open, so
- * `available()` and labels reflect current state rather than mount-time state.
- */
-
-/** One palette row. Shape lifted from `SccCommand`, which already had it right. */
 export interface Command {
   id: string;
   /** Row label. */
@@ -33,12 +23,6 @@ interface Registration {
 
 const sources = new Map<string, Registration>();
 
-/**
- * Register a command source. Re-registering the same id replaces it, so a
- * surface that remounts does not stack duplicate rows.
- *
- * @param order sort weight for whole blocks; ties fall back to source id.
- */
 export function registerCommandSource(
   id: string,
   source: CommandSource,
@@ -54,12 +38,7 @@ export function unregisterCommandSource(id: string): void {
   sources.delete(id);
 }
 
-/**
- * Collect every currently available command.
- *
- * Duplicate ids are dropped, first source wins: a surface-specific command can
- * shadow a generic one by registering at a lower order.
- */
+/** Collect every currently available command. */
 export function listCommands(): Command[] {
   const ordered = [...sources.values()].sort(
     (a, b) => a.order - b.order || a.id.localeCompare(b.id),
@@ -71,7 +50,6 @@ export function listCommands(): Command[] {
     try {
       commands = entry.source();
     } catch {
-      // A broken source must not empty the palette.
       commands = [];
     }
     for (const command of commands) {

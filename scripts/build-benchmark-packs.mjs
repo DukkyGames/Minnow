@@ -1,11 +1,4 @@
 #!/usr/bin/env node
-/**
- * Fetch standard benchmark datasets from Hugging Face and write bundled full-tier packs.
- * Usage: node scripts/build-benchmark-packs.mjs [--only mmlu,gsm8k] [--force]
- *
- * Output: public/benchmark-packs/full/*.json and public/benchmark-packs/mini/*.json
- * Requires network access to huggingface.co and datasets-server.huggingface.co
- */
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -24,11 +17,12 @@ const onlyArg = args.find((a) => a.startsWith('--only='))?.slice(7)
   ?? (args.includes('--only') ? args[args.indexOf('--only') + 1] : null);
 const only = onlyArg ? new Set(onlyArg.split(',').map((s) => s.trim())) : null;
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** List parquet file descriptors for a Hugging Face dataset. */
 async function listParquetFiles(dataset) {
   const res = await fetch(`${HF_PARQUET}?dataset=${encodeURIComponent(dataset)}`);
   if (!res.ok) throw new Error(`parquet list ${dataset} HTTP ${res.status}`);
@@ -36,7 +30,6 @@ async function listParquetFiles(dataset) {
   return data.parquet_files ?? [];
 }
 
-/** Download and parse one parquet file into row objects. */
 async function readParquetUrl(url) {
   for (let attempt = 0; attempt < 6; attempt++) {
     try {
@@ -83,6 +76,8 @@ function shouldBuild(key) {
   return !only || only.has(key);
 }
 
+// ── MMLU ─────────────────────────────────────────────────────────────────────
+
 async function buildMmlu() {
   if (!shouldBuild('mmlu')) return;
   console.log('Building MMLU full…');
@@ -122,6 +117,8 @@ async function buildMmlu() {
   });
 }
 
+// ── ARC ──────────────────────────────────────────────────────────────────────
+
 async function buildArc() {
   if (!shouldBuild('arc')) return;
   console.log('Building ARC Challenge full…');
@@ -153,6 +150,8 @@ async function buildArc() {
     items,
   });
 }
+
+// ── GSM8k ────────────────────────────────────────────────────────────────────
 
 async function buildGsm8k() {
   if (!shouldBuild('gsm8k')) return;
@@ -192,6 +191,8 @@ async function buildGsm8k() {
     items,
   });
 }
+
+// ── HumanEval ────────────────────────────────────────────────────────────────
 
 async function buildHumaneval() {
   if (!shouldBuild('humaneval')) return;
@@ -246,6 +247,8 @@ async function buildHumaneval() {
     MINI_DIR,
   );
 }
+
+// ── TruthfulQA ───────────────────────────────────────────────────────────────
 
 async function buildTruthfulqa() {
   if (!shouldBuild('truthfulqa')) return;

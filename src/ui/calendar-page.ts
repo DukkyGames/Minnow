@@ -1,7 +1,3 @@
-/**
- * Minnow Calendar app — local-first events, ICS, and CalDAV sync.
- */
-
 import '../styles/calendar.css';
 import '../styles/calendar-window.css';
 

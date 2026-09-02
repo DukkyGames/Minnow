@@ -1,10 +1,3 @@
-/**
- * Shared types for the tool approval queue and modal.
- *
- * Kept in a dedicated module so `approval-queue.ts` can import the modal without a circular dependency
- * (the queue calls `showToolApprovalModal`, which needs these request fields).
- */
-
 /** Workspace context shown in the approval dialog. */
 export type ToolApprovalWorkspace =
   | { label: string; path: string }
@@ -22,9 +15,5 @@ export interface ToolApprovalRequest {
   pathWarning?: string;
   subAgentType?: string;
   workAgentId?: string | null;
-  /**
-   * When aborted, the queue resolves `cancel` without executing the tool.
-   * Abort while the strip is open also dismisses it (P8-A / MIN-754).
-   */
   signal?: AbortSignal;
 }

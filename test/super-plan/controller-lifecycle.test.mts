@@ -123,6 +123,8 @@ async function settle(ms = 20): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// ── Super Plan stage reset ───────────────────────────────────────────────────
+
 describe('Super Plan stage reset', () => {
   test.after(() => resetSuperPlanControllerForTests());
 
@@ -141,6 +143,8 @@ describe('Super Plan stage reset', () => {
     assert.equal(record.finishedAt, undefined);
   });
 });
+
+// ── Super Plan rewind ────────────────────────────────────────────────────────
 
 describe('Super Plan rewind', () => {
   test('rewindSuperPlanStages resets the target and all later stages', () => {
@@ -174,6 +178,8 @@ describe('Super Plan rewind', () => {
     assert.equal(chat.superPlan!.activeStage, 'research');
   });
 });
+
+// ── Super Plan pause ─────────────────────────────────────────────────────────
 
 describe('Super Plan pause and cancel', () => {
   test.after(() => resetSuperPlanControllerForTests());
@@ -212,6 +218,8 @@ describe('Super Plan pause and cancel', () => {
     assert.equal(isSuperPlanStalled(errored), true);
   });
 });
+
+// ── Super Plan ───────────────────────────────────────────────────────────────
 
 describe('Super Plan review cancellation (Fix 3: pause/cancel reach the reviewer sub-agent)', () => {
   test.after(() => resetSuperPlanControllerForTests());
@@ -255,6 +263,8 @@ describe('Super Plan review cancellation (Fix 3: pause/cancel reach the reviewer
     assert.deepEqual(cancelSubAgentCalls, []);
   });
 });
+
+// ── advanceSuperPlan max-tool-turns ──────────────────────────────────────────
 
 describe('advanceSuperPlan max-tool-turns hint (Fix 5)', () => {
   test.after(() => resetSuperPlanControllerForTests());
@@ -351,6 +361,8 @@ describe('advanceSuperPlan max-tool-turns hint (Fix 5)', () => {
   });
 });
 
+// ── onSuperPlanStreamEnd stream-end ──────────────────────────────────────────
+
 describe('onSuperPlanStreamEnd stream-end ordering (Fix 9)', () => {
   test.after(() => resetSuperPlanControllerForTests());
 
@@ -381,6 +393,8 @@ describe('onSuperPlanStreamEnd stream-end ordering (Fix 9)', () => {
     );
   });
 });
+
+// ── skipSuperPlanStage during ────────────────────────────────────────────────
 
 describe('skipSuperPlanStage during grill (MIN-442)', () => {
   test.after(() => {
@@ -443,6 +457,8 @@ describe('skipSuperPlanStage during grill (MIN-442)', () => {
     assert.equal(chat.superPlan!.stages.spec_confirm.status, 'running');
   });
 });
+
+// ── advanceSuperPlan post-interview ──────────────────────────────────────────
 
 describe('advanceSuperPlan post-interview recovery', () => {
   test.after(() => resetSuperPlanControllerForTests());

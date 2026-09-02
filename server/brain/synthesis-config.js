@@ -43,7 +43,6 @@ async function resolveActiveChatBinding(activeProviderId) {
   let chatBinding = { providerId: '', modelId: '' };
 
   if (!useJsonSessionsStore()) {
-    // Narrow SELECT: session_meta.activeId → chats.provider_id/model_id.
     const binding = readActiveChatModelBinding();
     if (binding) {
       chatBinding = {
@@ -52,7 +51,6 @@ async function resolveActiveChatBinding(activeProviderId) {
       };
     }
   } else {
-    // JSON rollback: whole-blob resource read.
     const sessions = await readResource('sessions');
     const activeId = typeof sessions?.activeId === 'string' ? sessions.activeId : '';
     const chats = Array.isArray(sessions?.chats) ? sessions.chats : [];

@@ -1,7 +1,3 @@
-/**
- * File sidebar and split-viewer layout (mirrors chat sidebar layout.ts).
- */
-
 import { ICON_FILE_TREE } from '../constants';
 import {
   getFilePanelState,
@@ -35,11 +31,7 @@ const RIGHT_PANE_CHILD_IDS = [
   'previewPaneSecondary',
 ] as const;
 
-/**
- * MIN-224: viewer/preview panes must live inside #rightPaneColumn (below #unifiedTabs).
- * Desktop mount restore used to reparent them onto #workspaceSplit, which squeezed tabs
- * into a narrow column beside the editor.
- */
+/** MIN-224: viewer/preview panes must live inside #rightPaneColumn (below #unifiedTabs). */
 export function repairRightPaneDomStructure(): boolean {
   const column = document.getElementById('rightPaneColumn');
   const split = document.getElementById('workspaceSplit');
@@ -156,10 +148,7 @@ export function hideAllRightSplitPanesDom(): void {
   void window.minnow?.preview.hide();
 }
 
-/**
- * Unhide the pane matching persisted rightPaneMode when state and DOM diverge
- * (e.g. reload applied viewer-open before preview restore, or Code foreground).
- */
+/** Unhide the pane matching persisted rightPaneMode when state and DOM diverge (e.g. reload applied viewer-open before preview restore, or Code foreground). */
 export function reconcileRightSplitDomWithState(): void {
   repairRightPaneDomStructure();
   const mode = resolvedRightPaneMode();
@@ -223,10 +212,7 @@ function refreshUnifiedTabsIfPresent(): void {
   void import('./unified-right-tabs').then((m) => m.refreshUnifiedRightTabs());
 }
 
-/**
- * Sync the Files pane button: always the folder glyph, highlighted when
- * the files view is the active left pane (MIN-655).
- */
+/** Sync the Files pane button: always the folder glyph, highlighted when the files view is the active left pane (MIN-655). */
 export function syncFileSidebarFilesPaneButton(options?: { gitOpen?: boolean }): void {
   const side = document.getElementById('fileSidebar');
   const btn = document.getElementById('btnFileSidebarCollapse');
@@ -239,7 +225,6 @@ export function syncFileSidebarFilesPaneButton(options?: { gitOpen?: boolean }):
     ? !mobileOpen
     : side.classList.contains('collapsed') || getFilePanelState().fileSidebarCollapsed;
 
-  // Stable folder glyph — active highlight marks the pane, not a chevron swap.
   btn.innerHTML = ICON_FILE_TREE;
 
   const filesActive = !collapsed && !gitOpen;
@@ -261,7 +246,6 @@ export function syncFileSidebarFilesPaneButton(options?: { gitOpen?: boolean }):
 /** Apply collapsed rail, mobile overlay, and split ratio CSS variables. */
 export function applyFileSidebarVisuals(): void {
   reconcileRightSplitDomWithState();
-  // Always sync split chrome and pane focus ring (clears stale is-focused when split is off).
   applyRightPaneSplitDom();
 
   const side = document.getElementById('fileSidebar');
@@ -315,14 +299,10 @@ export function applyFileSidebarVisuals(): void {
   }
 }
 
-/**
- * Files pane control: switch back from Source Control, else toggle collapse /
- * mobile overlay (MIN-655).
- */
+/** Files pane control: switch back from Source Control, else toggle collapse / mobile overlay (MIN-655). */
 export async function toggleFileSidebarLayout(): Promise<void> {
   const git = await import('./git-panel');
 
-  // While Source Control is open, the Files button returns to the tree.
   if (git.isGitSidePanelOpen()) {
     git.closeGitSidePanel();
     if (isMobileLayout()) {
@@ -390,8 +370,6 @@ export function showViewerSplit(): void {
   clearChatColumnDragCollapsed();
   const state = getFilePanelState();
   if (state.rightPaneMode === 'split' && state.rightPaneSplit.enabled) {
-    // Slot content is derived from each group's own tab list — forcing the globally
-    // active file into the primary slot is what made a file open in both panes.
     patchFilePanelState({ viewerOpen: true, rightPaneMode: 'split' });
     applyFileSidebarVisuals();
     return;
@@ -407,7 +385,6 @@ export function showViewerSplit(): void {
 
 /** Hide split viewer pane; switches to preview tabs when available. */
 export function hideViewerSplit(options?: { skipPreviewFallback?: boolean }): void {
-  // Worktree/chat sync clears viewer tabs without closing an already-open browser split.
   if (getFilePanelState().rightPaneMode === 'preview') {
     hideViewerPaneDom();
     applyFileSidebarVisuals();
@@ -438,7 +415,6 @@ export function showPreviewSplit(_options?: ShowPreviewSplitOptions): void {
   clearChatColumnDragCollapsed();
 
   if (isRightPaneSplitLayoutEnabled()) {
-    // Which slot shows the tab is decided by registerPreviewTabOpened ownership.
     patchFilePanelState({ viewerOpen: true, rightPaneMode: 'split' });
     showRightPaneColumnDom();
     applyFileSidebarVisuals();
@@ -503,20 +479,14 @@ export function resetChatColumnDragCollapsedForTests(): void {
   clearChatColumnDragCollapsed();
 }
 
-/**
- * Close the preview split without clearing previewSource (MIN-342).
- * Used when Code becomes foreground so the user can reopen via #btnPreviewToggle.
- */
+/** Close the preview split without clearing previewSource (MIN-342). */
 export function hidePreviewSplitKeepSource(): void {
   hideAllRightSplitPanesDom();
   patchFilePanelState({ rightPaneMode: null, viewerOpen: false });
   applyFileSidebarVisuals();
 }
 
-/**
- * Close both right split panes on Code entry while keeping previewSource and
- * openViewerTabs for explicit reopen (MIN-342).
- */
+/** Close both right split panes on Code entry while keeping previewSource and openViewerTabs for explicit reopen (MIN-342). */
 export function resetRightSplitForCodeEntry(): void {
   hideAllRightSplitPanesDom();
   patchFilePanelState({ rightPaneMode: null, viewerOpen: false });

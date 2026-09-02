@@ -1,11 +1,3 @@
-/**
- * Minnow Issues app — denser-than-Linear list + board (Issues v2 Phase 1).
- * Code sidebar opens an embed in #chatArea; desktop/dock keeps the fullscreen app.
- *
- * Visual-direction-by-generation skipped: this harness has no native image gen.
- * Shape is the confirmed brief in documentation/plans/issues-app-v2.md §1–14.
- */
-
 import '../styles/issues.css';
 
 import { notifyAskQuestionDisplayContextChanged } from '../chat/ask-question-display';
@@ -173,6 +165,8 @@ type IssuesUiFilters = {
   search: string;
 };
 
+// ── Filters ──────────────────────────────────────────────────────────────────
+
 /** Board and menu status options from the live taxonomy catalog. */
 function getBoardStatusOptions(): Array<{ id: IssueStatus; label: string }> {
   return boardStatuses(getIssuesTaxonomySync()).map((s) => ({ id: s.id, label: s.label }));
@@ -249,6 +243,8 @@ function getRoot(): HTMLElement | null {
   return document.getElementById('issuesView');
 }
 
+// ── Embed ────────────────────────────────────────────────────────────────────
+
 /** True when Issues is hosted inside the Code app main column. */
 export function isIssuesEmbeddedInCode(): boolean {
   const area = document.getElementById('chatArea');
@@ -303,7 +299,6 @@ function ensureEmbeddedBackButton(): void {
 
 function onEmbedEscape(event: KeyboardEvent): void {
   if (event.key !== 'Escape' || !isIssuesEmbeddedInCode()) return;
-  // Detail slide-over owns Escape first when open.
   if (document.getElementById('issuesDetailHost')) return;
   event.preventDefault();
   closeIssuesEmbeddedInCode();
@@ -351,10 +346,7 @@ export function restoreIssuesViewIfMounted(): void {
   issuesViewHome = null;
 }
 
-/**
- * Restore Issues out of #chatArea before the transcript repaints.
- * @returns true when an active Issues embed was torn down.
- */
+/** Restore Issues out of #chatArea before the transcript repaints. */
 export function teardownIssuesEmbedBeforeChatPaint(): boolean {
   const area = document.getElementById('chatArea');
   const root = getRoot();
@@ -364,7 +356,6 @@ export function teardownIssuesEmbedBeforeChatPaint(): boolean {
   if (inChat) {
     restoreIssuesViewIfMounted();
   } else {
-    // app-host may have already reparented the view — clear leftover bookkeeping.
     issuesViewHome = null;
     root?.classList.remove(ISSUES_EMBEDDED_CLASS);
     removeEmbeddedBackButton();
@@ -394,7 +385,6 @@ export async function openIssuesEmbeddedInCode(options?: { issueId?: string }): 
 
   await closeCompetingMainColumnViews();
 
-  // Always capture the chat under the embed (app-host may have cleared DOM without us).
   returnChatId = sessionState?.activeId ?? null;
 
   rememberIssuesHome(root);
@@ -407,8 +397,6 @@ export async function openIssuesEmbeddedInCode(options?: { issueId?: string }): 
 
   bindEmbedEscape();
   await openIssues({ issueId: options?.issueId, embedded: true });
-  // Chrome is built inside openIssues; inject Back after that so replaceChildren
-  // cannot wipe the control.
   ensureEmbeddedBackButton();
   notifyAskQuestionDisplayContextChanged();
 }
@@ -456,6 +444,8 @@ export function toggleIssuesFromSidebar(): void {
   void openIssuesEmbeddedInCode();
 }
 
+// ── Collect ──────────────────────────────────────────────────────────────────
+
 function getMount(): HTMLElement | null {
   return document.getElementById('issuesPanelMount');
 }
@@ -478,8 +468,6 @@ function collectOptions(): CollectIssuesOptions {
     type: type === 'all' ? 'all' : (type as IssueType),
     status: status === 'all' ? 'all' : (status as IssueStatus),
     priority: priority === 'all' ? 'all' : (priority as IssuePriority),
-    // Session chip wins: the active view copies its hideDone default into
-    // `filters` on tab change, and the Hide-done chip toggles that copy.
     hideDone: filters.hideDone,
     search: filters.search,
   };
@@ -577,6 +565,8 @@ function formatUpdated(ts: number): string {
   }
 }
 
+// ── Selection ────────────────────────────────────────────────────────────────
+
 /** Build a type badge for list rows. */
 function createTypeChip(type: IssueType): HTMLElement {
   const taxonomy = getIssuesTaxonomySync();
@@ -638,8 +628,6 @@ function isIssuesSortKey(value: string): value is IssuesSortKey {
 function collectVisibleIssues(): IssueCard[] {
   const issues = collectIssues(collectOptions());
   if (viewMode !== 'list') return issues;
-  // Pass the live catalog: statuses/types/priorities the user added in Settings
-  // have no place in the seed order and would otherwise sort arbitrarily.
   return sortIssuesForList(issues, listSort, getIssuesTaxonomySync());
 }
 
@@ -766,6 +754,8 @@ function resolveIssueActionTargetIds(issueId: string): string[] {
   }
   return [issueId];
 }
+
+// ── Menus ────────────────────────────────────────────────────────────────────
 
 async function copyTextToClipboard(text: string): Promise<void> {
   if (!text.trim()) return;
@@ -920,7 +910,6 @@ function buildIssueRowMenuItems(
       label: 'Send to chat',
       separatorBefore: true,
       disabled: !workflowOk || workflowBusy,
-      // Resolved on open so a run started from another row is reflected.
       submenu: () => buildForegroundChatSubmenuItems(issue),
     });
     items.push({
@@ -1164,6 +1153,8 @@ function bindCellMenu(cell: HTMLElement, open: (anchor: Element) => void): void 
   });
 }
 
+// ── Rows ─────────────────────────────────────────────────────────────────────
+
 function assigneeLabel(issue: IssueCard): string {
   if (!issue.assignee) return '—';
   if (issue.assignee.id === LOCAL_ASSIGNEE_ID) return issue.assignee.label?.trim() || 'Me';
@@ -1239,9 +1230,6 @@ function buildIssueRow(
   project.textContent = projectName;
   bindCellMenu(project, (anchor) => openProjectMenu(anchor, issue));
 
-  // The agent cell is live state read from the board, not a guess derived from
-  // status. "Waiting on you" is the strongest state in the app, so it is the
-  // only one that gets its own treatment and its own click target.
   const agent = document.createElement('span');
   agent.className = 'issues-row__agent';
   const agentText = agentLabel(issue);
@@ -1268,9 +1256,6 @@ function buildIssueRow(
   }
   row.classList.toggle('is-agent-waiting', issue.agent?.phase === 'awaiting_input');
 
-  // Sub-issue progress wins the column; a checklist rollup fills it for a card
-  // that has no children, so one glance answers "how far along is this" either
-  // way rather than leaving a dash on every leaf issue with a task list.
   const rollup = document.createElement('span');
   rollup.className = 'issues-row__rollup';
   const tasks = taskProgress(issue.description);
@@ -1459,10 +1444,7 @@ function dropIndexFromY(rows: Element[], clientY: number): number {
   return rows.length;
 }
 
-/**
- * Write ranks for a list/board reorder. Unranked visual peers are materialized
- * first (see `materializePeerRanks`) so Alt+↓ / drop can land below them.
- */
+/** Write ranks for a list/board reorder. */
 function persistRanksAfterReorder(
   orderedIds: string[],
   movingIds: string[],
@@ -1488,13 +1470,9 @@ function persistRanksAfterReorder(
   }
 }
 
-/**
- * Rows, cards and the peek panel accept a dropped capture or OS files directly.
- *
- * Dropping on a specific issue means "attach to this one" — no popover, no
- * confirmation. The popover exists for when you have not decided where it goes;
- * dropping on a row *is* the decision.
- */
+// ── Board ────────────────────────────────────────────────────────────────────
+
+/** Rows, cards and the peek panel accept a dropped capture or OS files directly. */
 function bindIssueCaptureDrop(el: HTMLElement, issueId: string): void {
   bindIssueDropTarget(el, issueId, () => {
     renderIssuesPanel();
@@ -1650,6 +1628,8 @@ function renderBoard(mount: HTMLElement, issues: IssueCard[]): void {
   mount.appendChild(kanban);
 }
 
+// ── Views ────────────────────────────────────────────────────────────────────
+
 /** Rebuild list or board from current filters. */
 export function renderIssuesPanel(): void {
   const root = getRoot();
@@ -1677,7 +1657,6 @@ export function renderIssuesPanel(): void {
   mount.appendChild(empty);
 
   if (issues.length === 0) {
-    /* empty copy already painted */
   } else if (viewMode === 'list') {
     renderList(mount, issues);
   } else {
@@ -1719,7 +1698,6 @@ function orderedFirstId(issues: IssueCard[]): string | undefined {
 
 function emptyStateCopy(matchCount: number): string {
   if (activeViewId === BUILTIN_VIEW_TRIAGE && matchCount === 0) {
-    // One 13px line at normal Issues width — Y / N/Backspace / C must stay visible.
     return 'Crashes, agents, and GitHub land here — Y accept, N/Backspace decline, C to file.';
   }
   return 'Issues come from you, agents, crashes, and GitHub. File one with Quick capture or New issue (C).';
@@ -1921,10 +1899,7 @@ function setGroupBy(next: IssuesGroupBy): void {
   renderIssuesPanel();
 }
 
-/**
- * Sync the Issues deep-link hash — skipped while embedded in Code so the OS
- * router does not foreground the fullscreen Issues app.
- */
+/** Sync the Issues deep-link hash — skipped while embedded in Code so the OS router does not foreground the fullscreen Issues app. */
 export function setIssuesRouteHash(next: string): void {
   if (isIssuesEmbeddedInCode()) return;
   if (window.location.hash !== next) window.location.hash = next;
@@ -1984,6 +1959,8 @@ function ensureSubscriptions(): void {
     });
   }
 }
+
+// ── New issue ────────────────────────────────────────────────────────────────
 
 function isNewFormOpen(): boolean {
   return document.getElementById('issuesNewForm')?.classList.contains('is-open') ?? false;
@@ -2053,7 +2030,6 @@ function ensureNewIssueDescriptionEditor(): void {
     value: '',
     placeholder: 'Describe the problem. / for blocks, # for issues, @ for files.',
     onChange: () => {
-      // Read on submit; nothing to persist while composing a new issue.
     },
   });
 }
@@ -2169,6 +2145,8 @@ function onQuickCaptureKeydown(event: KeyboardEvent): void {
   renderIssuesPanel();
 }
 
+// ── Lifecycle ────────────────────────────────────────────────────────────────
+
 function focusedIssue(): IssueCard | undefined {
   const id = focusedIssueId ?? visibleIssueOrder()[0]?.id;
   return id ? findIssueById(id) : undefined;
@@ -2257,14 +2235,7 @@ function declineFocusedTriage(): void {
   renderIssuesPanel();
 }
 
-/**
- * `A` on the focused issue: the whole dispatch loop in one keystroke.
- *
- * Phase 1 only filled the slot with `{ phase: 'queued' }` because the runtime
- * did not exist yet. It does now, so `A` starts it: plan, board, worktree,
- * Builder/Tester, PR. An agent already working the issue is left alone rather
- * than spawning a second worktree for the same card.
- */
+/** `A` on the focused issue: the whole dispatch loop in one keystroke. */
 function dispatchFocusedAgent(): void {
   const issue = focusedIssue();
   if (!issue) return;
@@ -2274,8 +2245,6 @@ function dispatchFocusedAgent(): void {
     return;
   }
 
-  // Fill the slot immediately so the row shows something in the same frame;
-  // the dispatch replaces it with a live run a moment later.
   queueIssueAgent(issue.id);
   renderIssuesPanel();
 
@@ -2288,12 +2257,7 @@ function dispatchFocusedAgent(): void {
   });
 }
 
-/**
- * Answer an agent's question from the row.
- *
- * §8 asks for this explicitly: when an agent is blocked, answering must be
- * reachable without hunting for the chat it happens to be running in.
- */
+/** Answer an agent's question from the row. */
 async function openIssueAgentChat(issueId: string): Promise<void> {
   const issue = findIssueById(issueId);
   const chatId = issue?.agent?.chatId ?? issue?.boardChatId;
@@ -2304,19 +2268,7 @@ async function openIssueAgentChat(issueId: string): Promise<void> {
   switchChat(chatId);
 }
 
-/**
- * Issues keyboard map (suppressed by isTypingTarget):
- * j/k or arrows — move selection
- * Enter — peek; Escape — close peek / clear multi-select
- * s status, p priority, u assignee, l labels, g project
- * A — assign an agent (plan, board, worktree, PR); answer it when it is waiting
- * Y — accept triage (backlog + triagedAt)
- * N or Backspace — decline triage when the focused card is unreviewed
- * C — new issue
- * E — expand focused issue (sparkles rewrite)
- * Alt+↑/↓ — rank within the group/column
- * Shift+←/→ — move board column (status)
- */
+/** Issues keyboard map (suppressed by isTypingTarget): j/k or arrows — move selection Enter — peek; Escape — close peek / clear multi-select s status, p priority, u assignee, l labels, g project A — assign an agent (plan, board, worktree, PR); answer it when it is waiting Y — accept triage (backlog + triagedAt) N or Backspace — decline triage when the focused card is unreviewed C — new issue E — expand focused issue (sparkles rewrite) Alt+↑/↓ — rank within the group/column Shift+←/→ — move board column (status) / */
 function onIssuesKeydown(event: KeyboardEvent): void {
   if (!isIssuesPageOpen()) return;
   if (isTypingTarget(event.target)) return;
@@ -2575,15 +2527,7 @@ function bindStaticControls(): void {
   }
 }
 
-/**
- * Context-aware Issues entry point.
- *
- * With Code in the foreground this embeds Issues in the main column so the
- * workspace and the open chat stay put; anywhere else it launches the app. It
- * was written for a chat-sidebar button that never shipped and sat with no
- * caller — which left the Code embed unreachable outside tests. The global
- * palette's "Go to Issues" now routes through here.
- */
+/** Context-aware Issues entry point. */
 export function openIssuesFromSidebar(): void {
   if (shouldEmbedIssuesFromCodeSidebar()) {
     toggleIssuesFromSidebar();
@@ -2630,7 +2574,6 @@ export async function openIssues(options?: {
   const root = getRoot();
   if (!root) return;
 
-  // Fullscreen / dock launch must reclaim the view from a Code embed first.
   if (!options?.embedded && isIssuesEmbeddedInCode()) {
     teardownIssuesEmbedBeforeChatPaint();
   }
@@ -2642,7 +2585,6 @@ export async function openIssues(options?: {
   bindStaticControls();
   bindIssuesCommands();
   ensureSubscriptions();
-  // Ensure store exists before first paint (router/deep-link may open before boot load finishes).
   if (!isIssuesStoreLoaded()) {
     const { loadIssuesTaxonomyFromStorage } = await import('../state/issues-taxonomy-store');
     await loadIssuesTaxonomyFromStorage();
@@ -2655,7 +2597,6 @@ export async function openIssues(options?: {
   try {
     renderIssuesPanel();
   } catch {
-    /* ignore render failures outside a fully booted shell */
   }
 
   if (!options?.embedded && !isOsShellEnabled()) {
@@ -2665,7 +2606,6 @@ export async function openIssues(options?: {
 }
 
 export function closeIssues(options?: { skipNavigate?: boolean }): void {
-  // Embedded in Code: return to chat without switching the OS foreground app.
   if (isIssuesEmbeddedInCode()) {
     closeIssuesEmbeddedInCode({ restoreChat: !options?.skipNavigate });
     return;
@@ -2702,7 +2642,6 @@ export function consumePendingIssueId(): string | undefined {
 
 function onHashChange(): void {
   const hash = window.location.hash;
-  // Code embed owns its own detail panel — ignore Issues hashes while embedded.
   if (isIssuesEmbeddedInCode()) return;
   if (hash === '#/app/issues' || hash.startsWith('#/app/issues/')) {
     const match = hash.match(/^#\/app\/issues\/([\w-]+)/);

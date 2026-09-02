@@ -1,8 +1,3 @@
-/**
- * Live stream phase labels (generating / thinking) shown beside the assistant row
- * until the prose bubble is revealed.
- */
-
 import { formatThinkingDuration } from './thinking-duration';
 import { humanizeToolName } from './tool-messages';
 
@@ -17,10 +12,7 @@ export type StreamPhase =
 /** Visible while the local model is loading into memory before the first token. */
 export const STREAM_LABEL_LOADING_MODEL = 'Loading model…';
 
-/**
- * Visible while llama.cpp is still feeding the prompt through. Only reachable for
- * local llama.cpp models, which are the only ones that report prefill progress.
- */
+/** Visible while llama.cpp is still feeding the prompt through. */
 export const STREAM_LABEL_PROMPT_PROCESSING = 'Processing prompt…';
 
 /** Visible while waiting for reasoning or prose (no tokens yet). */
@@ -43,10 +35,7 @@ export interface StreamingStatusHandle {
   setPhase(phase: StreamPhase): void;
   /** Muted elapsed suffix while phase is `thinking`; pass null to clear. */
   setThinkingElapsed(ms: number | null): void;
-  /**
-   * Runtime detail beside the label: prefill percent during `prompt_processing`,
-   * a token count while generating. Pass null to clear.
-   */
+  /** Runtime detail beside the label: prefill percent during `prompt_processing`, a token count while generating. */
   setRuntimeDetail(detail: string | null): void;
   dispose(): void;
 }
@@ -77,14 +66,11 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
   const elapsedEl = document.createElement('span');
   elapsedEl.className = 'stream-status__elapsed';
   elapsedEl.hidden = true;
-  // Elapsed ticks live inside aria-live status; hide from SR to avoid "Thinking 1s 2s…" spam.
   elapsedEl.setAttribute('aria-hidden', 'true');
 
   const detailEl = document.createElement('span');
   detailEl.className = 'stream-status__detail';
   detailEl.hidden = true;
-  // Ticks ~10x a second inside an aria-live region; announcing every value would
-  // turn the status into noise for a screen reader.
   detailEl.setAttribute('aria-hidden', 'true');
 
   statusEl.appendChild(dots);
@@ -127,7 +113,6 @@ export function attachStreamStatus(wrap: HTMLElement): StreamingStatusHandle {
   const setRuntimeDetail = (detail: string | null): void => {
     if (disposed) return;
     const text = detail?.trim() ? ` ${detail.trim()}` : '';
-    // This ticks once per generated token; skip the DOM write when nothing changed.
     if (detailEl.textContent === text) {
       syncToolStartDetail(wrap, text);
       return;
@@ -209,10 +194,7 @@ function syncToolStartDetail(wrap: HTMLElement, text: string): void {
   detail.hidden = !text;
 }
 
-/**
- * Inline "Calling {tool}…" spinner shown while tool_calls JSON streams in
- * (before finalized tool-call bubbles render).
- */
+/** Inline "Calling {tool}…" spinner shown while tool_calls JSON streams in (before finalized tool-call bubbles render). */
 export function attachToolStartIndicator(row: ToolStartIndicatorRow): ToolStartIndicatorHandle {
   let indicatorEl: HTMLDivElement | null = null;
   let labelEl: HTMLSpanElement | null = null;

@@ -1,7 +1,3 @@
-/**
- * Browser tool: foreground a Minnow app via the OS hash router.
- */
-
 import { fieldByKey } from '../ui/settings-catalog';
 import { resolveBrainMemoryRoute } from '../ui/brain-memory-routing';
 import { categoryForArea, type SettingsSectionId } from '../ui/settings-page-types';

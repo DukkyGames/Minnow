@@ -21,10 +21,7 @@ export async function applyNewChatRunTargetFromGitPanelBrowse(chat: Chat): Promi
   attachChatToWorktree(chat, seed.worktreeRoot, seed.gitBranch);
 }
 
-/**
- * Seed composer run-target from git panel browse before chrome sync.
- * Worktree attach is synchronous; Local / managed cleanup runs async with a follow-up sync.
- */
+/** Seed composer run-target from git panel browse before chrome sync. */
 export function seedNewChatComposerRunTarget(chat: Chat): void {
   const seed = getGitPanelNewChatRunTargetSeed();
   if (!seed) return;

@@ -136,18 +136,15 @@ let diagnosticsBadgeEl: HTMLElement | null = null;
 /** Blob URL for the active PDF preview; revoked when the tab unmounts. */
 let activePdfPreviewBlobUrl: string | null = null;
 
+// ── Slots ────────────────────────────────────────────────────────────────────
+
 function revokeActivePdfPreviewBlob(): void {
   if (!activePdfPreviewBlobUrl) return;
   URL.revokeObjectURL(activePdfPreviewBlobUrl);
   activePdfPreviewBlobUrl = null;
 }
 
-/**
- * True when the right pane is showing two editor groups.
- *
- * Read straight from state (not `right-pane-split`) so this hot path stays free of the
- * file-layout ↔ right-pane-split import cycle.
- */
+/** True when the right pane is showing two editor groups. */
 function splitLayoutEnabled(): boolean {
   const state = getFilePanelState();
   return (
@@ -155,12 +152,7 @@ function splitLayoutEnabled(): boolean {
   );
 }
 
-/**
- * Path the **primary** pane renders.
- *
- * This is the slot's own active tab, not the global active tab: with the split open the
- * global pointer follows the focused pane, which may be the secondary one.
- */
+/** Path the **primary** pane renders. */
 function primarySlotViewerPath(): string | null {
   if (!splitLayoutEnabled()) return getActiveViewerTabPath();
   return getFilePanelState().rightPaneSplit.primaryTabs.activeViewerPath;
@@ -199,7 +191,6 @@ function renderSecondarySlot(): void {
       m.destroySecondaryViewerSlot();
       return;
     }
-    // null path renders the "open a file in this pane" hint for an empty group.
     m.renderSecondaryViewerSlot(tabs.activeViewerPath);
   });
 }
@@ -221,7 +212,6 @@ function primaryRenderIsCurrent(tab: ViewerTabState): boolean {
   const host = getViewerHost();
   if (!host || host.childElementCount === 0) return false;
   if (tab.viewMode === 'editor') {
-    // An in-flight async mount for the same tab counts as current.
     return (editorView !== null && editorViewPath === tab.path) || pendingMountPath === tab.path;
   }
   if (tab.viewMode === 'markdown-preview') return markdownPreviewEl !== null;
@@ -232,6 +222,8 @@ function primaryRenderIsCurrent(tab: ViewerTabState): boolean {
 export function invalidatePrimaryViewerRender(): void {
   primaryRenderKey = null;
 }
+
+// ── Path ─────────────────────────────────────────────────────────────────────
 
 /** Strip "N: " prefixes from read_file_range output (EOL-normalized for the editor). */
 export function parseReadFileRangeBody(raw: string): string {
@@ -273,6 +265,8 @@ function buildLargeFileExcerptFooter(byteLength: number): string {
 function getViewerHost(): HTMLElement | null {
   return document.getElementById('fileViewerHost');
 }
+
+// ── Intent ───────────────────────────────────────────────────────────────────
 
 function getIntentToggleButton(): HTMLButtonElement | null {
   return document.getElementById('btnFileViewerIntent') as HTMLButtonElement | null;
@@ -403,8 +397,9 @@ function getReadOnlyBanner(): HTMLElement | null {
   return document.getElementById('fileViewerReadOnlyBanner');
 }
 
+// ── LSP ──────────────────────────────────────────────────────────────────────
+
 function activeTabContent(tab: ViewerTabState): string {
-  // Bind to the view that actually holds this tab, not to the focused slot.
   if (editorView && editorViewPath === tab.path) {
     return editorView.state.doc.toString();
   }
@@ -446,10 +441,6 @@ export async function isLspEnabledForViewer(): Promise<boolean> {
   return cfg?.enabled === true;
 }
 
-/**
- * Snapshot hook published by the secondary slot editor.
- * Registered rather than imported so the unsaved-changes guard stays synchronous.
- */
 let snapshotSecondaryEditor: (() => void) | null = null;
 
 /** Let the secondary slot editor take part in the unsaved-changes guard. */
@@ -464,7 +455,6 @@ function snapshotOutgoingEditorTab(): void {
   const tab = getViewerTab(editorViewPath);
   if (!tab || tab.viewMode === 'image') return;
   const text = editorView.state.doc.toString();
-  // Compare EOL-normalized text — CM always uses LF; disk may have been CRLF.
   const dirty = !tab.readOnlyExcerpt && isViewerDocDirty(text, tab.originalContent);
   snapshotViewerTabEditorContent(editorViewPath, text, dirty);
 }
@@ -532,7 +522,6 @@ function updateDiagnosticsChrome(counts: {
 }
 
 function updateViewerChrome(): void {
-  // The header lives inside the primary pane, so it reflects the primary tab.
   const tab = primarySlotViewerTab();
   const saveBtn = getSaveButton();
   if (saveBtn) {
@@ -560,6 +549,8 @@ function updateViewerChrome(): void {
   syncIntentToolbarAvailability(tab);
   updateSecondaryViewerChrome();
 }
+
+// ── Mount ────────────────────────────────────────────────────────────────────
 
 function mountMarkdownPreview(tab: ViewerTabState, content: string): void {
   const host = getViewerHost();
@@ -589,7 +580,6 @@ function mountEditor(tab: ViewerTabState, content: string): void {
   const generation = ++mountGeneration;
   destroyEditor();
   host.innerHTML = '';
-  // Feed CM the same LF form we store in originalContent (avoids false dirty).
   content = normalizeViewerDocText(content);
 
   if (tab.readOnlyExcerpt) {
@@ -722,7 +712,6 @@ function mountEditor(tab: ViewerTabState, content: string): void {
     }
     editorView = new EditorView({ state, parent: editorMount });
     editorViewPath = path;
-    // Adopt CM's exact buffer as the clean baseline (avoids EOL / load mismatches).
     const liveTab = getViewerTab(path);
     if (liveTab && !liveTab.readOnlyExcerpt && !liveTab.isDirty) {
       rebaselineViewerTabFromEditor(path, editorView.state.doc.toString());
@@ -760,7 +749,6 @@ function mountEditor(tab: ViewerTabState, content: string): void {
       });
       editorView.focus();
     } else if (getActiveViewerTabPath() === path) {
-      // Only steal focus when this tab is also the globally focused one (split-aware).
       editorView.focus();
     }
 
@@ -827,10 +815,7 @@ function mountDocumentHtmlPreview(
   updateViewerChrome();
 }
 
-/**
- * PDF preview via blob URL + embed.
- * Chromium blocks PDFs inside sandboxed iframes (ERR_BLOCKED_BY_CLIENT).
- */
+/** PDF preview via blob URL + embed. */
 async function mountPdfPreview(tab: ViewerTabState, src: string): Promise<void> {
   const host = getViewerHost();
   if (!host) return;
@@ -867,6 +852,8 @@ async function mountPdfPreview(tab: ViewerTabState, src: string): Promise<void> 
     );
   }
 }
+
+// ── Load ─────────────────────────────────────────────────────────────────────
 
 export function setViewerLoading(_path: string): void {
   primaryRenderKey = null;
@@ -941,16 +928,10 @@ async function loadFileContent(path: string): Promise<LoadedFileContent> {
   return { content, readOnlyExcerpt: false };
 }
 
-/**
- * Load workspace file content for a tab, whichever pane is showing it.
- *
- * Path-keyed rather than "active tab"-keyed: with the split open the secondary group
- * opens files too, and its tabs would otherwise sit on "Loading…" forever.
- */
+/** Load workspace file content for a tab, whichever pane is showing it. */
 export async function ensureViewerTabLoaded(path: string): Promise<void> {
   const tab = getViewerTab(path);
   if (!tab || tab.loadStatus !== 'loading' || tab.kind === 'attachment') return;
-  // Both panes can ask for the same tab in one paint; one fetch is enough.
   if (loadsInFlight.has(path)) return;
   loadsInFlight.add(path);
 
@@ -974,7 +955,6 @@ export async function ensureViewerTabLoaded(path: string): Promise<void> {
     }
     const loaded = await loadFileContent(path);
     const still = getViewerTab(path);
-    // Tab closed or a newer open restarted loading — do not stomp state.
     if (!still || still.loadStatus !== 'loading') return;
     const viewMode = still.viewMode === 'markdown-preview' ? 'markdown-preview' : 'editor';
     setViewerTabLoadState(path, 'ready', {
@@ -1018,8 +998,6 @@ function noteRecentViewerOpen(path: string): void {
 
 /** Mount the primary slot's tab in #fileViewerHost (editor, preview, image, loading, error). */
 export function renderActiveViewerTab(): void {
-  // While split, a primary group showing a browser tab keeps its editor pane hidden —
-  // repainting it would churn CodeMirror behind the preview for nothing.
   if (splitLayoutEnabled() && primarySlotShowsPreview()) return;
 
   const tab = primarySlotViewerTab();
@@ -1030,7 +1008,6 @@ export function renderActiveViewerTab(): void {
       updateViewerChrome();
       return;
     }
-    // A primary pane showing a browser tab must not be repainted as an empty editor.
     if (!primarySlotShowsPreview()) renderViewerEmptyState();
     return;
   }
@@ -1046,8 +1023,6 @@ export function renderActiveViewerTab(): void {
     return;
   }
 
-  // Layout passes (resize, split reflow, focus change) re-enter here constantly; remounting
-  // would throw away CodeMirror state and restart PDF/document iframes every time.
   if (primaryRenderIsCurrent(tab)) {
     updateViewerChrome();
     return;
@@ -1107,9 +1082,10 @@ export function renderActiveViewerTab(): void {
   mountEditor(tab, content);
 }
 
+// ── Tabs ─────────────────────────────────────────────────────────────────────
+
 /** Confirm when leaving a dirty active editor tab (Save / Discard / Cancel). */
 export async function confirmLeaveDirtyActiveTab(): Promise<boolean> {
-  // Refresh dirty from the live CM buffer before prompting (stale flags lie).
   snapshotOutgoingEditorTab();
   const tab = getActiveViewerTab();
   if (!tab?.isDirty) return true;
@@ -1123,7 +1099,6 @@ export async function confirmLeaveDirtyActiveTab(): Promise<boolean> {
 
 /** Confirm closing a dirty tab (may be inactive). */
 async function confirmCloseDirtyTab(tab: ViewerTabState): Promise<boolean> {
-  // Refresh dirty from whichever slot holds this tab so a false ● does not block close.
   snapshotOutgoingEditorTab();
   if (!tab.isDirty) return true;
   const choice = await showViewerUnsavedDialog(
@@ -1134,10 +1109,7 @@ async function confirmCloseDirtyTab(tab: ViewerTabState): Promise<boolean> {
   return saveViewerTabByPath(tab.path);
 }
 
-/**
- * Activate a tab inside the slot that owns it.
- * Focus follows the tab so the pane the user clicked becomes the command target.
- */
+/** Activate a tab inside the slot that owns it. */
 async function activateTabAndRender(path: string, options?: { skipUnsavedGuard?: boolean }): Promise<boolean> {
   const slotTabs = await import('./right-pane-slot-tabs');
   const split = await import('./right-pane-split');
@@ -1189,7 +1161,6 @@ export async function closeViewerTab(path: string): Promise<void> {
       hideViewerSplit();
     }
   } else {
-    // The surviving tab of the closing pane becomes that pane's active tab.
     if (split.isRightPaneSplitLayoutEnabled()) {
       const focusPath = slotTabs.activeViewerPathForSlot(split.getFocusedPaneSlot());
       if (focusPath) adoptActiveViewerTabPath(focusPath);
@@ -1204,10 +1175,7 @@ function refreshRightTabs(): void {
   void import('./unified-right-tabs').then((m) => m.refreshUnifiedRightTabs());
 }
 
-/**
- * Tabs in the same editor group as `path`, in strip order.
- * "Close others" / "close to the right" must not reach across the split.
- */
+/** Tabs in the same editor group as `path`, in strip order. */
 async function groupTabPathsFor(path: string): Promise<string[]> {
   const split = await import('./right-pane-split');
   const ordered = listViewerTabs().map((t) => t.path);
@@ -1279,14 +1247,10 @@ export async function cycleViewerTab(direction: 'next' | 'prev'): Promise<void> 
   await activateTabAndRender(group[nextIdx]!);
 }
 
-/**
- * Persist one tab via save_file, from whichever pane holds its live buffer.
- *
- * Path-addressed on purpose: the split has two editors, and the old "active tab +
- * primary EditorView" pairing could write the left pane's text to the right pane's file.
- */
+// ── Save ─────────────────────────────────────────────────────────────────────
+
+/** Persist one tab via save_file, from whichever pane holds its live buffer. */
 export async function saveViewerTabByPath(path: string): Promise<boolean> {
-  // Pull the freshest text out of both editors before reading the cached buffer.
   snapshotOutgoingEditorTab();
   const tab = getViewerTab(path);
   if (!tab || tab.readOnlyExcerpt || isSaving) return false;
@@ -1308,7 +1272,6 @@ export async function saveViewerTabByPath(path: string): Promise<boolean> {
       );
     }
   } catch {
-    /* format-on-save is best-effort */
   }
   isSaving = true;
   updateViewerChrome();
@@ -1461,7 +1424,6 @@ export function bindFileViewerControls(): void {
       await loadEditorAiCompletionConfig();
       const tab = primarySlotViewerTab();
       if (tab?.viewMode === 'editor' && tab.loadStatus === 'ready' && editorView && editorAiOpts) {
-        // intentEnabledField sits outside the compartment, so the toggle survives.
         reconfigureEditorSuggestions(editorView, editorAiOpts);
       }
       void import('./file-viewer-secondary-slot').then((m) => {
@@ -1574,6 +1536,8 @@ export function bindFileViewerContextMenu(): void {
   });
 }
 
+// ── Open ─────────────────────────────────────────────────────────────────────
+
 /** Active CodeMirror view when the code editor (not markdown preview) is mounted. */
 export function getFileViewerEditorView(): EditorView | null {
   return editorView;
@@ -1622,10 +1586,7 @@ export async function openAttachmentSnapshotInViewer(displayName: string, conten
   renderFileTreeViaBridge();
 }
 
-/**
- * Route a freshly opened tab into one pane: the pane that already owns it, else the
- * focused one. Without this a new file paints into both panes and belongs to neither.
- */
+/** Route a freshly opened tab into one pane: the pane that already owns it, else the focused one. */
 async function adoptOpenedViewerTab(path: string): Promise<void> {
   const split = await import('./right-pane-split');
   if (!split.isRightPaneSplitLayoutEnabled()) return;
@@ -1755,7 +1716,6 @@ export async function restoreViewerTabsFromPrefs(
 ): Promise<void> {
   if (paths.length === 0) return;
   restoreWorkspaceViewerTabs(paths, activePath);
-  // Persisted slot lists predate this restore — re-home any tab they no longer cover.
   const split = await import('./right-pane-split');
   split.reconcileRightPaneSlots();
   showViewerSplit();
@@ -1769,13 +1729,14 @@ function resetAllViewerTabs(options?: { closeSplit?: boolean }): void {
   const saveBtn = getSaveButton();
   if (saveBtn) saveBtn.disabled = true;
   if (options?.closeSplit !== false) {
-    // Worktree/chat sync force-closes tabs — do not fall back to browser preview (MIN-342).
     hideViewerSplit({ skipPreviewFallback: true });
   } else {
     hideViewerPaneDom();
   }
   renderFileTreeViaBridge();
 }
+
+// ── Close ────────────────────────────────────────────────────────────────────
 
 /** Close the primary pane's tab (its header close button); hide split when none remain. */
 export function closeFileViewer(): void {

@@ -1,7 +1,3 @@
-/**
- * Minnow Chat app full-page UI (#/app/chat) — session rail, messaging, composer.
- */
-
 import { sendMessage } from '../chat/messaging';
 import { stopGeneration } from '../chat/stop-generation';
 import { isActiveChatStreaming, subscribeChatStreamEnd } from '../chat/streaming-state';
@@ -128,7 +124,6 @@ async function activateAssistantChat(chatId: string): Promise<void> {
   if (!chat) return;
   sessionState.activeId = chatId;
   markSessionScalarsDirty();
-  // Lazy history: wait before paint so restart+switch does not show empty state.
   await ensureChatHistoryLoaded(chatId);
   if (!sessionState || sessionState.activeId !== chatId) return;
   acknowledgeChatViewed(chatId);
@@ -162,7 +157,6 @@ async function createNewAssistantChat(): Promise<void> {
       return;
     }
   } catch {
-    /* no active chat */
   }
   const chat = createAssistantChat(path, newChatId());
   sessionState.chats.unshift(chat);
@@ -286,7 +280,6 @@ async function applyConciergeSeed(seed?: string): Promise<void> {
     const { clearForegroundSeed } = await import('../os/instances');
     clearForegroundSeed();
   } catch {
-    /* leave seed in composer for manual send when provider/tools are unavailable */
   } finally {
     syncComposerSendState();
   }
@@ -399,7 +392,6 @@ export async function openChatApp(options?: string | ChatAppOpenOptions): Promis
         await ensureActiveAssistantChat();
       }
     } catch {
-      /* server offline — still show shell */
     }
   }
 

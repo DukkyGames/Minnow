@@ -5,8 +5,6 @@ import { appAlert, appConfirm, appPrompt } from './app-dialog';
 
  */
 
-
-
 import {
 
   formatWorktreeOptionLabel,
@@ -127,11 +125,7 @@ import {
   type GitErrorChatKind,
 } from './git-error-to-chat';
 
-
-
 const POLL_MS = 5000;
-
-
 
 let panelRoot: HTMLElement | null = null;
 
@@ -175,8 +169,6 @@ let historySection: HTMLElement | null = null;
 
 let historyBody: HTMLElement | null = null;
 
-
-
 let pollTimer: number | undefined;
 
 let bound = false;
@@ -189,8 +181,6 @@ let refreshing = false;
 let refreshPending = false;
 
 let refreshBtn: HTMLButtonElement | null = null;
-
-
 
 /** Effective cwd for git ops; undefined means server workspace root. */
 let panelCwd: string | undefined;
@@ -206,21 +196,17 @@ let cachedMergeBranchLists = {
   lockedLocal: [] as string[],
 };
 
-
-
 let expandedDiffPath: string | null = null;
 
 let expandedDiffStaged = false;
 
 let selectedCommitSha: string | null = null;
 
-
-
 let graphHandle: ReturnType<typeof renderGitGraph> | null = null;
 
 const graphOptions: GitGraphOptions = {};
 
-
+// ── Mount ────────────────────────────────────────────────────────────────────
 
 function getFileSidebar(): HTMLElement | null {
 
@@ -228,25 +214,20 @@ function getFileSidebar(): HTMLElement | null {
 
 }
 
-
-
 function getGitMount(): HTMLElement | null {
 
   return document.getElementById('gitPanelRoot');
 
 }
 
-
+// ── Cwd ──────────────────────────────────────────────────────────────────────
 
 /** Clear browse override so the next chat/composer sync can drive panel cwd. */
 export function clearPanelCwdUserOverride(): void {
   panelCwdUserOverride = false;
 }
 
-/**
- * Composer run-target seed for new chats when the user manually picked a worktree
- * in Source Control (browse override). Null → keep default Local.
- */
+/** Composer run-target seed for new chats when the user manually picked a worktree in Source Control (browse override). */
 export function getGitPanelNewChatRunTargetSeed(): PanelBrowseRunTargetSeed | null {
   return resolvePanelBrowseRunTargetSeed(panelCwd, panelCwdUserOverride, knownWorktrees);
 }
@@ -293,13 +274,11 @@ export function setGitPanelCwd(cwd: string | undefined): void {
 
 }
 
-
-
 function pathsEqual(a: string, b: string): boolean {
   return panelPathsEqual(a, b);
 }
 
-
+// ── Branch actions ───────────────────────────────────────────────────────────
 
 function createToolbarIconBtn(label: string, title: string): HTMLButtonElement {
   const btn = document.createElement('button');
@@ -545,7 +524,7 @@ async function handleDeleteWorktree(): Promise<void> {
   );
 }
 
-
+// ── Commit chrome ────────────────────────────────────────────────────────────
 
 function gitErrorChatContext(): GitErrorChatContext {
   return {
@@ -570,11 +549,7 @@ function setStatus(
   );
 }
 
-
-
 type CommitActionKind = 'commit' | 'commit-push';
-
-
 
 function setCommitButtonBusy(btn: HTMLButtonElement, label: string): void {
 
@@ -589,8 +564,6 @@ function setCommitButtonBusy(btn: HTMLButtonElement, label: string): void {
     `<span class="git-panel-action-label">${label}</span>`;
 
 }
-
-
 
 function setCommitActionsBusy(active: CommitActionKind, progressLabel: string): void {
 
@@ -611,8 +584,6 @@ function setCommitActionsBusy(active: CommitActionKind, progressLabel: string): 
   if (idleBtn) idleBtn.disabled = true;
 
 }
-
-
 
 function clearCommitActionsBusy(): void {
 
@@ -654,13 +625,9 @@ function clearCommitActionsBusy(): void {
 
 }
 
-
-
 function getEffectiveCwdArg(): string | undefined {
   return resolvePanelWorktreeCwd(panelCwd);
 }
-
-
 
 function syncSidebarChrome(): void {
   const sidebar = getFileSidebar();
@@ -685,15 +652,13 @@ function syncSidebarChrome(): void {
   syncToggleButtonState();
 }
 
-
+// ── Panel DOM ────────────────────────────────────────────────────────────────
 
 function ensurePanelDom(): HTMLElement {
 
   const mount = getGitMount();
 
   if (panelRoot?.isConnected && mount?.contains(panelRoot)) return panelRoot;
-
-
 
   panelRoot = document.createElement('div');
 
@@ -704,8 +669,6 @@ function ensurePanelDom(): HTMLElement {
   panelRoot.setAttribute('role', 'region');
 
   panelRoot.setAttribute('aria-label', 'Source control');
-
-
 
   const toolbar = document.createElement('div');
 
@@ -762,8 +725,6 @@ function ensurePanelDom(): HTMLElement {
 
   toolbar.appendChild(centerRow);
 
-
-
   cwdWrap = document.createElement('div');
 
   cwdWrap.className = 'git-panel-cwd-wrap';
@@ -794,7 +755,6 @@ function ensurePanelDom(): HTMLElement {
     const value = cwdSelect?.value ?? '';
     panelCwdUserOverride = true;
     const ws = getWorkspacePath().trim();
-    // Selecting the Code workspace path means Local browse (undefined cwd).
     panelCwd = value && !pathsEqual(value, ws) ? value : undefined;
 
     syncWorktreeDeleteButton();
@@ -818,8 +778,6 @@ function ensurePanelDom(): HTMLElement {
   cwdFieldRow.append(cwdSelect, worktreeAddBtn, worktreeDeleteBtn);
 
   cwdWrap.append(cwdLabel, cwdFieldRow);
-
-
 
   const branchWrap = document.createElement('div');
 
@@ -864,19 +822,13 @@ function ensurePanelDom(): HTMLElement {
 
   branchWrap.append(branchLabel, branchFieldRow);
 
-
-
   const branchRow = document.createElement('div');
 
   branchRow.className = 'git-panel-sync-row';
 
-
-
   aheadBehindEl = document.createElement('span');
 
   aheadBehindEl.className = 'git-panel-ahead-behind';
-
-
 
   const pullBtn = document.createElement('button');
 
@@ -889,8 +841,6 @@ function ensurePanelDom(): HTMLElement {
   pullBtn.addEventListener('click', () =>
     void runGitOp(() => gitPull(getEffectiveCwdArg()), { successMessage: 'Pulled changes' }),
   );
-
-
 
   const pushBtn = document.createElement('button');
 
@@ -915,13 +865,9 @@ function ensurePanelDom(): HTMLElement {
 
   toolbar.append(cwdWrap, branchWrap, branchRow);
 
-
-
   scrollMount = document.createElement('div');
 
   scrollMount.className = 'git-panel-scroll';
-
-
 
   statusWrap = document.createElement('div');
   statusWrap.className = 'git-panel-status-wrap';
@@ -933,15 +879,11 @@ function ensurePanelDom(): HTMLElement {
   statusMessageEl.className = 'git-panel-status';
   statusWrap.appendChild(statusMessageEl);
 
-
-
   noRepoMount = document.createElement('div');
 
   noRepoMount.className = 'git-panel-no-repo-mount';
 
   noRepoMount.hidden = true;
-
-
 
   const commitBox = document.createElement('div');
 
@@ -966,8 +908,6 @@ function ensurePanelDom(): HTMLElement {
     }
 
   });
-
-
 
   const commitActions = document.createElement('div');
 
@@ -997,8 +937,6 @@ function ensurePanelDom(): HTMLElement {
 
   commitBtn.addEventListener('click', () => void handleCommit(false));
 
-
-
   commitPushBtn = document.createElement('button');
 
   commitPushBtn.type = 'button';
@@ -1009,19 +947,13 @@ function ensurePanelDom(): HTMLElement {
 
   commitPushBtn.addEventListener('click', () => void handleCommit(true));
 
-
-
   commitActions.append(commitBtn, commitPushBtn, aiGenerateBtn);
 
   commitBox.append(commitInput, commitActions);
 
-
-
   bodyMount = document.createElement('div');
 
   bodyMount.className = 'git-panel-sections';
-
-
 
   diffHost = document.createElement('div');
 
@@ -1029,13 +961,9 @@ function ensurePanelDom(): HTMLElement {
 
   diffHost.hidden = true;
 
-
-
   historySection = document.createElement('section');
 
   historySection.className = 'git-panel-section git-panel-section--history';
-
-
 
   const historyHdr = document.createElement('button');
 
@@ -1051,13 +979,9 @@ function ensurePanelDom(): HTMLElement {
 
   historyHdr.appendChild(historyTitle);
 
-
-
   historyBody = document.createElement('div');
 
   historyBody.className = 'git-panel-section__body git-panel-section__body--history';
-
-
 
   graphMount = document.createElement('div');
 
@@ -1066,8 +990,6 @@ function ensurePanelDom(): HTMLElement {
   graphMount.className = 'git-panel-graph-mount';
 
   historyBody.appendChild(graphMount);
-
-
 
   historyHdr.addEventListener('click', () => {
 
@@ -1079,17 +1001,11 @@ function ensurePanelDom(): HTMLElement {
 
   });
 
-
-
   historySection.append(historyHdr, historyBody);
-
-
 
   scrollMount.append(statusWrap, noRepoMount, commitBox, bodyMount, diffHost, historySection);
 
   panelRoot.append(toolbar, scrollMount);
-
-
 
   mount?.replaceChildren(panelRoot);
 
@@ -1097,14 +1013,10 @@ function ensurePanelDom(): HTMLElement {
 
 }
 
-
-
 async function syncFileTreeGitPollCwd(force?: boolean): Promise<void> {
   const { syncFileTreeToPanelWorktree } = await import('./file-tree');
   await syncFileTreeToPanelWorktree(panelCwd, { force });
 }
-
-
 
 async function handleBranchChange(): Promise<void> {
   if (!branchSelect) return;
@@ -1122,7 +1034,7 @@ async function handleBranchChange(): Promise<void> {
   }
 }
 
-
+// ── Commit ───────────────────────────────────────────────────────────────────
 
 async function handleGenerateCommitMessage(): Promise<void> {
 
@@ -1242,8 +1154,6 @@ async function handleGenerateCommitMessage(): Promise<void> {
 
 }
 
-
-
 async function handleCommit(andPush: boolean): Promise<void> {
 
   if (commitBusy) return;
@@ -1294,8 +1204,6 @@ async function handleCommit(andPush: boolean): Promise<void> {
 
 }
 
-
-
 type RunGitOpOptions = {
   successMessage?: string;
   /** When set, failed ops show a Send to chat action beside the error. */
@@ -1330,7 +1238,7 @@ async function runGitOp(
 
 }
 
-
+// ── File list ────────────────────────────────────────────────────────────────
 
 function statusBadgeLetter(status: string): string {
 
@@ -1346,23 +1254,17 @@ function statusBadgeLetter(status: string): string {
 
 }
 
-
-
 function buildFileRow(entry: GitFileEntry, staged: boolean): HTMLElement {
 
   const row = document.createElement('div');
 
   row.className = 'git-panel-file-row';
 
-
-
   const badge = document.createElement('span');
 
   badge.className = `git-panel-file-badge git-panel-file-badge--${entry.status === '?' ? 'untracked' : 'modified'}`;
 
   badge.textContent = statusBadgeLetter(entry.status);
-
-
 
   const path = document.createElement('button');
 
@@ -1376,13 +1278,9 @@ function buildFileRow(entry: GitFileEntry, staged: boolean): HTMLElement {
 
   path.addEventListener('click', () => void showFileDiff(entry.path, staged));
 
-
-
   const actions = document.createElement('div');
 
   actions.className = 'git-panel-file-actions';
-
-
 
   const diffBtn = document.createElement('button');
 
@@ -1395,8 +1293,6 @@ function buildFileRow(entry: GitFileEntry, staged: boolean): HTMLElement {
   diffBtn.title = 'Open diff';
 
   diffBtn.addEventListener('click', () => void openFileDiffInViewer(entry.path, staged));
-
-
 
   const stageBtn = document.createElement('button');
 
@@ -1430,8 +1326,6 @@ function buildFileRow(entry: GitFileEntry, staged: boolean): HTMLElement {
 
   });
 
-
-
   const discardBtn = document.createElement('button');
 
   discardBtn.type = 'button';
@@ -1451,8 +1345,6 @@ function buildFileRow(entry: GitFileEntry, staged: boolean): HTMLElement {
     })();
   });
 
-
-
   actions.append(diffBtn, stageBtn, discardBtn);
 
   row.append(badge, path, actions);
@@ -1460,8 +1352,6 @@ function buildFileRow(entry: GitFileEntry, staged: boolean): HTMLElement {
   return row;
 
 }
-
-
 
 function buildSection(
 
@@ -1479,8 +1369,6 @@ function buildSection(
 
   section.className = 'git-panel-section';
 
-
-
   const hdr = document.createElement('button');
 
   hdr.type = 'button';
@@ -1489,15 +1377,11 @@ function buildSection(
 
   hdr.setAttribute('aria-expanded', 'true');
 
-
-
   const hdrTitle = document.createElement('span');
 
   hdrTitle.textContent = `${title} (${files.length})`;
 
   hdr.appendChild(hdrTitle);
-
-
 
   if (bulkAction && files.length > 0) {
 
@@ -1519,8 +1403,6 @@ function buildSection(
 
   }
 
-
-
   const body = document.createElement('div');
 
   body.className = 'git-panel-section__body';
@@ -1530,8 +1412,6 @@ function buildSection(
     body.appendChild(buildFileRow(file, staged));
 
   }
-
-
 
   hdr.addEventListener('click', () => {
 
@@ -1543,15 +1423,13 @@ function buildSection(
 
   });
 
-
-
   section.append(hdr, body);
 
   return section;
 
 }
 
-
+// ── Graph ────────────────────────────────────────────────────────────────────
 
 function syncGraphSelectedCommit(): void {
   graphOptions.selectedSha = selectedCommitSha;
@@ -1582,8 +1460,6 @@ function buildGraphContextMenuCtx(): GitGraphContextMenuCtx {
   };
 }
 
-
-
 async function showCommitDiff(sha: string): Promise<void> {
 
   if (selectedCommitSha === sha && getOpenGitCommitDiffSha() === sha) {
@@ -1598,8 +1474,6 @@ async function showCommitDiff(sha: string): Promise<void> {
 
   }
 
-
-
   const opened = await openGitCommitDiffPanel({ sha, cwd: getEffectiveCwdArg() });
 
   if (!opened.ok) {
@@ -1613,8 +1487,6 @@ async function showCommitDiff(sha: string): Promise<void> {
     return;
 
   }
-
-
 
   expandedDiffPath = null;
 
@@ -1631,8 +1503,6 @@ async function showCommitDiff(sha: string): Promise<void> {
   syncGraphSelectedCommit();
 
 }
-
-
 
 async function openFileDiffInViewer(path: string, staged: boolean): Promise<void> {
   selectedCommitSha = null;
@@ -1674,15 +1544,11 @@ async function showFileDiff(path: string, staged: boolean): Promise<void> {
 
   }
 
-
-
   selectedCommitSha = null;
 
   closeGitCommitDiffPanel();
 
   syncGraphSelectedCommit();
-
-
 
   const result = await gitDiff({ path, cached: staged, cwd: getEffectiveCwdArg() });
 
@@ -1694,8 +1560,6 @@ async function showFileDiff(path: string, staged: boolean): Promise<void> {
 
   }
 
-
-
   expandedDiffPath = path;
 
   expandedDiffStaged = staged;
@@ -1703,8 +1567,6 @@ async function showFileDiff(path: string, staged: boolean): Promise<void> {
   diffHost.hidden = false;
 
   diffHost.replaceChildren();
-
-
 
   const label = document.createElement('p');
 
@@ -1724,7 +1586,7 @@ async function showFileDiff(path: string, staged: boolean): Promise<void> {
 
 }
 
-
+// ── Render ───────────────────────────────────────────────────────────────────
 
 function renderSections(status: GitOpResult): void {
 
@@ -1732,15 +1594,11 @@ function renderSections(status: GitOpResult): void {
 
   bodyMount.replaceChildren();
 
-
-
   const staged = status.staged ?? [];
 
   const unstaged = status.unstaged ?? [];
 
   const untracked = status.untracked ?? [];
-
-
 
   if (staged.length === 0 && unstaged.length === 0 && untracked.length === 0) {
 
@@ -1755,8 +1613,6 @@ function renderSections(status: GitOpResult): void {
     return;
 
   }
-
-
 
   if (staged.length > 0) {
 
@@ -1788,8 +1644,6 @@ function renderSections(status: GitOpResult): void {
 
 }
 
-
-
 function renderAheadBehind(status: GitOpResult): void {
 
   if (!aheadBehindEl) return;
@@ -1815,8 +1669,6 @@ function renderAheadBehind(status: GitOpResult): void {
   aheadBehindEl.textContent = parts.join(' ');
 
 }
-
-
 
 function branchDropdownMatches(
   select: HTMLSelectElement,
@@ -1897,8 +1749,6 @@ async function refreshBranchSelect(): Promise<void> {
   );
 }
 
-
-
 function worktreeDropdownMatches(select: HTMLSelectElement, worktrees: ParsedWorktree[]): boolean {
   if (select.options.length !== worktrees.length) return false;
   for (let i = 0; i < worktrees.length; i++) {
@@ -1919,8 +1769,6 @@ function syncCwdSelectValue(): void {
 async function refreshWorktreeDropdown(): Promise<void> {
 
   if (!cwdSelect || !cwdWrap) return;
-
-
 
   const ws = getWorkspacePath().trim();
 
@@ -1946,10 +1794,6 @@ async function refreshWorktreeDropdown(): Promise<void> {
 
   }
 
-
-
-  // Hide other-workspace Minnow slots so a stale list cannot leak after switch.
-  // Always keeps the git principal checkout (MIN-780).
   const parsed = parseWorktreeListPorcelain(listResult.output);
   const principal = getPrincipalWorktree(parsed);
   knownWorktrees = filterUserFacingWorktrees(parsed, ws);
@@ -1980,8 +1824,6 @@ async function refreshWorktreeDropdown(): Promise<void> {
 
 }
 
-
-
 function setGitPanelNoRepoState(active: boolean): void {
 
   panelRoot?.classList.toggle('git-panel-root--no-repo', active);
@@ -1998,7 +1840,7 @@ function setGitPanelNoRepoState(active: boolean): void {
 
 }
 
-
+// ── Lifecycle ────────────────────────────────────────────────────────────────
 
 export async function refreshGitPanel(): Promise<void> {
   if (!panelOpen) return;
@@ -2015,7 +1857,6 @@ export async function refreshGitPanel(): Promise<void> {
 
     const status = await gitStatus(getEffectiveCwdArg());
 
-    // Undo strip visibility depends on git repo presence — refresh after status probe.
     void import('./composer-undo').then((m) => {
       m.invalidateComposerUndoGitCache();
       m.syncComposerUndoFromActiveChat();
@@ -2059,8 +1900,6 @@ export async function refreshGitPanel(): Promise<void> {
 
     }
 
-
-
     setGitPanelNoRepoState(false);
 
     setStatus('');
@@ -2070,8 +1909,6 @@ export async function refreshGitPanel(): Promise<void> {
     renderSections(status);
 
     await refreshBranchSelect();
-
-
 
     ensureGitGraph();
 
@@ -2088,8 +1925,6 @@ export async function refreshGitPanel(): Promise<void> {
   }
 }
 
-
-
 function startPolling(): void {
 
   stopPolling();
@@ -2101,8 +1936,6 @@ function startPolling(): void {
   }, POLL_MS);
 
 }
-
-
 
 function stopPolling(): void {
 
@@ -2116,8 +1949,6 @@ function stopPolling(): void {
 
 }
 
-
-
 function syncToggleButtonState(): void {
 
   const toggleBtn = document.getElementById('btnGitPanelToggle');
@@ -2129,12 +1960,9 @@ function syncToggleButtonState(): void {
     toggleBtn.setAttribute('aria-pressed', open ? 'true' : 'false');
   }
 
-  // Keep Files highlight in lockstep with Source Control (MIN-655).
   syncFileSidebarFilesPaneButton({ gitOpen: open });
 
 }
-
-
 
 function ensureSidebarExpandedForGit(): void {
   if (isMobileLayout()) {
@@ -2150,8 +1978,6 @@ function ensureSidebarExpandedForGit(): void {
   applyFileSidebarVisuals();
 }
 
-
-
 /** Whether the git view is visible in the file sidebar. */
 
 export function isGitSidePanelOpen(): boolean {
@@ -2159,8 +1985,6 @@ export function isGitSidePanelOpen(): boolean {
   return panelOpen;
 
 }
-
-
 
 /** Open the git view in the file sidebar. */
 
@@ -2182,8 +2006,6 @@ export async function openGitSidePanel(): Promise<void> {
 
 }
 
-
-
 /** Hide the git view and return to the file tree. */
 
 export function closeGitSidePanel(): void {
@@ -2195,8 +2017,6 @@ export function closeGitSidePanel(): void {
   stopPolling();
 
 }
-
-
 
 /** Toggle git view visibility in the file sidebar. */
 
@@ -2215,13 +2035,6 @@ export function toggleGitSidePanel(): void {
 
 }
 
-
-
-/**
- * Sync git panel browse cwd + file tree from the active chat's composer run-target.
- * Follows the chat's own worktreeRoot when set. Skips when the user manually
- * picked a worktree (browse override).
- */
 export function syncPanelFromActiveChat(options?: { forceFileTree?: boolean }): void {
   if (!sessionState) return;
   if (panelCwdUserOverride) return;
@@ -2244,8 +2057,6 @@ export function syncGitPanelFromOrchestrator(): void {
   syncPanelFromActiveChat();
 }
 
-
-
 /** Wire toggle button, polling, orchestrator subscriptions. */
 
 export function initGitPanel(): void {
@@ -2254,19 +2065,13 @@ export function initGitPanel(): void {
 
   bound = true;
 
-
-
   ensurePanelDom();
 
   syncSidebarChrome();
 
-
-
   const toggleBtn = document.getElementById('btnGitPanelToggle');
 
   toggleBtn?.addEventListener('click', () => toggleGitSidePanel());
-
-
 
   window.addEventListener('focus', () => {
     if (panelOpen) void refreshGitPanel();
@@ -2282,8 +2087,6 @@ export function initGitPanel(): void {
 
   syncPanelFromActiveChat();
 }
-
-
 
 /** Reset module state (tests). */
 

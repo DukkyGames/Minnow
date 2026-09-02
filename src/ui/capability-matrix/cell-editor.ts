@@ -1,7 +1,3 @@
-/**
- * Capability matrix — manual cell editor (POST upsert).
- */
-
 import { upsertManualVerdict } from '../../benchmark/capabilities/manual-verdicts.ts';
 import type { CapabilityVerdict } from '../../benchmark/capabilities/types.ts';
 import { getCapabilityById } from '../../benchmark/capabilities/catalog.ts';
@@ -15,10 +11,7 @@ export type CapabilityCellEditorOptions = {
   host: HTMLElement;
   targetLabel: string;
   onSaved: () => void | Promise<void>;
-  /**
-   * When true, the editor sits inside the transcript drawer: drop duplicate
-   * title / close / transcript actions and do not steal focus.
-   */
+  /** When true, the editor sits inside the transcript drawer: drop duplicate title / close / transcript actions and do not steal focus. */
   embedded?: boolean;
   /** Disable save while an auto probe is still running. */
   saveDisabled?: boolean;
@@ -51,7 +44,6 @@ export function mountCapabilityCellEditor(
   const { host, targetLabel, onSaved, embedded, saveDisabled } = options;
   host.replaceChildren();
   host.hidden = false;
-  // Keep any host class (drawer extra slot) and add editor chrome on top.
   host.classList.add('cap-matrix-cell-editor');
   if (embedded) host.classList.add('cap-matrix-cell-editor--embedded');
   else host.classList.remove('cap-matrix-cell-editor--embedded');

@@ -1,15 +1,8 @@
-/**
- * Safe path resolution for files under MINNOW_HOME (config API whitelist).
- */
-
 import path from 'node:path';
 import { getMinnowHome } from './home.js';
 
-/** Relative keys allowed for generic read/write in Step 02. */
 export const ALLOWED_CONFIG_FILES = new Set([
   'config.json',
-  // sessions/state.json removed in A.2 — SQLite via sessions-paths.js bypasses this allowlist.
-  // resourceToRelativeKey('sessions') still returns 'sessions/state.json' for JSON rollback.
   'tools.json',
   'search.json',
   'servers.json',
@@ -26,7 +19,6 @@ export const ALLOWED_CONFIG_FILES = new Set([
 ]);
 
 /**
- * Map API resource segments to on-disk relative keys.
  * @param {string} resource
  * @returns {string | null}
  */
@@ -65,19 +57,11 @@ export function resourceToRelativeKey(resource) {
   }
 }
 
-/** Directory holding pre-migration copies of issues/state.json. */
 export const ISSUES_BACKUP_DIRNAME = 'issues/backups';
 
 /**
- * Absolute path for one issues-schema backup.
- *
- * Not routed through {@link ALLOWED_CONFIG_FILES}: that allowlist gates
- * client-addressable resources, and backup names are built server-side from a
- * schema number and a clock. Both inputs are coerced to integers here so the
- * filename can never carry a path segment.
- *
- * @param {number} fromVersion schema revision being replaced
- * @param {number} stamp epoch milliseconds
+ * @param {number} fromVersion
+ * @param {number} stamp
  * @returns {string}
  */
 export function issuesBackupPath(fromVersion, stamp) {
@@ -92,21 +76,13 @@ export function issuesBackupPath(fromVersion, stamp) {
   return full;
 }
 
-/** Absolute path of the issues backup directory. */
 export function issuesBackupDir() {
   return path.resolve(path.resolve(getMinnowHome()), ISSUES_BACKUP_DIRNAME);
 }
 
-/** Directory holding image and file attachments, one folder per issue. */
 export const ISSUES_ATTACHMENTS_DIRNAME = 'issues/attachments';
 
 /**
- * Strip a name down to something that can only ever be one path segment.
- *
- * Not an escape: separators, dots and control characters are removed outright
- * rather than encoded, because nothing downstream needs to recover the original
- * and a lossy name is a much smaller problem than a traversal.
- *
  * @param {unknown} raw
  * @param {string} fallback
  * @returns {string}
@@ -114,25 +90,14 @@ export const ISSUES_ATTACHMENTS_DIRNAME = 'issues/attachments';
 export function sanitizeAttachmentSegment(raw, fallback = 'file') {
   const text = typeof raw === 'string' ? raw : '';
   const cleaned = text
-    // Anything outside this set — separators, control characters, spaces,
-    // Unicode — collapses to a dash. Removing rather than encoding is fine:
-    // nothing downstream needs the original name back.
     .replace(/[^A-Za-z0-9._-]/g, '-')
     .replace(/-+/g, '-')
-    // Leading dots would make a hidden file, and `..` a traversal.
     .replace(/^[.-]+/, '')
     .slice(0, 96);
   return cleaned || fallback;
 }
 
 /**
- * Absolute path for one issue attachment.
- *
- * Both segments are sanitized here rather than at the call site, for the same
- * reason as {@link issuesBackupPath}: this is the only place that can be sure,
- * and a client-supplied filename is exactly the input that must never reach
- * `path.resolve` intact.
- *
  * @param {string} issueId
  * @param {string} fileName
  * @returns {string}
@@ -150,9 +115,6 @@ export function issuesAttachmentPath(issueId, fileName) {
 }
 
 /**
- * Absolute path for an attachment addressed by its stored relative key
- * (`<issueId>/<name>`). Rejects anything that is not exactly two safe segments.
- *
  * @param {string} relativeKey
  * @returns {string}
  */
@@ -166,7 +128,6 @@ export function resolveIssueAttachmentPath(relativeKey) {
 }
 
 /**
- * Resolve a relative config key to an absolute path under home.
  * @param {string} relativeKey
  * @returns {string}
  */

@@ -51,7 +51,6 @@ export function renderMenubar(root: HTMLElement): () => void {
   statusText.id = 'osStatusText';
   statusText.textContent = 'Loading models…';
   statusPill.append(statusDot, statusText);
-  // Mirror legacy topbar pill when menubar mounts after early boot status updates.
   const legacyDot = document.getElementById('sDot');
   const legacyText = document.getElementById('sText');
   if (legacyDot && legacyText) {
@@ -103,8 +102,6 @@ export function renderMenubar(root: HTMLElement): () => void {
   agentsBtn.innerHTML = iconHtml('appAgentActivity', { size: 16 });
   const cleanupAgentActivity = initAgentActivityMenubar(agentsBtn);
 
-  // Capture sits immediately before the bell: work leaves you here, and
-  // arrives there. Both are drop-or-glance targets in the same cluster.
   const captureBtn = document.createElement('button');
   const cleanupCapture = initMenubarCapture(captureBtn);
 
@@ -119,7 +116,6 @@ export function renderMenubar(root: HTMLElement): () => void {
   bell.appendChild(bellBadge);
   const cleanupNotifications = initOsNotificationsMenu(bell);
 
-  // Update pill (MIN-384): hidden unless an update is downloading or ready.
   const updateSlot = document.createElement('div');
   updateSlot.id = 'osMenubarUpdateSlot';
   updateSlot.className = 'mn-os-mb-update-slot';
@@ -157,13 +153,9 @@ export function renderMenubar(root: HTMLElement): () => void {
   function syncMenubar(): void {
     const view = getOsView();
     const fgApp = getForegroundAppId();
-    // A phone window sheet hides the desktop (and its dock) while the shell still
-    // reports the desktop view — keep the switcher reachable so home stays one tap away.
     const phoneSheet = isPhoneWindowSheetOpen();
     const onWorkspaces = view === 'workspaces' && !phoneSheet;
 
-    // A covering sheet is "in an app" as far as the menubar is concerned, even
-    // though windowed apps technically run inside the desktop view.
     root.dataset.view = onWorkspaces ? 'workspaces' : 'app';
     brand.hidden = !onWorkspaces;
     sep.hidden = onWorkspaces;
@@ -200,7 +192,6 @@ export function renderMenubar(root: HTMLElement): () => void {
 
   function ringBell(): void {
     bell.classList.remove('is-ringing');
-    // Force reflow so repeated notifications retrigger animation.
     void bell.offsetWidth;
     bell.classList.add('is-ringing');
     window.setTimeout(() => bell.classList.remove('is-ringing'), 1200);

@@ -1,7 +1,3 @@
-/**
- * User message bubbles: prose plus clickable file/image chips (MIN-31).
- */
-
 import {
   createFileCardBody,
   estimateTextByteSize,
@@ -23,11 +19,7 @@ import { createCodeRefLinkButton } from './code-ref-link';
 export interface UserBubbleRenderOptions {
   /** Pending attachments from the composer (includes image data URLs). */
   liveAttachments?: Attachment[];
-  /**
-   * Image bytes stored on the history row. The composer's pending list is gone
-   * after the turn, so this is the only source of thumbnails once the app is
-   * reloaded or the chat is re-opened.
-   */
+  /** Image bytes stored on the history row. */
   persistedImages?: UserImageAttachment[];
 }
 
@@ -111,11 +103,7 @@ function openFilePart(name: string, body: string): void {
   });
 }
 
-/**
- * "View on page" affordance for a linked design-ref (MIN-368): opens the preview at the
- * shape's page, enables Design Mode, and pulses the surviving anchor — or toasts that it's
- * moved/removed when the shape's uid AND selector both fail to resolve on the live page.
- */
+/** "View on page" affordance for a linked design-ref (MIN-368): opens the preview at the shape's page, enables Design Mode, and pulses the surviving anchor — or toasts that it's moved/removed when the shape's uid AND selector both fail to resolve on the live page. */
 function createOnPageButton(pageUrl: string, shapeId: string): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -226,9 +214,6 @@ export function renderUserMessageBubble(
     bubble.appendChild(textEl);
   }
 
-  // The crop for an elementRef is co-emitted as its own `[image: name]` placeholder
-  // (same multimodal pipeline as any other image); skip rendering it a second time
-  // as a bare image chip once the elementRef chip below already shows it.
   const elementRefImageNames = new Set(
     parsed.elementRefs.map((ref) => ref.imageName).filter((name): name is string => Boolean(name)),
   );
@@ -276,8 +261,6 @@ export function renderUserMessageBubble(
   for (const file of parsed.files) {
     const liveFile = findLiveFileAttachment(file.name, live);
     const fileKind = liveFile?.kind ?? inferFileKindFromName(file.name);
-    // `??` would keep a live size of 0 — which is what an unresolved workspace ref carries —
-    // and render "0 B" over a file whose bytes are sitting right there in `file.body`.
     const fileSize = liveFile?.size || estimateTextByteSize(file.body);
     row.appendChild(
       createMessageAttachChip(file.name, {

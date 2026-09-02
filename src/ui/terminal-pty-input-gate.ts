@@ -1,12 +1,3 @@
-/**
- * Hold PTY keystrokes until xterm has finished parsing the latest output.
- *
- * After a command, zsh prints the next prompt and then re-enters zle (SMKX /
- * bracketed-paste-on). xterm.js parses that output asynchronously, so ArrowUp
- * can reach the PTY while the TTY is still in cooked mode and echo as `^[[A`
- * (MIN-670 follow-up on macOS). Queue input until `term.write` completes.
- */
-
 const DEFAULT_MAX_HOLD_MS = 500;
 
 export interface PtyInputGateOptions {
@@ -69,7 +60,6 @@ export function createPtyInputGate(options: PtyInputGateOptions): PtyInputGate {
     holdStartedAt = now();
     failsafeId = schedule(() => {
       failsafeId = null;
-      // A missed write callback would otherwise drop every later keystroke.
       if (pendingOutput === 0) return;
       if (now() - holdStartedAt < maxHoldMs) return;
       pendingOutput = 0;

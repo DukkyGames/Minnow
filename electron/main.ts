@@ -1,7 +1,3 @@
-/**
- * Electron main process: app lifecycle, BrowserWindow, dev vs prod URL loading.
- */
-
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -51,9 +47,10 @@ import {
   type TrayStatusSnapshot,
 } from './tray-status.js';
 
+// ── App paths ────────────────────────────────────────────────────────────────
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/** Window/taskbar icon (dev and unpackaged runs; packaged builds use build/icon.ico via electron-builder). */
 function appIconPath(): string {
   const root = app.isPackaged
     ? app.getAppPath()
@@ -76,7 +73,6 @@ function appRoot(): string {
   return app.isPackaged ? app.getAppPath() : getProjectRoot();
 }
 
-/** System tray icon — platform-specific assets under build/tray/. */
 function trayIconPath(): string {
   return resolveTrayIconPath(process.platform, appRoot());
 }
@@ -85,8 +81,10 @@ function trayIconFallbackPath(): string {
   return resolveTrayIconFallbackPath(appRoot());
 }
 
+// ── Shell state ──────────────────────────────────────────────────────────────
+
 const isDev = process.env.MINNOW_ELECTRON_DEV === '1';
-// Vite HMR needs eval in dev; packaged builds do not. Suppress Electron's expected dev-only CSP warning.
+// Vite HMR needs eval in dev; suppress Electron's expected CSP warning.
 if (isDev) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 }
@@ -104,12 +102,12 @@ let bootstrapPromise: Promise<void> | null = null;
 const queuedTrayCommands: TrayRendererCommand[] = [];
 let rendererTrayReady = false;
 
-/** Sliding window of renderer crash timestamps for anti-reload-loop. */
+// ── Renderer recovery ────────────────────────────────────────────────────────
+
 const rendererCrashTimestamps: number[] = [];
 const RENDERER_CRASH_WINDOW_MS = 60_000;
 const RENDERER_CRASH_RELOAD_CAP = 3;
 
-/** Reload renderer after crash, or show recovery page if crashing too often. */
 function recoverRenderer(win: BrowserWindow): void {
   if (win.isDestroyed()) return;
 
@@ -149,7 +147,6 @@ function recoverRenderer(win: BrowserWindow): void {
   win.webContents.reload();
 }
 
-/** Notify the renderer when the display wakes so AFK boards can reconcile stalled finalizers. */
 function wirePowerWakeNotifications(): void {
   const notify = (): void => {
     const win = mainWindow;
@@ -160,7 +157,8 @@ function wirePowerWakeNotifications(): void {
   powerMonitor.on('unlock-screen', notify);
 }
 
-/** Register app + preview IPC handlers. */
+// ── IPC handlers ─────────────────────────────────────────────────────────────
+
 function registerIpcHandlers(): void {
   registerPreviewHostIpc();
   ipcMain.handle(channels.APP_OPEN_EXTERNAL, async (_event, url: string) => {
@@ -231,7 +229,6 @@ function registerIpcHandlers(): void {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
     restoreShellWindowFocus(win);
-    // Chromium can restore stale dialog focus after the IPC turn on Windows.
     setTimeout(() => restoreShellWindowFocus(win), 0);
   });
 
@@ -284,8 +281,6 @@ function registerIpcHandlers(): void {
     return writeHardwareAccelerationPreference(enabled);
   });
 
-  // app.exit(0) rather than app.quit(): quit() re-enters the close-to-tray and
-  // window-all-closed handlers, which can swallow it.
   ipcMain.handle(channels.APP_RESTART, async () => {
     await prepareQuitForUpdate();
     app.relaunch();
@@ -306,7 +301,8 @@ function registerIpcHandlers(): void {
   });
 }
 
-/** Push shell maximize state to the renderer for menubar control icons. */
+// ── Window chrome ────────────────────────────────────────────────────────────
+
 function wireShellWindowState(win: BrowserWindow): void {
   const emit = (): void => {
     if (win.isDestroyed()) return;
@@ -320,19 +316,9 @@ function wireShellWindowState(win: BrowserWindow): void {
   win.webContents.on('did-finish-load', emit);
 }
 
-/**
- * Push window visibility to the renderer so it can stop producing frames while hidden.
- *
- * `backgroundThrottling: false` (below) keeps AFK timers and SSE alive when the window is
- * minimised or in the tray — but it also stops Chromium from throttling the compositor, so
- * decorative CSS animations keep the GPU's 3D queue busy for a window nobody is looking at.
- * That is measurable: a local llama.cpp serve runs several tok/s slower with Minnow hidden
- * in the tray than minimised. Timers stay unthrottled; only animation pauses.
- */
 function wireShellWindowVisibility(win: BrowserWindow): void {
   const emit = (): void => {
     if (win.isDestroyed()) return;
-    // `isVisible()` is false for tray-hidden windows, true-but-minimised otherwise.
     const visible = win.isVisible() && !win.isMinimized();
     win.webContents.send(channels.WINDOW_VISIBILITY_CHANGED, visible);
   };
@@ -344,11 +330,6 @@ function wireShellWindowVisibility(win: BrowserWindow): void {
   win.webContents.on('did-finish-load', emit);
 }
 
-/**
- * Ask the renderer to stamp interrupted chats and system-pause boards before
- * tearing down generations / the HTTP server. Prefer the combined prepare hook
- * so Quit Minnow still leaves a boot resume candidate after generations die.
- */
 async function pauseOrchestrateBoardsInRenderer(win: BrowserWindow): Promise<void> {
   if (win.isDestroyed()) return;
   try {
@@ -358,11 +339,11 @@ async function pauseOrchestrateBoardsInRenderer(win: BrowserWindow): Promise<voi
       true,
     );
   } catch {
-    /* renderer already gone */
   }
 }
 
-/** Tear down PTY sessions, generations, and in-process HTTP server. */
+// ── Shutdown ─────────────────────────────────────────────────────────────────
+
 async function shutdownRuntime(): Promise<void> {
   if (mainWindow && !mainWindow.isDestroyed()) {
     await pauseOrchestrateBoardsInRenderer(mainWindow);
@@ -395,10 +376,6 @@ async function shutdownRuntime(): Promise<void> {
   }
 }
 
-/**
- * Tear down the runtime ahead of autoUpdater.quitAndInstall() and mark quit as in
- * progress so the before-quit handler lets the install-triggered quit proceed.
- */
 async function prepareQuitForUpdate(): Promise<void> {
   if (quitInProgress) return;
   quitInProgress = true;
@@ -445,6 +422,8 @@ function requestExplicitQuit(): void {
   app.quit();
 }
 
+// ── Tray ─────────────────────────────────────────────────────────────────────
+
 function ensureTrayManager(): TrayManager {
   if (!trayManager) {
     trayManager = createTrayManager({
@@ -470,10 +449,11 @@ function ensureTrayManager(): TrayManager {
   return trayManager;
 }
 
+// ── Main window ──────────────────────────────────────────────────────────────
+
+// Preload is electron/preload.mjs; Electron treats .js preloads as CommonJS.
 async function createMainWindow(): Promise<BrowserWindow> {
   const saved = await loadWindowState();
-  // Preload is renamed to .mjs by scripts/rename-preload-mjs.mjs because Electron
-  // loads .js preloads as CommonJS regardless of package.json "type": "module".
   const preloadPath = path.join(__dirname, 'preload.mjs');
 
   const win = new BrowserWindow({
@@ -492,14 +472,11 @@ async function createMainWindow(): Promise<BrowserWindow> {
     backgroundColor: '#0e0e10',
     webPreferences: {
       preload: preloadPath,
-      // ESM preload (.mjs) requires sandbox: false; contextIsolation + no node integration
-      // still prevent the renderer from escalating.
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: false,
       zoomFactor: shellZoomFactorFromPercent(shellZoomPercent),
-      // Keep AFK board/chat timers + SSE delivery alive when the display sleeps.
       backgroundThrottling: false,
     },
   });
@@ -547,7 +524,6 @@ async function createMainWindow(): Promise<BrowserWindow> {
 
   ensureTrayManager().wireWindowClose(win);
 
-  // If Vite is still warming up or load fails, avoid an invisible window on first launch.
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
     console.error(
       `[electron] Failed to load ${validatedURL}: ${errorDescription} (${errorCode})`,
@@ -599,7 +575,8 @@ async function createMainWindow(): Promise<BrowserWindow> {
   return win;
 }
 
-/** Packaged app: resources dir with bundled dist/. Unpackaged electron:prod: repo root. */
+// ── Bootstrap ────────────────────────────────────────────────────────────────
+
 function resolveElectronAppRoot(): string {
   if (app.isPackaged) {
     return app.getAppPath();
@@ -643,7 +620,6 @@ async function bootstrap(): Promise<void> {
 
 async function bootstrapInner(): Promise<void> {
   app.setName('Minnow');
-  // Windows taskbar grouping / jump lists; pairs with branded electron.exe in dev (see brand-electron-win.mjs).
   if (process.platform === 'win32') {
     app.setAppUserModelId('org.grimmedia.minnow');
   }
@@ -663,11 +639,7 @@ async function bootstrapInner(): Promise<void> {
     return;
   }
 
-  // Window creation and runtime/server bootstrap are independent (window state reads
-  // Electron userData, not the Minnow home dir), so overlap them — the shell is then
-  // ready to load the moment the server URL resolves.
   const loadUrlPromise = resolveLoadUrl();
-  // Keep the rejection handled even if createMainWindow() rejects first.
   loadUrlPromise.catch(() => {});
 
   mainWindow = await createMainWindow();
@@ -675,7 +647,6 @@ async function bootstrapInner(): Promise<void> {
   await mainWindow.loadURL(await loadUrlPromise);
 }
 
-/** Surface fatal startup errors — packaged runs have no terminal for console.error. */
 function failBootstrap(err: unknown): void {
   const message = err instanceof Error ? err.message : String(err);
   const stack = err instanceof Error ? err.stack : undefined;
@@ -694,8 +665,9 @@ function failBootstrap(err: unknown): void {
   app.exit(1);
 }
 
-// Must run before Electron's `ready` event — disableHardwareAcceleration() is a
-// silent no-op afterwards, so the preference is read synchronously here.
+// ── App lifecycle ────────────────────────────────────────────────────────────
+
+// Must run before Electron ready; disableHardwareAcceleration is a no-op after that.
 if (!readHardwareAccelerationSync()) app.disableHardwareAcceleration();
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();

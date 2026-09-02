@@ -1,17 +1,3 @@
-/**
- * Undo affordances.
- *
- * These are the replacement for the pre-action `window.confirm`. A modal asking
- * "are you sure?" is answered reflexively after the third time and stops being
- * a real check; a few seconds during which the action is visibly recallable
- * catches the mistakes people actually make — wrong recipient, wrong message,
- * fat-fingered delete — without gating the common case behind a click.
- *
- * Two shapes share one slot at the bottom of the screen (a second toast
- * replaces the first): a live countdown for a queued send, and a fixed-window
- * "Undo" for an already-applied mutation such as trash or archive.
- */
-
 import { cancelOutboxSend, type OutboxEntry } from '../../email/client';
 
 let activeToast: HTMLElement | null = null;
@@ -27,7 +13,6 @@ function buildToast(buttonLabel: string): {
   label: HTMLElement;
   button: HTMLButtonElement;
 } {
-  // Only one recallable action is ever pending; a new one replaces the old.
   dismiss();
 
   const toast = document.createElement('div');
@@ -55,10 +40,7 @@ export interface SendUndoToastOptions {
   onStatus?: (state: 'ok' | 'err', message: string) => void;
 }
 
-/**
- * Show "Sending… / Undo" until the entry's undo window closes.
- * @returns a function that dismisses the toast early
- */
+/** Show "Sending… / Undo" until the entry's undo window closes. */
 export function showSendUndoToast(
   entry: OutboxEntry,
   options: SendUndoToastOptions = {},
@@ -79,7 +61,6 @@ export function showSendUndoToast(
     if (remaining <= 0) {
       window.clearInterval(timer);
       undoBtn.disabled = true;
-      // Leave the toast up briefly so "Sending…" isn't a flash of nothing.
       window.setTimeout(stop, 1500);
     }
   };
@@ -92,7 +73,6 @@ export function showSendUndoToast(
       options.onStatus?.('ok', 'Send cancelled');
       options.onUndo?.(entry);
     } catch (err) {
-      // The window closed between the click and the request landing.
       undoBtn.disabled = true;
       options.onStatus?.(
         'err',
@@ -116,13 +96,7 @@ export interface ActionUndoToastOptions {
   onStatus?: (state: 'ok' | 'err', message: string) => void;
 }
 
-/**
- * Show "{message} · Undo" for an action that already applied optimistically
- * (trash, archive, move). The window is fixed rather than a countdown: the work
- * is done, this is only the grace period to take it back.
- *
- * @returns a function that dismisses the toast early
- */
+/** Show "{message} · Undo" for an action that already applied optimistically (trash, archive, move). */
 export function showActionUndoToast(
   message: string,
   options: ActionUndoToastOptions,

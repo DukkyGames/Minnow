@@ -1,8 +1,3 @@
-/**
- * Fuzzy chat search across desktop (assistant) and Code (workspace) chats.
- * Pure matching/scoring — popover UI lives in ui/chat-search-popover.ts.
- */
-
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { isPlaceholderChatName } from './titles/placeholder';
 import type { Chat } from '../types';
@@ -34,11 +29,6 @@ function isWordChar(ch: string): boolean {
   return /[\p{L}\p{N}_]/u.test(ch);
 }
 
-/**
- * Score one lowercased query token against lowercased text.
- * Substring hits score highest (word-start bonus); otherwise an in-order
- * subsequence within a bounded window still matches, penalized by gap size.
- */
 function scoreToken(token: string, text: string): TextMatch | null {
   const idx = text.indexOf(token);
   if (idx >= 0) {
@@ -47,7 +37,6 @@ function scoreToken(token: string, text: string): TextMatch | null {
   }
   if (token.length < 2) return null;
 
-  // Subsequence fallback: token chars in order, tightest span wins.
   const maxSpan = token.length * 4;
   let start = text.indexOf(token[0]);
   let best: TextMatch | null = null;
@@ -77,10 +66,6 @@ export function tokenizeQuery(query: string): string[] {
   return query.toLowerCase().split(/\s+/).filter(Boolean);
 }
 
-/**
- * Match every token against the text (AND semantics). Returns the summed
- * token scores and the earliest matched offset, or null when any token misses.
- */
 export function matchText(tokens: string[], text: string): TextMatch | null {
   if (!tokens.length) return null;
   const lower = text.toLowerCase();
@@ -98,7 +83,6 @@ export function matchText(tokens: string[], text: string): TextMatch | null {
 /** Collapse whitespace and clip a window around the match for display. */
 function buildSnippet(text: string, firstIndex: number): string {
   let start = Math.max(0, firstIndex - SNIPPET_BEFORE_CHARS);
-  // Snap to a word boundary so snippets don't open mid-word.
   while (start > 0 && start < text.length && isWordChar(text[start - 1])) start--;
   const raw = text.slice(start, start + SNIPPET_TOTAL_CHARS);
   const collapsed = raw.replace(/\s+/g, ' ').trim();
@@ -165,10 +149,6 @@ export function filterChatsByWorkspacePath(chats: Chat[], workspacePath: string)
   return chats.filter((chat) => normalizeWorkspacePath(chat.workspacePath ?? '') === key);
 }
 
-/**
- * Fuzzy-search chats by title and message contents.
- * Ranked by match score, then by most recent activity.
- */
 export function searchChats(
   chats: Chat[],
   query: string,

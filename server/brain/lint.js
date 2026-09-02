@@ -1,8 +1,3 @@
-/**
- * Wiki health report — orphans, stale pages, link issues (no auto-edits).
- * MIN-B9 extends this with anchor-drift detection.
- */
-
 import { llmCall } from '../research/llm.js';
 import {
   findOrphanPages,
@@ -29,12 +24,10 @@ Given catalog metadata and candidate issues, return JSON:
 
 Be conservative. Return ONLY valid JSON.`;
 
-/** Planner-facing definition of wiki orphans (matches findOrphanPages in store.js). */
 export const WIKI_ORPHAN_DEFINITION =
   'A page is an orphan when it has no inbound wikilinks, is not connected via similarTo edges to any other page, is not index.md, or is explicitly marked status orphan. Pages only linked through similarTo count as connected even without inbound wikilinks.';
 
 /**
- * Collect pages explicitly marked stale or with stale status in frontmatter cache.
  * @param {Array<{ path: string, status?: string }>} pages
  */
 export function findStalePages(pages) {
@@ -42,8 +35,6 @@ export function findStalePages(pages) {
 }
 
 /**
- * Detect wikilink targets that do not resolve to an existing page path.
- * Resolution rules match {@link resolvePageLookup} (catalog slice).
  * @param {Array<{ id?: string, path: string, links?: string[] }>} pages
  */
 export function findMissingLinkTargets(pages) {
@@ -71,15 +62,7 @@ export function findMissingLinkTargets(pages) {
 }
 
 /**
- * Re-score every existing `similarTo` edge against the current linking floors and
- * strip the ones that no longer qualify.
- *
- * Cleanup for wikis written before the floors existed, when linking took the top
- * three pages with no minimum score at all. Pages marked `stale` are left alone:
- * their `similarTo` is a supersede pointer written by retirement, not a
- * similarity edge, and dropping it would lose the trail to the newer page.
- *
- * @param {{ dryRun?: boolean }} [opts] defaults to a dry run — pass `dryRun: false` to write
+ * @param {{ dryRun?: boolean }} [opts]
  * @returns {Promise<{ generatedAt: string, dryRun: boolean, pagesScanned: number, edgesScanned: number, removals: Array<{ path: string, dropped: string[], kept: string[] }>, applied: string[] }>}
  */
 export async function pruneWeakSimilarLinks(opts = {}) {
@@ -122,7 +105,6 @@ export async function pruneWeakSimilarLinks(opts = {}) {
     for (const target of similarTo) {
       const match = targets.find((p) => p.meta.path === target);
       if (!match) {
-        // Points at a page that no longer exists (or at itself).
         dropped.push(target);
         continue;
       }
@@ -153,7 +135,6 @@ export async function pruneWeakSimilarLinks(opts = {}) {
         await updatePage(relPath, { similarTo: kept });
         applied.push(relPath);
       } catch {
-        /* best-effort */
       }
     }
   }
@@ -179,8 +160,7 @@ function mapAnchorDriftForReport(drifted) {
 }
 
 /**
- * Read-only wiki diagnostics for cleanup planning (no writes, no LLM).
- * @param {Record<string, never>} [_opts] reserved for future filters
+ * @param {Record<string, never>} [_opts]
  */
 export async function collectWikiDiagnostics(_opts = {}) {
   const catalog = await loadCatalog();
@@ -221,7 +201,6 @@ export async function collectWikiDiagnostics(_opts = {}) {
 }
 
 /**
- * Optional LLM pass for contradictions (skipped when no model is available).
  * @param {object[]} pages
  */
 async function detectContradictionsWithLlm(pages) {
@@ -259,8 +238,6 @@ async function detectContradictionsWithLlm(pages) {
 }
 
 /**
- * Run a structured wiki lint report.
- * When `apply: true`, marks orphan/stale pages and retires contradicted pages (conservative).
  * @param {{ includeLlm?: boolean, apply?: boolean }} [opts]
  */
 export async function lintBrainWiki(opts = {}) {
@@ -282,26 +259,22 @@ export async function lintBrainWiki(opts = {}) {
   const applied = [];
 
   if (opts.apply) {
-    // Mark stale pages as orphan status if they have no inbound links (delete is too aggressive).
     for (const page of orphans) {
       if (page.status === 'stale') {
         try {
           await deletePage(page.path);
           applied.push({ path: page.path, action: 'deleted' });
         } catch {
-          /* best-effort */
         }
       } else if (page.status !== 'orphan') {
         try {
           await updatePage(page.path, { status: 'stale' });
           applied.push({ path: page.path, action: 'marked-stale' });
         } catch {
-          /* best-effort */
         }
       }
     }
 
-    // For detected contradictions, mark the page listed second (assumed older) as stale.
     for (const contradiction of contradictions) {
       const pagePaths = Array.isArray(contradiction.pages) ? contradiction.pages : [];
       const target = pagePaths[1] ?? pagePaths[0];
@@ -312,7 +285,6 @@ export async function lintBrainWiki(opts = {}) {
         await updatePage(page.path, { status: 'stale' });
         applied.push({ path: page.path, action: 'marked-stale-contradiction' });
       } catch {
-        /* best-effort */
       }
     }
   }

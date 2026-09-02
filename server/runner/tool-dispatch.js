@@ -1,22 +1,3 @@
-/**
- * In-process tool dispatch for the shared runner (MIN-701 / P2-D).
- *
- * The renderer POSTs `/api/tools`. A Node runner is already inside the same
- * process as `executeServerTool`, so it must not take that hop — it would
- * serialize every file read through a socket and skip the chance to require
- * an explicit `cwd` (the isolation guarantee).
- *
- * Guards are not optional. This module applies the HTTP-layer checks
- * (`plan-write-guard`, plan-mode `update_settings`, `validateAllowedWorkspaceRoot`,
- * leading-`cd` rewrite) then calls `executeServerTool`, which runs the same
- * handlers as POST `/api/tools` (host-kill, host-port-bind, windows-pipe,
- * output-cap, plugin loader / manifest validate, MCP).
- *
- * Do not import this file from the Vite renderer. Node callers import it via
- * `server/runner/node.js`; the renderer adapter keeps
- * `src/tools/headless-tool-batch.ts`.
- */
-
 import { executeServerTool } from '../runtime/tools-middleware.js';
 import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import {
@@ -57,11 +38,8 @@ function normalizeAllowed(raw) {
 }
 
 /**
- * Plugin manifests are validated by `server/tools/validate.js` at load time.
- * Reject a malformed plugin name here so the in-process route cannot bypass
- * that check the way a raw `executeServerTool` call with a junk name would.
  * @param {string} name
- * @returns {string | null} error content, or null when the name is fine
+ * @returns {string | null}
  */
 function pluginNameError(name) {
   if (!isPluginToolName(name)) return null;
@@ -79,8 +57,6 @@ function pluginNameError(name) {
 }
 
 /**
- * HTTP middleware special-cases these before `executeServerTool`. Apply the
- * same checks so a tool cannot behave differently by call route.
  * @param {string} name
  * @param {Record<string, unknown>} args
  * @param {string | undefined} modeId
@@ -97,9 +73,6 @@ function httpLayerGuardResult(name, args, modeId) {
 }
 
 /**
- * Leading absolute `cd` that would leave the attempt root. HTTP applies this
- * when the chat has a worktree; the in-process route always has an explicit
- * `cwd`, so we apply the same rewrite against that root.
  * @param {string} name
  * @param {Record<string, unknown>} args
  * @param {string} cwd
@@ -114,9 +87,6 @@ function applyCwdGuard(name, args, cwd) {
 }
 
 /**
- * Execute one tool against the server registry in-process.
- * `cwd` is required — there is no silent fallback to the Code workspace root.
- *
  * @param {string} name
  * @param {Record<string, unknown>} [args]
  * @param {{
@@ -170,9 +140,6 @@ export async function executeInProcessTool(name, args = {}, options) {
   }
 
   const guardedArgs = applyCwdGuard(toolName, toolArgs, workspaceRoot);
-  // execute_command reads chatId from args; forward the attempt id when given
-  // so log lines / spawn env can correlate. cwd isolation still comes from
-  // workspaceRoot, not from a silent getWorkspaceRoot() default.
   if (
     toolName === 'execute_command' &&
     typeof options.toolCallId === 'string' &&
@@ -195,9 +162,6 @@ export async function executeInProcessTool(name, args = {}, options) {
 }
 
 /**
- * Close over attempt `cwd` (and optional allow-list / mode) so `runTurn` can
- * inject `execute` + `runHeadlessToolBatch` without an HTTP hop.
- *
  * @param {{
  *   cwd: string,
  *   modeId?: string | null,

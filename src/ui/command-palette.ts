@@ -1,20 +1,3 @@
-/**
- * Command palette.
- *
- * The renderer is the Source Control palette, generalized. That one already had
- * fuzzy subsequence matching, `available()` gating, group headers and combobox
- * a11y; what it lacked was any reason to be scoped to one app.
- *
- * Phase 0 decision on palette ownership: absorbed, not coexisting. There is one
- * palette and one chord. Source Control no longer runs an instance of its own —
- * it registers its git verbs as a command source while it is open, so Ctrl+K
- * from anywhere shows them, and its header button opens this palette. Two
- * palettes fighting over one chord is how the shortcut stops being global.
- *
- * `createCommandPalette` stays parameterised (host, class prefix) because a
- * surface may still need a scoped list later; nothing ships one today.
- */
-
 import '../styles/command-palette.css';
 import { listCommands, type Command } from './command-registry';
 
@@ -39,10 +22,7 @@ export interface CommandPaletteOptions {
   listId?: string;
 }
 
-/**
- * Subsequence match: "cpk" finds "Cherry-pick". Returns a score where lower is
- * a tighter match, or -1 for no match.
- */
+/** Subsequence match: "cpk" finds "Cherry-pick". */
 export function fuzzyScore(haystack: string, needle: string): number {
   if (!needle) return 0;
   const text = haystack.toLowerCase();
@@ -56,7 +36,6 @@ export function fuzzyScore(haystack: string, needle: string): number {
   for (const char of query) {
     const found = text.indexOf(char, cursor);
     if (found < 0) return -1;
-    // Gaps between matched characters make a match looser.
     score += found - cursor + 1;
     cursor = found + 1;
   }
@@ -155,7 +134,6 @@ export function createCommandPalette(
       return;
     }
     if (event.key === 'Tab') {
-      // The palette is modal; Tab must not walk into the page behind it.
       event.preventDefault();
       return;
     }
@@ -203,7 +181,6 @@ export function createCommandPalette(
       }))
       .filter((entry) => Number.isFinite(entry.score));
 
-    // Stable within a score so groups do not reshuffle as you type.
     scored.sort((a, b) => a.score - b.score);
     filtered = scored.map((entry) => entry.command);
 
@@ -220,7 +197,6 @@ export function createCommandPalette(
     let lastGroup = '';
 
     filtered.forEach((command, index) => {
-      // Group headers only make sense while unfiltered; ranked results ignore them.
       if (!query && command.group !== lastGroup) {
         lastGroup = command.group;
         frag.appendChild(el('div', `${prefix}__group`, command.group));
@@ -258,8 +234,6 @@ export function createCommandPalette(
     if (open) return;
     commands = options.getCommands();
     open = true;
-    // Duck-typed, not `instanceof HTMLElement`: that constructor is realm-bound
-    // and throws outright where the DOM globals are not on globalThis.
     const active = document.activeElement as HTMLElement | null;
     previousFocus = typeof active?.focus === 'function' ? active : null;
     overlay.hidden = false;
@@ -290,17 +264,10 @@ export function createCommandPalette(
   };
 }
 
-// ── Global palette ──────────────────────────────────────────────────────────
-
 let globalPalette: CommandPaletteHandle | null = null;
 let keyboardBound = false;
 
-/**
- * Mount point for the global palette.
- *
- * The foreground app layer would scope the overlay to one window, and the whole
- * point of this palette is that it is not one app's. It goes on the body.
- */
+/** Mount point for the global palette. */
 function paletteHost(): HTMLElement {
   return document.body;
 }
@@ -336,18 +303,10 @@ function isPaletteChord(event: KeyboardEvent): boolean {
   const mod = event.ctrlKey || event.metaKey;
   if (!mod) return false;
   if (event.key === 'k' || event.key === 'K') return !event.shiftKey;
-  // Ctrl/Cmd+Shift+P is the other name for this in every editor the audience uses.
   return event.shiftKey && (event.key === 'p' || event.key === 'P');
 }
 
-/**
- * Bind the global palette chord.
- *
- * Deliberately not a capture-phase listener: Quick Edit binds Mod-K inside
- * CodeMirror and calls preventDefault when it runs, so with a selection in the
- * editor Quick Edit still wins and the palette only takes the key when nothing
- * closer to the caret wanted it.
- */
+/** Bind the global palette chord. */
 export function initCommandPalette(): void {
   if (keyboardBound) return;
   keyboardBound = true;

@@ -1,18 +1,5 @@
-/**
- * Bounded parallel vs sequential classification for one assistant tool_calls batch.
- *
- * Port of `src/tools/parallel-tool-policy.ts`. Do not invent new concurrency
- * rules here — if the renderer copy changes, this file must change with it.
- * Duplicated as literals so `server/runner/` never imports `src/`.
- */
-
-/** Max concurrent read-only tool executions per parallel segment. */
 export const MAX_PARALLEL_READ_TOOLS = 6;
 
-/**
- * Extra read utilities marked parallel-safe in the renderer copy even when
- * they are not in the result-cache policy table.
- */
 const PARALLEL_EXTRA_WHITELIST = new Set([
   'get_datetime',
   'calculate',
@@ -22,12 +9,6 @@ const PARALLEL_EXTRA_WHITELIST = new Set([
   'get_sub_agent_status',
 ]);
 
-/**
- * Tools that always run one-at-a-time. Union of the renderer deny set:
- * user-input blocking tools, clipboard, spawn/cancel, mutating groups
- * (files-write, git-write, code-exec, browser, task-graph, issues, mode-mgmt),
- * wiki mutators, and the destructive wiki tool.
- */
 const SEQUENTIAL_DENY = new Set([
   'ask_question',
   'propose_mode_switch',
@@ -35,7 +16,6 @@ const SEQUENTIAL_DENY = new Set([
   'write_clipboard',
   'spawn_sub_agent',
   'cancel_sub_agent',
-  // files-write
   'save_file',
   'append_file',
   'insert_at_line',
@@ -47,11 +27,9 @@ const SEQUENTIAL_DENY = new Set([
   'create_pdf',
   'create_spreadsheet',
   'create_word_document',
-  // git-write
   'git_add',
   'git_commit',
   'git_checkout',
-  // code-exec
   'execute_command',
   'read_command_log',
   'list_running_commands',
@@ -61,7 +39,6 @@ const SEQUENTIAL_DENY = new Set([
   'manage_dev_servers',
   'run_javascript',
   'run_python',
-  // browser (prefix rule also catches these)
   'browser_list',
   'browser_navigate',
   'browser_new_tab',
@@ -73,7 +50,6 @@ const SEQUENTIAL_DENY = new Set([
   'browser_eval',
   'browser_screenshot',
   'request_browser_origin_access',
-  // issues
   'issue_add',
   'issue_update',
   'issue_link',
@@ -84,11 +60,9 @@ const SEQUENTIAL_DENY = new Set([
   'issue_assign',
   'issue_unlink',
   'issue_move',
-  // mode-mgmt
   'set_chat_mode',
   'create_chat_with_mode',
   'launch_minnow_app',
-  // wiki mutators
   'brain_write_page',
   'brain_append_log',
   'brain_ingest_source',
@@ -96,10 +70,6 @@ const SEQUENTIAL_DENY = new Set([
   'manage_brain',
 ]);
 
-/**
- * Cacheable-read policy from `src/tools/tool-cache-policy.ts`.
- * `cacheable: false` (or missing) means sequential unless whitelisted.
- */
 const CACHEABLE_READ = new Set([
   'read_file',
   'read_file_range',
@@ -123,7 +93,6 @@ const CACHEABLE_READ = new Set([
 ]);
 
 /**
- * True when a tool may run concurrently with other parallel-safe tools.
  * @param {string} name
  * @returns {boolean}
  */
@@ -145,8 +114,6 @@ export function isParallelSafeTool(name) {
 }
 
 /**
- * Split tool_calls into ordered segments: consecutive parallel-safe calls share
- * one parallel segment; each non-safe call is its own sequential segment.
  * @param {Array<{ function?: { name?: string } }>} toolCalls
  * @returns {Array<{ kind: 'parallel' | 'sequential', calls: typeof toolCalls }>}
  */

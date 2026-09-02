@@ -102,6 +102,7 @@ async function buildPdfBuffer(input) {
 }
 
 /**
+ * Excel sheet names cannot contain : \ / ? * [ ].
  * @param {unknown} sheets
  * @returns {Promise<Buffer>}
  */
@@ -129,7 +130,6 @@ async function buildSpreadsheetBuffer(sheets) {
 
     let name =
       typeof sheet.name === 'string' && sheet.name.trim() ? sheet.name.trim() : `Sheet${index + 1}`;
-    // Excel forbids : \ / ? * [ ] in sheet names.
     name = name.replace(/[:\\/?*[\]]/g, '');
     if (!name) name = `Sheet${index + 1}`;
     name = name.slice(0, 31);

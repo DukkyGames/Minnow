@@ -72,6 +72,7 @@ function normalizeProviderId(value) {
 
 /**
  * Load search settings from search.json with tools.json fallback (Phase 0 migration).
+ * Missing search.json defaults the research primary to SearXNG; managed SearXNG overrides the URL when healthy.
  * @returns {Promise<{
  *   provider: SearchProviderId;
  *   fallbackChain: SearchProviderId[];
@@ -88,7 +89,6 @@ export async function loadSearchSettings() {
   const searchRaw = await readConfigJson('search.json');
   const researchRaw = await readConfigJson('research.json');
 
-  // When search.json is absent (pre–Phase 0), default research primary to SearXNG but keep tools keys.
   let provider =
     searchRaw && typeof searchRaw === 'object'
       ? normalizeProviderId(searchRaw.provider ?? 'searxng')
@@ -129,7 +129,6 @@ export async function loadSearchSettings() {
     }
   }
 
-  // Managed SearXNG (Settings → Servers) overrides search.json when enabled and healthy.
   const managedSearxngUrl = await getManagedSearxngUrl();
   if (managedSearxngUrl) {
     searxngUrl = managedSearxngUrl;
@@ -208,6 +207,7 @@ async function callProvider(providerId, query, settings) {
 
 /**
  * Structured search with provider chain, disk cache, and last-error tracking.
+ * Re-check cached hits: old entries can stay pinned for the full TTL after a provider starts decoying.
  * @param {string} query
  * @param {{ provider?: SearchProviderId; count?: number; useCache?: boolean }} [opts]
  * @returns {Promise<import('../tools/search-result.js').SearchResult[]>}
@@ -237,8 +237,6 @@ export async function searchStructured(query, opts = {}) {
   const useCache = opts.useCache !== false;
   if (useCache) {
     const cached = await getSearch(cacheKey);
-    // Re-check on read: entries written before the guard existed (or by a provider that
-    // has since started decoying) would otherwise stay pinned for the full 2h TTL.
     if (cached?.length && !looksUnrelated(trimmed, cached)) {
       lastSearchProvider = primary;
       return cached;

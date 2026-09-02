@@ -1,7 +1,3 @@
-/**
- * Benchmark Tests tab: catalog browser + custom test editor (absorbs Settings Evals).
- */
-
 import {
   listIntegrationCatalogEntries,
   listStandardCatalogEntries,
@@ -62,7 +58,6 @@ async function loadCatalog(): Promise<UnifiedCatalogEntry[]> {
       packId: p.id,
     }));
   } catch {
-    /* offline */
   }
   return [...integration, ...standard, ...custom];
 }

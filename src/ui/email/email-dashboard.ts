@@ -1,7 +1,3 @@
-/**
- * Inbox dashboard — digest headline, instrumentation strip, attention queue, reply chips.
- */
-
 import type {
   EmailAccount,
   EmailFollowup,
@@ -66,14 +62,9 @@ function formatDigestTime(iso: string): string {
   return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-/**
- * Quick-reply block for one highlight thread.
- *
- * A chip is a label, not a trigger: clicking it opens an inline preview of the
- * whole reply (the one-line label can't show what you're about to send), and
- * only Send actually queues it. Reprompt opens an inline input row rather than
- * a `prompt()` dialog. One panel is open at a time.
- */
+// ── Digest ───────────────────────────────────────────────────────────────────
+
+/** Quick-reply block for one highlight thread. */
 function renderVariantChips(
   mount: HTMLElement,
   account: EmailAccount,
@@ -130,7 +121,6 @@ function renderVariantChips(
     sendBtn.addEventListener('click', async () => {
       sendBtn.disabled = true;
       try {
-        // Queued rather than sent — the undo toast is the confirmation step.
         const { entry } = await sendReplyVariant({
           accountId: account.id,
           messageId: highlight.messageId,
@@ -276,10 +266,7 @@ function categoryLabel(category?: string): string {
   return labels[category ?? ''] ?? '';
 }
 
-/**
- * Hide digest chips whose messages are already sitting in the review queue so
- * Refresh cannot stack duplicate pending rows for the same suggestion.
- */
+/** Hide digest chips whose messages are already sitting in the review queue so Refresh cannot stack duplicate pending rows for the same suggestion. */
 export function filterDigestActionGroups(
   digest: EmailNarrativeDigest,
   pendingActions: EmailPendingAction[] = [],
@@ -324,7 +311,6 @@ export function renderDigestActionGroups(
       chip.disabled = true;
       try {
         const { pending } = await queueDigestActionGroup(account.id, group.id);
-        // Drop the chip immediately; refresh confirms server-side consumption.
         chip.remove();
         if (row.childElementCount === 0) row.remove();
         options.onStatus?.(
@@ -345,10 +331,7 @@ export function renderDigestActionGroups(
 /** Latest dashboard options per review mount (updated on every render). */
 const pendingReviewOptions = new WeakMap<HTMLElement, EmailDashboardOptions>();
 
-/**
- * One delegated click handler per mount so Apply/Dismiss survive
- * `replaceChildren()` on the mount's descendants.
- */
+/** One delegated click handler per mount so Apply/Dismiss survive `replaceChildren()` on the mount's descendants. */
 function ensurePendingReviewDelegation(mount: HTMLElement): void {
   if (mount.dataset.pendingReviewDelegated === '1') return;
   mount.dataset.pendingReviewDelegated = '1';
@@ -377,7 +360,6 @@ function ensurePendingReviewDelegation(mount: HTMLElement): void {
       for (const control of rowButtons) control.disabled = true;
       try {
         await fn();
-        // Remove the review row before refresh so Apply/Dismiss never looks stuck.
         row?.remove();
         const section = mount.querySelector('.email-dash-review');
         if (section && section.querySelectorAll('.email-dash-review-row').length === 0) {
@@ -407,6 +389,8 @@ function ensurePendingReviewDelegation(mount: HTMLElement): void {
     }
   });
 }
+
+// ── Pending actions ──────────────────────────────────────────────────────────
 
 /** Review strip for AI-suggested batches awaiting Apply/Dismiss (§3.7). */
 export function renderPendingActions(
@@ -468,6 +452,8 @@ export function renderPendingActions(
 
   mount.appendChild(section);
 }
+
+// ── Followups ────────────────────────────────────────────────────────────────
 
 /** "Waiting on" — sent mail still expecting a reply (§3.4). */
 function renderFollowups(
@@ -577,8 +563,6 @@ export function renderHighlightRow(
   account: EmailAccount,
   options: EmailDashboardOptions,
 ): void {
-  // Rows are colored by the priority bucket (heuristic + overrides), falling
-  // back to raw LLM urgency for mail triaged before Phase 4.
   const bucket = highlight.priorityBucket ?? highlight.urgency;
   const row = el('article', `email-dash-row ${urgencyClass(bucket)}`);
   if (highlight.unseen) {
@@ -640,6 +624,8 @@ export function renderHighlightRow(
   list.appendChild(row);
 }
 
+// ── Dashboard ────────────────────────────────────────────────────────────────
+
 /**
  * Render the default inbox dashboard view.
  */
@@ -652,7 +638,6 @@ export async function renderEmailDashboard(
   try {
     let payload = await fetchInboxSummary(options.account.id);
 
-    // Empty cache — sync once so agent triage/variants can run server-side.
     if (payload.summary.text.includes('Sync to fetch new mail')) {
       mount.replaceChildren(el('p', 'email-loading', 'Syncing inbox…'));
       options.onSyncActivity?.(true);
@@ -692,8 +677,6 @@ export async function renderEmailDashboard(
 
     renderInstrumentStrip(mount, summary);
 
-    // Narrative digest leads when available; the heuristic template is the
-    // instant fallback and stays until the LLM pass lands via SSE.
     const brief = (digest?.narrative ?? '').trim() || summary.text.trim();
     if (brief) {
       const briefNode = el('p', 'email-dash-brief', brief);
@@ -727,8 +710,6 @@ export async function renderEmailDashboard(
       empty.appendChild(openEmpty);
       list.appendChild(empty);
     } else {
-      // The summary carries up to 16 highlights (digest input); the queue
-      // renders only the top slice to stay scannable.
       for (const highlight of summary.highlights.slice(0, 8)) {
         renderHighlightRow(list, highlight, options.account, options);
       }

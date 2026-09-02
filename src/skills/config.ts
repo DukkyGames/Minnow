@@ -124,9 +124,7 @@ export function saveSkillConfig(config: SkillConfig): void {
 
   try {
     localStorage.setItem(SKILL_CONFIG_STORAGE_KEY, JSON.stringify(cachedConfig));
-  } catch {
-    /* ignore quota / private mode */
-  }
+  } catch {}
 }
 
 /** True when a skill is enabled (default enabled). */

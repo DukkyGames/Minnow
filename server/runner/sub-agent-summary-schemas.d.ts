@@ -1,6 +1,3 @@
-/**
- * Preset JSON outcome schemas for sub-agent final-turn validation (MIN-43).
- */
 import type { SubAgentStructuredOutcome } from './sub-agent-structured-outcome.js';
 /** Shipped default schema id for parent handoff. */
 export declare const DEFAULT_SUB_AGENT_SUMMARY_SCHEMA = "minnow.sub-agent.v1";

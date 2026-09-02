@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Ensure electron-builder "files" includes every src/ path the Node server reads at runtime.
- * Run before package / package:dir so packaged Minnow does not exit silently on boot.
- */
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,7 +7,6 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const serverRoot = path.join(repoRoot, 'server');
 
-/** Paths under repo root that must ship inside the Electron asar. */
 const REQUIRED_RUNTIME_PATHS = [
   'src/lsp/merge-config.mjs',
   'src/lsp/defaults.json',
@@ -29,12 +24,10 @@ const REQUIRED_RUNTIME_PATHS = [
   'build/icon.ico',
 ];
 
-/** Directory trees read recursively by server scan helpers. */
 const REQUIRED_RUNTIME_DIRS = [
   'src/skills',
   'src/chat/prompts',
   'src/evals/packs',
-  // Server llama.cpp paths import the shared .mjs memory/geometry modules at runtime.
   'src/models',
 ];
 
@@ -45,7 +38,6 @@ function loadElectronBuilderFilePatterns() {
 }
 
 /**
- * Whether a repo-relative path is included by electron-builder "files" (negation patterns ignored).
  * @param {string} relativePath
  * @param {string[]} patterns
  */
@@ -66,19 +58,15 @@ function isIncludedInElectronFiles(relativePath, patterns) {
 }
 
 /**
- * Collect repo-relative imports from server .js files under src/ or scripts/.
  * @param {string} dir
  * @returns {{ src: string[], scripts: string[] }}
  */
 function collectServerRuntimeImports(dir) {
-  /** @type {string[]} */
+/** @type {string[]} */
   const src = [];
-  /** @type {string[]} */
+/** @type {string[]} */
   const scripts = [];
   const importRe = /from\s+['"]((?:\.\.\/)+(?:src|scripts)\/[^'"]+)['"]/g;
-  // `new URL('../../src/...', import.meta.url)` is how server JS reads JSON
-  // that Vite never bundles (e.g. shipped sub-agent defaults). importRe
-  // misses those, so a packaged build can ENOENT a file this script said was OK.
   const importMetaUrlRe =
     /new\s+URL\(\s*['"]((?:\.\.\/)+(?:src|scripts)\/[^'"]+)['"]\s*,\s*import\.meta\.url\s*\)/g;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

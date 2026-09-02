@@ -1,9 +1,3 @@
-/**
- * The single suggestion keymap. Registered at Prec.highest so LSP autocomplete
- * and the desktop shell cannot steal Tab (focus) or Escape (blur) first —
- * bindings that return false still fall through to the file editor keymap.
- */
-
 import type { KeyBinding } from '@codemirror/view';
 import { suggestionTabTarget } from '../editor-completion-policy';
 import { forceIntentResolve } from './engine';
@@ -28,7 +22,6 @@ export const editorSuggestionKeymapBindings: KeyBinding[] = [
       });
       if (target === 'intent') return acceptIntentProposal(view);
       if (target === 'completion') return acceptCompletionGhost(view);
-      // 'lsp' → the LSP keymap handles it; 'indent' → fileEditorTabBinding does.
       return false;
     },
   },

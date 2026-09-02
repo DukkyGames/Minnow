@@ -19,7 +19,6 @@ export function stopGeneration(chatId?: string, reason: ChatStopReason = 'user')
   const generationId = chat.currentGenerationId?.trim();
   if (generationId) {
     void cancelGeneration(generationId).catch(() => {
-      /* best-effort; local abort still tears down the reader */
     });
   }
 
@@ -27,15 +26,9 @@ export function stopGeneration(chatId?: string, reason: ChatStopReason = 'user')
 
   const abort = getChatAbort(chat.id);
   if (abort) {
-    // A live turn owns teardown: its `finally` clears activity and the generation id.
     abort.abort();
     return;
   }
 
-  /*
-   * No local turn to abort — the chat is only "running" because it still holds a
-   * persisted `currentGenerationId`. Nothing else will ever clear it, so the
-   * agent activity row would keep ticking after the user pressed Stop.
-   */
   flushStoppedChatPresentation([chat.id]);
 }

@@ -1,8 +1,4 @@
 import { appConfirm } from './app-dialog';
-/**
- * Block workspace switches while orchestrator boards are running (MIN-344, MIN-752).
- */
-
 import { setWorkspacePath } from '../config/workspace-api';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import {
@@ -46,10 +42,7 @@ function delay(ms: number): Promise<void> {
   });
 }
 
-/**
- * Ask the engine to stop, but do not wait forever.
- * The HTTP stop may still finish in the background (report writer, process teardown).
- */
+/** Ask the engine to stop, but do not wait forever. */
 async function stopV2BoardBestEffort(boardId: string): Promise<void> {
   try {
     await Promise.race([stopV2Board(boardId), delay(v2StopTimeoutMs)]);
@@ -107,8 +100,6 @@ export async function dismissBoardViewOutsideWorkspace(workspacePath: string): P
     exitBoardViewForNavigation();
   }
 
-  // V2 lives in `#orchestratorBoardsRoot`, not a ChatGroup. Close the live pane
-  // of the workspace we are leaving; the list refreshes after the switch.
   const { isBoardsViewOpen, deselectBoardForWorkspaceSwitch } = await import(
     '../orchestrator/boards-view'
   );
@@ -134,10 +125,7 @@ export function formatWorkspaceSwitchBoardConfirmMessage(groups: readonly NamedB
   );
 }
 
-/**
- * When a board is active, prompt to stop cleanly or cancel the switch.
- * Returns true when the switch may proceed (no blockers, or user confirmed stop).
- */
+/** When a board is active, prompt to stop cleanly or cancel the switch. */
 export async function confirmAndStopBoardsForWorkspaceSwitch(
   targetPath: string,
 ): Promise<boolean> {
@@ -163,7 +151,6 @@ export async function confirmAndStopBoardsForWorkspaceSwitch(
   }
 
   for (const group of v1) {
-    // Mark leftover folders Stopped so the rail does not keep treating them as live.
     if (group.orchestrateBoard) {
       group.orchestrateBoard.status = 'stopped';
       markGroupDirty(group.id);
@@ -179,7 +166,6 @@ export async function confirmAndStopBoardsForWorkspaceSwitch(
   if (v1.length > 0) {
     scheduleSaveSessions();
   }
-  // Stop is best-effort: a hung end-of-run report must not block the workspace PUT.
   await Promise.all(v2.map((board) => stopV2BoardBestEffort(board.boardId)));
 
   const { exitBoardViewForNavigation } = await import('./exit-board-view');

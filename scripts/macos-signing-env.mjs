@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Shared helpers for macOS code signing + notarization during electron-builder runs.
- * Loads optional `.env.signing` (gitignored) and inspects the login keychain.
- */
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -15,12 +11,9 @@ const csrDir = path.join(repoRoot, 'build', 'macos-signing');
 
 /** @typedef {{ name: string; hash: string }} SigningIdentity */
 
-/** Keychain label prefix that electron-builder 26+ rejects in mac.identity / CSC_NAME. */
 const DEVELOPER_ID_APPLICATION_PREFIX = /^Developer ID Application:\s*/i;
 
 /**
- * Strip the keychain certificate-type prefix for electron-builder.
- * Keychain lists "Developer ID Application: Acme (TEAMID)" but mac.identity wants "Acme (TEAMID)".
  * @param {string} name
  */
 export function normalizeIdentityForSigning(name) {
@@ -28,7 +21,6 @@ export function normalizeIdentityForSigning(name) {
 }
 
 /**
- * Parse a simple KEY=VALUE env file (no export prefix, # comments).
  * @param {string} filePath
  */
 export function loadSigningEnvFile(filePath = signingEnvPath) {
@@ -57,7 +49,7 @@ export function listDeveloperIdIdentities() {
     encoding: 'utf8',
   });
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
-  /** @type {SigningIdentity[]} */
+/** @type {SigningIdentity[]} */
   const identities = [];
   for (const line of output.split('\n')) {
     const match = line.match(/^\s*\d+\)\s+([0-9A-F]+)\s+"(Developer ID Application:[^"]+)"/i);
@@ -66,12 +58,10 @@ export function listDeveloperIdIdentities() {
   return identities;
 }
 
-/** True when a Developer ID Application cert is installed locally. */
 export function hasDeveloperIdIdentity() {
   return listDeveloperIdIdentities().length > 0;
 }
 
-/** True when notarization credentials are available for electron-builder. */
 export function hasNotarizationCredentials() {
   const teamId = process.env.APPLE_TEAM_ID?.trim();
   if (!teamId) return false;
@@ -87,7 +77,6 @@ export function hasNotarizationCredentials() {
 }
 
 /**
- * electron-builder CLI overrides for the current signing environment.
  * @returns {string[]}
  */
 export function electronBuilderSigningArgs() {
@@ -126,7 +115,6 @@ export function electronBuilderSigningArgs() {
     console.log(
       `[signing] Notarization enabled (team ${teamId}) via afterSign hook (retries + direct S3 fallback).`,
     );
-    // Built-in notarize uses @electron/notarize without --no-s3-acceleration; afterSign runs scripts/macos-notarize-after-sign.mjs.
     args.push('--config.mac.notarize=false');
   } else {
     console.warn(

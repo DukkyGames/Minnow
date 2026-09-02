@@ -1,7 +1,3 @@
-/**
- * Client helper: open a workspace-relative file or folder in the OS explorer.
- */
-
 import { isMinnowElectronShell } from '../tools/minnow-shell';
 import { isLocalServerAvailable } from '../tools/config';
 import { buildFileTreeToolContext } from './file-tree-listing-root';
@@ -19,10 +15,7 @@ function isElectronHostRevealAvailable(): boolean {
   );
 }
 
-/**
- * POST /api/workspace/reveal-in-explorer for the given tree path.
- * Surfaces errors via the status strip (same pattern as file-tree CRUD).
- */
+/** POST /api/workspace/reveal-in-explorer for the given tree path. */
 export async function revealPathInSystemExplorer(
   workspaceRelativePath: string,
 ): Promise<RevealInSystemExplorerResult> {

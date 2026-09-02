@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-/**
- * Wait for Vite, then launch Electron (used by npm run electron:dev).
- * Avoids fragile && chains under concurrently on Windows.
- */
 
 import { ensureElectronBuild, spawnElectronShell } from './spawn-electron.mjs';
 import { waitForMinnowDev } from './wait-for-minnow-dev.mjs';
@@ -12,7 +8,6 @@ async function main() {
   const preferredPort = resolveMinnowPort();
   console.log(`[electron:dev] Waiting for Minnow dev server near port ${preferredPort}…`);
 
-  // Compile while Vite cold-starts so the window opens sooner once the server is up.
   const buildPromise = ensureElectronBuild();
 
   const { origin, port } = await waitForMinnowDev({

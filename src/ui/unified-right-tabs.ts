@@ -1,7 +1,3 @@
-/**
- * Unified tab strip for file viewer and browser preview tabs (MIN-224).
- */
-
 import {
   focusPaneSlot,
   isRightPaneSplitLayoutEnabled,
@@ -60,6 +56,8 @@ let onPreviewTabActivate: PreviewTabIdHandler = () => {};
 let onPreviewTabClose: PreviewTabIdHandler = () => {};
 let onPreviewTabNew: () => void | Promise<void> = () => {};
 
+// ── Handler registration ─────────────────────────────────────────────────────
+
 /** Register file tab handlers from file-viewer. */
 export function registerUnifiedFileTabHandlers(handlers: {
   onActivate: FileTabPathHandler;
@@ -88,6 +86,8 @@ export function registerUnifiedPreviewTabHandlers(handlers: {
   onPreviewTabNew = handlers.onNew;
 }
 
+// ── Tab chrome ───────────────────────────────────────────────────────────────
+
 function getTabsContainer(slot: PaneSlotId): HTMLElement | null {
   if (slot === 'secondary') {
     return document.getElementById('unifiedTabsSecondary');
@@ -111,10 +111,7 @@ function scrollActiveTabIntoView(slot: PaneSlotId): void {
   }
 }
 
-/**
- * Accept a tab dragged from the other pane's strip.
- * Returns true when the drop was a cross-pane move (reordering is then skipped).
- */
+/** Accept a tab dragged from the other pane's strip. */
 function acceptCrossSlotDrop(raw: string, slot: PaneSlotId): boolean {
   if (!isRightPaneSplitLayoutEnabled()) return false;
   if (raw.startsWith('file:')) {
@@ -148,6 +145,8 @@ function clearDropIndicator(container: HTMLElement, className: string): void {
     el.classList.remove(className);
   });
 }
+
+// ── File tabs ────────────────────────────────────────────────────────────────
 
 function appendFileTab(
   container: HTMLElement,
@@ -247,7 +246,6 @@ function appendFileTab(
     if (!transfer) return;
     transfer.setData('text/plain', `file:${tab.path}`);
     transfer.effectAllowed = 'copyMove';
-    // Attachment snapshots are not workspace files; skip chat-link MIME.
     if (!isAttachmentViewerPath(tab.path)) {
       setViewerTabDragData(transfer, { path: tab.path, label: tab.displayName });
       transfer.setData(WORKSPACE_FILE_MIME, tab.path);
@@ -290,6 +288,8 @@ function appendFileTab(
 
   container.appendChild(tabEl);
 }
+
+// ── Preview tabs ─────────────────────────────────────────────────────────────
 
 function appendPreviewTab(
   container: HTMLElement,
@@ -388,6 +388,8 @@ function appendPreviewTab(
   container.appendChild(tabEl);
 }
 
+// ── Strip render ─────────────────────────────────────────────────────────────
+
 /** Whole-strip drop target so a tab can be dragged into an empty pane. */
 function bindStripDropZone(container: HTMLElement, slot: PaneSlotId): void {
   if (container.dataset.dropZoneBound === '1') return;
@@ -446,7 +448,6 @@ function renderSlotTabStrip(slot: PaneSlotId): void {
 
   const tabBar = getTabBarElement(slot);
   const hasTabs = fileTabs.length > 0 || previewTabs.length > 0;
-  // While split, an empty group keeps its strip: it is the drop target and "+" affordance.
   const keepVisible = isRightPaneSplitLayoutEnabled();
   tabBar?.classList.toggle('hidden', !hasTabs && !keepVisible);
 
@@ -473,6 +474,8 @@ export function bindUnifiedRightTabs(): void {
   bindStripKeyboard('primary');
   bindStripKeyboard('secondary');
 }
+
+// ── Keyboard ─────────────────────────────────────────────────────────────────
 
 /** Arrow / Ctrl+W / Ctrl+Tab within one group's strip. */
 function bindStripKeyboard(boundSlot: PaneSlotId): void {

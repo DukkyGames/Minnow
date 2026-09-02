@@ -147,14 +147,10 @@ export async function resolveElementSourceMapping(
   try {
     const staticMatch = await resolveStaticSource(input);
     if (staticMatch) return staticMatch;
-  } catch {
-    /* fall through to the dev-server ladder */
-  }
+  } catch {}
   try {
     const devMatch = await resolveDevServerSource(input, transport);
     if (devMatch) return devMatch;
-  } catch {
-    /* fall through to the guess fallback */
-  }
+  } catch {}
   return GUESS;
 }

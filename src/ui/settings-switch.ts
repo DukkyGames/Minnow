@@ -1,7 +1,3 @@
-/**
- * Settings toggle switches (replaces native checkboxes in settings UI).
- */
-
 let switchLabelCounter = 0;
 
 export type SettingsSwitchOptions = {
@@ -16,6 +12,8 @@ export type SettingsSwitchOptions = {
   description?: string;
   onChange?: (checked: boolean) => void;
 };
+
+// ── Create ───────────────────────────────────────────────────────────────────
 
 /** Visual switch; underlying control remains a checkbox for forms and bindings. */
 export function createSettingsSwitch(
@@ -89,6 +87,8 @@ export function createSettingsToggleRow(
   return { row, input };
 }
 
+// ── Legacy ───────────────────────────────────────────────────────────────────
+
 /** Label text from a legacy `<label class="settings-toggle-row">` (span child or bare text). */
 function readLegacyToggleRowLabel(parent: HTMLElement, input: HTMLInputElement): string {
   const bodyLabel = parent.querySelector(
@@ -138,6 +138,8 @@ function copyInputState(from: HTMLInputElement, to: HTMLInputElement): void {
     to.dataset[key] = value;
   }
 }
+
+// ── Upgrade ──────────────────────────────────────────────────────────────────
 
 /** Replace a plain checkbox with switch chrome (keeps id and listeners if upgraded before bind). */
 export function wrapCheckboxAsSwitch(input: HTMLInputElement): HTMLInputElement {

@@ -1,7 +1,3 @@
-/**
- * In-memory editor AI completion metrics (local diagnostics only).
- */
-
 export type EditorAiCompletionRejectReason =
   | 'empty'
   | 'empty_after_trim'

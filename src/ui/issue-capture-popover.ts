@@ -1,18 +1,3 @@
-/**
- * The capture popover: one component, every entry point.
- *
- * Right-click "Create issue", the menubar button, a drop on the Issues rail
- * tile and a drop on the button itself all open this. It is deliberately a
- * popover and not a dialog — the brief bans modal-first flows, and capture is
- * a twenty-second detour, not a form.
- *
- * Shape, top to bottom: where this came from, the title you can accept as-is,
- * the context that came with it as removable chips, and one row saying what
- * pressing Enter will do.
- *
- * Phase 2 of `documentation/plans/issues-app-v2.md`.
- */
-
 import '../styles/issue-capture.css';
 
 import { openContextMenu } from './context-menu';
@@ -109,10 +94,6 @@ export function closeIssueCapture(options?: {
   else saveIssueCaptureDraft(current.payload.workspacePath, null);
   session = null;
   unbindGlobalListeners();
-  // Restore focus *before* detaching. Removing the focused subtree first drops
-  // focus to <body>, and re-focusing after that is a second focus change the
-  // rest of the shell can observe and act on; moving focus while the popover is
-  // still mounted is one clean transition.
   const restore = options?.restoreFocus === false ? null : current.restoreFocus;
   if (restore?.isConnected) restore.focus();
   current.root.remove();
@@ -279,7 +260,6 @@ async function submitCapture(current: CaptureSession): Promise<void> {
         showToast('That issue no longer exists.', 'error');
         return;
       }
-      // appendIssueLinks takes one chat id; the rest go in follow-up calls.
       for (const chatId of links.chatIds.slice(1)) {
         store.appendIssueLinks(current.targetIssueId, { chatId });
       }
@@ -365,7 +345,6 @@ function onKeyDown(event: KeyboardEvent): void {
   }
   if (event.key === 'Enter' && !event.shiftKey) {
     const target = event.target;
-    // Enter inside the destination button should open the menu, not submit.
     if (target === current.destinationBtn) return;
     if (isTypingTarget(target) || target === current.submitBtn) {
       event.preventDefault();
@@ -379,7 +358,6 @@ function onPointerDown(event: PointerEvent): void {
   if (!current) return;
   const target = event.target;
   if (target instanceof Node && current.root.contains(target)) return;
-  // A context menu opened from inside the popover lives outside its subtree.
   if (target instanceof Element && target.closest('.mn-menu')) return;
   closeIssueCapture({ restoreFocus: false });
 }
@@ -459,10 +437,7 @@ export function focusOpenIssueCapture(): boolean {
   return true;
 }
 
-/**
- * Open the capture popover. Re-opening replaces the current one, so a second
- * press of the shortcut does not stack popovers.
- */
+/** Open the capture popover. */
 export function openIssueCapture(options: OpenIssueCaptureOptions): void {
   closeIssueCapture({ restoreFocus: false });
 
@@ -539,9 +514,6 @@ export function openIssueCapture(options: OpenIssueCaptureOptions): void {
   document.body.appendChild(root);
   positionPopover(root, current.anchor);
   bindGlobalListeners();
-  // The popover is a DOM layer; the Electron preview guest is a native
-  // WebContentsView that paints above it. Register so the guest hides while
-  // open (same contract as the other chrome popovers).
   registerChromePopover();
   chromePopoverRegistered = true;
 

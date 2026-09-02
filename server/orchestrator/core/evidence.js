@@ -1,22 +1,10 @@
-/**
- * P3-H — abandonment evidence (PRD §11).
- *
- * The control plane never asks an LLM whether to abandon. What it *does* is
- * journal enough context that a later measurement can ask, from the journal
- * alone, whether a smarter policy would have saved the task.
- *
- * This module is pure: it shapes records and reconstructs them from events.
- * Git diffs are captured in `touches.js` (I/O) and arrive already attached to
- * an attempt's `evidence.diff`.
- */
+/** Abandonment evidence helpers. */
 
 /** A unified diff, not a repo. Patch text longer than this is truncated. */
 export const MAX_DIFF_CHARS = 32_768;
 
 /**
- * Cap a patch string. Attempt *history* is never truncated; only the bytes of
- * one diff are, so an overnight run cannot journal a whole checkout.
- *
+ * Cap a patch string.
  * @param {unknown} text
  * @returns {{ text: string, truncated: boolean, originalLength?: number }}
  */
@@ -88,8 +76,6 @@ export function attemptHistoryRecord(attempt) {
   const diff = capDiffPayload(ev.diff);
   if (diff) record.diff = diff;
 
-  // Leftover attempt evidence (error strings, report lists) stays attached so
-  // a later reader does not have to know which keys we promoted.
   /** @type {Record<string, unknown>} */
   const rest = {};
   for (const [key, value] of Object.entries(ev)) {
@@ -102,11 +88,6 @@ export function attemptHistoryRecord(attempt) {
 
 /**
  * Evidence journaled on `task.abandoned`.
- *
- * The policy table's last-attempt inputs stay on the object (`role`, `outcome`,
- * `attemptCount`) so existing readers keep working. `attempts` is the full
- * history PRD §11 asked for — never truncated as a list.
- *
  * @param {import('./types').TaskState | { attempts?: readonly import('./types').Attempt[] }} task
  * @param {{ evidence?: Record<string, unknown> | null }} decision
  * @returns {Record<string, unknown>}
@@ -121,9 +102,7 @@ export function bundleAbandonmentEvidence(task, decision) {
 }
 
 /**
- * Does this bundle carry a non-empty attempt history and at least one
- * inspectable piece of evidence besides the empty object?
- *
+ * Does this bundle carry a non-empty attempt history and at least one inspectable piece of evidence besides the empty object?
  * @param {unknown} evidence
  * @returns {boolean}
  */
@@ -149,11 +128,6 @@ export function abandonmentEvidenceIsComplete(evidence) {
 
 /**
  * Rebuild every abandonment from journal events alone.
- *
- * Prefers `task.abandoned.evidence.attempts` when present (live path). Falls
- * back to folding `task.attempt.started` / `task.attempt.ended` so a thin
- * pre-P3-H journal is still measurable.
- *
  * @param {Iterable<unknown>} events
  * @returns {Array<{ taskId: string, reason: unknown, evidence: Record<string, unknown> }>}
  */

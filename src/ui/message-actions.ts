@@ -1,7 +1,3 @@
-/**
- * Per-message ⋮ menu: copy, edit, delete, regenerate, remake, undo (Epic C2 / MIN-409).
- */
-
 import { isActiveChatStreaming } from '../chat/streaming-state';
 import {
   indexOfUserBeforeBlock,
@@ -115,7 +111,6 @@ async function runUndoFromMenu(chatId: string): Promise<void> {
   renderChatFromHistory(chat);
   renderStatsForChat(chat);
   renderSidebar();
-  // Dynamic import avoids a messages ↔ message-actions ↔ composer-undo cycle.
   void import('./composer-undo').then((m) => m.syncComposerUndoFromActiveChat());
   const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
   input?.focus();
@@ -239,8 +234,6 @@ export function attachMessageActions(
       );
     }
 
-    // Undo last agent turn (chat rewind). Always on assistant rows (disabled +
-    // tooltip when blocked); also on the user row that is the undo target fork.
     {
       const chat = getActiveChat();
       const eligibility = getUndoEligibility(chat);

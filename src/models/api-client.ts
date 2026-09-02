@@ -301,6 +301,8 @@ async function parseJson<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
+// ── Hub downloads ────────────────────────────────────────────────────────────
+
 export async function fetchModelsPing(): Promise<boolean> {
   const res = await fetch('/api/models/ping');
   return res.ok;
@@ -358,9 +360,7 @@ export function subscribeDownloadProgress(
   source.onmessage = (msg) => {
     try {
       onEvent(JSON.parse(msg.data));
-    } catch {
-      /* ignore malformed */
-    }
+    } catch {}
   };
   source.onerror = () => {
     if (source.readyState === EventSource.CLOSED) {
@@ -391,6 +391,8 @@ export async function cancelModelDownload(jobId: string): Promise<DownloadJob> {
   const data = await parseJson<{ job: DownloadJob }>(res);
   return data.job;
 }
+
+// ── Installed ────────────────────────────────────────────────────────────────
 
 export async function listModelDownloads(): Promise<DownloadJob[]> {
   const res = await fetch('/api/models/downloads');
@@ -490,12 +492,12 @@ export function subscribeLlamaInstallProgress(
   source.onmessage = (msg) => {
     try {
       onEvent(JSON.parse(msg.data) as LlamaInstallJob);
-    } catch {
-      /* ignore malformed */
-    }
+    } catch {}
   };
   return () => source.close();
 }
+
+// ── Serve ────────────────────────────────────────────────────────────────────
 
 export async function startModelServe(payload: {
   modelPath: string;
@@ -552,6 +554,8 @@ export async function fetchServeLog(
   return parseJson(res);
 }
 
+// ── Streams ──────────────────────────────────────────────────────────────────
+
 /** Follow a serve's runtime log — emits the tail, then appended chunks. */
 export function subscribeServeLog(
   serveId: string,
@@ -561,9 +565,7 @@ export function subscribeServeLog(
   source.onmessage = (msg) => {
     try {
       onChunk(JSON.parse(msg.data));
-    } catch {
-      /* ignore malformed */
-    }
+    } catch {}
   };
   return () => source.close();
 }
@@ -579,9 +581,7 @@ export function subscribeServeEvents(
       if (data && Array.isArray(data.serves)) {
         onEvent({ serves: data.serves, reason: data.reason ?? 'update' });
       }
-    } catch {
-      /* ignore malformed */
-    }
+    } catch {}
   };
   return () => source.close();
 }
@@ -638,9 +638,7 @@ export function subscribeServeActivity(
     try {
       const data = JSON.parse(msg.data) as ServeActivity;
       if (data && typeof data.serveId === 'string') onEvent(data);
-    } catch {
-      /* ignore malformed */
-    }
+    } catch {}
   };
   return () => source.close();
 }

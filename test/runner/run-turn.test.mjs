@@ -166,6 +166,8 @@ async function withFake(scenario, fn) {
   }
 }
 
+// ── Source contract ──────────────────────────────────────────────────────────
+
 describe('runTurn source contract', () => {
   const source = fs.readFileSync(RUN_TURN_JS, 'utf8');
   const runnerDir = path.join(PROJECT_ROOT, 'server', 'runner');
@@ -187,6 +189,8 @@ describe('runTurn source contract', () => {
     }
   });
 });
+
+// ── Report tool ──────────────────────────────────────────────────────────────
 
 describe('runTurn report tool → verbatim outcome', () => {
   test('pass payload is returned as-is', { timeout: 20_000 }, async () => {
@@ -275,6 +279,8 @@ describe('runTurn report tool → verbatim outcome', () => {
     });
   });
 });
+
+// ── Missing report ───────────────────────────────────────────────────────────
 
 describe('runTurn without a successful report', () => {
   test('prose that looks like a pass is still no_report', { timeout: 20_000 }, async () => {
@@ -395,6 +401,8 @@ describe('runTurn without a successful report', () => {
   });
 });
 
+// ── Timeout and crash ────────────────────────────────────────────────────────
+
 describe('runTurn timeout and crash', () => {
   test('maxTurns exceeded is timeout', { timeout: 20_000 }, async () => {
     await withFake([{ emit: proseSseChunks('still going') }], async (baseUrl) => {
@@ -454,6 +462,8 @@ describe('runTurn timeout and crash', () => {
     assert.equal(result.error, 'provider exploded');
   });
 });
+
+// ── Tools and chatId ─────────────────────────────────────────────────────────
 
 describe('runTurn tools and opaque chatId', () => {
   test('works with a UUID chatId and no board in existence', { timeout: 20_000 }, async () => {
@@ -529,6 +539,8 @@ describe('P5-D the turn reports what it cost (MIN-722)', () => {
   });
 });
 
+// ── Chat-shaped turn ─────────────────────────────────────────────────────────
+
 describe('P6-A chat-shaped turn (MIN-723)', () => {
   const DATETIME_TOOL = {
     type: 'function',
@@ -598,6 +610,8 @@ describe('P6-A chat-shaped turn (MIN-723)', () => {
     });
   });
 });
+
+// ── AskCapability ────────────────────────────────────────────────────────────
 
 describe('P6-B AskCapability (MIN-724)', () => {
   const ASK_ARGS = {
@@ -837,6 +851,8 @@ describe('P6-B AskCapability (MIN-724)', () => {
     );
   });
 });
+
+// ── RunTurn interface ────────────────────────────────────────────────────────
 
 describe('P6-C runTurn interface (MIN-725)', () => {
   const DATETIME_TOOL = {
@@ -1113,7 +1129,65 @@ describe('P6-C runTurn interface (MIN-725)', () => {
       },
     );
   });
+
+  test('finalizeStructuredOutcome false nudges report_outcome instead of JSON-only finalization', { timeout: 20_000 }, async () => {
+    const valid = {
+      outcome: 'pass',
+      summary: 'Called the tool after the nudge.',
+      evidence: ['ok'],
+    };
+    await withFake(
+      [
+        {
+          match: { nth: 0 },
+          emit: proseSseChunks(
+            JSON.stringify({
+              summary: 'dumped findings instead of calling the tool',
+              findings: [],
+              artifacts: [],
+            }),
+          ),
+        },
+        { emit: functionCallChunks(DEFAULT_REPORT_TOOL_NAME, valid) },
+      ],
+      async (baseUrl, fake) => {
+        const result = await runTurn({
+          chatId: CHAT_UUID,
+          seed: 'Finish up.',
+          tools: [],
+          model: { providerId: 'local-fake', id: 'fake-model' },
+          deps: stubDeps(baseUrl),
+          nudgeToolUse: false,
+          finalizeStructuredOutcome: false,
+        });
+        assert.equal(result.outcome, 'pass');
+        assert.equal(result.summary, valid.summary);
+        const completions = fake.requests.filter((row) => row.pathname === '/v1/chat/completions');
+        const dumpedJsonFinalization = completions.some((row) =>
+          (row.body?.messages ?? []).some(
+            (m) =>
+              m.role === 'user' &&
+              typeof m.content === 'string' &&
+              m.content.includes('Final response (required)'),
+          ),
+        );
+        assert.equal(dumpedJsonFinalization, false);
+        const reportNudged = completions.some((row) =>
+          (row.body?.messages ?? []).some(
+            (m) =>
+              m.role === 'user' &&
+              typeof m.content === 'string' &&
+              m.content.includes(DEFAULT_REPORT_TOOL_NAME) &&
+              m.content.includes('must call'),
+          ),
+        );
+        assert.ok(reportNudged, 'board-shaped turns must nudge the report tool');
+      },
+    );
+  });
 });
+
+// ── Incremental persist ──────────────────────────────────────────────────────
 
 describe('P10-C settled incremental persist (MIN-768)', () => {
   const DATETIME_TOOL = {
@@ -1365,6 +1439,8 @@ describe('P10-C settled incremental persist (MIN-768)', () => {
     },
   );
 });
+
+// ── Round boundary ───────────────────────────────────────────────────────────
 
 describe('P10-I onRoundBoundary (MIN-774)', () => {
   const DATETIME_TOOL = {

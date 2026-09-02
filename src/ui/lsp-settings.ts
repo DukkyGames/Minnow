@@ -1,9 +1,3 @@
-/**
- * Language servers settings: categorized rows with install actions and enable toggles.
- */
-
-
-
 import {
   fetchLspBundles,
   fetchLspBundleProgress,
@@ -25,8 +19,6 @@ import { appendSettingsOfflineHint } from './settings-controls';
 import { setStatus } from './status';
 import '../styles/settings-general.css';
 
-
-
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   className?: string,
@@ -38,14 +30,10 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-
-
 /** Hide test-only fake server from the settings list. */
 function visibleServers(servers: LspServerStatus[]): LspServerStatus[] {
   return servers.filter((s) => s.id !== 'fake');
 }
-
-
 
 /** Format install requirements for a hint line under the server row. */
 function formatRequirementsHint(
@@ -60,8 +48,6 @@ function formatRequirementsHint(
   return bits.join(' · ');
 }
 
-
-
 function formatBundleSize(bytes: number, estimateMb?: number): string {
   if (bytes > 0) {
     if (bytes < 1024 * 1024) {
@@ -75,16 +61,12 @@ function formatBundleSize(bytes: number, estimateMb?: number): string {
   return '';
 }
 
-
-
 function parseCommaList(raw: string): string[] {
   return raw
     .split(/[,\n]+/)
     .map((s) => s.trim())
     .filter(Boolean);
 }
-
-
 
 /** Compact instrumentation row: master switch plus live counts. */
 function appendLspToolbar(
@@ -101,8 +83,6 @@ function appendLspToolbar(
   bar.setAttribute('role', 'group');
   bar.setAttribute('aria-label', 'Language server status');
 
-
-
   const control = el('div', 'settings-lsp-toolbar__control');
   const { root: switchRoot } = createSettingsSwitch({
     checked: opts.masterOn,
@@ -114,8 +94,6 @@ function appendLspToolbar(
     el('span', 'settings-lsp-toolbar__label', 'Enable language servers'),
   );
   bar.append(control);
-
-
 
   const stats = el('div', 'settings-lsp-stats');
   const chips: Array<{ label: string; value: string; tone?: 'ok' | 'muted' }> = [
@@ -144,8 +122,6 @@ function appendLspToolbar(
   }
   bar.append(stats);
 
-
-
   const storage = el('p', 'settings-lsp-storage');
   storage.append(document.createTextNode('Overrides: '));
   const pathCode = document.createElement('code');
@@ -153,8 +129,6 @@ function appendLspToolbar(
   storage.append(pathCode);
   mount.append(bar, storage);
 }
-
-
 
 /** Label + switch for Installed / Enabled columns on each server row. */
 function createLspMiniToggle(
@@ -176,8 +150,6 @@ function createLspMiniToggle(
   cell.append(el('span', 'settings-lsp-mini-toggle__label', label), root);
   return { cell, input };
 }
-
-
 
 /** In-flight bundle install/uninstall rows block full section re-render. */
 let lspBundleUiOperations = 0;
@@ -336,8 +308,6 @@ function bindBundleInstallActions(
   }
 }
 
-
-
 function createLspSettingsRow(
   server: LspServerStatus,
   bundle: LspBundleStatus | null,
@@ -349,17 +319,11 @@ function createLspSettingsRow(
   row.dataset.serverId = server.id;
   if (bundle) row.dataset.bundleId = bundle.id;
 
-
-
   const head = el('div', 'settings-lsp-row-head');
   const toggles = el('div', 'settings-lsp-row-toggles');
 
-
-
   let enableInput: HTMLInputElement | null = null;
   let bundleProgress: HTMLElement | null = null;
-
-
 
   let installBtn: HTMLButtonElement | null = null;
   let removeBtn: HTMLButtonElement | null = null;
@@ -411,11 +375,7 @@ function createLspSettingsRow(
     toggles.append(enableToggle.cell);
   }
 
-
-
   head.append(toggles);
-
-
 
   const identity = el('div', 'settings-lsp-row-identity');
   identity.append(el('span', 'settings-lsp-name', server.label));
@@ -426,8 +386,6 @@ function createLspSettingsRow(
     identity.append(desc);
   }
   head.append(identity);
-
-
 
   const headMeta = el('div', 'settings-lsp-row-head-meta');
   if (bundle && (installBtn || removeBtn)) {
@@ -458,8 +416,6 @@ function createLspSettingsRow(
     headMeta.append(status);
   }
 
-
-
   if (bundle) {
     const sizeLabel = formatBundleSize(bundle.sizeBytes, bundle.sizeEstimateMb);
     if (bundle.installed && bundle.version) {
@@ -482,12 +438,8 @@ function createLspSettingsRow(
     headMeta.append(removeBtn);
   }
 
-
-
   head.append(headMeta);
   row.append(head);
-
-
 
   const detailBits: string[] = [];
   if (server.extensions.length > 0) {
@@ -506,25 +458,17 @@ function createLspSettingsRow(
     row.append(detail);
   }
 
-
-
   if (enableInput && bundle && !bundle.installed) {
     enableInput.disabled = true;
     enableInput.checked = false;
   }
 
-
-
   if (bundleProgress) {
     row.append(bundleProgress);
   }
 
-
-
   return row;
 }
-
-
 
 function appendServerCategory(
   mount: HTMLElement,
@@ -544,8 +488,6 @@ function appendServerCategory(
   mount.append(section);
 }
 
-
-
 /** Group servers by bundle catalog categories; extras go in Core / Custom. */
 function appendCategorizedServerCatalog(
   mount: HTMLElement,
@@ -558,8 +500,6 @@ function appendCategorizedServerCatalog(
 ): void {
   const serverById = new Map(servers.map((s) => [s.id, s]));
   const consumed = new Set<string>();
-
-
 
   if (categories?.length) {
     for (const category of categories) {
@@ -578,41 +518,29 @@ function appendCategorizedServerCatalog(
     }
   }
 
-
-
   const remaining = servers.filter((s) => !consumed.has(s.id));
   const core = remaining.filter((s) => s.builtin);
   const custom = remaining.filter((s) => !s.builtin);
-
-
 
   const coreRows = core.map((server) =>
     createLspSettingsRow(server, null, handlers.onToggle, handlers.onDelete),
   );
   appendServerCategory(mount, 'Core', coreRows);
 
-
-
   const customRows = custom.map((server) =>
     createLspSettingsRow(server, null, handlers.onToggle, handlers.onDelete),
   );
   appendServerCategory(mount, 'Custom', customRows);
-
-
 
   if (servers.length === 0) {
     mount.append(el('p', 'settings-field-hint', 'No language servers in defaults or lsp.json.'));
   }
 }
 
-
-
 function buildCustomServerForm(onAdded: () => void): HTMLFormElement {
   const form = el('form', 'settings-lsp-form');
   form.setAttribute('aria-label', 'Add custom language server');
   form.noValidate = true;
-
-
 
   const idRow = el('div', 'field-row');
   const idField = el('div', 'field');
@@ -632,8 +560,6 @@ function buildCustomServerForm(onAdded: () => void): HTMLFormElement {
   );
   idRow.append(idField);
 
-
-
   const labelField = el('div', 'field');
   labelField.append(el('label', '', 'Display name'));
   const labelInput = document.createElement('input');
@@ -644,8 +570,6 @@ function buildCustomServerForm(onAdded: () => void): HTMLFormElement {
   labelField.append(labelInput);
   idRow.append(labelField);
   form.append(idRow);
-
-
 
   const cmdField = el('div', 'field');
   cmdField.append(el('label', '', 'Command'));
@@ -662,8 +586,6 @@ function buildCustomServerForm(onAdded: () => void): HTMLFormElement {
   );
   form.append(cmdField);
 
-
-
   const extField = el('div', 'field');
   extField.append(el('label', '', 'File extensions'));
   const extInput = document.createElement('input');
@@ -677,8 +599,6 @@ function buildCustomServerForm(onAdded: () => void): HTMLFormElement {
   );
   form.append(extField);
 
-
-
   const actions = el('div', 'settings-lsp-form-actions');
   const submit = el('button', 'settings-action-btn', 'Add server');
   submit.type = 'submit';
@@ -687,8 +607,6 @@ function buildCustomServerForm(onAdded: () => void): HTMLFormElement {
   resetBtn.addEventListener('click', () => form.reset());
   actions.append(submit, resetBtn);
   form.append(actions);
-
-
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -711,8 +629,6 @@ function buildCustomServerForm(onAdded: () => void): HTMLFormElement {
     }
     const label = labelInput.value.trim() || id;
 
-
-
     void saveLspConfig({
       lsp: {
         [id]: {
@@ -733,12 +649,8 @@ function buildCustomServerForm(onAdded: () => void): HTMLFormElement {
     });
   });
 
-
-
   return form;
 }
-
-
 
 function appendCustomServerPanel(mount: HTMLElement, onAdded: () => void): void {
   const details = el('details', 'settings-lsp-add-panel');
@@ -746,8 +658,6 @@ function appendCustomServerPanel(mount: HTMLElement, onAdded: () => void): void 
   details.append(buildCustomServerForm(onAdded));
   mount.append(details);
 }
-
-
 
 /** Render the full Language servers settings section into #settingsLspBody. */
 export async function renderLspSection(): Promise<void> {
@@ -769,8 +679,6 @@ export async function renderLspSection(): Promise<void> {
   const content = el('div', 'settings-general__content');
   shell.appendChild(content);
 
-
-
   await detectLocalServer();
   const online = isLocalServerAvailable();
   if (!online) {
@@ -781,11 +689,7 @@ export async function renderLspSection(): Promise<void> {
     return;
   }
 
-
-
   const [config, bundleData] = await Promise.all([fetchLspConfig(), fetchLspBundles()]);
-
-
 
   if (!config) {
     appendSettingsOfflineHint(
@@ -795,14 +699,10 @@ export async function renderLspSection(): Promise<void> {
     return;
   }
 
-
-
   const servers = visibleServers(config.servers);
   const enabledCount = servers.filter((s) => !s.disabled).length;
   const runningCount = servers.filter((s) => s.running).length;
   const masterOn = config.enabled !== false;
-
-
 
   const statusGroup = appendSettingsGroup(content, 'Status', undefined, 'integrations.lsp', {
     emphasis: true,
@@ -823,13 +723,9 @@ export async function renderLspSection(): Promise<void> {
     },
   });
 
-
-
   const refresh = () => {
     void renderLspSection();
   };
-
-
 
   const setServerDisabled = async (id: string, enabled: boolean) => {
     const ok = await saveLspConfig({
@@ -843,8 +739,6 @@ export async function renderLspSection(): Promise<void> {
     setStatus('err', 'Could not save language server settings. Open or restart Minnow.');
     await renderLspSection();
   };
-
-
 
   const removeCustomServer = async (id: string) => {
     if (
@@ -864,8 +758,6 @@ export async function renderLspSection(): Promise<void> {
     setStatus('err', 'Could not remove. Open or restart Minnow and try again.');
   };
 
-
-
   const catalog = appendSettingsGroup(
     content,
     'Language servers',
@@ -873,8 +765,6 @@ export async function renderLspSection(): Promise<void> {
     'integrations.lsp',
     { emphasis: true },
   );
-
-
 
   appendCategorizedServerCatalog(catalog, servers, bundleData?.categories, {
     onToggle: (id, enabled) => {
@@ -885,8 +775,6 @@ export async function renderLspSection(): Promise<void> {
     },
   });
 
-
-
   const customGroup = appendSettingsGroup(
     content,
     'Custom server',
@@ -896,14 +784,10 @@ export async function renderLspSection(): Promise<void> {
   );
   appendCustomServerPanel(customGroup, refresh);
 
-
-
   appendSettingsCrosslinks(content, [
     { label: 'Editor', sectionId: 'editor' },
     { label: 'Tools', sectionId: 'tools' },
     { label: 'MCP servers', sectionId: 'mcp' },
   ]);
 }
-
-
 

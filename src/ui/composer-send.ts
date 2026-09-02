@@ -25,6 +25,8 @@ export type ComposerStreamingMode = 'idle' | 'streaming';
 
 let recoveryBlocked = false;
 
+// ── Recovery ─────────────────────────────────────────────────────────────────
+
 /** Block composer send while Continue / Discard banner is visible. */
 export function setComposerRecoveryBlocked(blocked: boolean): void {
   recoveryBlocked = blocked;
@@ -50,6 +52,8 @@ export function shouldAllowComposerPrimaryAction(inputText: string): boolean {
 function composerInputHasText(): boolean {
   return Boolean(getActiveComposerSurface().inputEl?.value.trim());
 }
+
+// ── Streaming ────────────────────────────────────────────────────────────────
 
 /** Update primary button label during streaming from composer text (steer vs stop). */
 export function refreshComposerStreamingAffordance(): void {
@@ -156,7 +160,6 @@ export function syncComposerFromStreamingState(): void {
   syncGoalActiveHint();
   syncLoopActiveHint();
   syncTodoPanel();
-  // These refresh helpers read getActiveChat(); skip if tests already tore down sessions.
   if (!sessionState) return;
   void import('./composer-run-target').then((m) => {
     if (!sessionState) return;
@@ -167,6 +170,8 @@ export function syncComposerFromStreamingState(): void {
     m.refreshComposerUndoDisabled();
   });
 }
+
+// ── Send ─────────────────────────────────────────────────────────────────────
 
 function submitQueueFromComposer(): void {
   const input = getActiveComposerSurface().inputEl;

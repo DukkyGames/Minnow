@@ -1,7 +1,3 @@
-/**
- * LSP signature help shown after `(` and `,`.
- */
-
 import { StateEffect, StateField, Prec, type Extension } from '@codemirror/state';
 import { EditorView, showTooltip, type Tooltip } from '@codemirror/view';
 import { fetchLspSignature, type LspSignatureHelp } from '../../lsp/completion-client';

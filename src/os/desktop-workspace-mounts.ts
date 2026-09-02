@@ -5,9 +5,7 @@ export function isDesktopWorkspaceHostingActive(): boolean {
 
 /** Legacy sync hook — no-op. */
 export async function syncDesktopWorkspaceMounts(): Promise<void> {
-  /* no-op */
 }
 
 export function resetDesktopWorkspaceMountsForTests(): void {
-  /* no-op */
 }

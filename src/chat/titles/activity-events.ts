@@ -1,7 +1,3 @@
-/**
- * Pub/sub for async chat title jobs (agent activity panel).
- */
-
 import type { TitleScheduleContext } from './schedule';
 
 export interface TitleJobActivity {
@@ -27,9 +23,7 @@ function notify(): void {
   for (const fn of listeners) {
     try {
       fn();
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   }
 }
 

@@ -45,7 +45,6 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
 
   let catalogModels: LmModelRecord[] | undefined;
 
-  // 1 — Provider reachable
   let t = t0();
   announceTestStart(ctx, {
     testId: 'cap-provider',
@@ -70,7 +69,6 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
     );
   }
 
-  // 2 — Model resolves
   t = t0();
   announceTestStart(ctx, {
     testId: 'cap-model',
@@ -87,7 +85,6 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
     ),
   );
 
-  // 3 — Streaming
   assertNotAborted(ctx.signal);
   t = t0();
   announceTestStart(ctx, {
@@ -132,7 +129,6 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
     );
   }
 
-  // 4 — Usage chunk (skip if absent)
   assertNotAborted(ctx.signal);
   t = t0();
   announceTestStart(ctx, {
@@ -187,7 +183,6 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
     );
   }
 
-  // 5 — Tool schema accepted
   assertNotAborted(ctx.signal);
   t = t0();
   announceTestStart(ctx, {
@@ -245,7 +240,6 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
     );
   }
 
-  // 6 — Models list (fetch once; catalog reused for multimodal gate)
   assertNotAborted(ctx.signal);
   t = t0();
   announceTestStart(ctx, {
@@ -278,7 +272,6 @@ export async function runCapabilitySuite(ctx: BenchmarkRunContext): Promise<Suit
     );
   }
 
-  // 7 — Multimodal (skip text-only; run image probe for vision models)
   assertNotAborted(ctx.signal);
   t = t0();
   announceTestStart(ctx, {

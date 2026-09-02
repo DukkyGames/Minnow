@@ -1,8 +1,3 @@
-/**
- * Split-button dropdown for Issues workflow — Send to chat / Send to background.
- * Flat chrome, --mn-* tokens, accessible menu with keyboard support.
- */
-
 import { createIcon } from './icon';
 
 export interface IssuesWorkflowMenuItem {
@@ -136,10 +131,7 @@ function openMenuForTrigger(
   if (firstEnabled >= 0) buttons[firstEnabled]?.focus();
 }
 
-/**
- * Build a split-style dropdown trigger for Issues workflow actions.
- * Click opens the mode menu; choosing a mode runs onSelect.
- */
+/** Build a split-style dropdown trigger for Issues workflow actions. */
 export function createIssuesWorkflowDropdown(
   options: IssuesWorkflowDropdownOptions,
 ): HTMLDivElement {

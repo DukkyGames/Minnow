@@ -1,7 +1,3 @@
-/**
- * LLM-based summarization of dropped chat turns for context enforcement.
- */
-
 import { extractMessageText } from '../../api/chat';
 import { extractReasoningMessage } from '../../api/reasoning';
 import type { ChatCompletionBody } from '../../api/chat';

@@ -1,7 +1,3 @@
-/**
- * Operating mode types (General / Build / Plan / Orchestrate / Debug).
- */
-
 /** Stable ids — do not rename without migration. */
 export type ModeId =
   | 'general'

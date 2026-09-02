@@ -22,14 +22,12 @@ export class BoardGateError extends Error {
   }
 }
 
+// ── Gate args ────────────────────────────────────────────────────────────────
+
 function optionName(token) {
   return token.slice(2).replaceAll('-', '_');
 }
 
-/**
- * Parse a strict, dependency-free command line.
- * Specs use `{ type: 'string'|'integer'|'boolean', multiple?, min?, max?, default? }`.
- */
 export function parseBoardGateArgs(argv, specs) {
   const values = {};
   const seen = new Set();
@@ -84,6 +82,8 @@ export function parseBoardGateArgs(argv, specs) {
   }
   return values;
 }
+
+// ── Catalog ──────────────────────────────────────────────────────────────────
 
 export async function resolveCatalogScenarios(requested = []) {
   const { getBoardScenario, listBoardScenarioMetadata } = await importTsModule(
@@ -176,6 +176,8 @@ async function waitForTerminal(manager, runId, timeoutMs) {
   throw new BoardGateError(`Scenario manager did not settle run ${runId}`, 'timeout', BOARD_GATE_EXIT.timeout);
 }
 
+// ── Run board ────────────────────────────────────────────────────────────────
+
 export async function runManagedBoardGate({
   gate,
   scenarios,
@@ -231,6 +233,8 @@ export async function runManagedBoardGate({
 export function printGateResult(result) {
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
+
+// ── CLI ──────────────────────────────────────────────────────────────────────
 
 export async function runBoardGateMain(action) {
   try {

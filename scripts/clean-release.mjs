@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-/**
- * Remove release/win-unpacked before electron-builder repackages (avoids app.asar lock on Windows).
- */
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,13 +11,11 @@ const winUnpackedDirs = [
   path.join(repoRoot, 'release', 'win-unpacked'),
 ];
 
-// Kill packaged / dev Electron instances that hold app.asar open.
 execSync(`node "${path.join(repoRoot, 'scripts', 'kill-minnow-processes.mjs')}"`, {
   stdio: 'inherit',
   cwd: repoRoot,
 });
 
-/** Prefer delete; on Windows fall back to rename when app.asar is still open (Explorer, AV, etc.). */
 async function clearWinUnpacked(winUnpacked) {
   const maxAttempts = 5;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {

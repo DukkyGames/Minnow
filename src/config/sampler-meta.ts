@@ -16,8 +16,6 @@ export interface SamplerGlobalMeta extends SamplerPreset {
 }
 
 export const DEFAULT_SAMPLER_GLOBAL: SamplerGlobalMeta = {
-  // Qwen "thinking mode, general tasks": temperature 1.0, top_p 0.95, top_k 20.
-  // Neutral penalty fields (0 / 1 / 0) populate Settings inputs but are omitted on send.
   temperature: 1.0,
   topP: 0.95,
   topK: 20,

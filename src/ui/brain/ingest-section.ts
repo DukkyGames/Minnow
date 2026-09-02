@@ -1,7 +1,3 @@
-/**
- * Brain app — Ingest section: submit raw sources to POST /ingest.
- */
-
 import { ingestBrainSource } from '../../brain/client';
 
 let bindingsDone = false;

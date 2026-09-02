@@ -1,10 +1,4 @@
-/**
- * P3-D — overflow frequency over a journal.
- *
- * Pure fold of `touches.overflow` events. The gate currently journals and
- * continues; this report is how a later phase decides whether the gate should
- * grow teeth, without putting that decision in the control plane.
- */
+/** Overflow frequency over a journal. */
 
 /**
  * @typedef {object} OverflowTaskRow
@@ -27,11 +21,6 @@
 
 /**
  * Aggregate overflow events: how often, which tasks, which files.
- *
- * `actual` is the overflowing paths (outside declared globs). Counts are by
- * event, not by unique path-per-task — a file rewritten on two attempts
- * contributes two.
- *
  * @param {Iterable<{ type?: string, taskId?: string, actual?: unknown }>} events
  * @returns {TouchesOverflowReport}
  */

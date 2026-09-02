@@ -13,15 +13,12 @@ export async function startNewDesktopGeneralChat(): Promise<void> {
 }
 
 export function renderDesktopChatMessages(): void {
-  /* no-op */
 }
 
 export function syncDesktopChatSessionSwitch(): void {
-  /* no-op */
 }
 
 export function wireDesktopComposerControls(): void {
-  /* no-op */
 }
 
 export function getDesktopChatScrollElement(): HTMLElement | null {

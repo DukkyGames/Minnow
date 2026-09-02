@@ -1,7 +1,3 @@
-/**
- * Convert LSP 0-based positions to CodeMirror document offsets.
- */
-
 import type { EditorState } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import type { LspPosition, LspRange, LspTextEdit } from '../../lsp/completion-client';

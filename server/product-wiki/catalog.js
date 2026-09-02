@@ -45,7 +45,6 @@ async function resolveDocumentationRoot() {
     try {
       if ((await fs.stat(candidate)).isDirectory()) return candidate;
     } catch {
-      // Continue to the packaged extraResources candidate.
     }
   }
   throw new Error('Minnow documentation is not installed.');

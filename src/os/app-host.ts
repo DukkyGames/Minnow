@@ -11,6 +11,9 @@ import type { AppId, LaunchOptions } from './types';
 import type { SettingsSectionId } from '../ui/settings-page-types';
 import { shouldSuppressDesktopChrome } from './shell-chrome';
 import { mountOsMobileDrawerBackdrops } from '../ui/mobile-drawer-portal';
+
+// ── Layers ───────────────────────────────────────────────────────────────────
+
 const APP_LAYER_IDS: Record<AppId, string> = {
   code: 'osAppLayer-code',
   settings: 'settingsView',
@@ -68,7 +71,6 @@ function mountAppLayers(): void {
     codeWrap.dataset.osApp = 'code';
     if (topbar) codeWrap.appendChild(topbar);
     codeWrap.appendChild(appBody);
-    // Status bar spans the full stage width, below every column in .app-body.
     const statusBar = document.getElementById('codeStatusBar');
     if (statusBar) codeWrap.appendChild(statusBar);
     const welcome = document.getElementById('welcomeView');
@@ -112,7 +114,6 @@ function isAppPageLayerOpen(appId: AppId): boolean {
   if (!PAGE_OPEN_LAYER_APPS.has(appId)) return true;
   const layer = layerForApp(appId);
   if (!layer) return false;
-  // Page modules mark readiness with `is-open`; the OS shell still needs `is-active`.
   return layer.classList.contains('is-open') && layer.classList.contains('is-active');
 }
 
@@ -165,7 +166,6 @@ function closeAllAppPages(): void {
     if (id === 'expertsView') {
       const view = document.getElementById('expertsView');
       const desktopMount = document.getElementById('desktopExpertsMount');
-      // Lab panel on the desktop overlay — preserve is-open while reparented there.
       if (view && desktopMount?.contains(view)) {
         continue;
       }
@@ -173,9 +173,7 @@ function closeAllAppPages(): void {
     if (id === 'issuesView') {
       const view = document.getElementById('issuesView');
       const chatArea = document.getElementById('chatArea');
-      // Code sidebar embed — restore to apps layer before clearing is-open.
       if (view && chatArea?.contains(view)) {
-        // Keep this DOM-only so app-host does not import the Issues UI module.
         const appsLayer = document.getElementById('osAppsLayer');
         appsLayer?.appendChild(view);
         view.classList.remove('issues-page--embedded', 'is-open');
@@ -191,6 +189,8 @@ function closeAllAppPages(): void {
 
 /** Defer OS layer visibility until lazy page CSS + `is-open` are applied (avoids FOUC). */
 type OpenAppPageLayerReveal = { animateEnter: boolean };
+
+// ── Open page ────────────────────────────────────────────────────────────────
 
 async function openAppPage(
   appId: AppId,
@@ -318,7 +318,6 @@ async function openAppPage(
         await showCodeStageSection(section);
         break;
       }
-      // Chat workspace: drop every stage overlay without painting chat twice.
       await closeOtherCodeStageViews();
       if (options?.chatId?.trim()) {
         const { switchToCodeChat } = await import('./chat-launch');
@@ -338,14 +337,14 @@ async function openAppPage(
 
   if (layerReveal != null) {
     const staleGeneration = generation != null && generation !== syncGeneration;
-    // Hash bumps from page open (e.g. Brain #/app/brain → #/app/brain/graph) can stale the
-    // generation before we reveal the layer; still show when this app remains foreground.
     if (!staleGeneration || getForegroundAppId() === appId) {
       showAppLayer(appId, layerReveal.animateEnter);
     }
     if (staleGeneration) return;
   }
 }
+
+// ── Show layer ───────────────────────────────────────────────────────────────
 
 /** Show the requested app layer and hide others without a blank intermediate frame. */
 export function showAppLayer(appId: AppId, animateEnter = false): void {
@@ -436,6 +435,8 @@ function syncFromSnapshot(snapshot: InstanceSnapshot): void {
     );
   }
 }
+
+// ── Init ─────────────────────────────────────────────────────────────────────
 
 /** Wire app layer visibility to instance + router state. */
 export function initAppHost(): void {

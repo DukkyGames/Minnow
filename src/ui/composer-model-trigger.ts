@@ -1,8 +1,3 @@
-/**
- * Compact active-model label on composer surfaces (desktop chat + Code).
- * Opens a fixed popover wired to the canonical #modelSelect catalog.
- */
-
 import { decodeModelSelectKey, resolveModelSelectValueForChat } from '../lib/model-select-key';
 import { syncBoardHeaderReasoning } from './orchestrate-board-reasoning.ts';
 import { getModelRowForSelectOrCanonicalId, updateModelLoadUnloadButtons } from '../api/models';
@@ -90,6 +85,8 @@ let globalsBound = false;
 let shortcutBound = false;
 let unregisterExternalCloser: (() => void) | null = null;
 
+// ── Finders ──────────────────────────────────────────────────────────────────
+
 /** True when an element is connected and laid out in the viewport. */
 function isElementVisible(el: HTMLElement): boolean {
   if (!el.isConnected) return false;
@@ -153,6 +150,8 @@ export function syncBoardModelChipTrigger(): void {
   const boardTrigger = findBoardModelTrigger();
   if (boardTrigger) syncTrigger(boardTrigger);
 }
+
+// ── Sync ─────────────────────────────────────────────────────────────────────
 
 function getModelSelect(): HTMLSelectElement | null {
   return document.getElementById('modelSelect') as HTMLSelectElement | null;
@@ -234,8 +233,6 @@ function syncMenubarLoadDot(trigger: ComposerModelTrigger, selectValue: string):
         : 'unknown';
   }
   trigger.dotEl.dataset.loadState = state;
-  // Separate from loadState: a loaded model that is *working* animates, a loaded idle
-  // one does not. Glanceable without opening the menu.
   const busy = state === 'loaded' && Boolean(activitySuffixForModelId(canonicalActivityId(selectValue)));
   if (busy) trigger.dotEl.dataset.busy = 'true';
   else delete trigger.dotEl.dataset.busy;
@@ -248,10 +245,7 @@ function canonicalActivityId(selectValue: string): string {
   return decoded?.modelId?.trim() || selectValue.trim();
 }
 
-/**
- * Repaint only what telemetry changes — the trigger dots and the open menu's activity
- * suffixes. Deliberately not `syncComposerModelTriggers`, which rebuilds the menu.
- */
+/** Repaint only what telemetry changes — the trigger dots and the open menu's activity suffixes. */
 function syncActivityOnly(): void {
   for (const trigger of triggers) syncMenubarLoadDot(trigger, resolveTriggerSelectValue(trigger));
   syncModelActivityIndicators();
@@ -267,7 +261,6 @@ function syncTrigger(trigger: ComposerModelTrigger): void {
   if (isMenubarStyleVariant(trigger.variant)) {
     trigger.labelEl.textContent = model;
     if (trigger.providerEl) {
-      // Skip provider when it duplicates the model name (e.g. fake-board branding).
       const showProvider =
         Boolean(provider) &&
         provider.trim().toLowerCase() !== model.trim().toLowerCase();
@@ -313,6 +306,8 @@ export function syncComposerModelTriggers(): void {
   if (openTrigger) rebuildOpenMenu();
   updateModelLoadUnloadButtons();
 }
+
+// ── Menu ─────────────────────────────────────────────────────────────────────
 
 function handleComposerModelPick(trigger: ComposerModelTrigger, modelId: string): void {
   if (trigger.variant === 'menubar') {
@@ -383,7 +378,6 @@ function positionPanel(trigger: ComposerModelTrigger): void {
     return;
   }
 
-  // Prefer above the trigger — composer sits at the bottom of the viewport.
   let top = rect.top - panelHeight - gap;
   if (top < margin) {
     top = rect.bottom + gap;
@@ -402,15 +396,12 @@ function positionMenubarExpandLabel(trigger: ComposerModelTrigger): void {
   const expand = trigger.expandEl;
   if (!expand) return;
   const rect = trigger.trigger.getBoundingClientRect();
-  // Board header is dense (telemetry sits to the left). Drop the label under the
-  // icon so it never paints over the instrument strip.
   if (trigger.variant === 'board') {
     expand.style.left = `${rect.left + rect.width / 2}px`;
     expand.style.top = `${rect.bottom + 6}px`;
     expand.style.right = 'auto';
     return;
   }
-  // Menubar: anchor to the left of the icon — label grows leftward, icon stays fixed.
   expand.style.left = `${rect.left - 6}px`;
   expand.style.top = `${rect.top + rect.height / 2}px`;
   expand.style.right = 'auto';
@@ -567,6 +558,8 @@ export function closeComposerModelMenu(): void {
   }
   detachGlobalListeners();
 }
+
+// ── Build ────────────────────────────────────────────────────────────────────
 
 function openMenu(trigger: ComposerModelTrigger): void {
   const sel = getModelSelect();
@@ -803,6 +796,8 @@ function buildTrigger(variant: ComposerModelVariant): ComposerModelTrigger {
   return entry;
 }
 
+// ── Mount ────────────────────────────────────────────────────────────────────
+
 /** Mount a compact model trigger into an anchor element. */
 export function mountComposerModelTrigger(
   anchor: HTMLElement,
@@ -830,10 +825,7 @@ export function mountBoardModelChipTrigger(anchor: HTMLElement): void {
   anchor.appendChild(entry.root);
 }
 
-/**
- * Re-home the existing board chip, or mount one. Live Boards paints replace the
- * header; moving the node keeps the menu and the `#modelSelect` catalog intact.
- */
+/** Re-home the existing board chip, or mount one. */
 export function adoptBoardModelChipTrigger(anchor: HTMLElement): void {
   ensureGlobals();
   const existing = findBoardModelTrigger();
@@ -916,8 +908,6 @@ export function initComposerModelTriggers(): void {
 
   mountChatAppComposerModelTrigger();
 
-  // App-wide, not a Models-page side effect: the header is on screen everywhere. The
-  // feed opens its stream on this first subscriber and closes it on teardown.
   if (!activityFeedUnsub) {
     activityFeedUnsub = subscribeServeActivityFeed(() => {
       syncActivityOnly();

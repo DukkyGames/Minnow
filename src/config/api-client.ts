@@ -28,6 +28,8 @@ import {
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
+// ── Transport ────────────────────────────────────────────────────────────────
+
 /**
  * Fetch `keepalive` bodies are capped at 64 KiB by the Fetch spec (Chromium enforces).
  * Larger keepalive PUTs are often a silent no-op — prefer a small PATCH beacon below this.
@@ -92,6 +94,8 @@ async function parseJsonResponse<T>(res: Response): Promise<T> {
   }
   return res.json() as Promise<T>;
 }
+
+// ── Sessions ─────────────────────────────────────────────────────────────────
 
 /** GET /api/config/status */
 export async function fetchConfigStatus(): Promise<ConfigStatusResponse> {
@@ -170,6 +174,8 @@ export async function searchSessions(
   return Array.isArray(body.results) ? body.results : [];
 }
 
+// ── Issues ───────────────────────────────────────────────────────────────────
+
 /** GET /api/config/bugs */
 export async function getBugs(): Promise<BugsState> {
   const res = await fetch('/api/config/bugs', { cache: 'no-store' });
@@ -235,6 +241,8 @@ export async function putReviews(state: unknown): Promise<void> {
   });
   await parseJsonResponse<{ ok: boolean }>(res);
 }
+
+// ── Session writes ───────────────────────────────────────────────────────────
 
 /** Raised when the server rejected a write because another window advanced the store. */
 export class SessionsRevisionConflictError extends Error {
@@ -324,11 +332,9 @@ export function putSessionsKeepalive(
       body,
       keepalive: true,
     }).catch(() => {
-      /* ignore — server may already be down during pagehide */
     });
     return true;
   } catch {
-    /* ignore — nothing else we can do during unload */
     return false;
   }
 }
@@ -381,7 +387,6 @@ export function flushSessionsOnShutdown(
     if (transport === 'beacon') {
       const queued = sendSessionsPatchBeacon(delta);
       if (queued) return { transport, clearedOk: true };
-      // Beacon rejected — fall through.
     } else if (splitSessionsPatchBeacons(delta)) {
       return { transport: 'beacon', clearedOk: true };
     }
@@ -404,7 +409,6 @@ function splitSessionsPatchBeacons(delta: SessionsPatchDelta): boolean {
   for (const chat of chats) {
     const piece: SessionsPatchDelta = { baseVersion: delta.baseVersion, chats: [chat] };
     if (utf8ByteLength(JSON.stringify(piece)) >= SESSIONS_BEACON_MAX_BYTES) {
-      // One chat alone is over the cap — nothing smaller left to try.
       allQueued = false;
       continue;
     }
@@ -421,6 +425,8 @@ function splitSessionsPatchBeacons(delta: SessionsPatchDelta): boolean {
   }
   return allQueued;
 }
+
+// ── Other config ─────────────────────────────────────────────────────────────
 
 /** GET /api/config/tools */
 export async function getTools(): Promise<ToolConfig> {

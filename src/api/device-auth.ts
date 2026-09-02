@@ -1,7 +1,3 @@
-/**
- * Companion pairing bootstrap and host-side device management API.
- */
-
 import {
   clearDeviceToken,
   getDeviceToken,
@@ -55,7 +51,6 @@ export async function exchangePairingCode(code: string): Promise<PairingExchange
   const normalized = normalizePairingCode(code);
   if (!normalized) throw new Error('Enter the 6-digit pairing code from the host');
 
-  // This exact bootstrap request is the only API operation that accepts no token.
   const response = await fetch('/api/auth/pair', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

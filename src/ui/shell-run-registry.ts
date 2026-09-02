@@ -1,7 +1,3 @@
-/**
- * Tracks in-flight agent shell runs (blocking SSE + background) for kill UI.
- */
-
 export interface ShellRunEntry {
   runId: string;
   command: string;

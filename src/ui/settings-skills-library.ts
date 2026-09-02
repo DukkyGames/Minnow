@@ -1,7 +1,3 @@
-/**
- * Skills Library settings: browse curated packs, install/remove, add from GitHub URL.
- */
-
 import '../styles/settings-general.css';
 import '../styles/settings-skills-library.css';
 import { refreshSkillCatalog, getAllSkillCatalog } from '../skills/client';

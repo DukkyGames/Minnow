@@ -1,8 +1,3 @@
-/**
- * Post-review actions shared by Source Control and Issues.
- * Merge confirm is extracted from the SCC PR detail so both surfaces stay in sync.
- */
-
 import { appConfirm } from '../../ui/app-dialog.ts';
 import { prMerge, prView, type CheckState } from '../../state/forge-api.ts';
 import {

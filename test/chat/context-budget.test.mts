@@ -40,6 +40,8 @@ function assistantWithTools(content: string | null, toolCalls: ToolCall[]): ApiM
   };
 }
 
+// ── resolveContextBudget ─────────────────────────────────────────────────────
+
 describe('resolveContextBudget', () => {
   test('effectiveLimit is 90% of model limit', () => {
     const resolved = resolveContextBudget({
@@ -103,6 +105,8 @@ describe('resolveContextBudget', () => {
   });
 });
 
+// ── estimateApiMessageTokens ─────────────────────────────────────────────────
+
 describe('estimateApiMessageTokens', () => {
   test('tool output is priced above prose of the same length', () => {
     const text = 'x'.repeat(3600);
@@ -159,6 +163,8 @@ describe('estimateApiMessageTokens', () => {
   });
 });
 
+// ── applyContextBudget truncate ──────────────────────────────────────────────
+
 describe('applyContextBudget truncate', () => {
   test('drops oldest history after system block', () => {
     const messages: ApiMessage[] = [
@@ -199,6 +205,8 @@ describe('applyContextBudget truncate', () => {
     assert.equal((out.messages[1] as { content: string }).content, 'two');
   });
 });
+
+// ── applyContextBudget slide ─────────────────────────────────────────────────
 
 describe('applyContextBudget slide', () => {
   test('removes oldest turns and keeps minRecentTurns', () => {
@@ -256,6 +264,8 @@ describe('applyContextBudget slide', () => {
     assert.ok(serialized.includes('new task'));
   });
 });
+
+// ── applyContextBudget dropMiddle ────────────────────────────────────────────
 
 describe('applyContextBudget dropMiddle', () => {
   test('compresses board-task tool loops after a single user seed', () => {
@@ -349,6 +359,8 @@ describe('applyContextBudget dropMiddle', () => {
   });
 });
 
+// ── hard truncate single message ─────────────────────────────────────────────
+
 describe('hard truncate single message', () => {
   test('adds truncation marker on oversized user line', () => {
     const messages: ApiMessage[] = [system('s'), user('z'.repeat(8000))];
@@ -395,6 +407,8 @@ function assertValidToolSequence(messages: ApiMessage[]): void {
     }
   }
 }
+
+// ── applyContextBudget preserves ─────────────────────────────────────────────
 
 describe('applyContextBudget preserves tool-call pairing (sub-agent single turn)', () => {
   test('dropMiddle never orphans a tool result after system', () => {
@@ -450,6 +464,8 @@ describe('applyContextBudget preserves tool-call pairing (sub-agent single turn)
   });
 });
 
+// ── partitionTurns tool ──────────────────────────────────────────────────────
+
 describe('partitionTurns tool screenshot follow-ups', () => {
   test('binds an image follow-up to the assistant tool-call unit', () => {
     const messages: ApiMessage[] = [
@@ -478,6 +494,8 @@ describe('partitionTurns tool screenshot follow-ups', () => {
   });
 });
 
+// ── formatContextTrimStatus ──────────────────────────────────────────────────
+
 describe('formatContextTrimStatus', () => {
   test('includes policy and drop count', () => {
     const line = formatContextTrimStatus('slide', 4, false);
@@ -485,6 +503,8 @@ describe('formatContextTrimStatus', () => {
     assert.match(line, /4 older turns/);
   });
 });
+
+// ── applyContextBudget archive ───────────────────────────────────────────────
 
 describe('applyContextBudget archive', () => {
   test('archive policy uses slide behavior', () => {

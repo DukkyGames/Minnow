@@ -1,8 +1,3 @@
-/**
- * Minnow dev server: Vite + /api/* middleware for LM Studio tool execution.
- * Runtime wiring lives in server/runtime/* for reuse by a future Electron HTTP host.
- */
-
 import { createServer } from 'vite';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -51,8 +46,9 @@ import {
 
 const PORT = resolveMinnowPort();
 
+// ── Crash log ────────────────────────────────────────────────────────────────
+
 /**
- * Append one crash record to ~/.minnow/logs/crash.jsonl. Never throws.
  * @param {{ kind: string, message: string, stack?: string }} entry
  */
 function logServerCrash(entry) {
@@ -67,15 +63,9 @@ function logServerCrash(entry) {
     });
     fs.appendFileSync(path.join(dir, 'crash.jsonl'), `${line}\n`, 'utf8');
   } catch {
-    /* last resort — cannot recover if the disk/path is unavailable */
   }
 }
 
-// The dev host previously had no global handlers, so a single stray async error
-// (e.g. a broken pipe when a managed dev server is force-killed) would exit the
-// whole `node server.js` process with code 1 and take the Electron shell down with
-// it. The packaged Electron host already logs-and-survives (electron/main.ts); mirror
-// that here so dev does not crash, and so the stack is captured for diagnosis.
 process.on('uncaughtException', (err) => {
   const message = err instanceof Error ? err.message : String(err);
   const stack = err instanceof Error ? err.stack : undefined;
@@ -91,11 +81,8 @@ process.on('unhandledRejection', (reason) => {
   console.error('[minnow] unhandledRejection (kept alive):', reason);
 });
 
-/**
- * Launch Electron in a detached child process (avoids Vite self-fetch deadlock).
- * Success/failure is handled inside the launcher — do not treat its exit code as
- * Electron launch status (MIN-264: detached bootstrap can exit non-zero spuriously).
- */
+// ── Electron ─────────────────────────────────────────────────────────────────
+
 function launchElectronShell(port, localUrl, appRoot) {
   const launcher = path.join(appRoot, 'scripts', 'launch-electron-after-vite.mjs');
   const child = spawn(process.execPath, [launcher, '--port', String(port)], {
@@ -114,9 +101,9 @@ function launchElectronShell(port, localUrl, appRoot) {
   child.unref();
 }
 
+// ── Boot ─────────────────────────────────────────────────────────────────────
+
 async function main() {
-  // Drop stale dev-host metadata from a prior crash so Electron does not attach
-  // to an orphaned server on the preferred port while this boot binds elsewhere.
   clearDevHostState();
 
   const appRoot = getAppRoot();
@@ -159,7 +146,6 @@ async function main() {
   console.log(`Workspace: ${workspacePath}`);
   console.log(`Minnow data: ${homePath}`);
 
-  // Warm editor deps before publishing dev-host state (avoids missing dist-*.js chunk URLs).
   await vite.listen();
   for (const url of [
     '/src/main.ts',
@@ -245,11 +231,9 @@ async function main() {
       .catch((err) => console.error('[shutdown]', err))
       .finally(() => process.exit(0));
   });
-  // Skip auto-open for CI / headless CLI / when Electron is already the host.
   if (process.env.MINNOW_HEADLESS === '1') {
     console.log('Headless: UI auto-open skipped (MINNOW_HEADLESS=1)');
   } else if (process.env.BROWSER === 'none' || process.env.MINNOW_ELECTRON === '1') {
-    /* explicit no UI */
   } else if (process.env.MINNOW_BROWSER === '1') {
     openBrowser(localUrl);
     console.log('Opened in system browser (MINNOW_BROWSER=1). Built-in Chromium preview uses the Electron shell by default.');

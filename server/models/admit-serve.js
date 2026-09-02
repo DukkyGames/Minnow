@@ -1,21 +1,10 @@
-/**
- * Pure llama.cpp residency policy — cap, VRAM/RAM budget, LRU eviction order.
- *
- * Kept I/O-free so tests can lock cap/budget/LRU without spawning llama-server.
- * `serve.js` applies the result with `stopServe`. This is **not** llama-server
- * router mode: each resident is its own process; Minnow picks which `baseUrl`
- * a completion hits.
- */
-
 import path from 'node:path';
 import { isCpuLlamaVariant, launchBudgetBytes } from '../../src/models/launch-plan.mjs';
 import { estimateRunMemory, GIB } from '../../src/models/memory-model.mjs';
 
-/** Idle llama.cpp serves unload after 20 minutes of no completions. */
 export const SERVE_IDLE_TTL_MS = 20 * 60 * 1000;
 
 /**
- * Backend id for estimateRunMemory overhead tables.
  * @param {string | null | undefined} variant
  */
 function backendFromVariant(variant) {
@@ -29,14 +18,6 @@ function backendFromVariant(variant) {
 }
 
 /**
- * How many llama.cpp processes may stay resident.
- *
- * GPU uses the **card rating** (`gpuVramGb`), not `launchBudgetBytes` (which
- * subtracts WDDM/UI reserve and would keep a 16 GB card at cap 1).
- * CPU defaults to **1**: llama.cpp already saturates host RAM bandwidth and
- * shares the box with the OS + Minnow renderer — two GGUFs would swap.
- * `llama-cpp.json` `models_max` (integer ≥ 1) always wins when set.
- *
  * @param {{ userModelsMax?: unknown, budgetGb: number, isCpu: boolean }} opts
  * @returns {number}
  */
@@ -61,7 +42,6 @@ export function resolveModelsMax(opts) {
 }
 
 /**
- * Cap + byte budget for one incoming plan on this machine.
  * @param {{ hardware?: object, variant?: string, userModelsMax?: unknown }} opts
  */
 export function resolveResidencyLimits(opts) {
@@ -69,8 +49,6 @@ export function resolveResidencyLimits(opts) {
   const variant = opts.variant ?? 'cpu';
   const isCpu = isCpuLlamaVariant(variant);
   const budgetBytes = launchBudgetBytes(hardware, variant);
-  // GPU: card size so 16 GB → cap 2. CPU: RAM launch budget (unused for the
-  // default cap of 1, but still the over-budget ceiling when models_max is raised).
   const budgetGb = isCpu
     ? budgetBytes / GIB
     : Number(hardware.gpuVramGb) > 0
@@ -85,12 +63,6 @@ export function resolveResidencyLimits(opts) {
 }
 
 /**
- * Bytes the new (or resident) plan is expected to occupy on the constrained pool.
- * GPU → VRAM; CPU → RAM. Exact GGUF `geometry` uses `estimateRunMemory`; otherwise
- * planner `estimateGb` counts. 4-byte serve-test stubs have no geometry but still
- * carry a heuristic `estimateGb` (~1 GiB KV), so integration tests must pin
- * `hardware` — do not rely on the runner's `os.freemem()`.
- *
  * @param {object | null | undefined} plan
  * @returns {number}
  */
@@ -102,19 +74,13 @@ export function estimatePlanMemoryBytes(plan) {
       geometry: plan.geometry,
       weightsBytes: Number(plan.weightsBytes) || 0,
       ctx: Number(plan.ctx) || 0,
-      // buildLlamaServerLaunch stamps the resolved per-side types onto the plan, so a
-      // manual q8_0/f16 pair is sized as a pair rather than as either type doubled.
       cacheType: {
         k: typeof plan.cache_type_k === 'string' ? plan.cache_type_k : plan.cache_type,
         v: typeof plan.cache_type_v === 'string' ? plan.cache_type_v : plan.cache_type,
       },
-      // null ngl (GPU auto) ⇒ full-offload estimate, matching unset `-ngl`.
       nGpuLayers: plan.n_gpu_layers == null ? undefined : Number(plan.n_gpu_layers),
       backend: backendFromVariant(plan.variant),
       swaFull: plan.swa_full === true,
-      // A draft model is a second set of weights sharing the same device budget.
-      // `specContextBytes` is llama-server's own post-load figure for a speculative
-      // context (MTP included, which has no second weights file to measure).
       draftWeightsBytes:
         (Number(plan.draftWeightsBytes) || 0) + (Number(plan.specContextBytes) || 0),
     });
@@ -125,16 +91,7 @@ export function estimatePlanMemoryBytes(plan) {
 }
 
 /**
- * LRU victims to stop before starting `incoming`. Never includes `incomingId`.
- * Missing `lastUsedAt` is treated as oldest (0) so a restored row is first out.
- *
- * @param {{
- *   residents: Array<{ id: string, lastUsedAt?: number, estimateBytes?: number }>,
- *   incomingEstimateBytes: number,
- *   incomingId?: string,
- *   modelsMax: number,
- *   budgetBytes: number,
- * }} opts
+ * @param {{ residents: Array<{ id: string, lastUsedAt?: number, estimateBytes?: number }>, incomingEstimateBytes: number, incomingId?: string, modelsMax: number, budgetBytes: number, }} opts
  * @returns {Array<{ id: string, lastUsedAt?: number, estimateBytes?: number }>}
  */
 export function pickEvictions(opts) {
@@ -142,8 +99,6 @@ export function pickEvictions(opts) {
   const remaining = opts.residents.filter((row) => row.id !== incomingId);
   const incomingBytes = Number(opts.incomingEstimateBytes) || 0;
   const modelsMax = Math.max(1, Number(opts.modelsMax) || 1);
-  // 0 / NaN / missing = probe failed or host reported no free RAM. Cap still
-  // applies; a zero budget must not evict every resident on the first extra load.
   const budgetBytes = Number(opts.budgetBytes);
   const hasBudget = Number.isFinite(budgetBytes) && budgetBytes > 0;
   const evicted = [];
@@ -169,14 +124,12 @@ export function pickEvictions(opts) {
 }
 
 /**
- * Match a completion `model` id to a serve row: `--alias` (libraryId), label, filename, stem.
  * @param {{ libraryId?: string, modelLabel?: string, modelPath?: string }} row
  * @param {string | null | undefined} modelId
  */
 export function serveMatchesModelId(row, modelId) {
   const id = String(modelId ?? '').trim();
   if (!id || !row) return false;
-  // Normalize Windows paths so basename works on Unix CI hosts.
   const normalizedPath = String(row.modelPath || '').replace(/\\/g, '/');
   const base = path.basename(normalizedPath);
   const stem = base.replace(/\.gguf$/i, '');

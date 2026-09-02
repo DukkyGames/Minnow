@@ -1,7 +1,3 @@
-/**
- * Context menu for file tree rows and empty tree background.
- */
-
 import { isFileTreeServerAvailable } from './file-tree-server';
 import { getFileTreeClipboard } from './file-tree-clipboard';
 import { pasteTargetDirForPath } from './file-tree-path';
@@ -21,6 +17,8 @@ export interface FileTreeMenuContext {
 
 let menuEl: HTMLDivElement | null = null;
 let dismissBound = false;
+
+// ── Shell ────────────────────────────────────────────────────────────────────
 
 function ensureMenuElement(): HTMLDivElement {
   if (menuEl) return menuEl;
@@ -57,6 +55,8 @@ export interface FilePanelContextMenuItem {
 }
 
 type MenuItemDef = FilePanelContextMenuItem;
+
+// ── Items ────────────────────────────────────────────────────────────────────
 
 /** Copy workspace-relative path to the system clipboard (files and folders). */
 function buildCopyPathItem(path: string): MenuItemDef {
@@ -279,6 +279,8 @@ function buildBackgroundMenuItems(targetDir: string): MenuItemDef[] {
     },
   ];
 }
+
+// ── Show ─────────────────────────────────────────────────────────────────────
 
 /** Show a file-panel context menu at viewport coordinates (tree or viewer). */
 export function showFilePanelContextMenu(

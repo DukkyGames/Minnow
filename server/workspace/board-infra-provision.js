@@ -1,16 +1,3 @@
-/**
- * Board infra auto-provisioning (MIN-285 Phase 2).
- *
- * GAP-4 scope split: shared services (docker compose, fixed host ports) are
- * board-global and provisioned once, keyed by content signature stored in
- * board.provisionedSignatures. Per-task deps (node_modules, per-worktree venv)
- * are provisioned per worktree root.
- *
- * The handler runs against the worktree workspaceRoot (passed as the top-level
- * workspaceRoot field in the POST body, validated + set as the tool-context
- * override) so getEffectiveWorkspaceRoot() returns the correct worktree path.
- */
-
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -39,10 +26,6 @@ function sha1(str) {
   return crypto.createHash('sha1').update(str).digest('hex').slice(0, 16);
 }
 
-/**
- * Compute a short content-based signature for the given files in root.
- * Returns null when none of the files exist.
- */
 async function contentSignature(root, filenames) {
   const parts = [];
   for (const name of filenames) {
@@ -54,12 +37,10 @@ async function contentSignature(root, filenames) {
 }
 
 /**
- * Detect and run infra provisioning steps for a worktree.
- *
- * @param {string} workspaceRoot  absolute worktree path
+ * @param {string} workspaceRoot
  * @param {object} opts
- * @param {number}  [opts.timeoutMs]  per-command timeout (default 180 000)
- * @param {string[]} [opts.services]  docker compose service names to bring up (all if empty)
+ * @param {number} [opts.timeoutMs]
+ * @param {string[]} [opts.services]
  * @returns {Promise<{ ok: boolean, steps: string[], failed: string[], signatures: string[] }>}
  */
 export async function provisionBoardInfra(workspaceRoot, opts = {}) {
@@ -69,7 +50,6 @@ export async function provisionBoardInfra(workspaceRoot, opts = {}) {
   const failed = [];
   const signatures = [];
 
-  // ── 1. Docker Compose (shared services, board-global key) ─────────────────
   const composeFile =
     (await fileExists(path.join(workspaceRoot, 'docker-compose.yml')))
       ? 'docker-compose.yml'
@@ -99,17 +79,12 @@ export async function provisionBoardInfra(workspaceRoot, opts = {}) {
     }
   }
 
-  // ── 2. Node.js deps (per-worktree) ────────────────────────────────────────
   const packageJsonPath = path.join(workspaceRoot, 'package.json');
   const nodeModulesPath = path.join(workspaceRoot, 'node_modules');
-  // `fileExists` (access) reports a dangling/looping junction as present — inspect the
-  // link instead, so a broken node_modules is not read as "deps already provisioned".
   const nodeModulesState = await fileExists(packageJsonPath)
     ? await inspectDepDir(nodeModulesPath)
     : 'real-dir';
   if (nodeModulesState === 'broken') {
-    // Repairing the link is dep-symlinks' job (it needs the source root); report it so
-    // the task is classified infra instead of installing through a broken link.
     failed.push(
       `node_modules in ${workspaceRoot} is a broken link — re-provision the worktree dep links`,
     );
@@ -139,14 +114,12 @@ export async function provisionBoardInfra(workspaceRoot, opts = {}) {
     }
   }
 
-  // ── 3. Python deps (per-worktree venv — never global pip) ─────────────────
   const hasPyproject = await fileExists(path.join(workspaceRoot, 'pyproject.toml'));
   const hasRequirements = await fileExists(path.join(workspaceRoot, 'requirements.txt'));
   if (hasPyproject || hasRequirements) {
     const venvPath = path.join(workspaceRoot, '.venv');
     const hasVenv = await fileExists(venvPath);
     if (!hasVenv) {
-      // Create venv first
       try {
         const res = await runProcess('python3', ['-m', 'venv', '.venv'], {
           cwd: workspaceRoot,
@@ -162,14 +135,12 @@ export async function provisionBoardInfra(workspaceRoot, opts = {}) {
       }
     }
 
-    // Only install if venv now exists (or already existed)
     if (await fileExists(venvPath)) {
       const isWindows = process.platform === 'win32';
       const pipBin = isWindows
         ? path.join(venvPath, 'Scripts', 'pip')
         : path.join(venvPath, 'bin', 'pip');
 
-      // Prefer uv if available
       const hasUv = await fileExists(path.join(venvPath, isWindows ? 'Scripts/uv' : 'bin/uv'))
         .then(() => true).catch(() => false);
 
@@ -206,11 +177,6 @@ export async function provisionBoardInfra(workspaceRoot, opts = {}) {
   return { ok: failed.length === 0, steps, failed, signatures };
 }
 
-/**
- * Server tool handler for board_provision_infra.
- * The workspaceRoot is resolved via getEffectiveWorkspaceRoot() so the caller
- * should pass it as the top-level workspaceRoot field in the POST body.
- */
 export async function toolBoardProvisionInfra(args) {
   const workspaceRoot = getEffectiveWorkspaceRoot();
   const services = Array.isArray(args?.services) ? args.services : [];

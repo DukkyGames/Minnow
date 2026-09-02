@@ -1,10 +1,3 @@
-/**
- * Recover the latest plan path from chat history (save_file under documentation/plans/).
- *
- * Planner / Super Plan presentation — not a board engine. Moved out of
- * `src/chat/orchestrate/` in MIN-714.
- */
-
 import { normalizeOrchestratePlanPath } from './plan-path.ts';
 import type {
   AssistantToolCallMessage,
@@ -116,11 +109,6 @@ export interface FindLastPlanSavePathOptions {
   normalizePath?: (raw: string) => string | undefined;
 }
 
-/**
- * Latest workspace-relative plan path written via save_file to documentation/plans/*.md.
- * Scans history newest-first (optionally restricted to `[startIndex, endIndex]`, e.g. a
- * single run's own output range); correlates tool rows with preceding assistant tool_calls.
- */
 export function findLastPlanSavePath(
   history: Message[],
   options: FindLastPlanSavePathOptions = {},

@@ -1,26 +1,3 @@
-/**
- * P5-A — The browser session the server drives (MIN-719).
- *
- * `launchBrowser()` returns a **result**, never a bare throw for the two cases
- * the ladder has to degrade on: no browser installed, and browser automation
- * disabled in settings. Everything else is a typed rejection.
- *
- * Containment, in three independent layers, because a Final Tester running
- * unattended at 3am has nobody to unstick it:
- *
- *   1. every CDP command carries a deadline;
- *   2. a navigation that misses its deadline triggers a browser-level liveness
- *      probe — a slow page keeps the session, a dead browser is killed;
- *   3. an absolute `hardTimeoutMs` watchdog kills the browser regardless.
- *
- * After any kill the profile directory is removed and the session is `dead`;
- * every later call rejects immediately rather than waiting on a socket that
- * will never answer.
- *
- * P5-B wraps this as tools. It is deliberately not a tool surface itself: no
- * string formatting for models, no tool-call error prefixes, no prompt text.
- */
-
 import { isNavigationAllowed, originFromUrl } from '../cdp/allowlist.js';
 import { loadBrowserConfig } from '../cdp/browser-config.js';
 import { writeScreenshot } from '../cdp/paths.js';
@@ -42,12 +19,11 @@ import {
 } from './process.js';
 import { takeSnapshot } from './snapshot.js';
 
-/** Typed failures a caller may want to branch on. */
 export class BrowserDriverError extends Error {
   /**
-   * @param {string} message
-   * @param {'gone' | 'allowlist' | 'timeout' | 'protocol' | 'closed' | 'invalid'} code
-   */
+ * @param {string} message
+ * @param {'gone' | 'allowlist' | 'timeout' | 'protocol' | 'closed' | 'invalid'} code
+ */
   constructor(message, code) {
     super(message);
     this.name = 'BrowserDriverError';
@@ -57,7 +33,6 @@ export class BrowserDriverError extends Error {
 
 /**
  * @typedef {'user' | 'hard-timeout' | 'unresponsive' | 'external' | 'launch-failure'} SessionEndReason
- *
  * @typedef {object} SessionStatus
  * @property {boolean} alive
  * @property {number} pid
@@ -83,15 +58,15 @@ function delay(ms) {
 
 export class BrowserSession {
   /**
-   * @param {object} input
-   * @param {import('./process.js').BrowserProcessHandle} input.handle
-   * @param {import('./cdp-client.js').CdpClient} input.client
-   * @param {string} input.targetId
-   * @param {import('./launch-options.js').NormalizedLaunchOptions} input.options
-   * @param {string[]} input.allowedOriginPatterns
-   * @param {string} input.browserVersion
-   * @param {boolean} input.ownsProfileDir
-   */
+ * @param {object} input
+ * @param {import('./process.js').BrowserProcessHandle} input.handle
+ * @param {import('./cdp-client.js').CdpClient} input.client
+ * @param {string} input.targetId
+ * @param {import('./launch-options.js').NormalizedLaunchOptions} input.options
+ * @param {string[]} input.allowedOriginPatterns
+ * @param {string} input.browserVersion
+ * @param {boolean} input.ownsProfileDir
+ */
   constructor(input) {
     this.handle = input.handle;
     this.client = input.client;
@@ -116,8 +91,6 @@ export class BrowserSession {
     this.closing = null;
 
     this.handle.child.on('exit', () => {
-      // The browser died without us asking. Record it; do not throw from here —
-      // an exit listener that throws takes the host process with it.
       if (this.alive) this.#markDead('external', 'the browser process exited unexpectedly');
     });
     this.hardTimer = setTimeout(() => {
@@ -125,17 +98,15 @@ export class BrowserSession {
     }, this.options.hardTimeoutMs);
     if (typeof this.hardTimer.unref === 'function') this.hardTimer.unref();
 
-    // …and if it died in the gap between launching and getting here, the
-    // listener above will never fire, so check once directly.
     if (this.handle.child.exitCode !== null || this.handle.child.signalCode !== null) {
       this.#markDead('external', 'the browser process exited unexpectedly');
     }
   }
 
   /**
-   * @param {SessionEndReason} reason
-   * @param {string} detail
-   */
+ * @param {SessionEndReason} reason
+ * @param {string} detail
+ */
   #markDead(reason, detail) {
     if (!this.alive) return;
     this.alive = false;
@@ -145,7 +116,6 @@ export class BrowserSession {
     try {
       this.client.close(`browser session ended: ${reason}`);
     } catch {
-      /* ignore */
     }
   }
 
@@ -175,14 +145,8 @@ export class BrowserSession {
   }
 
   /**
-   * Is the browser itself answering, independent of whatever the page is doing?
-   *
-   * This is the question that separates "the page is slow" from "the browser is
-   * wedged", and it is answered over HTTP, not over the page's own execution
-   * context, so a spinning renderer cannot mask a healthy browser or vice versa.
-   *
-   * @returns {Promise<boolean>}
-   */
+ * @returns {Promise<boolean>}
+ */
   async isResponsive() {
     if (!this.alive) return false;
     const health = await checkBrowserHealth(this.handle.port, LIVENESS_PROBE_TIMEOUT_MS);
@@ -190,33 +154,23 @@ export class BrowserSession {
   }
 
   /**
-   * Append to the console ring buffer. Public because `launchBrowser` wires the
-   * CDP listeners after construction; not part of the API P5-B should call.
-   * @param {string} level
-   * @param {string} text
-   */
+ * @param {string} level
+ * @param {string} text
+ */
   recordConsoleEntry(level, text) {
     this.console.push({ level, text: capText(text, 2_000), at: Date.now() });
     if (this.console.length > MAX_CONSOLE_ENTRIES) this.console.shift();
   }
 
-  /** Console, `Log` entries, and uncaught exceptions collected since launch. */
   consoleMessages() {
     return this.console.map((entry) => ({ ...entry }));
   }
 
   /**
-   * Navigate, subject to the browser allowlist.
-   *
-   * Returns `{ outcome: 'loaded' }` or `{ outcome: 'timeout' }`. A timeout is
-   * **not** automatically fatal: the load event may simply be late, and the DOM
-   * is often readable anyway. What is fatal is a browser that stops answering,
-   * and that is checked explicitly.
-   *
-   * @param {string} url
-   * @param {{ timeoutMs?: number }} [opts]
-   * @returns {Promise<{ outcome: 'loaded' | 'timeout', url: string, title: string, killed?: boolean }>}
-   */
+ * @param {string} url
+ * @param {{ timeoutMs?: number }} [opts]
+ * @returns {Promise<{ outcome: 'loaded' | 'timeout', url: string, title: string, killed?: boolean }>}
+ */
   async navigate(url, opts = {}) {
     this.#assertAlive();
     const target = String(url ?? '').trim();
@@ -254,11 +208,6 @@ export class BrowserSession {
 
     this.lastSnapshot = null;
     try {
-      // `Page.navigate` does not acknowledge until the navigation commits, so a
-      // server that accepts the connection and never answers hangs the *command*,
-      // not just the load event. It therefore gets the navigation deadline, and
-      // its rejection is absorbed here — an unhandled one would take the host
-      // process down a quarter of an hour after the caller had already moved on.
       const ack = this.client.send('Page.navigate', { url: target }, { timeoutMs: timeoutMs + 1_000 });
       ack.catch(() => {});
       const acked = await Promise.race([
@@ -280,12 +229,9 @@ export class BrowserSession {
     }
 
     if (!loaded) {
-      // Stop the load so the DOM settles at whatever it managed, then find out
-      // whether the browser is merely busy or actually gone.
       try {
         await this.client.send('Page.stopLoading', {}, { timeoutMs: LIVENESS_PROBE_TIMEOUT_MS });
       } catch {
-        /* the probe below is the real verdict */
       }
       const responsive = await this.isResponsive();
       if (!responsive) {
@@ -312,16 +258,10 @@ export class BrowserSession {
   }
 
   /**
-   * Evaluate an expression in the page and return it by value.
-   *
-   * `awaitPromise` is off by default: a promise that never settles is the most
-   * common way to wedge a driver, and the caller who genuinely needs one can
-   * opt in with its own deadline.
-   *
-   * @param {string} expression
-   * @param {{ timeoutMs?: number, awaitPromise?: boolean }} [opts]
-   * @returns {Promise<unknown>}
-   */
+ * @param {string} expression
+ * @param {{ timeoutMs?: number, awaitPromise?: boolean }} [opts]
+ * @returns {Promise<unknown>}
+ */
   async evaluate(expression, opts = {}) {
     this.#assertAlive();
     const result = await this.client.send(
@@ -342,10 +282,9 @@ export class BrowserSession {
   }
 
   /**
-   * Visible text of the page body.
-   * @param {{ maxChars?: number, timeoutMs?: number }} [opts]
-   * @returns {Promise<string>}
-   */
+ * @param {{ maxChars?: number, timeoutMs?: number }} [opts]
+ * @returns {Promise<string>}
+ */
   async text(opts = {}) {
     const value = await this.evaluate(
       'document.body ? document.body.innerText : ""',
@@ -355,10 +294,9 @@ export class BrowserSession {
   }
 
   /**
-   * Serialized DOM.
-   * @param {{ maxChars?: number, timeoutMs?: number }} [opts]
-   * @returns {Promise<string>}
-   */
+ * @param {{ maxChars?: number, timeoutMs?: number }} [opts]
+ * @returns {Promise<string>}
+ */
   async html(opts = {}) {
     const value = await this.evaluate(
       'document.documentElement ? document.documentElement.outerHTML : ""',
@@ -368,11 +306,9 @@ export class BrowserSession {
   }
 
   /**
-   * Accessibility tree with stable uids. The uids are what a later interaction
-   * API (P5-B) resolves against, so the snapshot is retained on the session.
-   * @param {{ timeoutMs?: number }} [opts]
-   * @returns {Promise<import('./snapshot.js').Snapshot>}
-   */
+ * @param {{ timeoutMs?: number }} [opts]
+ * @returns {Promise<import('./snapshot.js').Snapshot>}
+ */
   async snapshot(opts = {}) {
     this.#assertAlive();
     await this.client.send('Accessibility.enable', {}, { timeoutMs: this.options.commandTimeoutMs });
@@ -384,17 +320,9 @@ export class BrowserSession {
   }
 
   /**
-   * PNG to `~/.minnow/screenshots/`, served by the existing
-   * `/api/browser/screenshot/:id` route.
-   *
-   * **Evidence only.** Nothing in the driver or its tests asserts on a
-   * screenshot — the known hazard is that these round-trips hang, so this is a
-   * best-effort artefact for a human, with its own deadline, and a failure here
-   * is returned rather than thrown.
-   *
-   * @param {{ timeoutMs?: number }} [opts]
-   * @returns {Promise<{ ok: true, id: string, filePath: string, sizeBytes: number } | { ok: false, error: string }>}
-   */
+ * @param {{ timeoutMs?: number }} [opts]
+ * @returns {Promise<{ ok: true, id: string, filePath: string, sizeBytes: number } | { ok: false, error: string }>}
+ */
   async screenshot(opts = {}) {
     if (!this.alive) return { ok: false, error: 'browser session is not usable' };
     try {
@@ -415,11 +343,10 @@ export class BrowserSession {
   }
 
   /**
-   * Force-kill the browser and tear the profile down. Idempotent, never throws.
-   * @param {SessionEndReason} [reason]
-   * @param {string} [detail]
-   * @returns {Promise<SessionStatus>}
-   */
+ * @param {SessionEndReason} [reason]
+ * @param {string} [detail]
+ * @returns {Promise<SessionStatus>}
+ */
   async kill(reason = 'user', detail = '') {
     if (this.closing) {
       await this.closing;
@@ -435,11 +362,8 @@ export class BrowserSession {
   }
 
   /**
-   * Normal shutdown. Same path as {@link kill} — Chromium's `Browser.close` is
-   * a courtesy that a wedged browser ignores, and a driver that waits on a
-   * courtesy is a driver that hangs.
-   * @returns {Promise<SessionStatus>}
-   */
+ * @returns {Promise<SessionStatus>}
+ */
   async close() {
     return this.kill('user', 'closed by caller');
   }
@@ -450,22 +374,14 @@ export class BrowserSession {
  * @property {true} ok
  * @property {BrowserSession} session
  * @property {import('./discover.js').BrowserCapabilityAvailable} capability
- *
  * @typedef {object} LaunchFailure
  * @property {false} ok
  * @property {'disabled-in-settings' | 'no-chromium-browser' | 'env-path-missing' | 'launch-failed'} reason
  * @property {string} detail
- *
  * @typedef {LaunchSuccess | LaunchFailure} LaunchResult
  */
 
 /**
- * Launch an isolated browser and attach to its first page target.
- *
- * Returns a result rather than throwing for every case the ladder must degrade
- * on. A machine with no browser, or a user who turned automation off, gets
- * `{ ok: false, reason }` — not an exception, and certainly not a failed run.
- *
  * @param {import('./launch-options.js').LaunchOptions & { label?: string }} [opts]
  * @returns {Promise<LaunchResult>}
  */
@@ -540,8 +456,6 @@ export async function launchBrowser(opts = {}) {
       ownsProfileDir,
     });
 
-    // Console + errors are the assertion surface the issue asks for, so they are
-    // wired before the caller gets the session and can navigate anywhere.
     client.on('Runtime.consoleAPICalled', (params) => {
       const args = /** @type {any[]} */ (params.args ?? []);
       const text = args
@@ -566,7 +480,6 @@ export async function launchBrowser(opts = {}) {
     try {
       await client.send('Log.enable', {}, { timeoutMs: options.commandTimeoutMs });
     } catch {
-      // Log domain is optional; console + exceptions already cover the ladder.
     }
 
     return { ok: true, session, capability };

@@ -1,8 +1,3 @@
-﻿/**
- * Plain-text extraction for TTS read-aloud (no UI dependencies).
- */
-
-/** Strip markdown-ish content to plain speech text. */
 export function extractSpeechText(content: string): string {
   let cleaned = content.replace(/<think(?:ing)?>[\s\S]*?<\/think(?:ing)?>/gi, '');
   cleaned = cleaned.replace(/```[\s\S]*?```/g, ' ');

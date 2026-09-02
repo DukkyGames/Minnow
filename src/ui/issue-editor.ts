@@ -1,20 +1,3 @@
-/**
- * The issue description editor: WYSIWYG over canonical markdown.
- *
- * The architecture is the point. The document is a list of blocks
- * (`markdown-blocks.ts`), each holding its exact source. Blocks render into one
- * contenteditable host, one element each. Typing marks the containing block
- * dirty; **only dirty blocks are re-serialized**. Everything else is emitted
- * from `source` verbatim, so an agent's footnotes, HTML and reference links
- * come back byte-identical whether or not the editor understands them.
- *
- * Blocks it cannot represent render read-only with a label saying why. The
- * WYSIWYG never becomes a second source of truth, because there is exactly one
- * direction in which it is allowed to write.
- *
- * Phase 3 of `documentation/plans/issues-app-v2.md`.
- */
-
 import '../styles/issue-editor.css';
 
 import {
@@ -65,8 +48,6 @@ interface EditorState {
 
 const HEADING_TAGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const;
 
-/* ── rendering ─────────────────────────────────────────────────────────── */
-
 function blockElement(state: EditorState, block: MarkdownBlock): HTMLElement {
   const el = renderBlockBody(state, block);
   el.dataset.blockId = block.id;
@@ -103,13 +84,7 @@ function renderBlockBody(state: EditorState, block: MarkdownBlock): HTMLElement 
   }
 }
 
-/**
- * Blank runs are structure, not content.
- *
- * They exist so `serializeMarkdownBlocks` reproduces the original spacing, but
- * showing them would put empty boxes between every paragraph. They render as a
- * zero-height marker the caret skips.
- */
+/** Blank runs are structure, not content. */
 function renderBlank(block: MarkdownBlock): HTMLElement {
   const el = document.createElement('div');
   el.className = 'mn-editor__blank';
@@ -184,10 +159,7 @@ function renderList(block: MarkdownBlock): HTMLElement {
   return el;
 }
 
-/**
- * Checklists are state: the boxes are real inputs, and toggling one rewrites a
- * single character in the block source rather than re-serializing the list.
- */
+/** Checklists are state: the boxes are real inputs, and toggling one rewrites a single character in the block source rather than re-serializing the list. */
 function renderTaskList(state: EditorState, block: MarkdownBlock): HTMLElement {
   const el = document.createElement('ul');
   el.className = 'mn-editor__list mn-editor__list--tasks';
@@ -236,7 +208,6 @@ function renderTable(block: MarkdownBlock): HTMLElement {
       .map((cell) => cell.trim());
 
   rows.forEach((line, index) => {
-    // Row 1 is the alignment delimiter; it is structure, not content.
     if (index === 1) return;
     const tr = document.createElement('tr');
     for (const cell of cells(line)) {
@@ -251,15 +222,6 @@ function renderTable(block: MarkdownBlock): HTMLElement {
   return wrap;
 }
 
-/**
- * Fenced code renders highlighted and read-only, and swaps to a plain textarea
- * on click.
- *
- * Editing code inside contenteditable is where WYSIWYG editors go wrong —
- * autocorrect, smart quotes and stray `<div>`s all land in the user's source.
- * A textarea is the honest control for a block whose whole point is that its
- * characters are exact.
- */
 function renderCode(state: EditorState, block: MarkdownBlock): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'mn-editor__code';
@@ -323,19 +285,12 @@ function renderCode(state: EditorState, block: MarkdownBlock): HTMLElement {
   return wrap;
 }
 
-/* ── block state ───────────────────────────────────────────────────────── */
-
 function replaceBlock(state: EditorState, id: string, next: MarkdownBlock): void {
   state.blocks = state.blocks.map((block) => (block.id === id ? next : block));
   state.dirty.delete(id);
 }
 
-/**
- * Pull a dirty block's markdown back out of its DOM.
- *
- * Everything here is the inverse of `renderBlockBody`, and only ever runs for
- * blocks the user actually typed in.
- */
+/** Pull a dirty block's markdown back out of its DOM. */
 function serializeBlockElement(el: HTMLElement, block: MarkdownBlock): string {
   const kind = block.kind;
 
@@ -377,8 +332,6 @@ function serializeTaskList(el: HTMLElement, block: MarkdownBlock): string {
       const box = li.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
       const textEl = li.querySelector('.mn-editor__task-text');
       const text = textEl ? htmlToInline(textEl).replace(/\n+/g, ' ').trim() : '';
-      // Keep the original marker and indent where one exists, so editing the
-      // text of an agent's `* [ ]` list does not silently restyle it to `- `.
       const prefix = items[index]?.prefix ?? '- ';
       return `${prefix}[${box?.checked ? 'x' : ' '}] ${text}`;
     })
@@ -413,13 +366,6 @@ function currentMarkdown(state: EditorState): string {
   return serializeMarkdownBlocks(next);
 }
 
-/**
- * Commit the document upstream and re-parse.
- *
- * Re-parsing is what turns typed markdown into structure: type `## ` at the
- * start of a paragraph and it becomes a heading here, without a separate set
- * of input rules that could disagree with the parser.
- */
 function commit(state: EditorState): void {
   const markdown = currentMarkdown(state);
   state.dirty.clear();
@@ -428,15 +374,12 @@ function commit(state: EditorState): void {
   render(state);
 }
 
-/* ── DOM plumbing ──────────────────────────────────────────────────────── */
-
 function render(state: EditorState): void {
   state.rendering = true;
   const selection = captureCaret(state);
   state.body.replaceChildren();
   for (const block of state.blocks) {
     const el = blockElement(state, block);
-    // Fingerprint for the dirty check in `markDirtyAtCaret`.
     el.dataset.renderedText = el.textContent ?? '';
     state.body.appendChild(el);
   }
@@ -462,12 +405,7 @@ interface CaretMark {
   offset: number;
 }
 
-/**
- * Remember the caret as a block id plus a text offset.
- *
- * A DOM node reference would not survive `replaceChildren`, and re-rendering
- * after every commit is what keeps the document and the DOM in step.
- */
+/** Remember the caret as a block id plus a text offset. */
 function captureCaret(state: EditorState): CaretMark | null {
   const selection = window.getSelection?.();
   if (!selection || selection.rangeCount === 0) return null;
@@ -519,8 +457,6 @@ function blockIdAtCaret(state: EditorState): string | null {
   return mark?.blockId ?? null;
 }
 
-/* ── toolbar ───────────────────────────────────────────────────────────── */
-
 interface ToolbarButton {
   id: string;
   label: string;
@@ -530,10 +466,6 @@ interface ToolbarButton {
 }
 
 function exec(command: string): void {
-  // `execCommand` is deprecated and still the only cross-browser way to apply
-  // inline formatting to a contenteditable selection without shipping a
-  // selection model. The output is normalized by `htmlToInline` on save, so
-  // whatever tags it emits never reach disk.
   document.execCommand(command, false);
 }
 
@@ -659,8 +591,6 @@ function buildToolbar(state: EditorState): HTMLElement {
     btn.title = button.label;
     if (button.icon) btn.innerHTML = iconHtml(button.icon as 'plus', { size: 14 });
     else btn.textContent = button.text ?? button.label;
-    // mousedown default would move focus out of the contenteditable and lose
-    // the selection the command is about to act on.
     btn.addEventListener('mousedown', (event) => event.preventDefault());
     btn.addEventListener('click', () => button.run(state));
     bar.appendChild(btn);
@@ -668,18 +598,7 @@ function buildToolbar(state: EditorState): HTMLElement {
   return bar;
 }
 
-/**
- * Mark the block the user is editing.
- *
- * The caret is the primary signal, because a formatting-only change (bold on a
- * selection) leaves the text identical. But the caret is not always resolvable
- * — an IME commit, a drop, a programmatic edit — and a missed block is a
- * silently dropped edit, so anything whose visible text has diverged from what
- * `render` produced is marked too.
- *
- * Both are narrow on purpose: a block nobody touched is never re-serialized,
- * which is what keeps untouched regions byte-identical.
- */
+/** Mark the block the user is editing. */
 function markDirtyAtCaret(state: EditorState): void {
   const id = blockIdAtCaret(state);
   if (id) state.dirty.add(id);
@@ -692,11 +611,8 @@ function markDirtyAtCaret(state: EditorState): void {
   }
 }
 
-/* ── slash menu ────────────────────────────────────────────────────────── */
-
 function slashItems(state: EditorState): MenuItem[] {
   const insert = (transform: (source: string) => string) => () => {
-    // Drop the `/` that opened the menu before applying the block change.
     convertBlock(state, (source) => transform(source.replace(/\/$/, '').trimEnd()));
   };
 
@@ -745,8 +661,6 @@ function slashItems(state: EditorState): MenuItem[] {
 }
 
 function replaceTrailingSlash(): void {
-  // The `/` is still in the DOM when the menu opens; remove it so the inserted
-  // text does not read `/@src/foo.ts`.
   const selection = window.getSelection?.();
   if (!selection || selection.rangeCount === 0) return;
   const range = selection.getRangeAt(0);
@@ -815,8 +729,6 @@ async function insertSubIssue(state: EditorState): Promise<void> {
   commit(state);
 }
 
-/* ── mount ─────────────────────────────────────────────────────────────── */
-
 /** Create the editor inside `host`. */
 export function createIssueEditor(
   host: HTMLElement,
@@ -855,7 +767,6 @@ export function createIssueEditor(
 
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.key === '/' && !event.ctrlKey && !event.metaKey) {
-      // Only at the start of an empty-ish line, so a URL never opens the menu.
       window.setTimeout(() => maybeOpenSlashMenu(state), 0);
       return;
     }
@@ -865,7 +776,6 @@ export function createIssueEditor(
       return;
     }
     if (event.key === 'Escape') {
-      // Let the peek panel handle it; committing first means nothing is lost.
       commit(state);
     }
   };
@@ -877,8 +787,6 @@ export function createIssueEditor(
     options.onBlur?.();
   };
 
-  // Static import, not dynamic: `preventDefault` has to happen inside the
-  // paste event, and an awaited module load is already too late.
   const onPaste = (event: ClipboardEvent): void => {
     transformPaste(event, {
       issueId: options.issueId,
@@ -934,7 +842,6 @@ function maybeOpenSlashMenu(state: EditorState): void {
   const block = state.body.querySelector<HTMLElement>(`[data-block-id="${mark.blockId}"]`);
   if (!block) return;
   const text = block.textContent ?? '';
-  // `/` only opens the menu when it is the entire line so far.
   if (text.trim() !== '/') return;
 
   const rect = block.getBoundingClientRect();

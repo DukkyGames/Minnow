@@ -7,6 +7,8 @@
 
 import { isDesignModeUsingIframeGuest } from '../ui/preview-design-mode-guest';
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
 export interface DomRectLike {
   x: number;
   y: number;
@@ -66,6 +68,8 @@ export function setRegionCaptureTestHooks(hooks: RegionCaptureTestHooks | null):
 export function resetRegionCaptureForTests(): void {
   testHooks = null;
 }
+
+// ── Crop ─────────────────────────────────────────────────────────────────────
 
 /** Pure crop math: CSS guest rect × DPR, rounded and clamped to page pixels. */
 export function computeCropRect(
@@ -170,16 +174,12 @@ export async function compositeOverlayOntoCrop(
       overlayImg.onerror = () => reject(new Error('failed to decode overlay svg'));
       overlayImg.src = svgDataUrl;
     });
-    // The overlay SVG is sized in host CSS px (full preview host, not just the crop region);
-    // scale by dpr and translate by the crop origin (device px) so it lines up with the crop.
     const scale = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
     ctx.save();
     ctx.scale(scale, scale);
     ctx.drawImage(overlayImg, -crop.sx / scale, -crop.sy / scale);
     ctx.restore();
   } catch {
-    // Overlay failed to decode (unsupported SVG-in-canvas in this runtime) — fall back to the
-    // plain crop rather than losing the region capture entirely.
     overlayImg.src = '';
     canvas.width = 0;
     canvas.height = 0;
@@ -279,16 +279,14 @@ function buildCapturedBase(ctx: RegionCaptureContext, partial: Partial<CapturedR
   };
 }
 
+// ── Capture ──────────────────────────────────────────────────────────────────
+
 /**
  * Capture and crop the region for one element. Falls back to uploading the
  * full-page screenshot (with an explanatory `error`) when the crop canvas is
  * tainted (cross-origin preview content).
  */
 export async function captureRegion(ctx: RegionCaptureContext): Promise<CapturedRegion> {
-  // Design Mode's iframe guest is not the native WebContentsView that capturePage()/execJs
-  // target — that view is hidden while Design Mode is on, so a native capture would either be
-  // blank or block until the view is shown again (i.e. until Design Mode exits). Skip it: the
-  // chip/marker is created immediately with just its region outline, no raster crop.
   if (!testHooks && isDesignModeUsingIframeGuest()) {
     return buildCapturedBase(ctx, { error: 'design-mode preview — region marked without a raster crop' });
   }
@@ -356,8 +354,6 @@ export async function captureRegionWithOverlay(
     if ('dataUrl' in composited) {
       return { ...base, dataUrl: composited.dataUrl };
     }
-  } catch {
-    /* fall back to the uncomposited crop below */
-  }
+  } catch {}
   return base;
 }

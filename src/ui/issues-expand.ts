@@ -1,11 +1,3 @@
-/**
- * Issues sparkles expander — rewrite title + description from the current card.
- *
- * Streams into a review overlay. Apply is the only write; Discard / Escape /
- * backdrop leave the store untouched. Peek fields auto-save on edit, so the
- * proposal must not land there until the user accepts.
- */
-
 import { canExpandIssueDraft } from '../chat/issues/expand-issue-guards';
 import {
   mergeExpandedIssue,
@@ -48,6 +40,8 @@ let activeRun: ExpandRun | null = null;
 /** Test override; production loads the generations client on first expand. */
 let expandFetchImpl: ExpandIssueFetcher | null = null;
 
+// ── Fetcher ──────────────────────────────────────────────────────────────────
+
 export function setExpandIssueFetcherForTests(impl: ExpandIssueFetcher | null): void {
   expandFetchImpl = impl;
 }
@@ -85,6 +79,8 @@ function syncExpandButtons(): void {
     }
   });
 }
+
+// ── Overlay ──────────────────────────────────────────────────────────────────
 
 function overlayEls(): {
   form: HTMLFormElement;
@@ -261,6 +257,8 @@ export function closeIssueExpandOverlay(): void {
   discardExpand();
 }
 
+// ── Apply ────────────────────────────────────────────────────────────────────
+
 function discardExpand(): void {
   const run = activeRun;
   if (run) {
@@ -283,7 +281,6 @@ function applyExpand(): void {
 
   const description = els.description.value;
   const issueId = run.issueId;
-  // Drop the run before writing so a store-driven remount does not treat this as in-flight.
   clearActiveRun();
   updateIssue(issueId, { title, description });
   closeOverlay();
@@ -292,10 +289,7 @@ function applyExpand(): void {
   showToast('Issue expanded', 'success');
 }
 
-/**
- * Open the review overlay and stream a proposal. Does not write the store
- * until the user applies.
- */
+/** Open the review overlay and stream a proposal. */
 export async function startIssueExpandFromUi(issueId: string): Promise<void> {
   const issue = findIssueById(issueId);
   if (!issue) {

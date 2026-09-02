@@ -1,7 +1,3 @@
-/**
- * Hub dev-server view model — re-exports shared formatters from the Dev Servers screen module.
- */
-
 export {
   deriveHubDevServerView,
   formatHubDevServerMeta,

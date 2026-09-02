@@ -1,7 +1,3 @@
-/**
- * Expert system types: metadata, runtime profiles, and config.
- */
-
 import type { ModeId } from '../modes/types';
 
 export type ExpertAccent =

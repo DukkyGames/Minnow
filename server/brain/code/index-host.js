@@ -29,7 +29,6 @@ export function createNdjsonFramer(onLine) {
     push(chunk) {
       residual += chunk;
       const lines = residual.split(/\r?\n/);
-      // The trailing element is an incomplete line — hold it for the next chunk.
       residual = lines.pop() ?? '';
       for (const line of lines) {
         if (line) onLine(line);

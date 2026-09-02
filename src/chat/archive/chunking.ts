@@ -1,7 +1,3 @@
-/**
- * Split oversized stale ranges before Brain bundling (MIN-139).
- */
-
 import type { ApiMessage } from '../../types';
 import { estimateApiMessagesTokens } from '../context-budget';
 import type { ArchiveHistoryRange } from './types';

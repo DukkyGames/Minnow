@@ -1,35 +1,4 @@
-/**
- * P5-D — instrumentation for the unattended overnight proof (MIN-722).
- *
- * Everything here answers one question: *did the run need anyone?* Not whether
- * it finished — a run that finishes because someone nudged it at 3am has proved
- * nothing. The failure modes this exists to catch are the ones that only appear
- * over hours, and each of them is invisible to a pass/fail:
- *
- * - a slow leak in the effector's running map,
- * - a journal that grows until the fold is the slowest thing in the loop,
- * - a browser or a worktree that accumulates one orphan per attempt,
- * - a provider that starts rate-limiting at hour three,
- * - a cost that quietly makes the whole approach uneconomic.
- *
- * ## Why this is separate from the plan it measures
- *
- * `test/fixtures/orchestrator-v2-p5d/plan.md` is the *subject* of the overnight
- * run, not its implementation. It is real work of a realistic size, and the
- * agents do it. This module is the observer, and it deliberately shares no code
- * with what the agents are asked to build — an instrument that the run under
- * measurement can modify is not an instrument.
- *
- * ## Everything here is derived from the journal
- *
- * Not from a live listener attached before the run started. That matters for
- * the induced-failure part of the proof: when the server is killed at hour two,
- * an in-memory observer dies with it, and the numbers for the first two hours
- * die too. The journal survives, so the measurement does. Samples of things the
- * journal cannot know — RSS, live process counts — are the only exception, and
- * they are timestamped so a gap in them is visible as a gap rather than
- * silently interpolated.
- */
+/** Instrumentation for unattended overnight runs. */
 
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -47,11 +16,6 @@ function percentile(sorted, p) {
 
 /**
  * Journal size on disk, and how many events are in it.
- *
- * Size is the thing that grows without bound; event count is what makes it
- * interpretable. A journal that is large because the run was long is fine; one
- * that is large because a single event type is repeating is a leak.
- *
  * @param {string} boardId
  * @returns {Promise<{ bytes: number, events: number, byType: Record<string, number> }>}
  */
@@ -74,13 +38,6 @@ export async function journalSize(boardId) {
 
 /**
  * How long one fold of the whole journal takes, right now.
- *
- * This is the number P0-G's snapshot exists to keep flat, and the overnight run
- * is the first time it is measured at real scale. If it climbs with the journal
- * rather than staying flat, the snapshot is not doing its job — and the symptom
- * in production is a board that gets progressively less responsive over a night
- * rather than one that fails.
- *
  * @param {string} boardId
  * @returns {Promise<{ ms: number, events: number }>}
  */
@@ -94,14 +51,6 @@ export async function foldDuration(boardId) {
 
 /**
  * The wall-clock distribution of attempts.
- *
- * The mean is useless here — what matters is the tail. One attempt that took
- * forty minutes because a provider was throttling is the thing that turns a
- * six-hour run into a twelve-hour one, and it disappears into an average.
- *
- * An attempt with no `ended` is reported as `open`, never as duration zero: at
- * the end of a completed run an open attempt is itself a finding.
- *
  * @param {Array<Record<string, unknown>>} events
  */
 export function attemptDurations(events) {
@@ -150,17 +99,6 @@ export function attemptDurations(events) {
 
 /**
  * What the run cost, in tokens.
- *
- * Co-Coder's finding — +60% cost for +3.2% correctness — is the number V2 has
- * to be checked against, and it cannot be checked without this one. Attempts
- * whose provider reported no usage are counted separately and never as zero:
- * a run that is 80% unreported has no cost figure, and saying so is the honest
- * answer rather than reporting the 20% as if it were the total.
- *
- * `wasted` is the cost of attempts that produced nothing — crashed, timed out,
- * abandoned. That is the number that moves when reliability slips, and it is
- * invisible in a total.
- *
  * @param {Array<Record<string, unknown>>} events
  */
 export function tokenCost(events) {
@@ -202,18 +140,12 @@ export function tokenCost(events) {
     byRole,
     attemptsWithUsage,
     attemptsWithoutUsage,
-    // Without this flag a partial figure reads like a complete one.
     complete: attemptsWithoutUsage === 0 && attemptsWithUsage > 0,
   };
 }
 
 /**
  * Did the run report exactly once?
- *
- * The headline criterion, and the easiest to get wrong in a way nobody notices:
- * a run that reports twice is as much a failure of "set and forget" as one that
- * never reports, because the second report trains you to check.
- *
  * @param {Array<Record<string, unknown>>} events
  */
 export function reportCount(events) {
@@ -222,22 +154,13 @@ export function reportCount(events) {
   return {
     reports: reports.length,
     finishes: finishes.length,
-    // One report, and a run that actually reached the end. A run that finished
-    // without reporting and one that reported twice are different bugs, so the
-    // two counts stay separate rather than collapsing into a boolean.
     exactlyOnce: reports.length === 1,
     finishedWithoutReporting: finishes.length > 0 && reports.length === 0,
   };
 }
 
 /**
- * Live counts the journal cannot know: this process's memory, and the browser
- * and worktree processes still on the machine.
- *
- * Sampled rather than derived, so each carries the time it was taken. A gap in
- * the series is a gap, not a straight line between two points — during a
- * server kill the truth is "unknown", and interpolating over it would hide
- * exactly the interval the proof cares about.
+ * Live counts the journal cannot know: this process's memory, and the browser and worktree processes still on the machine.
  */
 export async function census() {
   const memory = process.memoryUsage();
@@ -260,12 +183,7 @@ export async function census() {
 }
 
 /**
- * Worktrees still on disk for a board, and whether the journal thinks any
- * attempt is still using them.
- *
- * One orphan is a bug; one orphan *per run* is the thing that fills a disk
- * overnight and is invisible in a single-run test.
- *
+ * Worktrees still on disk for a board, and whether the journal thinks any attempt is still using them.
  * @param {string} boardId
  * @param {string} worktreeRoot directory the board's slot worktrees live under
  */
@@ -302,9 +220,6 @@ export async function takeSample(input) {
   const { boardId, startedAt } = input;
   /** @type {Record<string, unknown>} */
   const sample = { at: Date.now(), elapsedMs: Date.now() - startedAt };
-  // Each measurement is independently guarded. A sampler that throws stops
-  // sampling, and a run with no samples after hour two is a run that cannot be
-  // diagnosed — which is the failure this whole module exists to prevent.
   for (const [key, fn] of /** @type {const} */ ([
     ['journal', () => journalSize(boardId)],
     ['fold', () => foldDuration(boardId)],
@@ -333,11 +248,6 @@ export async function takeSample(input) {
 
 /**
  * Sample on an interval until stopped.
- *
- * The loop is `setTimeout`-chained rather than `setInterval` so a slow sample
- * (a fold over a large journal is not instant) delays the next one instead of
- * stacking behind it. Over a night, stacking is how a sampler becomes the load.
- *
  * @param {{
  *   boardId: string,
  *   worktreeRoot?: string | null,
@@ -369,7 +279,6 @@ export function startSampler(options) {
       samples.push(sample);
       options.onSample?.(sample);
     } catch (err) {
-      // Never stop. A failed sample is a data point, not the end of the series.
       samples.push({
         at: Date.now(),
         elapsedMs: Date.now() - startedAt,
@@ -398,12 +307,7 @@ export function startSampler(options) {
 }
 
 /**
- * Compare a run against the recorded P2-G (N=1) and P3-E (N=2) baselines.
- *
- * States what moved and in which direction. It does not decide whether the run
- * "passed" — that is a judgement about a specific plan on a specific night, and
- * a function that pretends to make it would be believed.
- *
+ * Compare a run against the recorded (N=1) and (N=2) baselines.
  * @param {{ merged: number, retries: number, abandonments: number, ms: number }} run
  * @param {{ label: string, perRun: Array<{ merged: number, retries: number, abandoned: number, ms: number }> }} baseline
  */
@@ -431,9 +335,6 @@ export function compareToBaseline(run, baseline) {
   return {
     label: baseline?.label ?? 'baseline',
     comparable: true,
-    // The baselines are 3-task boards; a comparison of raw counts against an
-    // 18-task run is not meaningful, and saying so is more useful than a ratio
-    // that looks like a measurement.
     caveat:
       'the recorded baselines are 3-task boards at N=1 and N=2. Rates are comparable; ' +
       'raw counts are not.',

@@ -1,17 +1,3 @@
-/**
- * Client-side mail store with optimistic mutations.
- *
- * Every action used to call `refreshAll()` — refetch messages, folders and
- * summary, then rebuild the whole list DOM — so starring a message took a
- * server round trip before anything moved on screen. Here the change is applied
- * locally first and the request runs behind it; if the request fails the change
- * is rolled back and the caller is told, which is the only honest way to be
- * both fast and correct.
- *
- * The store owns the rows. It does not own the DOM: it announces changes and a
- * renderer decides what to repaint.
- */
-
 import type { EmailMessage } from '../../email/client';
 
 export type MailStoreListener = (state: MailStoreState) => void;
@@ -33,10 +19,7 @@ export interface MailStore {
   /** Replace the contents after a real fetch. */
   replace(messages: EmailMessage[], total: number): void;
   get(id: string): EmailMessage | undefined;
-  /**
-   * Apply `patch` immediately, run `commit`, and roll back if it rejects.
-   * @returns whether the change stuck
-   */
+  /** Apply `patch` immediately, run `commit`, and roll back if it rejects. */
   mutate(
     id: string,
     patch: Partial<EmailMessage>,
@@ -80,9 +63,6 @@ export function createMailStore(options: {
     replace(next, nextTotal) {
       messages = next;
       total = nextTotal;
-      // A fresh fetch is authoritative; anything still in flight will either
-      // land on top of it or roll back against a row that no longer exists,
-      // which `restore` handles by re-checking the index.
       pending.clear();
       emit();
     },
@@ -116,8 +96,6 @@ export function createMailStore(options: {
         pending.delete(id);
         return true;
       } catch (err) {
-        // Only roll back if this mutation is still the live one — a newer
-        // click on the same row has already superseded it.
         if (pending.get(id)?.restore === restore) {
           restore();
           pending.delete(id);
@@ -161,9 +139,6 @@ export function createMailStore(options: {
     applyServerFlags(id, flags) {
       const index = indexOf(id);
       if (index < 0) return;
-      // A local mutation that has not settled yet is the user's most recent
-      // intent; letting a server echo overwrite it would make the row flicker
-      // back to the old state.
       if (pending.has(id)) return;
 
       messages = [

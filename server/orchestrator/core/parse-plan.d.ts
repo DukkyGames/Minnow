@@ -1,8 +1,7 @@
 import type { ParseError, TaskGraph } from './types';
 
 /**
- * Board intake with no model call. Returns a validated, acyclic `TaskGraph`, or
- * every problem found, each with a line number.
+ * Board intake with no model call.
  */
 export function parsePlan(markdown: string): TaskGraph | ParseError[];
 

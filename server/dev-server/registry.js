@@ -84,7 +84,6 @@ async function writeRegistry(workspaceRoot, servers) {
       ? { .../** @type {Record<string, unknown>} */ (existingWs.devServersByPath) }
       : {};
 
-  // Store only overridable fields for startup.md-linked rows; command/cwd/health stay on disk.
   byPath[key] = {
     servers: servers.map((s) => {
       if (s.source === 'startup.md') {
@@ -165,7 +164,6 @@ function hydrateStartupEntry(entry, guide, settings) {
     command: guide.command,
     cwd: guide.cwd ?? entry.cwd ?? '.',
     healthUrl: guide.healthUrl ?? entry.healthUrl,
-    // Port/network stay from registry (user overrides); fall back to settings/guide.
     port: entry.port || settings.port || guide.port || DEFAULT_PORT,
     network: entry.network || settings.network || DEFAULT_NETWORK,
   };
@@ -267,7 +265,6 @@ export async function updateDevServer(workspaceRoot, id, patch) {
   const current = list[idx];
 
   if (current.source === 'startup.md') {
-    // Only persist overridable fields; command/cwd/health stay authoritative from startup.md.
     list[idx] = {
       ...current,
       name: typeof patch.name === 'string' && patch.name.trim() ? patch.name.trim() : current.name,
@@ -329,7 +326,6 @@ export async function deleteDevServer(workspaceRoot, id) {
 
 /** Clear persisted registries between tests (caller clears config; this is a no-op marker). */
 export function resetDevServerRegistryForTests() {
-  // Registry is config-backed; tests clear config.json. Export kept for API symmetry.
 }
 
 export { PRIMARY_ID as PRIMARY_DEV_SERVER_ID };

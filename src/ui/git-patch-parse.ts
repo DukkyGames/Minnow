@@ -1,7 +1,3 @@
-/**
- * Parse unified diff patch text into DiffLine rows for inline viewers.
- */
-
 import type { DiffLine } from '../chat/prompts/text-diff';
 
 /** Parse unified diff hunk lines (after @@ headers) into DiffLine[]. */

@@ -45,8 +45,6 @@ export const PHASE_2D_EMIT_ONLY_CAPABILITY_IDS = [
   'apps-settings-appearance',
   'mode-set-chat-mode',
   'mode-create-chat',
-  // Previously manual: executing these needs the Electron pane / a live session / a
-  // connected mailbox, but the model-side capability is emit-only like the rows above.
   'browser-navigate',
   'browser-snapshot',
   'browser-eval',

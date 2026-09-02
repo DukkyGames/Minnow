@@ -1,7 +1,3 @@
-/**
- * Super Plan stage runners — one function per pipeline stage.
- */
-
 import type { AggregateResult } from '../../agents/types';
 import { spawnSubAgent, waitForSubAgent } from '../../agents/orchestrator';
 import {
@@ -52,6 +48,8 @@ import {
 } from './state';
 import type { SuperPlanStageId } from './types';
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
 export type SuperPlanStageOutcome =
   | { kind: 'await_stream' }
   | { kind: 'blocked_user'; artifactPath?: string }
@@ -64,6 +62,8 @@ export interface SuperPlanStageRunHooks {
   /** Fires after Deep Research starts so the progress UI can subscribe to the stream. */
   onResearchStarted?: (researchId: string) => void;
 }
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 async function runChatTurnForStage(
   chat: Chat,
@@ -120,12 +120,6 @@ async function probeFileMetadata(path: string): Promise<'exists' | 'missing' | '
   return 'error';
 }
 
-/**
- * True when `path` exists in the workspace, false when it genuinely doesn't.
- * A transient tools-server error is retried once, then throws a distinct
- * error instead of reporting `false` — a hiccup here must not read as
- * "the plan wasn't saved".
- */
 async function fileExists(path: string): Promise<boolean> {
   const first = await probeFileMetadata(path);
   if (first !== 'error') return first === 'exists';
@@ -152,11 +146,6 @@ const RESEARCH_MAX_CONSECUTIVE_POLL_FAILURES = 5;
 
 type ResearchWaitResult = { kind: 'done'; report: string } | { kind: 'paused' };
 
-/**
- * Poll a Deep Research run until it finishes. Tolerates transient status-poll
- * failures, honors pipeline pause/cancel, and times out after 30 minutes with
- * an actionable error (the stage can be retried from the plan screen).
- */
 async function waitForResearchDone(
   chat: Chat,
   researchId: string,
@@ -232,8 +221,6 @@ export function assertPlanReviewerAggregate(
     throw new Error(`Plan review (pass ${pass}) did not return a sub-agent result.`);
   }
   if (result.status === 'cancelled' && result.error === 'timeout') {
-    // The sub-agent type's own wall-clock timer fired (possibly racing the
-    // stage's AbortSignal.timeout below) — report it the same way either way.
     throw reviewTimeoutError(pass, timeoutMs);
   }
   const summary = (result.outcome?.summary ?? result.summary ?? '').trim();
@@ -247,6 +234,8 @@ export function assertPlanReviewerAggregate(
   }
   return result;
 }
+
+// ── Stages ───────────────────────────────────────────────────────────────────
 
 async function runGrillStage(chat: Chat): Promise<SuperPlanStageOutcome> {
   const state = ensureSuperPlanState(chat);
@@ -284,9 +273,7 @@ async function resolveReattachableResearchId(state: {
     if (status.status === 'done' || status.status === 'running') {
       return existing;
     }
-  } catch {
-    /* stale id — start fresh */
-  }
+  } catch {}
   return null;
 }
 
@@ -406,11 +393,8 @@ async function runReviewStage(
       ? { modelId: config.reviewerModel.modelId.trim() }
       : {}),
   });
-  // Let pauseSuperPlan/cancelSuperPlan reach this run while it's in flight.
   patchSuperPlanState(chat, { reviewRunId: spawned.runId });
 
-  // Bound the wait so a hung reviewer cannot stall the pipeline forever;
-  // aborting the wait also cancels the sub-agent run.
   let result: unknown;
   try {
     result = await waitForSubAgent(
@@ -535,6 +519,8 @@ async function runPresentStage(chat: Chat): Promise<SuperPlanStageOutcome> {
   return { kind: 'blocked_user', artifactPath: planPath };
 }
 
+// ── Dispatch ─────────────────────────────────────────────────────────────────
+
 export async function runSuperPlanStage(
   chat: Chat,
   stageId: import('./types').SuperPlanStageId,
@@ -578,8 +564,6 @@ export async function finalizeStreamStage(
   stageId: import('./types').SuperPlanStageId,
 ): Promise<SuperPlanStageOutcome> {
   const state = ensureSuperPlanState(chat);
-  // Scope history scans to this stage's own turn so an older artifact from a
-  // prior draft/spec attempt can't be mistaken for this run's output.
   const run = newestRun(chat);
   const runRange = { startIndex: run?.outputHistoryStart, endIndex: run?.outputHistoryEnd };
 
@@ -589,10 +573,6 @@ export async function finalizeStreamStage(
       return { kind: 'done' };
 
     case 'spec_confirm': {
-      // The model may save the spec under a near-miss filename (still a valid
-      // reference artifact) — adopt whatever it actually saved this turn.
-      // Scoped to this run's window: an older spec save must not mask this
-      // attempt failing to save (same hazard as the draft case below).
       const savedSpecPath = findLastPlanSavePath(chat.history, {
         ...runRange,
         normalizePath: normalizeSuperPlanReferencePath,
@@ -621,7 +601,6 @@ export async function finalizeStreamStage(
           `Plan draft was not saved to ${expected}. Retry the stage to draft it again.`,
         );
       }
-      // Persist the actual save location so later stages and previews agree on one file.
       patchSuperPlanState(chat, { planPath: savedPlanPath });
       markSuperPlanStageStatus(chat, stageId, 'done', { artifactPath: savedPlanPath });
       return { kind: 'done', artifactPath: savedPlanPath };

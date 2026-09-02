@@ -1,10 +1,4 @@
-/**
- * P3-D — expand declared `touches` against the real workspace, and diff a
- * worktree to see whether a pass wrote outside that footprint.
- *
- * I/O lives here, not in `core/`. Expansion is journaled on `board.created`
- * so a later filesystem change cannot silently rewrite `plan()`.
- */
+/** Expand touches globs and detect overflow writes. */
 
 import { runProcess } from '../process-runner.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
@@ -67,10 +61,7 @@ export function attachTouchesExpansion(tasks, repoFiles) {
 }
 
 /**
- * Files this worktree changed relative to the integration (or first parent)
- * plus anything still uncommitted. Empty when git cannot answer — overflow
- * is evidence, never a reason to fail the attempt.
- *
+ * Files this worktree changed relative to the integration (or first parent) plus anything still uncommitted.
  * @param {string} worktree
  * @param {string} [baseRef]
  * @returns {Promise<string[]>}
@@ -101,9 +92,7 @@ export async function listChangedFiles(worktree, baseRef) {
 }
 
 /**
- * Resolve the same merge-base `listChangedFiles` uses so overflow and the
- * abandonment patch describe the same tree.
- *
+ * Resolve the same merge-base `listChangedFiles` uses so overflow and the abandonment patch describe the same tree.
  * @param {string} worktree
  * @param {string} [baseRef]
  * @returns {Promise<string>}
@@ -122,9 +111,7 @@ async function resolveDiffBase(worktree, baseRef) {
 }
 
 /**
- * Unified diff of this worktree relative to integration (or first parent),
- * plus unstaged changes. Capped to a patch, never a repo (MIN-712 / PRD §11).
- *
+ * Unified diff of this worktree relative to integration (or first parent), plus unstaged changes.
  * @param {string} worktree
  * @param {string} [baseRef]
  * @returns {Promise<{ files: string[], patch: string, truncated: boolean, originalLength?: number } | null>}

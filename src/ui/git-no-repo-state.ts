@@ -1,7 +1,3 @@
-/**
- * Shared empty state when a workspace path is not inside a git repository.
- */
-
 import '../styles/git-no-repo.css';
 import { iconHtml } from './icon';
 

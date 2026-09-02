@@ -1,9 +1,3 @@
-/**
- * Models workbench inspector panel show/hide (persisted in localStorage).
- * Kept separate from models-page.ts so library/inspector panels can open it
- * without a circular import through models-sections.
- */
-
 const STORAGE_KEY = 'minnow.models.inspector';
 
 function modelsRoot(): HTMLElement | null {
@@ -24,7 +18,6 @@ export function setModelsInspectorOpen(open: boolean): void {
   try {
     localStorage.setItem(STORAGE_KEY, open ? '1' : '0');
   } catch {
-    /* private mode */
   }
 }
 

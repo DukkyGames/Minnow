@@ -1,7 +1,3 @@
-/**
- * Resolve effective shell-sandbox mode for a chat (global vs board/autopilot).
- */
-
 import {
   getAllowUnsandboxedShellFromConfig,
   getShellSandboxFromConfig,
@@ -26,7 +22,6 @@ async function resolveBoardSandboxContext(chatId) {
     if (!useJsonSessionsStore()) {
       const ctx = await resolveChatWorktreeContext(trimmedId);
       if (!ctx.groupId) return { onBoard: false, boardMode: undefined };
-      // Indexed path may not carry board.shellSandbox yet — treat as on-board inherit.
       return { onBoard: true, boardMode: undefined, groupId: ctx.groupId };
     }
 
@@ -53,10 +48,9 @@ async function resolveBoardSandboxContext(chatId) {
 }
 
 /**
- * Full effective mode + allow-unsandboxed flag for createRun / tools.
  * @param {object} [params]
  * @param {string} [params.chatId]
- * @param {'off'|'prefer'|'require'} [params.modeOverride] explicit caller override
+ * @param {'off'|'prefer'|'require'} [params.modeOverride]
  * @param {boolean} [params.allowUnsandboxed]
  * @param {NodeJS.ProcessEnv} [params.env]
  * @returns {Promise<{ mode: 'off'|'prefer'|'require', allowUnsandboxed: boolean, onBoard: boolean, groupId?: string }>}

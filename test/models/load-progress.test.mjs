@@ -23,6 +23,8 @@ import {
 
 const GB = 1024 ** 3;
 
+// ── matchLoadPhase ───────────────────────────────────────────────────────────
+
 describe('matchLoadPhase', () => {
   it('starts at spawning when nothing has been printed', () => {
     assert.equal(matchLoadPhase('').key, 'spawning');
@@ -83,6 +85,8 @@ describe('matchLoadPhase', () => {
   });
 });
 
+// ── parseWeightLoadDots ──────────────────────────────────────────────────────
+
 describe('parseWeightLoadDots', () => {
   it('reads the b9628 tensor-copy row and ignores timestamp dots', () => {
     const log = [
@@ -95,6 +99,8 @@ describe('parseWeightLoadDots', () => {
     assert.equal(parseWeightLoadDots('this can take a while...'), null);
   });
 });
+
+// ── parseSpecContextBytes ────────────────────────────────────────────────────
 
 describe('parseSpecContextBytes', () => {
   it('reads the figure llama-server prints for an MTP context', () => {
@@ -119,6 +125,8 @@ describe('parseSpecContextBytes', () => {
   });
 });
 
+// ── resolveBytesPerMs ────────────────────────────────────────────────────────
+
 describe('resolveBytesPerMs', () => {
   it('prefers a prior measured on this exact model', () => {
     const rate = resolveBytesPerMs({
@@ -140,6 +148,8 @@ describe('resolveBytesPerMs', () => {
   });
 });
 
+// ── updateLoadRate ───────────────────────────────────────────────────────────
+
 describe('updateLoadRate', () => {
   it('seeds from the first sample and then eases toward later ones', () => {
     const first = updateLoadRate(0, { loadMs: 10_000, weightsBytes: 10 * GB });
@@ -158,6 +168,8 @@ describe('updateLoadRate', () => {
     assert.equal(updateLoadRate(0, { loadMs: 0, weightsBytes: 0 }), 0);
   });
 });
+
+// ── computeLoadProgress ──────────────────────────────────────────────────────
 
 describe('computeLoadProgress', () => {
   const weightsBytes = 10 * GB;
@@ -422,6 +434,8 @@ describe('computeLoadProgress', () => {
     assert.ok(result.percent < 100);
   });
 });
+
+// ── mlx-lm load progress ─────────────────────────────────────────────────────
 
 describe('mlx-lm load progress', () => {
   const weightsBytes = 10 * GB;

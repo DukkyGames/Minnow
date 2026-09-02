@@ -1,7 +1,3 @@
-﻿/**
- * In-memory generation state for backend-owned LLM streams.
- */
-
 import { randomUUID } from 'node:crypto';
 import { fireAndForget } from '../webhooks/emit.js';
 import {
@@ -23,11 +19,6 @@ import {
  */
 
 /**
- * In-process subscriber — a callback pair, not a fake HTTP socket.
- * Chunks are the same upstream SSE bytes HTTP subscribers receive.
- * Terminal status is a structured payload; the HTTP `event: end` sentinel is
- * SSE-framing for `ServerResponse` only (fetch-chat strips it before parsing).
- *
  * @typedef {object} LocalSubscriber
  * @property {(buf: Buffer) => void} onChunk
  * @property {(payload: ReturnType<typeof terminalEventPayload>) => void} onEnd
@@ -59,7 +50,6 @@ import {
  * @property {string | null} chatId
  */
 
-/** Per-generation SSE replay cap. Hitting it means the model never stopped. */
 const MAX_BYTES = 16 * 1024 * 1024;
 const MAX_BYTES_MESSAGE = `The model streamed more than ${MAX_BYTES / (1024 * 1024)} MB without finishing. It is likely looping — check that its tool calls are being parsed, or lower max tokens.`;
 const EVICT_MS_EPHEMERAL = 30_000;
@@ -69,14 +59,13 @@ const EVICT_MS_PERSIST = 5 * 60_000;
 const generations = new Map();
 
 /**
- * Per-subscriber outbound queue. When `res.write` returns false the chunk is
- * already in Node's buffer — dequeue it and wait on one `drain` before more writes.
- *
  * @typedef {{ queue: Buffer[], draining: boolean, endAfterFlush?: boolean }} SubscriberWriteState
  */
 
 /** @type {WeakMap<ServerResponse, SubscriberWriteState>} */
 const subscriberWrites = new WeakMap();
+
+// ── SSE write ────────────────────────────────────────────────────────────────
 
 /**
  * @param {ServerResponse} res
@@ -136,18 +125,14 @@ function detachSubscriber(state, res) {
     try {
       res.destroy();
     } catch {
-      /* ignore */
     }
   }
 }
 
 /**
- * Drain queued buffers to one SSE client. Never re-writes a chunk that
- * already returned false from `res.write` (Node has it in the internal buffer).
- *
  * @param {GenerationState} state
  * @param {ServerResponse} res
- * @param {{ terminal?: boolean }} [opts] — terminal flush after subscriber removed
+ * @param {{ terminal?: boolean }} [opts]
  */
 function flushSubscriberQueue(state, res, opts = {}) {
   if (!canWriteToSubscriber(res)) {
@@ -201,7 +186,6 @@ function flushSubscriberQueue(state, res, opts = {}) {
       try {
         res.destroy();
       } catch {
-        /* ignore */
       }
     }
   }
@@ -230,11 +214,9 @@ function writeToSubscriber(state, res, buf) {
 }
 
 /**
- * SSE sentinel so subscribers know the generation ended.
  * @param {GenerationState} state
  */
 function broadcastTerminalEvent(state) {
-  // Leading blank line ensures client `\n\n` framing never merges with the last upstream chunk.
   const line = `\n\nevent: end\ndata: ${JSON.stringify(terminalEventPayload(state))}\n\n`;
   const buf = Buffer.from(line, 'utf8');
   for (const res of [...state.subscribers]) {
@@ -252,7 +234,6 @@ function broadcastTerminalEvent(state) {
       try {
         res.destroy();
       } catch {
-        /* ignore */
       }
     }
   }
@@ -273,15 +254,10 @@ function scheduleEviction(state) {
   }, delay);
 }
 
+// ── Generation ───────────────────────────────────────────────────────────────
+
 /**
- * @param {{
- *   providerId: string,
- *   body: unknown,
- *   persist?: boolean,
- *   candidates?: FallbackCandidate[],
- *   fallbackRole?: string | null,
- *   chatId?: string | null,
- * }} params
+ * @param {{ providerId: string, body: unknown, persist?: boolean, candidates?: FallbackCandidate[], fallbackRole?: string | null, chatId?: string | null, }} params
  * @returns {GenerationState}
  */
 export function createGenerationState({
@@ -340,8 +316,6 @@ export function getGenerationState(id) {
 }
 
 /**
- * Snapshot of in-memory generations. Used by the in-process runner binding
- * tests to assert persist/role without an HTTP status round-trip.
  * @returns {import('./store.js').GenerationState[]}
  */
 export function listGenerationStates() {
@@ -349,12 +323,6 @@ export function listGenerationStates() {
 }
 
 /**
- * Rebuild a terminal generation from its disk checkpoint after a server restart.
- *
- * The replayed state is inert — no upstream, no writer — but `addSubscriber` treats
- * it like any other finished generation: buffered chunks first, then the `end`
- * sentinel. That is the whole point; the client needs no restart-specific path.
- *
  * @param {string} id
  * @returns {GenerationState | undefined}
  */
@@ -375,7 +343,6 @@ function rehydrateFromCheckpoint(id) {
     subscribers: new Set(),
     localSubscribers: new Set(),
     evictTimer: null,
-    // Already on disk; re-checkpointing a replay would append its own bytes back.
     persist: false,
     startedAt: typeof meta.startedAt === 'string' ? meta.startedAt : new Date().toISOString(),
     finishedAt: typeof meta.finishedAt === 'string' ? meta.finishedAt : null,
@@ -404,7 +371,6 @@ export function markStreaming(state) {
 }
 
 /**
- * Lock failover after the first upstream byte is emitted.
  * @param {GenerationState} state
  * @param {{ providerId: string, modelId: string, index: number }} selection
  */
@@ -442,8 +408,9 @@ export function appendChunk(state, buf) {
   }
 }
 
+// ── Subscribers ──────────────────────────────────────────────────────────────
+
 /**
- * Replay buffered bytes, then terminal sentinel when already finished.
  * @param {GenerationState} state
  * @param {ServerResponse} res
  */
@@ -464,14 +431,12 @@ export function addSubscriber(state, res) {
         flushSubscriberQueue(state, res, { terminal: true });
       }
     } catch {
-      /* subscriber may already be closed */
     }
     state.subscribers.delete(res);
   }
 }
 
 /**
- * Drop a client stream without stopping upstream generation.
  * @param {GenerationState} state
  * @param {ServerResponse} res
  */
@@ -480,8 +445,6 @@ export function removeSubscriber(state, res) {
 }
 
 /**
- * Fan a buffered chunk to in-process subscribers. Errors unsubscribe the
- * offender so a bad callback cannot break HTTP clients or other locals.
  * @param {GenerationState} state
  * @param {Buffer} buf
  */
@@ -496,7 +459,6 @@ function notifyLocalChunk(state, buf) {
 }
 
 /**
- * Structured terminal delivery for in-process subscribers (not the SSE sentinel).
  * @param {GenerationState} state
  */
 function broadcastLocalTerminal(state) {
@@ -506,18 +468,14 @@ function broadcastLocalTerminal(state) {
     try {
       sub.onEnd(payload);
     } catch {
-      /* ignore */
     }
   }
 }
 
 /**
- * Replay buffered bytes, then live chunks, then a structured terminal payload.
- * Does not touch the HTTP subscriber set.
- *
  * @param {GenerationState} state
  * @param {LocalSubscriber} subscriber
- * @returns {() => void} unsubscribe; does not cancel upstream
+ * @returns {() => void}
  */
 export function addLocalSubscriber(state, subscriber) {
   for (const chunk of state.chunks) {
@@ -532,7 +490,6 @@ export function addLocalSubscriber(state, subscriber) {
     try {
       subscriber.onEnd(terminalEventPayload(state));
     } catch {
-      /* already terminal; nothing to attach */
     }
     return () => {};
   }
@@ -544,13 +501,14 @@ export function addLocalSubscriber(state, subscriber) {
 }
 
 /**
- * Drop an in-process subscriber without stopping upstream generation.
  * @param {GenerationState} state
  * @param {LocalSubscriber} subscriber
  */
 export function removeLocalSubscriber(state, subscriber) {
   state.localSubscribers.delete(subscriber);
 }
+
+// ── Complete ─────────────────────────────────────────────────────────────────
 
 /**
  * @param {GenerationState} state
@@ -607,7 +565,6 @@ export function markCancelled(state) {
 }
 
 /**
- * Abort upstream and end subscribers with cancelled status.
  * @param {GenerationState} state
  */
 export function cancel(state) {
@@ -615,13 +572,8 @@ export function cancel(state) {
   markCancelled(state);
 }
 
-/** Fallback roles for lightweight background jobs (not user-facing agent chat). */
 export const NON_AGENT_FALLBACK_ROLES = new Set(['utility', 'chat-titles', 'goal-eval', 'editor-completion']);
 
-/**
- * True when a user-facing agent generation is pending or streaming.
- * Covers main chat (chatId / persist), sub-agents (typed fallbackRole), and similar.
- */
 export function hasActiveUserAgentGenerations() {
   for (const state of generations.values()) {
     if (state.status !== 'pending' && state.status !== 'streaming') {
@@ -641,9 +593,6 @@ export function hasActiveUserAgentGenerations() {
   return false;
 }
 
-/**
- * Process exit: cancel all in-flight generations.
- */
 export function deleteGenerationsForProviderShutdown() {
   for (const state of generations.values()) {
     state.upstreamController?.abort();
