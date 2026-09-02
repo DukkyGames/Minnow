@@ -7,9 +7,13 @@ import {
   openWorkspacePr,
   workspaceLandingStats,
 } from '../state/worktree-service.ts';
+import { attachBoardFollowUpChip } from '../attachments/board-ref.ts';
 import { createChatWithMode } from '../ui/sidebar.ts';
 import { countPhase, renderRunLedger } from './board-render';
 import { el } from './dom';
+
+/** Cap the report excerpt so the chip stays within typical text-attachment size. */
+const FOLLOW_UP_REPORT_MAX_CHARS = 4000;
 
 // ── Predicates ───────────────────────────────────────────────────────────────
 
@@ -273,7 +277,9 @@ function renderFooter(
   }
 
   const follow = btn('ov2-report-screen__btn board-btn board-btn--compact', 'Start follow-up chat');
-  follow.addEventListener('click', () => startFollowUp(state, markdown));
+  follow.addEventListener('click', () => {
+    void startFollowUp(state, markdown);
+  });
   row.appendChild(follow);
 
   row.appendChild(buildGitAction(state, markdown));
@@ -292,29 +298,56 @@ function btn(className: string, label: string): HTMLButtonElement {
   return node;
 }
 
-function startFollowUp(state: BoardState, markdown: string | null): void {
-  const merged = [...state.tasks.values()]
-    .filter((task) => task.phase === 'merged')
-    .map((task) => `- ${task.id}: ${task.title}`)
-    .join('\n');
-  const seed = [
+/**
+ * Plain-text board snapshot for the follow-up chip (injected on send).
+ * Includes every task and its phase; omits the old auto-send review prompt.
+ */
+export function buildBoardFollowUpContext(
+  state: BoardState,
+  markdown: string | null,
+): string {
+  const taskLines: string[] = [];
+  for (const id of state.taskOrder) {
+    const task = state.tasks.get(id);
+    if (!task) continue;
+    taskLines.push(`- ${task.id} [${task.phase}]: ${task.title}`);
+  }
+  const report =
+    markdown && markdown.trim()
+      ? 'End-of-run report:\n\n' + markdown.slice(0, FOLLOW_UP_REPORT_MAX_CHARS)
+      : '';
+  return [
     'Follow-up on a completed Orchestrate board.',
     '',
     `Board: ${state.name || state.boardId}`,
+    `Board id: ${state.boardId}`,
     `Plan: ${state.planPath || '(none)'}`,
     `Integration branch: ${integrationBranchName(state.boardId)}`,
     state.runSummary ? `Summary: ${state.runSummary}` : '',
     '',
-    'Merged tasks:',
-    merged || '(none)',
+    'Tasks:',
+    taskLines.join('\n') || '(none)',
     '',
-    markdown ? 'End-of-run report:\n\n' + markdown.slice(0, 4000) : '',
-    '',
-    'Help me review the integration work and decide what to do next.',
+    report,
   ]
     .filter((line) => line !== '')
     .join('\n');
-  createChatWithMode({ modeId: 'general', initialUserMessage: seed });
+}
+
+/**
+ * Leave the V2 Boards overlay, open an empty General Code chat, and attach
+ * board context as a file-style chip. Does not queue or send a user message.
+ */
+export async function startFollowUp(
+  state: BoardState,
+  markdown: string | null,
+): Promise<void> {
+  const title = (state.name || state.boardId).trim() || state.boardId;
+  const text = buildBoardFollowUpContext(state, markdown);
+  const { closeBoardsView } = await import('./boards-view.ts');
+  await closeBoardsView({ restoreChat: false });
+  createChatWithMode({ modeId: 'general' });
+  attachBoardFollowUpChip({ name: title, text });
 }
 
 // ── Git ──────────────────────────────────────────────────────────────────────

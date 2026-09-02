@@ -66,8 +66,16 @@
     color 0.12s var(--ease-out);
 }
 
+.git-no-repo__btn:disabled {
+  cursor: default;
+  opacity: 0.65;
+  color: var(--mn-fg-muted);
+  border-color: var(--mn-border);
+  background: transparent;
+}
+
 @media (hover: hover) and (pointer: fine) {
-  .git-no-repo__btn:hover {
+  .git-no-repo__btn:hover:not(:disabled) {
     border-color: var(--mn-accent);
     color: var(--mn-accent);
     background: var(--mn-surface-2);

@@ -446,6 +446,8 @@ function validateTasks(body, errors) {
   }
 }
 
+// ── Cross-checks ─────────────────────────────────────────────────────────────
+
 /**
  * The front-matter `todos` and the `#### Task` headings must each account for the other.
  * @param {{ todos: Array<{ id: string, line: number }> }} frontMatter

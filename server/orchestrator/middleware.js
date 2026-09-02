@@ -95,6 +95,44 @@ function serialiseState(state) {
   return stateToJSON(state);
 }
 
+/**
+ * When each in-flight attempt started, for the clocks on the board.
+ *
+ * Deliberately *not* part of `BoardState`: `ts` is display-only, and the fold
+ * is a pure function of the journal that must not vary with timestamps
+ * (`derive.test.mjs` asserts exactly that). So it rides alongside the snapshot
+ * instead, and only for attempts that are still running — a finished attempt
+ * has an outcome, which is the thing worth reading.
+ *
+ * @param {string} boardId
+ * @param {import('./core/types').BoardState} state
+ * @returns {Promise<Record<string, number>>}
+ */
+async function inFlightStartTimes(boardId, state) {
+  /** @type {Set<string>} */
+  const wanted = new Set();
+  for (const task of state.tasks.values()) {
+    for (const attempt of task.attempts) {
+      if (!attempt.ended) wanted.add(attempt.attemptId);
+    }
+  }
+  if (wanted.size === 0) return {};
+
+  /** @type {Record<string, number>} */
+  const out = {};
+  try {
+    for (const event of await readEvents(boardId)) {
+      const attemptId = typeof event?.attemptId === 'string' ? event.attemptId : '';
+      if (!attemptId || !wanted.has(attemptId)) continue;
+      if (event.type !== 'task.attempt.started' && event.type !== 'merge.enqueued') continue;
+      if (typeof event.ts === 'number') out[attemptId] = event.ts;
+    }
+  } catch {
+    // A clock is a nicety. Losing it must never cost the caller its snapshot.
+  }
+  return out;
+}
+
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 /** @type {Array<{ method: string, pattern: RegExp, name: string }>} */
@@ -644,7 +682,15 @@ async function streamEvents(req, res, boardId) {
   } else {
     const state = engine.getState();
     const seq = engine.getHighestSeq();
-    send('snapshot', { seq, state: serialiseState(state) }, seq);
+    send(
+      'snapshot',
+      {
+        seq,
+        state: serialiseState(state),
+        attemptStartedAt: await inFlightStartTimes(boardId, state),
+      },
+      seq,
+    );
     sentThrough = seq;
   }
 

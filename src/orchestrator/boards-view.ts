@@ -1,4 +1,5 @@
 import '../styles/orchestrator-boards.css';
+import '../styles/transcript-view.css';
 import '../styles/orchestrate-hub.css';
 import '../styles/orchestrate-plan-screen.css';
 
@@ -21,6 +22,7 @@ import {
 } from './client';
 import { withSessionToken } from '../api/session-token';
 import {
+  formatElapsed,
   renderBoardHeader,
   renderBoardSkeleton,
   renderEngineErrors,
@@ -213,6 +215,7 @@ export function teardownBoardsView(): void {
   list = null;
 
   askPlanPreviewRequestId = 0;
+  stopElapsedTicker();
   teardownV2BoardHeaderInstruments();
   document.getElementById(BOARDS_ROOT_ID)?.remove();
   const area = document.getElementById('chatArea');
@@ -394,7 +397,10 @@ function renderListItem(board: BoardSummary): HTMLElement {
     ),
   );
   meta.appendChild(el('span', undefined, `${board.taskCount} tasks`));
-  if (board.status === 'running') meta.appendChild(el('span', undefined, `N=${board.concurrency}`));
+  if (board.status === 'running') {
+    const n = board.concurrency;
+    meta.appendChild(el('span', undefined, `${n} agent${n === 1 ? '' : 's'}`));
+  }
   btn.appendChild(meta);
   item.appendChild(btn);
 
@@ -928,7 +934,9 @@ function paintBoard(): void {
   const options = {
     selectedTaskId,
     pendingTaskIds: pendingTasks,
-    liveHeadlines: client?.getLiveHeadlines(),
+    liveActivity: client?.getLiveActivity(),
+    attemptStartedAt: client?.getAttemptStartedAt(),
+    now: Date.now(),
     engineErrors: client?.getEngineErrors(),
     transcript,
     files: taskFilesView(),
@@ -947,8 +955,55 @@ function paintBoard(): void {
   surface.root.querySelector('.ov2-detail-overlay')?.remove();
   if (selected) surface.root.appendChild(renderTaskDetail(state, selected, actions, options));
   syncLogPolling(state);
+  syncElapsedTicker(state);
 
   restoreFocus(focused);
+}
+
+// ── Elapsed clocks ───────────────────────────────────────────────────────────
+
+let elapsedTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopElapsedTicker(): void {
+  if (elapsedTimer === null) return;
+  clearInterval(elapsedTimer);
+  elapsedTimer = null;
+}
+
+/**
+ * Tick the running clocks in place.
+ *
+ * Repainting the board once a second would tear down the model chip, the
+ * transcript and the focus ring for the sake of one number, so the clocks carry
+ * their own start time and only their text changes.
+ */
+function syncElapsedTicker(state: BoardState): void {
+  const anyRunning = [...state.tasks.values()].some((task) =>
+    task.attempts.some((attempt) => !attempt.ended),
+  );
+  if (!anyRunning || !surface) {
+    stopElapsedTicker();
+    return;
+  }
+  if (elapsedTimer !== null) return;
+  elapsedTimer = setInterval(() => {
+    const root = surface?.root;
+    if (!root) {
+      stopElapsedTicker();
+      return;
+    }
+    const clocks = root.querySelectorAll<HTMLElement>('.ov2-activity__elapsed[data-started-at]');
+    if (clocks.length === 0) {
+      stopElapsedTicker();
+      return;
+    }
+    const now = Date.now();
+    for (const clock of clocks) {
+      const startedAt = Number(clock.dataset.startedAt);
+      if (!Number.isFinite(startedAt) || startedAt <= 0) continue;
+      clock.textContent = formatElapsed(now - startedAt);
+    }
+  }, 1_000);
 }
 
 function clearTaskDetailState(): void {
@@ -1139,8 +1194,8 @@ function renderControls(state: BoardState): HTMLElement {
   runBtn.title = running
     ? 'Stop the loop. In-flight attempts keep running until they finish; nothing new starts.'
     : rerunInstead
-      ? 'Reopen failed tasks (or add a fix task) and start the board again. N comes from the run field.'
-      : 'Start the reconcile loop. N=1 is sequential; higher N runs that many agents at once.';
+      ? 'Reopen failed tasks (or add a fix task) and start the board again, with the agent count set beside this button.'
+      : 'Start the reconcile loop. One agent works through tasks in order; more than one works on tasks in parallel.';
   runBtn.addEventListener('click', () => {
     if (running) void commandStop();
     else if (rerunInstead) void commandRerun();
@@ -1189,9 +1244,9 @@ function renderConcurrencyControl(
 ): HTMLElement {
   const wrap = el('label', 'board-header__concurrency');
   wrap.title =
-    'Agents running at once. Each is a model call and a worktree. There is no hard cap; pick what this machine can hold. Changing N while running takes effect on the next tick; in-flight attempts keep going.';
+    'Agents running at once. Each is a model call and a worktree. There is no hard cap; pick what this machine can hold. Changing it while running takes effect on the next tick; agents already working keep going.';
 
-  const label = el('span', 'board-header__field-label', 'run');
+  const label = el('span', 'board-header__field-label', 'Agents');
   wrap.appendChild(label);
 
   const input = el('input', 'board-header__concurrency-input');
@@ -1201,7 +1256,7 @@ function renderConcurrencyControl(
   const shownN =
     state.status === 'created' ? DEFAULT_BOARD_CONCURRENCY : state.concurrency;
   input.value = String(shownN);
-  input.setAttribute('aria-label', 'Tasks running at once');
+  input.setAttribute('aria-label', 'Agents running at once');
   input.id = 'ov2-concurrency-input';
   input.dataset.focusKey = 'board-concurrency';
   input.disabled = false;

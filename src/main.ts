@@ -48,6 +48,7 @@ import './styles/research-panel.css';
 import './styles/git-help-lightbox.css';
 import './styles/tool-approval.css';
 import './styles/question-cards.css';
+import './styles/transcript-view.css';
 import './styles/sub-agent-drawer.css';
 import './styles/composer-pinned-skill.css';
 import './styles/composer-model-trigger.css';

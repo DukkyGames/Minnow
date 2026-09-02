@@ -10,9 +10,23 @@ import { installHappyDomGlobals } from '../os/dom-helpers.mts';
 import { derive } from '../../server/orchestrator/core/derive.js';
 import type { BoardState } from '../../server/orchestrator/core/types';
 
+/** Captures follow-up navigation so tests can assert close-then-create, no seed. */
+const followUpLog: Array<{ kind: string; payload?: unknown }> = [];
+
 mock.module('../../src/ui/sidebar.ts', {
   namedExports: {
-    createChatWithMode: () => ({}),
+    createChatWithMode: (options: unknown) => {
+      followUpLog.push({ kind: 'createChatWithMode', payload: options });
+      return {};
+    },
+  },
+});
+
+mock.module('../../src/orchestrator/boards-view.ts', {
+  namedExports: {
+    closeBoardsView: async (options?: unknown) => {
+      followUpLog.push({ kind: 'closeBoardsView', payload: options });
+    },
   },
 });
 
@@ -53,7 +67,12 @@ const {
   canFixFinal,
   clearBoardReportStateForTests,
   integrationBranchName,
+  buildBoardFollowUpContext,
+  startFollowUp,
 } = await import('../../src/orchestrator/board-report.ts');
+const { getPendingAttachments, clearAttachments } = await import(
+  '../../src/attachments/store.ts'
+);
 
 let activeWindow: Window | undefined;
 
@@ -65,9 +84,13 @@ function setupDom(): void {
 }
 
 afterEach(() => {
-  if (activeWindow) document.body.innerHTML = '';
-  activeWindow?.close();
-  activeWindow = undefined;
+  followUpLog.length = 0;
+  if (activeWindow) {
+    clearAttachments();
+    document.body.innerHTML = '';
+    activeWindow.close();
+    activeWindow = undefined;
+  }
   clearBoardReportStateForTests();
 });
 
@@ -178,5 +201,75 @@ describe('renderBoardReport', () => {
 describe('integrationBranchName', () => {
   test('matches the engine worktree formula', () => {
     assert.equal(integrationBranchName('ant-game-build'), 'minnow/board/ant-game-build/integration');
+  });
+});
+
+describe('buildBoardFollowUpContext', () => {
+  test('includes title, plan, every task phase, and report; omits the review prompt', () => {
+    const state = finishedBoard();
+    const text = buildBoardFollowUpContext(state, '# Hello report\n\nDone.');
+    assert.match(text, /Board: Example/);
+    assert.match(text, /Board id: b1/);
+    assert.match(text, /Plan: documentation\/plans\/x\.md/);
+    assert.match(text, /minnow\/board\/b1\/integration/);
+    assert.match(text, /Summary: 1 merged, 1 abandoned, final test fail/);
+    assert.match(text, /W1-A \[merged\]: A/);
+    assert.match(text, /W1-B \[abandoned\]: B/);
+    assert.match(text, /Hello report/);
+    assert.doesNotMatch(text, /Help me review/);
+    assert.doesNotMatch(text, /Merged tasks:/);
+  });
+});
+
+describe('startFollowUp', () => {
+  test('closes Boards, opens General chat without a seed, and queues a title chip', async () => {
+    setupDom();
+    const input = document.createElement('textarea');
+    input.id = 'msgInput';
+    document.body.appendChild(input);
+    const preview = document.createElement('div');
+    preview.id = 'attachPreview';
+    document.body.appendChild(preview);
+
+    const state = finishedBoard();
+    await startFollowUp(state, '# Hello report\n\nDone.');
+
+    assert.deepEqual(
+      followUpLog.map((entry) => entry.kind),
+      ['closeBoardsView', 'createChatWithMode'],
+    );
+    assert.deepEqual(followUpLog[0].payload, { restoreChat: false });
+    const createOpts = followUpLog[1].payload as { modeId?: string; initialUserMessage?: string };
+    assert.equal(createOpts.modeId, 'general');
+    assert.equal('initialUserMessage' in createOpts, false);
+
+    const pending = getPendingAttachments();
+    assert.equal(pending.length, 1);
+    assert.equal(pending[0].kind, 'text');
+    assert.equal(pending[0].name, 'Example');
+    assert.match(pending[0].text ?? '', /W1-B \[abandoned\]: B/);
+    assert.doesNotMatch(pending[0].text ?? '', /Help me review/);
+    assert.equal(document.activeElement, input);
+  });
+
+  test('Start follow-up chat does not auto-send', async () => {
+    setupDom();
+    const node = renderBoardReport(finishedBoard(), 'ok', false, {
+      dismiss: () => {},
+      reopen: () => {},
+      fixFinal: () => {},
+    });
+    const follow = [...node.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Start follow-up chat',
+    );
+    assert.ok(follow);
+    follow!.click();
+    for (let i = 0; i < 40 && !followUpLog.some((e) => e.kind === 'createChatWithMode'); i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    const create = followUpLog.find((entry) => entry.kind === 'createChatWithMode');
+    assert.ok(create);
+    const opts = create!.payload as { initialUserMessage?: string };
+    assert.equal(opts.initialUserMessage, undefined);
   });
 });

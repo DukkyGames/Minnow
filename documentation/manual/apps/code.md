@@ -90,7 +90,7 @@ On Windows, installed WSL distributions appear as shell options. Pick one under 
 
 ## Git
 
-The source-control panel does status, stage, diff, commit, branch, pull and push.
+The source-control panel does status, stage, diff, commit, branch, pull and push. If the folder is not a git repository yet, **Set up git** starts a background chat that initializes it (init, `.gitignore`, first commit) without leaving the panel.
 
 - **Commit messages** can be generated from the staged diff: conventional commits with optional gitmoji, an imperative subject, and a body explaining why. The `/git-commit` skill uses the same conventions.
 - **Commit and file diffs** open as a side-by-side review in the workspace. Long lines **wrap by default**; use the **Wrap** control in the review header to turn wrapping off when you want a single-line scroll.
