@@ -3,9 +3,12 @@ import { COLUMNS, columnOf, type ColumnId } from './board-columns';
 import {
   OUTCOME_TONE,
   PHASE_TONE,
+  formatElapsed,
   isStartable,
   phaseLabel,
   renderSkeleton,
+  retryCount,
+  retryLabel,
   type BoardActions,
   type BoardViewOptions,
   type FileDiffView,
@@ -13,25 +16,25 @@ import {
   type TranscriptView,
 } from './board-render';
 import type { TaskFileStat } from './client';
+import { adaptAttemptTranscript, liveTailPhase } from './transcript-adapter';
 import { el, empty, pill } from './dom';
 import { createIcon } from '../ui/icon';
 import { renderUnifiedPromptDiff } from '../ui/prompt-diff-unified';
 import { setAssistantBubbleContent } from '../markdown/renderer';
+import { appendTranscriptLiveTail, renderTranscriptView } from '../ui/transcript-view';
 
 const ui = {
-  expandedRows: new Set<string>(),
   expandedSummaries: new Set<string>(),
-  followLog: true,
-  logScrollTop: 0,
+  followThread: true,
+  threadScrollTop: 0,
   specOpen: null as boolean | null,
 };
 
 // ── Reset ────────────────────────────────────────────────────────────────────
 
 export function resetTaskDetailLogUi(): void {
-  ui.expandedRows.clear();
-  ui.followLog = true;
-  ui.logScrollTop = 0;
+  ui.followThread = true;
+  ui.threadScrollTop = 0;
 }
 
 export function resetTaskDetailUi(): void {
@@ -71,13 +74,20 @@ export function renderTaskDetail(
 
   detail.appendChild(renderHead(state, task, actions, titleId));
 
-  const body = el('div', 'ov2-detail__body');
-  for (const alert of renderAlerts(task)) body.appendChild(alert);
-  body.appendChild(renderFilesSection(task, actions, options));
-  body.appendChild(renderAttemptsSection(task, actions, options));
+  // Two panes: what the task is on the left, what an agent actually did on the
+  // right. The thread is a conversation and needs its own height to read as one.
+  const panes = el('div', 'ov2-detail__panes');
+
+  const rail = el('div', 'ov2-detail__rail');
+  for (const alert of renderAlerts(task)) rail.appendChild(alert);
+  rail.appendChild(renderFilesSection(task, actions, options));
+  rail.appendChild(renderWorkSection(task, actions, options));
   const spec = renderSpecSection(task);
-  if (spec) body.appendChild(spec);
-  detail.appendChild(body);
+  if (spec) rail.appendChild(spec);
+  panes.appendChild(rail);
+
+  panes.appendChild(renderThreadPane(task, options));
+  detail.appendChild(panes);
 
   overlay.appendChild(detail);
   return overlay;
@@ -143,6 +153,8 @@ function renderFacts(state: BoardState, task: TaskState): HTMLElement {
   add('Column', columnLabel(columnOf(state, task)));
   add('Wave', String(task.wave));
   add('Needs', task.dependsOn.length > 0 ? task.dependsOn.join(', ') : 'nothing');
+  const retries = retryCount(task);
+  if (retries > 0) add('Retries', retryLabel(retries));
   if (task.mergedSha) add('Merged', task.mergedSha.slice(0, 10), true);
   return facts;
 }
@@ -152,10 +164,18 @@ function columnLabel(id: ColumnId): string {
 }
 
 
+/**
+ * Only things that changed the outcome.
+ *
+ * Footprint overflow and unmatched globs used to shout here, one banner per
+ * event, so a task that merged fine opened with three warnings about
+ * package-lock.json. They are still on the journal; they are not what you came
+ * to this panel to read.
+ */
 function renderAlerts(task: TaskState): HTMLElement[] {
   const alerts: HTMLElement[] = [];
   const add = (
-    tone: 'bad' | 'warn' | 'info',
+    tone: 'bad' | 'warn',
     heading: string,
     detail: string,
     mono = false,
@@ -163,7 +183,9 @@ function renderAlerts(task: TaskState): HTMLElement[] {
     const alert = el('div', `ov2-alert ov2-alert--${tone}`);
     alert.setAttribute('role', tone === 'bad' ? 'alert' : 'status');
     alert.appendChild(el('span', 'ov2-alert__heading', heading));
-    alert.appendChild(el('span', mono ? 'ov2-alert__detail ov2-alert__detail--mono' : 'ov2-alert__detail', detail));
+    alert.appendChild(
+      el('span', mono ? 'ov2-alert__detail ov2-alert__detail--mono' : 'ov2-alert__detail', detail),
+    );
     alerts.push(alert);
   };
 
@@ -178,17 +200,7 @@ function renderAlerts(task: TaskState): HTMLElement[] {
     add('warn', 'Skipped', `${task.skippedBy} failed, so this never ran. It did not fail itself.`);
   }
   if (task.mergeConflicts && task.mergeConflicts.length > 0) {
-    add('warn', 'Merge conflict', task.mergeConflicts.join(', '), true);
-  }
-  for (const overflow of task.touchesOverflow) {
-    add('info', 'Wrote outside its footprint', overflow.actual.join(', '), true);
-  }
-  if (task.emptyTouchesGlobs && task.emptyTouchesGlobs.length > 0) {
-    add(
-      'info',
-      'Did not exist yet',
-      `${task.emptyTouchesGlobs.join(', ')} matched nothing when the board was made.`,
-    );
+    add('warn', 'Merge conflict', [...new Set(task.mergeConflicts)].join(', '), true);
   }
   return alerts;
 }
@@ -375,349 +387,341 @@ const ROLE_ICON = {
   builder: 'boardBuild',
   tester: 'boardTest',
   merge: 'boardGroup',
+  final: 'boardTest',
 } as const;
 
-// ── Attempts ─────────────────────────────────────────────────────────────────
+/** What to call each role in the panel. "builder" is a role; "Builder" is who did it. */
+const ROLE_LABEL: Record<string, string> = {
+  builder: 'Builder',
+  tester: 'Tester',
+  merge: 'Merge',
+  final: 'Final test',
+};
 
-function renderAttemptsSection(
+/** Roles run by an agent, and so the only ones with a thread to read. */
+const AGENT_ROLES = new Set(['builder', 'tester']);
+
+/** Why an agent was sent in again. `initial` is the first go, not a retry. */
+const SEED_LABEL: Record<string, string> = {
+  'failure-aware': 'after a failure',
+  repair: 'repair',
+  continue: 'continued',
+  fix: 'fix',
+  rebase: 'rebased',
+  'integration-fix': 'integration fix',
+};
+
+// ── Work ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Everything that has been done to this task, in order.
+ *
+ * Builder and tester are agents and open a thread. Merge and the final test are
+ * the engine's own steps: they belong in the sequence, but they have no
+ * transcript and no agent, so they are rendered as the thinner thing they are.
+ */
+function renderWorkSection(
   task: TaskState,
   actions: BoardActions,
   options: BoardViewOptions,
 ): HTMLElement {
-  const wrap = section('Attempts');
+  const agents = task.attempts.filter((a) => AGENT_ROLES.has(a.role)).length;
+  const meta = agents > 0 ? el('div', 'ov2-panel__meta') : null;
+  if (meta) {
+    meta.appendChild(el('span', 'ov2-panel__count', `${agents} agent${agents === 1 ? '' : 's'}`));
+  }
+  const wrap = section('Work', meta);
+
   if (task.attempts.length === 0) {
-    wrap.appendChild(empty('Nothing has been tried yet.'));
+    wrap.appendChild(empty('Nothing has been done to this task yet.'));
     return wrap;
   }
-  const list = el('ol', 'ov2-attempts');
+  const list = el('ol', 'ov2-work');
   task.attempts.forEach((attempt, index) => {
-    list.appendChild(renderAttempt(attempt, index + 1, actions, options));
+    list.appendChild(renderWorkRow(attempt, index + 1, actions, options));
   });
   wrap.appendChild(list);
   return wrap;
 }
 
-function renderAttempt(
+function renderWorkRow(
   attempt: Attempt,
   index: number,
   actions: BoardActions,
   options: BoardViewOptions,
 ): HTMLElement {
-  const item = el('li', 'ov2-attempt');
-  const readable = attempt.role === 'builder' || attempt.role === 'tester';
+  const readable = AGENT_ROLES.has(attempt.role);
+  const item = el('li', readable ? 'ov2-work__item' : 'ov2-work__item ov2-work__item--engine');
   const open = readable && options.transcript?.attemptId === attempt.attemptId;
   item.classList.toggle('is-open', open);
 
-  const header = readable ? el('button', 'ov2-attempt__header') : el('div', 'ov2-attempt__header');
+  const header = readable ? el('button', 'ov2-work__header') : el('div', 'ov2-work__header');
   if (header instanceof HTMLButtonElement) {
     header.type = 'button';
     header.setAttribute('aria-expanded', open ? 'true' : 'false');
     header.dataset.focusKey = `transcript:${attempt.attemptId}`;
+    header.title = `Read what the ${ROLE_LABEL[attempt.role] ?? attempt.role} did`;
     header.addEventListener('click', () => actions.openTranscript(attempt.attemptId));
   } else {
-    header.classList.add('ov2-attempt__header--static');
+    header.classList.add('ov2-work__header--static');
+    header.title = 'An engine step. It has no agent and no transcript.';
   }
 
-  const marker = el('span', 'ov2-attempt__index', String(index));
+  const marker = el('span', 'ov2-work__index', String(index));
   marker.setAttribute('aria-hidden', 'true');
   header.appendChild(marker);
 
-  const icon = createIcon(ROLE_ICON[attempt.role as keyof typeof ROLE_ICON] ?? 'boardBuild', {
-    size: 13,
-    className: 'ov2-attempt__icon',
-  });
-  header.appendChild(icon);
-
-  const name = el('span', 'ov2-attempt__role', attempt.role);
-  header.appendChild(name);
-  if (attempt.seedKind) {
-    header.appendChild(el('span', 'ov2-attempt__seed', attempt.seedKind.replace(/-/g, ' ')));
-  }
-  if (attempt.manual && !attempt.ended) header.appendChild(pill('by hand', 'neutral'));
   header.appendChild(
-    attempt.ended
-      ? pill(attempt.outcome ?? 'ended', OUTCOME_TONE[attempt.outcome ?? ''] ?? 'neutral')
-      : pill('running', 'live'),
+    createIcon(ROLE_ICON[attempt.role as keyof typeof ROLE_ICON] ?? 'boardBuild', {
+      size: 13,
+      className: 'ov2-work__icon',
+    }),
   );
+  header.appendChild(el('span', 'ov2-work__role', ROLE_LABEL[attempt.role] ?? attempt.role));
+
+  const seed =
+    attempt.seedKind && attempt.seedKind !== 'initial'
+      ? (SEED_LABEL[attempt.seedKind] ?? attempt.seedKind.replace(/-/g, ' '))
+      : '';
+  if (seed) header.appendChild(el('span', 'ov2-work__seed', seed));
+  if (attempt.manual && !attempt.ended) header.appendChild(pill('by hand', 'neutral'));
+
+  if (attempt.ended) {
+    header.appendChild(
+      pill(attempt.outcome ?? 'ended', OUTCOME_TONE[attempt.outcome ?? ''] ?? 'neutral'),
+    );
+  } else {
+    header.appendChild(
+      renderRunningState(attempt, options.attemptStartedAt, options.now),
+    );
+  }
 
   if (readable) {
-    const chevron = createIcon('chevronRight', { size: 12, className: 'ov2-attempt__chevron' });
-    header.appendChild(chevron);
+    header.appendChild(createIcon('chevronRight', { size: 12, className: 'ov2-work__chevron' }));
   }
   item.appendChild(header);
 
-  if (attempt.summary) {
-    const key = `summary:${attempt.attemptId}`;
-    const open = ui.expandedSummaries.has(key);
-    const summary = el('p', 'ov2-attempt__summary', attempt.summary);
-    if (open) summary.classList.add('is-expanded');
-    item.appendChild(summary);
-    if (attempt.summary.length > 200) {
-      const more = el('button', 'ov2-attempt__more', open ? 'Show less' : 'Show all');
-      more.type = 'button';
-      more.setAttribute('aria-expanded', open ? 'true' : 'false');
-      more.dataset.focusKey = key;
-      more.addEventListener('click', () => {
-        const next = !ui.expandedSummaries.has(key);
-        if (next) ui.expandedSummaries.add(key);
-        else ui.expandedSummaries.delete(key);
-        summary.classList.toggle('is-expanded', next);
-        more.setAttribute('aria-expanded', next ? 'true' : 'false');
-        more.textContent = next ? 'Show less' : 'Show all';
-      });
-      item.appendChild(more);
-    }
-  }
-  if (open && options.transcript) {
-    item.appendChild(renderLog(options.transcript, !attempt.ended));
-  }
+  if (attempt.summary) item.appendChild(renderSummary(attempt));
   return item;
 }
 
+/** Spinner, the word, and how long — the three things "is it stuck?" needs. */
+function renderRunningState(
+  attempt: Attempt,
+  startedAtById?: ReadonlyMap<string, number>,
+  now?: number,
+): HTMLElement {
+  const wrap = el('span', 'ov2-work__running');
+  wrap.setAttribute('role', 'status');
 
-const LOG_LABEL: Record<string, string> = {
-  thinking: 'Thought',
-  tool_call: 'Tool',
-  tool_result: 'Result',
-  round_end: 'Round',
-  attempt_end: 'Ended',
-  error: 'Error',
-};
+  const spinner = el('span', 'tool-call-spinner ov2-work__spinner');
+  spinner.setAttribute('aria-hidden', 'true');
+  wrap.appendChild(spinner);
+  wrap.appendChild(el('span', 'ov2-work__running-label', 'running'));
 
-interface LogRow {
-  kind: 'thought' | 'tool' | 'result' | 'end' | 'error' | 'plain';
-  label: string;
-  lead: string;
-  trail?: string;
-  full?: string;
-  tone?: 'good' | 'bad' | 'warn';
-}
-
-function asText(value: unknown): string {
-  if (value === undefined || value === null) return '';
-  if (typeof value === 'string') return value;
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function summariseArgs(value: unknown): string {
-  if (value === undefined || value === null) return '';
-  let parsed: unknown = value;
-  if (typeof value === 'string') {
-    try {
-      parsed = JSON.parse(value);
-    } catch {
-      return value;
-    }
-  }
-  if (!parsed || typeof parsed !== 'object') return asText(parsed);
-  const parts: string[] = [];
-  for (const [key, raw] of Object.entries(parsed as Record<string, unknown>)) {
-    const text = typeof raw === 'string' ? raw : asText(raw);
-    if (!text) continue;
-    parts.push(text.length > 80 ? `${key}: ${text.slice(0, 80)}…` : `${key}: ${text}`);
-    if (parts.length === 3) break;
-  }
-  return parts.join('  ');
-}
-
-function firstLine(text: string, max = 140): string {
-  const line = text.replace(/\s+/g, ' ').trim();
-  return line.length > max ? `${line.slice(0, max)}…` : line;
-}
-
-// ── Log ──────────────────────────────────────────────────────────────────────
-
-function toLogRow(event: Record<string, unknown>): LogRow | null {
-  const type = typeof event.type === 'string' ? event.type : '';
-  const label = LOG_LABEL[type] ?? type.replace(/_/g, ' ');
-  if (!label) return null;
-
-  if (type === 'thinking') {
-    const text = asText(event.text);
-    if (!text.trim()) return null;
-    return { kind: 'thought', label, lead: text };
-  }
-  if (type === 'tool_call') {
-    return {
-      kind: 'tool',
-      label,
-      lead: asText(event.name) || 'tool',
-      trail: firstLine(summariseArgs(event.arguments)),
-      full: asText(event.arguments) || undefined,
-    };
-  }
-  if (type === 'tool_result') {
-    const content = asText(event.content ?? event.result);
-    return {
-      kind: 'result',
-      label,
-      lead: asText(event.name) || 'result',
-      trail: content ? firstLine(content) : 'no output',
-      full: content || undefined,
-    };
-  }
-  if (type === 'round_end') {
-    const index = typeof event.index === 'number' ? event.index : null;
-    const tools = typeof event.toolCallCount === 'number' ? event.toolCallCount : 0;
-    const text = asText(event.text);
-    return {
-      kind: 'plain',
-      label,
-      lead: index == null ? 'round' : `round ${index}`,
-      trail: tools > 0 ? `${tools} tool${tools === 1 ? '' : 's'}` : text ? firstLine(text) : undefined,
-      full: text || undefined,
-    };
-  }
-  if (type === 'attempt_end') {
-    const outcome = asText(event.name) || 'ended';
-    return {
-      kind: 'end',
-      label,
-      lead: outcome,
-      trail: asText(event.summary) ? firstLine(asText(event.summary), 200) : undefined,
-      full: asText(event.summary) || undefined,
-      tone: outcome === 'pass' ? 'good' : outcome === 'blocked' ? 'warn' : 'bad',
-    };
-  }
-  const text = asText(event.error ?? event.text ?? event.summary ?? event.name);
-  if (!text.trim()) return null;
-  return {
-    kind: type === 'error' ? 'error' : 'plain',
-    label,
-    lead: text,
-    tone: type === 'error' ? 'bad' : undefined,
-  };
-}
-
-function renderLog(view: TranscriptView, live: boolean): HTMLElement {
-  const wrap = el('div', 'ov2-log');
-
-  if (view.status === 'loading') {
-    wrap.appendChild(renderSkeleton(4, 'ov2-skeleton ov2-skeleton--log'));
-    return wrap;
-  }
-  if (view.status === 'error') {
-    wrap.appendChild(el('p', 'ov2-panel__note', view.error ?? 'Could not read this log.'));
-    return wrap;
-  }
-
-  const rows = view.events.map(toLogRow).filter((row): row is LogRow => row !== null);
-  if (rows.length === 0) {
-    wrap.appendChild(
-      empty(
-        live
-          ? 'Nothing recorded yet. The log starts at the first thought or tool call.'
-          : 'Nothing was recorded for this attempt.',
-      ),
-    );
-    return wrap;
-  }
-
-  if (view.capped || view.truncated) {
-    wrap.appendChild(
-      el(
-        'p',
-        'ov2-panel__note',
-        view.capped
-          ? 'This attempt ran longer than the log keeps. The rest was dropped.'
-          : 'Showing the most recent entries.',
-      ),
-    );
-  }
-
-  const scroller = el('div', 'ov2-log__scroller');
-  scroller.dataset.logScroller = view.attemptId;
-  if (live) {
-    scroller.setAttribute('role', 'log');
-    scroller.setAttribute('aria-live', 'polite');
-  }
-  const list = el('ol', 'ov2-log__list');
-  rows.forEach((row, index) => list.appendChild(renderLogRow(row, view.attemptId, index)));
-  scroller.appendChild(list);
-
-  scroller.addEventListener('scroll', () => {
-    const distance = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-    ui.followLog = distance <= 24;
-    ui.logScrollTop = scroller.scrollTop;
-  });
-  wrap.appendChild(scroller);
-
-  queueMicrotask(() => {
-    if (!scroller.isConnected) return;
-    scroller.scrollTop = live && ui.followLog ? scroller.scrollHeight : ui.logScrollTop;
-  });
-
-  if (live) {
-    wrap.appendChild(el('p', 'ov2-log__tail', 'Still running. New entries land here as they happen.'));
+  const startedAt = startedAtById?.get(attempt.attemptId);
+  if (typeof startedAt === 'number' && startedAt > 0) {
+    const at = typeof now === 'number' ? now : Date.now();
+    const clock = el('span', 'ov2-activity__elapsed', formatElapsed(at - startedAt));
+    clock.dataset.startedAt = String(startedAt);
+    clock.title = 'How long this has been running';
+    wrap.appendChild(clock);
   }
   return wrap;
 }
 
-function renderLogRow(row: LogRow, attemptId: string, index: number): HTMLElement {
-  const item = el('li', `ov2-log__row ov2-log__row--${row.kind}`);
-  if (row.tone) item.classList.add(`ov2-log__row--${row.tone}`);
+function renderSummary(attempt: Attempt): HTMLElement {
+  const wrap = el('div', 'ov2-work__summary-wrap');
+  const key = `summary:${attempt.attemptId}`;
+  const open = ui.expandedSummaries.has(key);
+  const text = attempt.summary ?? '';
 
-  item.appendChild(el('span', 'ov2-log__label', row.label));
+  const summary = el('p', 'ov2-work__summary', text);
+  if (open) summary.classList.add('is-expanded');
+  wrap.appendChild(summary);
 
-  const content = el('div', 'ov2-log__content');
-  const key = `${attemptId}:${index}`;
-  const expanded = ui.expandedRows.has(key);
-
-  if (row.kind === 'thought') {
-    const text = el('p', 'ov2-log__thought', row.lead);
-    if (expanded) text.classList.add('is-expanded');
-    content.appendChild(text);
-    if (row.lead.length > 220) {
-      content.appendChild(
-        expandToggle(key, expanded, ['Show all', 'Show less'], () => {
-          text.classList.toggle('is-expanded');
-        }),
-      );
-    }
-  } else {
-    const line = el('div', 'ov2-log__line');
-    line.appendChild(el('span', 'ov2-log__lead', row.lead));
-    if (row.trail) line.appendChild(el('span', 'ov2-log__trail', row.trail));
-    content.appendChild(line);
-    const hasMore = Boolean(row.full && row.full.length > (row.trail?.length ?? 0) + 40);
-    if (hasMore) {
-      const body = el('pre', 'ov2-log__body', row.full);
-      body.hidden = !expanded;
-      content.appendChild(body);
-      content.appendChild(
-        expandToggle(key, expanded, ['Show', 'Hide'], () => {
-          body.hidden = !body.hidden;
-        }),
-      );
-    }
+  if (text.length > 200) {
+    const more = el('button', 'ov2-work__more', open ? 'Show less' : 'Show all');
+    more.type = 'button';
+    more.setAttribute('aria-expanded', open ? 'true' : 'false');
+    more.dataset.focusKey = key;
+    more.addEventListener('click', () => {
+      const next = !ui.expandedSummaries.has(key);
+      if (next) ui.expandedSummaries.add(key);
+      else ui.expandedSummaries.delete(key);
+      summary.classList.toggle('is-expanded', next);
+      more.setAttribute('aria-expanded', next ? 'true' : 'false');
+      more.textContent = next ? 'Show less' : 'Show all';
+    });
+    wrap.appendChild(more);
   }
-  item.appendChild(content);
-  return item;
+  return wrap;
 }
 
-function expandToggle(
-  key: string,
-  expanded: boolean,
-  [closedLabel, openLabel]: readonly [string, string],
-  apply: () => void,
-): HTMLButtonElement {
-  const toggle = el('button', 'ov2-log__more', expanded ? openLabel : closedLabel);
-  toggle.type = 'button';
-  toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-  toggle.dataset.focusKey = `log-more:${key}`;
-  toggle.addEventListener('click', () => {
-    const next = !ui.expandedRows.has(key);
-    if (next) ui.expandedRows.add(key);
-    else ui.expandedRows.delete(key);
-    toggle.setAttribute('aria-expanded', next ? 'true' : 'false');
-    toggle.textContent = next ? openLabel : closedLabel;
-    apply();
+// ── Thread ───────────────────────────────────────────────────────────────────
+
+/**
+ * The right pane: one agent's attempt, rendered as the conversation it was.
+ *
+ * The board records the same turn events chat does, so it goes through the same
+ * renderer — tool cards, diffs, thought panels and all — rather than a second,
+ * worse one that would drift from it.
+ */
+function renderThreadPane(task: TaskState, options: BoardViewOptions): HTMLElement {
+  const pane = el('div', 'ov2-thread');
+
+  const attempt = options.transcript
+    ? task.attempts.find((a) => a.attemptId === options.transcript?.attemptId)
+    : undefined;
+
+  if (!options.transcript || !attempt) {
+    pane.appendChild(renderThreadPlaceholder(task));
+    return pane;
+  }
+
+  pane.appendChild(renderThreadHead(attempt, options));
+
+  const body = el('div', 'ov2-thread__body transcript-view__body');
+  body.dataset.threadScroller = attempt.attemptId;
+  pane.appendChild(body);
+
+  const view = options.transcript;
+  if (view.status === 'loading') {
+    body.appendChild(renderSkeleton(5, 'ov2-skeleton ov2-skeleton--log'));
+    return pane;
+  }
+  if (view.status === 'error') {
+    body.appendChild(
+      el('p', 'ov2-panel__note', view.error ?? 'Could not read what this agent did.'),
+    );
+    return pane;
+  }
+
+  paintThread(body, view, attempt);
+  return pane;
+}
+
+function renderThreadHead(attempt: Attempt, options: BoardViewOptions): HTMLElement {
+  const head = el('div', 'ov2-thread__head');
+  head.appendChild(
+    createIcon(ROLE_ICON[attempt.role as keyof typeof ROLE_ICON] ?? 'boardBuild', {
+      size: 14,
+      className: 'ov2-thread__icon',
+    }),
+  );
+  head.appendChild(el('h3', 'ov2-thread__title', ROLE_LABEL[attempt.role] ?? attempt.role));
+  if (attempt.seedKind && attempt.seedKind !== 'initial') {
+    head.appendChild(
+      el(
+        'span',
+        'ov2-work__seed',
+        SEED_LABEL[attempt.seedKind] ?? attempt.seedKind.replace(/-/g, ' '),
+      ),
+    );
+  }
+  head.appendChild(
+    attempt.ended
+      ? pill(attempt.outcome ?? 'ended', OUTCOME_TONE[attempt.outcome ?? ''] ?? 'neutral')
+      : renderRunningState(attempt, options.attemptStartedAt, options.now),
+  );
+  return head;
+}
+
+function renderThreadPlaceholder(task: TaskState): HTMLElement {
+  const readable = task.attempts.some((a) => AGENT_ROLES.has(a.role));
+  const wrap = el('div', 'ov2-thread__blank');
+  wrap.appendChild(
+    el(
+      'p',
+      'ov2-thread__blank-title',
+      readable ? 'Pick a Builder or Tester to read it.' : 'No agent has worked on this yet.',
+    ),
+  );
+  wrap.appendChild(
+    el(
+      'p',
+      'ov2-thread__blank-body',
+      readable
+        ? 'Everything it thought, ran and wrote shows up here.'
+        : 'Once one starts, everything it thinks and runs shows up here as it happens.',
+    ),
+  );
+  return wrap;
+}
+
+function paintThread(body: HTMLElement, view: TranscriptView, attempt: Attempt): void {
+  const { messages, end } = adaptAttemptTranscript(view.events);
+  const live = !attempt.ended;
+
+  if (messages.length === 0 && !end) {
+    body.appendChild(
+      empty(
+        live
+          ? 'Nothing yet. The thread starts at the first thought or tool call.'
+          : 'Nothing was recorded for this attempt.',
+      ),
+    );
+    return;
+  }
+
+  // The shared renderer owns this element and clears it, so the note about a
+  // shortened thread goes in after, not before.
+  renderTranscriptView(body, messages);
+
+  if (view.capped || view.truncated) {
+    body.prepend(
+      el(
+        'p',
+        'ov2-panel__note ov2-thread__note',
+        view.capped
+          ? 'This attempt ran longer than the transcript keeps. The earliest of it was dropped.'
+          : 'Showing the most recent of a long thread.',
+      ),
+    );
+  }
+
+  if (live) {
+    const tail = liveTailPhase(view.events);
+    appendTranscriptLiveTail(
+      body,
+      {
+        isLive: true,
+        phase: tail.phase,
+        currentToolName: tail.toolName ?? null,
+        ...(tail.reasoning ? { partialReasoning: tail.reasoning } : {}),
+      },
+      messages,
+    );
+  } else if (end) {
+    body.appendChild(renderThreadEnd(end.outcome, end.summary));
+  }
+
+  restoreThreadScroll(body, live);
+}
+
+function renderThreadEnd(outcome: string, summary: string): HTMLElement {
+  const wrap = el('div', `ov2-thread__end ov2-thread__end--${OUTCOME_TONE[outcome] ?? 'neutral'}`);
+  wrap.appendChild(el('span', 'ov2-thread__end-label', 'Ended'));
+  wrap.appendChild(pill(outcome, OUTCOME_TONE[outcome] ?? 'neutral'));
+  if (summary.trim()) {
+    const prose = el('div', 'ov2-thread__end-summary');
+    setAssistantBubbleContent(prose, summary);
+    wrap.appendChild(prose);
+  }
+  return wrap;
+}
+
+/** Stick to the bottom while an agent is working; hold position once it stops. */
+function restoreThreadScroll(body: HTMLElement, live: boolean): void {
+  body.addEventListener('scroll', () => {
+    const distance = body.scrollHeight - body.scrollTop - body.clientHeight;
+    ui.followThread = distance <= 32;
+    ui.threadScrollTop = body.scrollTop;
   });
-  return toggle;
+  queueMicrotask(() => {
+    if (!body.isConnected) return;
+    body.scrollTop = live && ui.followThread ? body.scrollHeight : ui.threadScrollTop;
+  });
 }
 
 // ── Spec ─────────────────────────────────────────────────────────────────────

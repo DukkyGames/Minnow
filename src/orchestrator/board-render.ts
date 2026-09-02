@@ -1,7 +1,7 @@
 import type { BoardState, TaskState } from '../../server/orchestrator/core/types';
 import { reopenTargets } from '../../server/orchestrator/core/plan.js';
 import type { DiffLine } from '../chat/prompts/text-diff';
-import type { EngineError, TaskFileStat } from './client';
+import type { EngineError, LiveActivity, TaskFileStat } from './client';
 import {
   bucketWave,
   COLUMNS,
@@ -11,6 +11,10 @@ import {
   type ColumnId,
 } from './board-columns';
 import { el, empty, field, pill } from './dom';
+import { createIcon } from '../ui/icon';
+import { getToolIcon } from '../ui/tool-call-presentation';
+import { humanizeToolName } from '../ui/tool-messages';
+import { setAssistantBubbleContent } from '../markdown/renderer';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,7 +60,11 @@ export interface TaskFilesView {
 export interface BoardViewOptions {
   selectedTaskId: string | null;
   pendingTaskIds: ReadonlySet<string>;
-  liveHeadlines?: ReadonlyMap<string, { role: string; text: string }>;
+  liveActivity?: ReadonlyMap<string, LiveActivity>;
+  /** When in-flight attempts started. View-only; never part of the fold. */
+  attemptStartedAt?: ReadonlyMap<string, number>;
+  /** Ticks while anything is running, so elapsed times move. */
+  now?: number;
   engineErrors?: ReadonlyMap<string, EngineError>;
   transcript?: TranscriptView | null;
   files?: TaskFilesView | null;
@@ -88,6 +96,39 @@ export function phaseLabel(state: BoardState, task: TaskState): string {
   if (task.phase === 'idle' && isBlocked(state, task)) return 'blocked';
   if (task.phase === 'idle' && task.attempts.length > 0) return 'waiting';
   return task.phase;
+}
+
+// ── Retries ──────────────────────────────────────────────────────────────────
+
+/**
+ * How many times this task had to be picked up again.
+ *
+ * Not the number of attempts: a task that builds, tests and merges cleanly has
+ * three attempts and zero retries. Only a restart counts, which is exactly what
+ * `seedKind` records — anything other than `initial` is the engine having
+ * another go at work that did not land.
+ */
+export function retryCount(task: TaskState): number {
+  return task.attempts.filter((a) => a.seedKind !== null && a.seedKind !== 'initial').length;
+}
+
+export function retryLabel(count: number): string {
+  return count === 1 ? '1 retry' : `${count} retries`;
+}
+
+/** `m:ss`, or `h:mm:ss` once an attempt has been going that long. */
+export function formatElapsed(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const seconds = total % 60;
+  const minutes = Math.floor(total / 60) % 60;
+  const hours = Math.floor(total / 3600);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
+}
+
+/** The attempt currently doing the work, if any. */
+export function runningAttempt(task: TaskState) {
+  return task.attempts.find((a) => !a.ended) ?? null;
 }
 
 // ── Header ───────────────────────────────────────────────────────────────────
@@ -172,7 +213,7 @@ function renderHeaderTelemetry(state: BoardState): HTMLElement {
   const tokens: Array<{ value: string; label: string; key: string }> = [
     { value: `${done}/${total}`, label: 'tasks', key: 'tasks' },
     { value: `${wavesComplete}/${totalWaves}`, label: 'waves', key: 'waves' },
-    { value: `${active}/${state.concurrency}`, label: 'run', key: 'running' },
+    { value: `${active}/${state.concurrency}`, label: 'agents', key: 'running' },
   ];
   tokens.forEach((token, index) => {
     if (index > 0) {
@@ -379,9 +420,11 @@ function renderTaskCard(
   const badges = el('span', 'ov2-task__badges');
   badges.appendChild(pill(phaseLabel(state, task), blocked ? 'warn' : PHASE_TONE[task.phase]));
   if (task.outcome) badges.appendChild(pill(task.outcome, OUTCOME_TONE[task.outcome] ?? 'neutral'));
-  const tries = task.attempts.filter((a) => a.ended).length;
-  if (tries > 0) {
-    badges.appendChild(el('span', 'ov2-task__tries', `${tries} ${tries === 1 ? 'try' : 'tries'}`));
+  const retries = retryCount(task);
+  if (retries > 0) {
+    const badge = el('span', 'ov2-task__retries', retryLabel(retries));
+    badge.title = `Picked up again ${retryLabel(retries)} after work that did not land.`;
+    badges.appendChild(badge);
   }
   head.appendChild(badges);
   card.appendChild(head);
@@ -391,11 +434,15 @@ function renderTaskCard(
     card.appendChild(el('p', 'ov2-task__blocked', `waiting on ${waiting.join(', ')}`));
   }
 
-  const live = options.liveHeadlines?.get(task.id);
-  if (live && (task.phase === 'building' || task.phase === 'testing')) {
-    const liveLine = el('p', 'ov2-task__live', `${live.role}: ${live.text}`);
-    liveLine.setAttribute('aria-live', 'polite');
-    card.appendChild(liveLine);
+  const activeAttempt = runningAttempt(task);
+  if (activeAttempt) {
+    card.appendChild(
+      renderActivity(
+        options.liveActivity?.get(task.id) ?? null,
+        options.attemptStartedAt?.get(activeAttempt.attemptId) ?? null,
+        options.now,
+      ),
+    );
   }
 
   const failure =
@@ -409,6 +456,58 @@ function renderTaskCard(
 
   card.appendChild(renderCardControls(state, task, actions, options));
   return card;
+}
+
+/**
+ * What this task's agent is doing, and for how long.
+ *
+ * The spinner and the clock answer two different questions: the first says work
+ * is happening at all, the second says whether it is stuck. A running attempt
+ * with no live frame yet still gets both — it is starting, not idle.
+ */
+export function renderActivity(
+  activity: LiveActivity | null,
+  startedAt: number | null,
+  now?: number,
+): HTMLElement {
+  const row = el('div', 'ov2-activity');
+  row.setAttribute('aria-live', 'polite');
+
+  const glyph = el('span', 'ov2-activity__glyph');
+  glyph.setAttribute('aria-hidden', 'true');
+  if (activity?.kind === 'tool' && !activity.settled) {
+    const spinner = el('span', 'tool-call-spinner');
+    glyph.appendChild(spinner);
+  } else if (activity?.kind === 'tool') {
+    glyph.appendChild(createIcon(getToolIcon(activity.text), { size: 13 }));
+  } else if (activity?.kind === 'thinking') {
+    glyph.appendChild(createIcon('sparkles', { size: 13 }));
+    row.classList.add('ov2-activity--thinking');
+  } else {
+    glyph.appendChild(el('span', 'tool-call-spinner'));
+  }
+  row.appendChild(glyph);
+
+  const label = el('span', 'ov2-activity__label');
+  if (activity?.kind === 'tool') {
+    label.textContent = humanizeToolName(activity.text);
+  } else if (activity?.kind === 'thinking') {
+    label.textContent = activity.text;
+    label.title = activity.text;
+  } else {
+    label.textContent = 'Starting up';
+  }
+  row.appendChild(label);
+
+  if (typeof startedAt === 'number' && startedAt > 0) {
+    const at = typeof now === 'number' ? now : Date.now();
+    const clock = el('span', 'ov2-activity__elapsed', formatElapsed(at - startedAt));
+    clock.title = 'How long this agent has been running';
+    // Stamped so the clock can tick without repainting the whole board.
+    clock.dataset.startedAt = String(startedAt);
+    row.appendChild(clock);
+  }
+  return row;
 }
 
 function renderCardControls(
@@ -546,7 +645,7 @@ export function renderRunLedger(
   stats.appendChild(field('Merged', String(countPhase(state, 'merged'))));
   stats.appendChild(field('Abandoned', String(countPhase(state, 'abandoned'))));
   stats.appendChild(field('Skipped', String(countPhase(state, 'skipped'))));
-  stats.appendChild(field('Attempts', String(totalAttempts(state))));
+  stats.appendChild(field('Retries', String(totalRetries(state))));
   if (state.integrationSha) {
     stats.appendChild(field('Integration', state.integrationSha.slice(0, 12)));
   }
@@ -564,10 +663,10 @@ export function renderRunLedger(
     row.appendChild(el('span', 'ov2-report__task-id', task.id));
     row.appendChild(el('span', 'ov2-report__task-title', task.title));
     row.appendChild(pill(task.phase, PHASE_TONE[task.phase]));
-    const tries = task.attempts.filter((a) => a.ended).length;
-    row.appendChild(
-      el('span', 'ov2-report__task-tries', `${tries} ${tries === 1 ? 'attempt' : 'attempts'}`),
-    );
+    const retries = retryCount(task);
+    if (retries > 0) {
+      row.appendChild(el('span', 'ov2-report__task-retries', retryLabel(retries)));
+    }
     const why = reasonFor(task);
     if (why) row.appendChild(el('span', 'ov2-report__task-why', why));
     table.appendChild(row);
@@ -605,12 +704,12 @@ function renderFinalTest(
       final.appendChild(pre);
     }
     if (actions?.rerun) {
-      const n = reopenTargets(state).length;
+      const failed = reopenTargets(state).length;
       const retry = el(
         'button',
         'ov2-btn ov2-btn--primary ov2-report__retry',
-        n > 0
-          ? `Rerun ${n} failed task${n === 1 ? '' : 's'}`
+        failed > 0
+          ? `Rerun ${failed} failed task${failed === 1 ? '' : 's'}`
           : 'Add a fix task and re-verify',
       );
       retry.type = 'button';
@@ -621,9 +720,9 @@ function renderFinalTest(
   return final;
 }
 
-function totalAttempts(state: BoardState): number {
+function totalRetries(state: BoardState): number {
   let n = 0;
-  for (const task of state.tasks.values()) n += task.attempts.filter((a) => a.ended).length;
+  for (const task of state.tasks.values()) n += retryCount(task);
   return n;
 }
 
@@ -725,8 +824,8 @@ export function renderFinishReport(markdown: string | null, loading: boolean): H
     wrap.appendChild(empty('No report yet.'));
     return wrap;
   }
-  const body = el('pre', 'ov2-finish__body');
-  body.textContent = markdown;
+  const body = el('div', 'ov2-finish__body');
+  setAssistantBubbleContent(body, markdown);
   wrap.appendChild(body);
   return wrap;
 }

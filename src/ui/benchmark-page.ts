@@ -1,4 +1,5 @@
 import '../styles/benchmark-page.css';
+import '../styles/transcript-view.css';
 import '../styles/sub-agent-drawer.css';
 
 import type {

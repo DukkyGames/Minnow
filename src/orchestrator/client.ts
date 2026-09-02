@@ -31,10 +31,16 @@ export interface BoardClientOptions {
   openStream?: (url: string) => EventStream;
 }
 
-export interface LiveHeadline {
+/** What an agent is doing right now, for the card's activity line. */
+export interface LiveActivity {
   attemptId: string;
   role: string;
+  /** A tool the agent is running, or a thought it is having. */
+  kind: 'tool' | 'thinking';
+  /** Tool name for `tool`, the thought itself for `thinking`. */
   text: string;
+  /** True once the tool came back, so the card can stop saying "running". */
+  settled: boolean;
 }
 
 export interface EngineError {
@@ -50,7 +56,9 @@ export interface BoardClient {
   getState(): BoardState | null;
   isConnected(): boolean;
   getSeq(): number;
-  getLiveHeadlines(): ReadonlyMap<string, LiveHeadline>;
+  getLiveActivity(): ReadonlyMap<string, LiveActivity>;
+  /** When each in-flight attempt started, keyed by attempt id. */
+  getAttemptStartedAt(): ReadonlyMap<string, number>;
   getEngineErrors(): ReadonlyMap<string, EngineError>;
   subscribe(listener: (state: BoardState | null) => void): () => void;
   connect(): void;
@@ -366,7 +374,14 @@ export function createBoardClient(
   let internal: BoardState | null = null;
   let view: BoardState | null = null;
   let seq = 0;
-  const liveHeadlines = new Map<string, LiveHeadline>();
+  const liveActivity = new Map<string, LiveActivity>();
+  /*
+   * View-only, and deliberately outside `BoardState`: the fold is a pure
+   * function of the journal and must not vary with timestamps. Filled from the
+   * `task.attempt.started` line's own `ts`, and from the snapshot's sidecar so
+   * a clock survives a reload mid-attempt.
+   */
+  const attemptStartedAt = new Map<string, number>();
   const engineErrors = new Map<string, EngineError>();
 
   let source: EventStream | null = null;
@@ -395,8 +410,18 @@ export function createBoardClient(
     if (!internal) return false;
     const eventSeq = Number(event.seq);
     if (Number.isSafeInteger(eventSeq) && eventSeq <= seq) return false;
+    if (event.type === 'task.attempt.started' || event.type === 'merge.enqueued') {
+      const attemptId = typeof event.attemptId === 'string' ? event.attemptId : '';
+      if (attemptId && typeof event.ts === 'number') attemptStartedAt.set(attemptId, event.ts);
+    }
     if (event.type === 'task.attempt.started') {
       engineErrors.delete(`${String(event.role ?? '')}:${String(event.taskId ?? '')}`);
+      liveActivity.delete(String(event.taskId ?? ''));
+    }
+    if (event.type === 'task.attempt.ended') {
+      // The card falls back to the attempt's own outcome; a stale "reading
+      // foo.ts" under a finished task reads as if it were still working.
+      liveActivity.delete(String(event.taskId ?? ''));
     }
     foldInto(internal, [event]);
     if (Number.isSafeInteger(eventSeq)) seq = eventSeq;
@@ -423,6 +448,12 @@ export function createBoardClient(
   const onSnapshot = (event: { data: string }) => {
     try {
       const payload = JSON.parse(event.data);
+      const started = payload.attemptStartedAt;
+      if (started && typeof started === 'object') {
+        for (const [attemptId, at] of Object.entries(started)) {
+          if (typeof at === 'number') attemptStartedAt.set(attemptId, at);
+        }
+      }
       if (adopt(stateFromJSON(payload.state), Number(payload.seq) || 0)) publish();
     } catch (err) {
       console.error('[orchestrator] could not read the board snapshot', err);
@@ -440,14 +471,33 @@ export function createBoardClient(
       const taskId = typeof payload.taskId === 'string' ? payload.taskId : null;
       if (!taskId) return;
       const inner = payload.event;
-      if (inner?.type !== 'tool_call' && inner?.type !== 'tool_result') return;
-      const name = typeof inner.name === 'string' && inner.name ? inner.name : inner.type;
-      liveHeadlines.set(taskId, {
+      if (!inner) return;
+
+      const base = {
         attemptId: String(payload.attemptId ?? ''),
         role: String(payload.role ?? ''),
-        text: inner.type === 'tool_result' ? `${name} done` : name,
-      });
-      emit();
+      };
+
+      // Thinking arrives coalesced: each frame is the thought so far, so the
+      // last one wins rather than accumulating.
+      if (inner.type === 'thinking') {
+        const thought = typeof inner.text === 'string' ? inner.text.trim() : '';
+        if (!thought) return;
+        liveActivity.set(taskId, { ...base, kind: 'thinking', text: thought, settled: false });
+        emit();
+        return;
+      }
+
+      if (inner.type === 'tool_call' || inner.type === 'tool_result') {
+        const name = typeof inner.name === 'string' && inner.name ? inner.name : inner.type;
+        liveActivity.set(taskId, {
+          ...base,
+          kind: 'tool',
+          text: name,
+          settled: inner.type === 'tool_result',
+        });
+        emit();
+      }
     } catch (err) {
       console.error('[orchestrator] could not read a live attempt event', err);
     }
@@ -508,7 +558,8 @@ export function createBoardClient(
     getState: () => view,
     isConnected: () => connected,
     getSeq: () => seq,
-    getLiveHeadlines: () => liveHeadlines,
+    getLiveActivity: () => liveActivity,
+    getAttemptStartedAt: () => attemptStartedAt,
     getEngineErrors: () => engineErrors,
 
     subscribe(listener) {
