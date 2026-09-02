@@ -1,5 +1,9 @@
 import '../styles/git-no-repo.css';
 import { iconHtml } from './icon';
+import {
+  isGitSetupBackgroundBusy,
+  startGitSetupBackgroundChat,
+} from '../chat/git-setup-background';
 
 const DEFAULT_HINT =
   'This workspace is not tracked with git. Initialize to see branches, changes, and commit history.';
@@ -7,6 +11,11 @@ const DEFAULT_HINT =
 /** True when git status failed because the workspace root is not a repository. */
 export function isMissingGitRepositoryError(message?: string): boolean {
   return Boolean(message && /not a git repository/i.test(message));
+}
+
+function applySetupButtonBusy(action: HTMLButtonElement, busy: boolean): void {
+  action.disabled = busy;
+  action.textContent = busy ? 'Setting up…' : 'Set up git';
 }
 
 /** Informational block with optional Set up git CTA. */
@@ -36,40 +45,27 @@ export function renderGitNoRepositoryState(
   const action = document.createElement('button');
   action.type = 'button';
   action.className = 'git-no-repo__btn';
-  action.textContent = 'Set up git';
+  applySetupButtonBusy(action, !options?.onSetupGit && isGitSetupBackgroundBusy());
   action.addEventListener('click', () => {
     if (options?.onSetupGit) {
       options.onSetupGit();
       return;
     }
-    void prefillGitSetupComposer();
+    void handleDefaultSetupGitClick(action);
   });
 
   block.append(icon, title, hint, action);
   host.appendChild(block);
 }
 
-/** Prefill /git-setup in the Code composer and focus it. */
-export async function prefillGitSetupComposer(): Promise<void> {
-  const input = document.getElementById('msgInput') as HTMLTextAreaElement | null;
-  if (!input) return;
-  const prompt =
-    '/git-setup Initialize git in this workspace (init, .gitignore, initial commit).';
-  input.value = prompt;
-  input.dispatchEvent(new Event('input', { bubbles: true }));
-  const { autoResize } = await import('./input');
-  autoResize(input);
-  input.focus();
-  input.setSelectionRange(prompt.length, prompt.length);
-}
-
-/** Leave Code overview (composer hidden there) then prefill git setup. */
-export async function openGitSetupFromOverview(): Promise<void> {
-  const { isCodeOverviewOpen, closeCodeOverview } = await import('./code-overview');
-  if (isCodeOverviewOpen()) {
-    const { navigateToCodeChat } = await import('../os/router');
-    closeCodeOverview({ skipNavigate: true, restoreChat: false });
-    navigateToCodeChat();
+/** Stay on the current surface; run /git-setup in a background chat. */
+async function handleDefaultSetupGitClick(action: HTMLButtonElement): Promise<void> {
+  if (action.disabled) return;
+  applySetupButtonBusy(action, true);
+  const result = await startGitSetupBackgroundChat();
+  if (!result.ok) {
+    applySetupButtonBusy(action, false);
+    return;
   }
-  await prefillGitSetupComposer();
+  if (!isGitSetupBackgroundBusy()) applySetupButtonBusy(action, false);
 }

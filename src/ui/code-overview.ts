@@ -30,7 +30,6 @@ import { showToast } from './toast';
 import { notifyCodeStageViewChanged, stripMainColumnOverlayClasses } from './main-column-overlay';
 import {
   isMissingGitRepositoryError,
-  openGitSetupFromOverview,
   renderGitNoRepositoryState,
 } from './git-no-repo-state';
 
@@ -163,7 +162,8 @@ function renderError(host: HTMLElement, message: string, onRetry?: () => void): 
 
 /** Informational rail block when the workspace has no git metadata yet. */
 function renderNoGitRepository(host: HTMLElement): void {
-  renderGitNoRepositoryState(host, { onSetupGit: () => void openGitSetupFromOverview() });
+  // Shared default: stay on overview and run /git-setup in a background chat.
+  renderGitNoRepositoryState(host);
 }
 
 function buildSparklineSvg(values: number[], className: string): SVGSVGElement {
