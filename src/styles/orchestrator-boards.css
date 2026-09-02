@@ -1043,18 +1043,66 @@
   font-weight: 550;
 }
 
-.ov2-task__tries {
-  color: var(--mn-fg-subtle);
+/*
+ * Only present when there is something to say. A task that built, tested and
+ * merged in one pass carries no count at all.
+ */
+.ov2-task__retries {
+  color: var(--mn-warning);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
-.ov2-task__live {
-  margin: 0;
+/* ── Activity ──────────────────────────────────────────────────────────────
+ * What an agent is doing, and for how long. The spinner says work is
+ * happening; the clock says whether it is stuck. Neither answers the other.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+.ov2-activity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   padding: 0 2px;
   color: var(--mn-fg-muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px;
+  font-size: 11.5px;
   line-height: 1.4;
+}
+
+.ov2-activity__glyph {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  color: var(--mn-fg-subtle);
+}
+
+.ov2-activity--thinking .ov2-activity__glyph {
+  color: var(--mn-accent);
+}
+
+.ov2-activity__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A thought is prose, not a tool name, so it reads as prose. */
+.ov2-activity--thinking .ov2-activity__label {
+  font-style: italic;
+  color: var(--mn-fg-subtle);
+}
+
+.ov2-activity__elapsed {
+  flex: 0 0 auto;
+  color: var(--mn-fg-subtle);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
 }
 
 .ov2-task__controls {
@@ -1119,7 +1167,7 @@
 .ov2-detail {
   display: flex;
   flex-direction: column;
-  width: min(940px, 100%);
+  width: min(1360px, 100%);
   height: 100%;
   min-height: 0;
   max-width: 100%;
@@ -1247,21 +1295,48 @@
 
 /* ── Body ──────────────────────────────────────────────────────────────── */
 
-.ov2-detail__body {
+/*
+ * Two panes. The left is what the task is; the right is what an agent did about
+ * it. They scroll independently because reading a thread and checking a file
+ * list are different jobs, and one should not drag the other out of view.
+ */
+.ov2-detail__panes {
   flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 0 24px;
+  padding-top: 14px;
+}
+
+.ov2-detail__rail {
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 22px;
-  padding: 16px 2px 20px 0;
+  padding: 2px 2px 20px 0;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
 
 /* Alerts are one group, so they sit tighter than the 22px section rhythm. */
-.ov2-detail__body > .ov2-alert + .ov2-alert {
+.ov2-detail__rail > .ov2-alert + .ov2-alert {
   margin-top: -14px;
+}
+
+/* Narrow: the thread goes under the rail rather than into a 300px column. */
+@container ov2 (max-width: 900px) {
+  .ov2-detail__panes {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, auto) minmax(220px, 1fr);
+    gap: 18px;
+  }
+
+  .ov2-detail__rail {
+    max-height: 46%;
+  }
 }
 
 /*
@@ -1305,10 +1380,6 @@
   color: var(--mn-warning);
 }
 
-.ov2-alert--info {
-  background: var(--mn-accent-soft);
-  color: var(--mn-accent-ink);
-}
 
 /* ── Sections ──────────────────────────────────────────────────────────── */
 
@@ -1514,9 +1585,13 @@
   color: var(--mn-fg-muted);
 }
 
-/* ── Attempts ──────────────────────────────────────────────────────────── */
+/* ── Work ──────────────────────────────────────────────────────────────────
+ * Everything done to a task, in order. Builder and tester are agents and open
+ * a thread; merge and the final test are engine steps and are drawn as the
+ * thinner thing they are, so the list never implies you can read one.
+ * ════════════════════════════════════════════════════════════════════════ */
 
-.ov2-attempts {
+.ov2-work {
   display: flex;
   flex-direction: column;
   margin: 0;
@@ -1524,305 +1599,277 @@
   list-style: none;
 }
 
-.ov2-attempt + .ov2-attempt {
-  border-top: 1px solid var(--mn-border-subtle, var(--mn-border));
+.ov2-work__item + .ov2-work__item {
+  border-top: 1px solid var(--mn-border);
 }
 
-.ov2-attempt__header {
+.ov2-work__header {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 4px 7px 0;
+  padding: 9px 6px;
   border: 0;
   border-radius: 6px;
-  background: transparent;
-  color: var(--mn-fg);
+  background: none;
+  color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background-color 140ms var(--ease-out);
 }
 
-.ov2-attempt__header--static {
+.ov2-work__header--static {
   cursor: default;
+  opacity: 0.66;
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .ov2-attempt__header:not(.ov2-attempt__header--static):hover {
+  .ov2-work__header:not(.ov2-work__header--static):hover {
     background: var(--mn-surface-1);
   }
 }
 
-.ov2-attempt__header:focus-visible {
+.ov2-work__header:focus-visible {
   outline: 2px solid var(--mn-focus-ring, var(--mn-accent));
   outline-offset: -2px;
 }
 
-.ov2-attempt__index {
+.ov2-work__index {
   flex: 0 0 auto;
-  width: 15px;
+  min-width: 14px;
   color: var(--mn-fg-subtle);
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10.5px;
   font-variant-numeric: tabular-nums;
-  text-align: right;
 }
 
-.ov2-attempt__icon {
+.ov2-work__icon {
+  flex: 0 0 auto;
+  color: var(--mn-fg-muted);
+}
+
+.ov2-work__role {
+  font-weight: 550;
+  font-size: 12.5px;
+}
+
+/* Engine steps keep the row but not the emphasis: they had no agent. */
+.ov2-work__item--engine .ov2-work__role {
+  font-weight: 400;
+}
+
+.ov2-work__seed {
+  color: var(--mn-fg-subtle);
+  font-size: 11px;
+}
+
+.ov2-work__header .ov2-pill,
+.ov2-work__running {
+  margin-left: auto;
+}
+
+.ov2-work__running {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mn-fg-muted);
+  font-size: 11px;
+}
+
+.ov2-work__running-label {
+  color: var(--mn-accent-ink, var(--mn-accent));
+}
+
+/* Anything after the outcome sits after it, not pushed to the far edge too. */
+.ov2-work__header .ov2-pill ~ .ov2-work__chevron,
+.ov2-work__running ~ .ov2-work__chevron {
+  margin-left: 0;
+}
+
+.ov2-work__chevron {
   flex: 0 0 auto;
   color: var(--mn-fg-subtle);
+  transition: transform 160ms var(--ease-out);
 }
 
-.ov2-attempt__role {
+.ov2-work__item.is-open .ov2-work__chevron {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ov2-work__chevron {
+    transition: none;
+  }
+}
+
+.ov2-work__summary-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 0 6px 10px 28px;
+}
+
+.ov2-work__summary {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--mn-fg-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.ov2-work__summary.is-expanded {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
+.ov2-work__more {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mn-fg-subtle);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ov2-work__more:focus-visible {
+  outline: 2px solid var(--mn-focus-ring, var(--mn-accent));
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ov2-work__more:hover {
+    color: var(--mn-fg);
+  }
+}
+
+/* ── Thread ────────────────────────────────────────────────────────────────
+ * One attempt, as the conversation it was. The rendering comes from the chat
+ * transcript renderer; what lives here is only the frame around it.
+ * ════════════════════════════════════════════════════════════════════════ */
+
+.ov2-thread {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding-bottom: 12px;
+  border-left: 1px solid var(--mn-border);
+  padding-left: 24px;
+}
+
+.ov2-thread__head {
+  display: flex;
   flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px 10px;
+  border-bottom: 1px solid var(--mn-border);
+}
+
+.ov2-thread__icon {
+  color: var(--mn-fg-muted);
+}
+
+.ov2-thread__title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mn-fg-muted);
+}
+
+.ov2-thread__head .ov2-pill,
+.ov2-thread__head .ov2-work__running {
+  margin-left: auto;
+}
+
+.ov2-thread__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 14px 4px 0 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.ov2-thread__blank {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 24px;
+  text-align: center;
+}
+
+.ov2-thread__blank-title {
+  margin: 0;
+  color: var(--mn-fg-muted);
   font-size: 13px;
   font-weight: 550;
 }
 
-.ov2-attempt__seed {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--mn-fg-muted);
-  font-size: 11.5px;
-}
-
-/* Outcome sits hard right, so a column of attempts reads as a column of results. */
-.ov2-attempt__header .ov2-pill {
-  margin-left: auto;
-}
-
-.ov2-attempt__chevron {
-  flex: 0 0 auto;
-  color: var(--mn-fg-muted);
-  transition: transform 160ms var(--ease-out);
-}
-
-.ov2-attempt.is-open .ov2-attempt__chevron {
-  transform: rotate(90deg);
-}
-
-/*
- * The short answer, readable without opening anything, and clamped so four
- * attempts do not put eight hundred words between the file list and the log.
- */
-.ov2-attempt__summary {
-  margin: -2px 0 0 23px;
-  max-width: 74ch;
-  color: var(--mn-fg-muted);
-  font-size: 12.5px;
-  line-height: 1.55;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  overflow: hidden;
-}
-
-.ov2-attempt__summary.is-expanded {
-  display: block;
-  overflow: visible;
-}
-
-.ov2-attempt__more {
-  margin: 3px 0 8px 23px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--mn-fg-muted);
-  font: inherit;
-  font-size: 11.5px;
-  cursor: pointer;
-}
-
-.ov2-attempt__more:focus-visible {
-  outline: 2px solid var(--mn-focus-ring, var(--mn-accent));
-  outline-offset: 2px;
-  border-radius: 3px;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .ov2-attempt__more:hover {
-    color: var(--mn-accent-ink);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-}
-
-/* Without a Show all button the summary still needs its bottom breathing room. */
-.ov2-attempt__summary:last-child {
-  margin-bottom: 8px;
-}
-
-/* ── The log ───────────────────────────────────────────────────────────── */
-
-.ov2-log {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 0 0 12px 23px;
-}
-
-.ov2-log__scroller {
-  max-height: 380px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  border: 1px solid var(--mn-border);
-  border-radius: 8px;
-  background: var(--mn-surface-0);
-}
-
-.ov2-log__list {
-  display: flex;
-  flex-direction: column;
+.ov2-thread__blank-body {
   margin: 0;
-  padding: 6px 0;
-  list-style: none;
-}
-
-/*
- * Two columns: a narrow right-aligned gutter that names the kind of line, and
- * the line. The old three-column mono grid put every event in the same
- * typeface at the same size, so reasoning and tool output were indistinguishable.
- */
-.ov2-log__row {
-  display: grid;
-  grid-template-columns: 52px 1fr;
-  gap: 10px;
-  padding: 4px 12px 4px 0;
-  align-items: baseline;
-}
-
-.ov2-log__row + .ov2-log__row {
-  margin-top: 2px;
-}
-
-.ov2-log__label {
-  color: var(--mn-fg-muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.ov2-log__content {
-  min-width: 0;
-}
-
-/* Reasoning is prose. It gets the UI face, a readable measure, and a clamp. */
-.ov2-log__thought {
-  margin: 0;
-  max-width: 72ch;
-  color: var(--mn-fg-muted);
-  font-size: 12.5px;
+  max-width: 34ch;
+  color: var(--mn-fg-subtle);
+  font-size: 12px;
   line-height: 1.55;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 6;
-  line-clamp: 6;
-  overflow: hidden;
 }
 
-.ov2-log__thought.is-expanded {
-  display: block;
-  overflow: visible;
-}
-
-/* Tool traffic is code, so it gets mono. */
-.ov2-log__line {
+/* How it finished, once it has. Tone comes from the fill, never an edge stripe. */
+.ov2-thread__end {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 8px;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11.5px;
-  line-height: 1.5;
-}
-
-.ov2-log__lead {
-  color: var(--mn-fg);
-  font-weight: 500;
-}
-
-.ov2-log__trail {
-  min-width: 0;
-  color: var(--mn-fg-muted);
-  overflow-wrap: anywhere;
-}
-
-.ov2-log__row--result .ov2-log__lead {
-  color: var(--mn-fg-muted);
-  font-weight: 400;
-}
-
-.ov2-log__row--good .ov2-log__lead {
-  color: var(--mn-success);
-}
-
-.ov2-log__row--warn .ov2-log__lead {
-  color: var(--mn-warning);
-}
-
-.ov2-log__row--bad .ov2-log__lead {
-  color: var(--mn-danger-ink);
-}
-
-.ov2-log__body {
-  margin: 5px 0 0;
-  padding: 7px 9px;
-  max-height: 220px;
-  overflow: auto;
-  border-radius: 6px;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: 8px;
   background: var(--mn-surface-1);
-  color: var(--mn-fg-muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
-.ov2-log__more {
-  margin-top: 3px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--mn-fg-muted);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
+.ov2-thread__end--good {
+  background: var(--mn-success-soft, var(--mn-surface-1));
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .ov2-log__more:hover {
-    color: var(--mn-accent-ink);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
+.ov2-thread__end--warn {
+  background: var(--mn-warning-soft, var(--mn-surface-1));
 }
 
-/*
- * No spinner and no animated ellipsis here on purpose. A live log is open while
- * a model is generating, and one running CSS animation pins the compositor at
- * refresh rate for as long as it runs — measurably fewer tokens per second on
- * the very screen that is watching them arrive. The line is the state.
- */
-.ov2-log__tail {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  margin: 0;
+.ov2-thread__end--bad {
+  background: var(--mn-danger-soft, var(--mn-surface-1));
+}
+
+.ov2-thread__end-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--mn-fg-muted);
-  font-size: 11px;
+}
+
+.ov2-thread__end-summary {
+  flex: 1 1 100%;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.ov2-thread__end-summary > :first-child {
+  margin-top: 0;
+}
+
+.ov2-thread__end-summary > :last-child {
+  margin-bottom: 0;
 }
 
 /* ── Spec ──────────────────────────────────────────────────────────────── */
@@ -2415,9 +2462,10 @@ select.ov2-create__input {
   color: var(--mn-fg-muted);
 }
 
-.ov2-report__task-tries {
-  color: var(--mn-fg-subtle);
+.ov2-report__task-retries {
+  color: var(--mn-warning);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -2754,19 +2802,31 @@ select.ov2-create__input {
   font-size: 12.5px;
 }
 
+/*
+ * The report is markdown the model wrote, so it is read as prose rather than
+ * as a dump. Capped at a readable measure; the surface stays flat.
+ */
 .ov2-finish__body {
-  margin: 0;
-  max-height: 420px;
-  overflow: auto;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--mn-surface-1);
+  max-width: 72ch;
+  max-height: 460px;
+  overflow-x: hidden;
+  overflow-y: auto;
   color: var(--mn-fg);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  font-size: 12px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.ov2-finish__body > :first-child {
+  margin-top: 0;
+}
+
+.ov2-finish__body > :last-child {
+  margin-bottom: 0;
+}
+
+.ov2-finish__body pre {
+  overflow-x: auto;
 }
 
 /* ── Narrow ────────────────────────────────────────────────────────────── */
@@ -2798,16 +2858,6 @@ select.ov2-create__input {
   /* 4 -> 2 lanes, from the twin-shape brief. */
   .ov2-kanban {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  /* The log's gutter label moves above its content rather than shrinking. */
-  .ov2-log__row {
-    grid-template-columns: 1fr;
-    gap: 1px;
-  }
-
-  .ov2-log__label {
-    text-align: left;
   }
 
   .ov2-detail {

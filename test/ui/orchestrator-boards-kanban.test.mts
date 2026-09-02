@@ -24,6 +24,7 @@ import {
   renderEngineErrors,
   renderRunLedger,
   renderTaskList,
+  retryCount,
   type BoardActions,
 } from '../../src/orchestrator/board-render.ts';
 import {
@@ -212,6 +213,106 @@ describe('renderTaskList', () => {
     assert.match(card.querySelector('.ov2-task__blocked')!.textContent!, /W1-B/);
   });
 
+  test('a clean task claims no retries — build, test and merge are not tries', () => {
+    setupDom();
+    // W1-A ran a builder that passed and then merged: three attempts, nothing
+    // retried. The old badge read "3 tries" here, which is the bug.
+    const state = board();
+    assert.equal(retryCount(state.tasks.get('W1-A')!), 0);
+    const node = renderTaskList(state, NO_ACTIONS, OPTIONS);
+    const card = node.querySelector('[data-task-id="W1-A"]')!;
+    assert.equal(card.querySelector('.ov2-task__retries'), null);
+    // The old copy. "Retry" the button is fine; "3 tries" the badge was not.
+    assert.doesNotMatch(card.textContent!, /\d+ tr(y|ies)/);
+  });
+
+  test('a task picked up again counts that, and only that', () => {
+    setupDom();
+    const state = board([
+      {
+        v: 1,
+        seq: 8,
+        type: 'task.attempt.ended',
+        taskId: 'W1-B',
+        attemptId: 'b1',
+        role: 'builder',
+        outcome: 'fail',
+      },
+      {
+        v: 1,
+        seq: 9,
+        type: 'task.attempt.started',
+        taskId: 'W1-B',
+        attemptId: 'b2',
+        role: 'builder',
+        seedKind: 'failure-aware',
+      },
+      {
+        v: 1,
+        seq: 10,
+        type: 'task.attempt.ended',
+        taskId: 'W1-B',
+        attemptId: 'b2',
+        role: 'builder',
+        outcome: 'pass',
+      },
+    ]);
+    assert.equal(retryCount(state.tasks.get('W1-B')!), 1);
+    const node = renderTaskList(state, NO_ACTIONS, OPTIONS);
+    const card = node.querySelector('[data-task-id="W1-B"]')!;
+    assert.equal(card.querySelector('.ov2-task__retries')!.textContent, '1 retry');
+  });
+
+  test('a running card shows what the agent is doing and for how long', () => {
+    setupDom();
+    const state = board();
+    const node = renderTaskList(state, NO_ACTIONS, {
+      ...OPTIONS,
+      liveActivity: new Map([
+        ['W1-B', { attemptId: 'b1', role: 'builder', kind: 'tool' as const, text: 'read_file', settled: false }],
+      ]),
+      attemptStartedAt: new Map([['b1', 1_000]]),
+      now: 1_000 + 95_000,
+    });
+    const card = node.querySelector('[data-task-id="W1-B"]')!;
+    const activity = card.querySelector('.ov2-activity')!;
+    // The tool reads as an action, not as a raw function name.
+    assert.match(activity.querySelector('.ov2-activity__label')!.textContent!, /Read/);
+    assert.equal(activity.querySelector('.ov2-activity__elapsed')!.textContent, '1:35');
+    assert.ok(activity.querySelector('.tool-call-spinner'), 'a running tool spins');
+  });
+
+  test('a thinking agent says what it is thinking, not the last tool it touched', () => {
+    setupDom();
+    const state = board();
+    const node = renderTaskList(state, NO_ACTIONS, {
+      ...OPTIONS,
+      liveActivity: new Map([
+        [
+          'W1-B',
+          {
+            attemptId: 'b1',
+            role: 'builder',
+            kind: 'thinking' as const,
+            text: 'The scaffold already has a vite config.',
+            settled: false,
+          },
+        ],
+      ]),
+    });
+    const activity = node.querySelector('[data-task-id="W1-B"] .ov2-activity')!;
+    assert.ok(activity.classList.contains('ov2-activity--thinking'));
+    assert.match(activity.textContent!, /vite config/);
+  });
+
+  test('a card with no attempt running shows no activity line at all', () => {
+    setupDom();
+    const node = renderTaskList(board(), NO_ACTIONS, OPTIONS);
+    // W1-A merged; W1-C is blocked. Neither is doing anything.
+    assert.equal(node.querySelector('[data-task-id="W1-A"] .ov2-activity'), null);
+    assert.equal(node.querySelector('[data-task-id="W1-C"] .ov2-activity'), null);
+  });
+
   test('a card that has failed offers Retry, not Start', () => {
     setupDom();
     const state = board([
@@ -353,7 +454,7 @@ describe('renderRunLedger (P9-G)', () => {
     assert.equal(renderRunLedger(board()), null);
   });
 
-  test('reports per-task outcomes, attempt counts and why', () => {
+  test('reports per-task outcomes, retries and why', () => {
     setupDom();
     const state = board([
       { v: 1, seq: 8, type: 'task.abandoned', taskId: 'W1-D', reason: 'builder-failed-twice' },
@@ -369,6 +470,9 @@ describe('renderRunLedger (P9-G)', () => {
     assert.match(text, /npm test/);
     assert.match(text, /abc123/, 'the integration sha is part of the report');
     assert.equal(node.querySelectorAll('.ov2-report__task').length, 4);
+    // Nothing was retried, so the ledger totals zero and no row claims one.
+    assert.match(text, /Retries0/);
+    assert.equal(node.querySelectorAll('.ov2-report__task-retries').length, 0);
   });
 
   test('names a hand abandonment as one', () => {
@@ -419,21 +523,22 @@ describe('renderTaskDetail', () => {
     assert.equal(dialog.getAttribute('role'), 'dialog');
     assert.equal(dialog.getAttribute('aria-modal'), 'true');
     assert.ok(node.querySelector('.ov2-facts'), 'status facts live in the pinned head');
-    assert.ok(node.querySelector('.ov2-detail__body'));
-    // The head is not part of the scrolling body, so the title stays put.
-    assert.equal(node.querySelector('.ov2-detail__body .ov2-detail__title'), null);
+    assert.ok(node.querySelector('.ov2-detail__rail'));
+    assert.ok(node.querySelector('.ov2-thread'), 'the thread gets its own pane');
+    // The head is not part of either scrolling pane, so the title stays put.
+    assert.equal(node.querySelector('.ov2-detail__panes .ov2-detail__title'), null);
   });
 
   test('leads with the run and keeps the spec last', () => {
     setupDom();
     const state = unrunBoard();
     const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, OPTIONS);
-    const bodyText = node.querySelector('.ov2-detail__body')!.textContent!;
-    const filesAt = bodyText.indexOf('Files');
-    const attemptsAt = bodyText.indexOf('Attempts');
-    const specAt = bodyText.indexOf('Spec');
-    assert.ok(filesAt >= 0 && attemptsAt > filesAt, 'Files precede Attempts');
-    assert.ok(specAt > attemptsAt, 'the spec is last, not the first screen');
+    const railText = node.querySelector('.ov2-detail__rail')!.textContent!;
+    const filesAt = railText.indexOf('Files');
+    const workAt = railText.indexOf('Work');
+    const specAt = railText.indexOf('Spec');
+    assert.ok(filesAt >= 0 && workAt > filesAt, 'Files precede Work');
+    assert.ok(specAt > workAt, 'the spec is last, not the first screen');
   });
 
   test('opens the spec for a task that has not run, and folds it once it has', () => {
@@ -465,16 +570,30 @@ describe('renderTaskDetail', () => {
     assert.deepEqual(calls, [null]);
   });
 
-  test('the attempt row itself opens the log, and merges have none to open', () => {
+  test('an agent row opens its thread, and engine steps have none to open', () => {
     setupDom();
     const state = board();
     const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, OPTIONS);
-    const opens = [...node.querySelectorAll('.ov2-attempt__header')]
+    const opens = [...node.querySelectorAll('.ov2-work__header')]
       .map((row) => (row as HTMLElement).dataset.focusKey)
       .filter(Boolean);
     // W1-A ran one builder (a1) and has one merge attempt the fold synthesised.
     assert.deepEqual(opens, ['transcript:a1']);
-    assert.equal(node.querySelectorAll('.ov2-attempt__header--static').length, 1);
+    // The merge is in the list, visibly not an agent, and not clickable.
+    assert.equal(node.querySelectorAll('.ov2-work__header--static').length, 1);
+    assert.equal(node.querySelectorAll('.ov2-work__item--engine').length, 1);
+  });
+
+  test('Work counts agents, not engine steps', () => {
+    setupDom();
+    const state = board();
+    const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, OPTIONS);
+    const panels = [...node.querySelectorAll('.ov2-panel')];
+    const work = panels.find((p) => p.querySelector('.ov2-panel__title')?.textContent === 'Work')!;
+    assert.ok(work, 'the section is called Work');
+    // Two rows — builder and merge — but only the builder is an agent.
+    assert.equal(work.querySelectorAll('.ov2-work__item').length, 2);
+    assert.equal(work.querySelector('.ov2-panel__count')!.textContent, '1 agent');
   });
 
   test('falls back to the declared footprint before a task has merged', () => {
@@ -539,7 +658,7 @@ describe('renderTaskDetail', () => {
     assert.deepEqual(asked, ['src/a.ts']);
   });
 
-  test('renders a loading log as a skeleton, not as a word', () => {
+  test('renders a loading thread as a skeleton, not as a word', () => {
     setupDom();
     const state = board();
     const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, {
@@ -553,29 +672,10 @@ describe('renderTaskDetail', () => {
       },
     });
     assert.ok(node.querySelector('.ov2-skeleton--log'));
-    assert.equal(node.querySelector('.ov2-log__list'), null);
+    assert.equal(node.querySelector('.tool-call-msg'), null);
   });
 
-  test('renders log entries, and says when it was capped', () => {
-    setupDom();
-    const state = board();
-    const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, {
-      ...OPTIONS,
-      transcript: {
-        attemptId: 'a1',
-        status: 'ready' as const,
-        events: [{ type: 'tool_call', name: 'read_file', arguments: '{"path":"a.ts"}' }],
-        truncated: false,
-        capped: true,
-      },
-    });
-    assert.match(node.textContent!, /read_file/);
-    // The argument reads as a value, not as a JSON blob.
-    assert.match(node.querySelector('.ov2-log__trail')!.textContent!, /path: a\.ts/);
-    assert.match(node.textContent!, /ran longer than the log keeps/);
-  });
-
-  test('reasoning renders as prose and tool traffic as mono, in separate rows', () => {
+  test('a tool call renders as a chat tool card, and says when it was capped', () => {
     setupDom();
     const state = board();
     const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, {
@@ -584,21 +684,52 @@ describe('renderTaskDetail', () => {
         attemptId: 'a1',
         status: 'ready' as const,
         events: [
-          { type: 'thinking', text: 'Let me start by exploring the working directory.' },
-          { type: 'tool_call', name: 'read_file' },
+          { type: 'tool_call', id: 't1', name: 'read_file', arguments: '{"path":"a.ts"}' },
+          { type: 'tool_result', id: 't1', name: 'read_file', content: 'ok' },
+          { type: 'round_end', index: 1, toolCallCount: 1, text: '' },
+        ],
+        truncated: false,
+        capped: true,
+      },
+    });
+    // The same card chat uses, not a log row with a label gutter.
+    const card = node.querySelector('.tool-call-msg')!;
+    assert.ok(card, 'the tool call is a chat tool card');
+    assert.equal((card as HTMLElement).dataset.toolName, 'read_file');
+    assert.match(node.textContent!, /ran longer than the transcript keeps/);
+  });
+
+  test('reasoning goes to the thoughts panel, uncapped, and the outcome is stated', () => {
+    setupDom();
+    const state = board();
+    const thought =
+      'Let me start by exploring the working directory. '.repeat(12);
+    const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, {
+      ...OPTIONS,
+      transcript: {
+        attemptId: 'a1',
+        status: 'ready' as const,
+        events: [
+          { type: 'thinking', text: thought },
+          { type: 'tool_call', id: 't1', name: 'read_file' },
+          { type: 'tool_result', id: 't1', name: 'read_file', content: 'ok' },
+          { type: 'round_end', index: 1, toolCallCount: 1, text: 'Created the file.' },
           { type: 'attempt_end', name: 'pass', summary: 'Created the file.' },
         ],
         truncated: false,
         capped: false,
       },
     });
-    assert.equal(node.querySelectorAll('.ov2-log__row').length, 3);
-    assert.equal(node.querySelector('.ov2-log__label')!.textContent, 'Thought');
-    assert.ok(node.querySelector('.ov2-log__thought'), 'reasoning is prose, not a code row');
-    assert.ok(node.querySelector('.ov2-log__row--good'), 'a pass is toned as one');
+    const thoughts = node.querySelector('.thoughts-panel-wrap')!;
+    assert.ok(thoughts, 'reasoning is a thoughts panel, not a clamped log row');
+    // The whole thought is present: nothing is cut at a character count.
+    assert.ok(thoughts.textContent!.includes(thought.trim().slice(-40)));
+    // The assistant's prose for the round reads as a message.
+    assert.match(node.querySelector('.transcript-view__assistant')!.textContent!, /Created the file/);
+    assert.match(node.querySelector('.ov2-thread__end')!.textContent!, /pass/);
   });
 
-  test('an empty log says so rather than showing nothing', () => {
+  test('an empty thread says so rather than showing nothing', () => {
     setupDom();
     const state = board();
     const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, {
@@ -614,6 +745,13 @@ describe('renderTaskDetail', () => {
     assert.match(node.textContent!, /Nothing was recorded/);
   });
 
+  test('with no attempt picked, the thread pane invites one instead of sitting blank', () => {
+    setupDom();
+    const state = board();
+    const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, OPTIONS);
+    assert.match(node.querySelector('.ov2-thread__blank')!.textContent!, /Pick a Builder or Tester/);
+  });
+
   test('says outright that a skipped task did not fail, above everything else', () => {
     setupDom();
     const state = board([
@@ -624,8 +762,36 @@ describe('renderTaskDetail', () => {
     const alert = node.querySelector('.ov2-alert--warn')!;
     assert.match(alert.textContent!, /did not fail itself/);
     // Alerts come before every section, because they are why the card was opened.
-    const body = node.querySelector('.ov2-detail__body')!;
-    assert.ok(body.firstElementChild!.classList.contains('ov2-alert'));
+    const rail = node.querySelector('.ov2-detail__rail')!;
+    assert.ok(rail.firstElementChild!.classList.contains('ov2-alert'));
+  });
+
+  test('footprint noise never becomes an alert', () => {
+    setupDom();
+    const state = board([
+      {
+        v: 1,
+        seq: 8,
+        type: 'touches.overflow',
+        taskId: 'W1-A',
+        attemptId: 'a1',
+        declared: ['a.ts'],
+        actual: ['package-lock.json'],
+      },
+      {
+        v: 1,
+        seq: 9,
+        type: 'touches.overflow',
+        taskId: 'W1-A',
+        attemptId: 'a1',
+        declared: ['a.ts'],
+        actual: ['package-lock.json'],
+      },
+    ]);
+    const node = renderTaskDetail(state, state.tasks.get('W1-A')!, NO_ACTIONS, OPTIONS);
+    // It stays on the journal. It does not open the panel three times over.
+    assert.equal(node.querySelectorAll('.ov2-alert').length, 0);
+    assert.doesNotMatch(node.textContent!, /Wrote outside its footprint/);
   });
 });
 

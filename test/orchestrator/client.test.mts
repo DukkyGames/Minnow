@@ -280,10 +280,29 @@ describe('board client — reading', () => {
         event: { type: 'tool_call', name: 'save_file' },
       });
       await until(
-        () => client.getLiveHeadlines().get('W1-A')?.text === 'save_file',
-        'the live tool headline',
+        () => client.getLiveActivity().get('W1-A')?.text === 'save_file',
+        'the live tool activity',
       );
-      assert.equal(client.getLiveHeadlines().get('W1-A')?.role, 'builder');
+      assert.equal(client.getLiveActivity().get('W1-A')?.role, 'builder');
+      assert.equal(client.getLiveActivity().get('W1-A')?.kind, 'tool');
+
+      // Thinking is activity too — the card says what the agent is doing, not
+      // only which tool it last reached for.
+      emitLive({
+        boardId,
+        attemptId: 'r-live-test',
+        taskId: 'W1-A',
+        role: 'builder',
+        event: { type: 'thinking', text: 'Checking the existing scaffold first.' },
+      });
+      await until(
+        () => client.getLiveActivity().get('W1-A')?.kind === 'thinking',
+        'the live thought',
+      );
+      assert.match(
+        client.getLiveActivity().get('W1-A')!.text,
+        /existing scaffold/,
+      );
 
       const events = await readEvents(boardId);
       assert.equal(
