@@ -439,8 +439,15 @@ function validateTasks(body, errors) {
           line: task.line,
           column: 1,
           message: `task ${task.id} declares an invalid glob \`${glob}\`: ${problem}`,
-          hint: 'touches are repo-relative globs, e.g. `src/ui/**
- * `, `server/orchestrator/*.js`', }); } } } } /** The front-matter `todos` and the `#### Task` headings must each account for the other.
+          hint: 'touches are repo-relative globs, e.g. `src/ui/**`, `server/orchestrator/*.js`',
+        });
+      }
+    }
+  }
+}
+
+/**
+ * The front-matter `todos` and the `#### Task` headings must each account for the other.
  * @param {{ todos: Array<{ id: string, line: number }> }} frontMatter
  * @param {{ tasks: any[] }} body
  * @param {import('./types').ParseError[]} errors
