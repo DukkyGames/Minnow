@@ -23,6 +23,7 @@ import { createChatTranscriptStore } from '../../src/chat/chat-transcript-store.
 import {
   CONTINUE_AFTER_TRUNCATION_INSTRUCTION,
   EMPTY_POST_TOOL_CONTINUE_INSTRUCTION,
+  INTENT_TO_ACT_RETRY_INSTRUCTION,
   PROSE_QUESTION_RETRY_INSTRUCTION,
   SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION,
 } from '../../src/tools/turn-continuation.ts';
@@ -184,6 +185,10 @@ describe('P10-D chat transcript decorator (MIN-769)', () => {
     store.append(CHAT_ID, {
       role: 'user',
       content: PROSE_QUESTION_RETRY_INSTRUCTION,
+    });
+    store.append(CHAT_ID, {
+      role: 'user',
+      content: INTENT_TO_ACT_RETRY_INSTRUCTION,
     });
     store.append(CHAT_ID, {
       role: 'user',

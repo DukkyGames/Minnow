@@ -25,7 +25,10 @@ import {
   runTurn,
   buildOpeningMessages,
 } from '../../server/runner/index.js';
-import { SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION } from '../../server/runner/turn-continuation.js';
+import {
+  INTENT_TO_ACT_RETRY_INSTRUCTION,
+  SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION,
+} from '../../server/runner/turn-continuation.js';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const RUN_TURN_JS = path.join(PROJECT_ROOT, 'server', 'runner', 'run-turn.js');
@@ -1102,6 +1105,76 @@ describe('P6-C runTurn interface (MIN-725)', () => {
       const userContents = (completions[0].body?.messages ?? [])
         .filter((m) => m.role === 'user')
         .map((m) => m.content);
+      assert.equal(userContents.includes(SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION), false);
+    });
+  });
+
+  test('nudgeToolUse false: announce-then-stop retries once without the sub-agent nudge', { timeout: 20_000 }, async () => {
+    const announce =
+      'The user wants the **status-bar Tray only**. Let me set up my task list and inspect the existing icon asset and available image tooling before building.';
+    await withFake(
+      [
+        { emit: proseSseChunks(announce) },
+        { emit: functionCallChunks('get_datetime', {}, 'call_dt') },
+        { emit: proseSseChunks('It is noon.') },
+      ],
+      async (baseUrl, fake) => {
+        const result = await runTurn({
+          chatId: CHAT_UUID,
+          seed: 'Use a tray-only status bar.',
+          tools: [DATETIME_TOOL],
+          model: { providerId: 'local-fake', id: 'fake-model' },
+          deps: stubDeps(baseUrl, { runHeadlessToolBatch: passthroughBatch }),
+          execute: async () => ({ content: '2026-08-31T12:00:00.000Z' }),
+          injectReportTool: false,
+          nudgeToolUse: false,
+          finalizeStructuredOutcome: false,
+          systemPrompt: 'chat',
+          limits: { maxTurns: 4 },
+        });
+        assert.equal(result.outcome, 'no_report');
+        const completions = fake.requests.filter((row) => row.pathname === '/v1/chat/completions');
+        assert.ok(completions.length >= 2, 'intent-to-act must spend a retry completion');
+        const retryMessages = completions[1]?.body?.messages ?? [];
+        const retryUser = retryMessages.filter((m) => m.role === 'user').map((m) => m.content);
+        assert.ok(
+          retryUser.includes(INTENT_TO_ACT_RETRY_INSTRUCTION),
+          'retry completion must carry the intent-to-act control row',
+        );
+        assert.ok(
+          retryMessages.some((m) => m.role === 'assistant' && m.content === announce),
+          'visible announce preamble must stay on the retry transcript',
+        );
+        const nudged = completions.some((row) =>
+          (row.body?.messages ?? []).some(
+            (m) => m.role === 'user' && m.content === SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION,
+          ),
+        );
+        assert.equal(nudged, false, 'chat-shaped turns must still skip the generic tool-use nudge');
+      },
+    );
+  });
+
+  test('nudgeToolUse false: plain Done does not intent-retry', { timeout: 20_000 }, async () => {
+    await withFake([{ emit: proseSseChunks('Done.') }], async (baseUrl, fake) => {
+      const result = await runTurn({
+        chatId: CHAT_UUID,
+        seed: 'Hi',
+        tools: [DATETIME_TOOL],
+        model: { providerId: 'local-fake', id: 'fake-model' },
+        deps: stubDeps(baseUrl),
+        injectReportTool: false,
+        nudgeToolUse: false,
+        finalizeStructuredOutcome: false,
+        systemPrompt: 'chat',
+      });
+      assert.equal(result.outcome, 'no_report');
+      const completions = fake.requests.filter((row) => row.pathname === '/v1/chat/completions');
+      assert.equal(completions.length, 1, 'plain Done must not spend a retry completion');
+      const userContents = (completions[0].body?.messages ?? [])
+        .filter((m) => m.role === 'user')
+        .map((m) => m.content);
+      assert.equal(userContents.includes(INTENT_TO_ACT_RETRY_INSTRUCTION), false);
       assert.equal(userContents.includes(SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION), false);
     });
   });

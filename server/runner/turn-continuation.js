@@ -11,6 +11,8 @@ function resolveFailedTurnContinueInstruction(history) {
 }
 const MAX_PROSE_QUESTION_RETRIES = 1;
 const PROSE_QUESTION_RETRY_INSTRUCTION = "Your previous reply is already in the chat. You presented multiple-choice options in plain text. Do not repeat that list in prose. Call the ask_question tool now with a questions array (each item: id, prompt, options as {id, label} objects). Wait for the user to answer before continuing.";
+const MAX_INTENT_TO_ACT_RETRIES = 1;
+const INTENT_TO_ACT_RETRY_INSTRUCTION = "Your previous reply is already in the chat. It announced a next action but did not call a tool. Do not repeat it. Call those tools now.";
 const SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION = "You must use the available tools to complete the task. Do not answer with prose only \u2014 call the appropriate tool(s) now, then summarize after you have tool results.";
 /**
  * @param {string} toolName
@@ -79,6 +81,8 @@ export {
   MAX_EMPTY_POST_TOOL_RETRIES,
   MAX_PROSE_QUESTION_RETRIES,
   PROSE_QUESTION_RETRY_INSTRUCTION,
+  MAX_INTENT_TO_ACT_RETRIES,
+  INTENT_TO_ACT_RETRY_INSTRUCTION,
   SUB_AGENT_TOOL_USE_NUDGE_INSTRUCTION,
   buildReportToolNudgeInstruction,
   TURN_DEBUG_STORAGE_KEY,
