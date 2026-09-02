@@ -165,6 +165,40 @@ describe('mountCreateForm', () => {
     assert.equal(sessionState?.chats.length, chatsBefore);
     setSessionStateForTests(null);
   });
+
+  test('Repair is present on parse failure and success calls onCreated', async () => {
+    const pane = setupDom();
+    const created: string[] = [];
+    await mountCreateForm(pane, {
+      discoverPlans: async () => ({
+        plans: ['documentation/plans/alpha.md'],
+      }),
+      createBoard: async () => {
+        throw new PlanParseFailure('the plan does not parse', [
+          { line: 8, column: 1, message: 'missing Build', hint: 'add a Build bullet' },
+        ]);
+      },
+      startPlanRepair: async () => ({ ok: true, boardId: 'from-form' }),
+      onCreated: (boardId) => {
+        created.push(boardId);
+      },
+      onCancel: () => {},
+    });
+
+    const form = pane.querySelector('form.ov2-create');
+    const select = pane.querySelector<HTMLSelectElement>('select.ov2-create__input');
+    assert.ok(form && select);
+    select.value = 'documentation/plans/alpha.md';
+    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const repair = [...pane.querySelectorAll('button')].find((b) => b.textContent === 'Repair');
+    assert.ok(repair, 'expected Repair on the create form parse pane');
+    repair.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(created, ['from-form']);
+  });
 });
 
 describe('mountBoardsAskPane', () => {
@@ -262,5 +296,123 @@ describe('mountBoardsAskPane', () => {
     assert.match(pane.querySelector('.ov2-create__parse-title')?.textContent ?? '', /does not parse/);
     assert.match(pane.querySelector('.ov2-create__parse-loc')?.textContent ?? '', /12:1/);
     assert.match(pane.querySelector('.ov2-create__parse-msg')?.textContent ?? '', /missing Touches/);
+    const repair = [...pane.querySelectorAll('button')].find((b) => b.textContent === 'Repair');
+    assert.ok(repair, 'expected a Repair button on parse failure');
+  });
+
+  test('Repair click invokes startPlanRepair with the plan path and errors', async () => {
+    const pane = setupDom();
+    const calls: Array<{ planPath: string; errors: unknown }> = [];
+    await mountBoardsAskPane(pane, {
+      discoverPlans: async () => ({
+        plans: ['documentation/plans/alpha.md'],
+      }),
+      createBoard: async () => {
+        throw new PlanParseFailure('the plan does not parse', [
+          {
+            line: 12,
+            column: 1,
+            message: 'missing Touches',
+            hint: 'Add a Touches list',
+          },
+        ]);
+      },
+      startPlanRepair: async (input) => {
+        calls.push({ planPath: input.planPath, errors: input.errors });
+        return { ok: true, boardId: 'alpha' };
+      },
+      onCreated: () => {},
+    });
+
+    const select = pane.querySelector<HTMLSelectElement>('#orchestrateHubPlanSelect');
+    const start = pane.querySelector<HTMLButtonElement>('#orchestrateHubStartBoard');
+    assert.ok(select && start);
+    select.value = 'documentation/plans/alpha.md';
+    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    start.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const repair = [...pane.querySelectorAll('button')].find((b) => b.textContent === 'Repair');
+    assert.ok(repair);
+    repair.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.planPath, 'documentation/plans/alpha.md');
+    assert.equal((calls[0]?.errors as { message: string }[])[0]?.message, 'missing Touches');
+  });
+
+  test('successful Repair calls onCreated with the new board id', async () => {
+    const pane = setupDom();
+    const created: string[] = [];
+    await mountBoardsAskPane(pane, {
+      discoverPlans: async () => ({
+        plans: ['documentation/plans/alpha.md'],
+      }),
+      createBoard: async () => {
+        throw new PlanParseFailure('the plan does not parse', [
+          { line: 12, column: 1, message: 'missing Touches', hint: 'Add a Touches list' },
+        ]);
+      },
+      startPlanRepair: async () => ({ ok: true, boardId: 'fixed' }),
+      onCreated: (boardId) => {
+        created.push(boardId);
+      },
+    });
+
+    const select = pane.querySelector<HTMLSelectElement>('#orchestrateHubPlanSelect');
+    const start = pane.querySelector<HTMLButtonElement>('#orchestrateHubStartBoard');
+    assert.ok(select && start);
+    select.value = 'documentation/plans/alpha.md';
+    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    start.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const repair = [...pane.querySelectorAll('button')].find((b) => b.textContent === 'Repair');
+    assert.ok(repair);
+    repair.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.deepEqual(created, ['fixed']);
+  });
+
+  test('remaining PlanParseFailure after Repair re-renders the error list', async () => {
+    const pane = setupDom();
+    await mountBoardsAskPane(pane, {
+      discoverPlans: async () => ({
+        plans: ['documentation/plans/alpha.md'],
+      }),
+      createBoard: async () => {
+        throw new PlanParseFailure('the plan does not parse', [
+          { line: 12, column: 1, message: 'missing Touches', hint: 'Add a Touches list' },
+        ]);
+      },
+      startPlanRepair: async () => ({
+        ok: false,
+        parseFailure: new PlanParseFailure('the plan does not parse', [
+          { line: 4, column: 1, message: 'missing name', hint: 'add YAML name' },
+        ]),
+      }),
+      onCreated: () => {},
+    });
+
+    const select = pane.querySelector<HTMLSelectElement>('#orchestrateHubPlanSelect');
+    const start = pane.querySelector<HTMLButtonElement>('#orchestrateHubStartBoard');
+    assert.ok(select && start);
+    select.value = 'documentation/plans/alpha.md';
+    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    start.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const repair = [...pane.querySelectorAll('button')].find((b) => b.textContent === 'Repair');
+    assert.ok(repair);
+    repair.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.match(pane.querySelector('.ov2-create__parse-msg')?.textContent ?? '', /missing name/);
+    assert.match(pane.querySelector('.ov2-create__parse-loc')?.textContent ?? '', /4:1/);
+    const repairAgain = [...pane.querySelectorAll('button')].find((b) => b.textContent === 'Repair');
+    assert.ok(repairAgain, 'Repair stays available after a second parse failure');
+    assert.equal(repairAgain.disabled, false);
   });
 });

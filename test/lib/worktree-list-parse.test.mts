@@ -9,7 +9,6 @@ import {
   parseWorktreeListPorcelain,
   worktreePathsEqual,
 } from '../../src/lib/worktree-list-parse.ts';
-import { repoKeyFromWorkspacePath } from '../../src/lib/repo-key.mjs';
 
 describe('parseWorktreeListPorcelain', () => {
   it('parses multiple worktrees with branches', () => {
@@ -39,13 +38,13 @@ describe('parseWorktreeListPorcelain', () => {
 });
 
 describe('filterUserFacingBranches', () => {
-  it('drops minnow board branches and worktree-locked names', () => {
+  it('drops worktree-locked names and keeps unlocked board branches', () => {
     assert.equal(isMinnowBoardBranch('minnow/board/g/task/W1-A'), true);
     const out = filterUserFacingBranches(
-      ['main', 'minnow/board/g/integration', 'feature'],
+      ['main', 'minnow/board/g/integration', 'feature', 'chat-branch'],
       new Set(['chat-branch']),
     );
-    assert.deepEqual(out, ['main', 'feature']);
+    assert.deepEqual(out, ['main', 'minnow/board/g/integration', 'feature']);
   });
 });
 
@@ -101,21 +100,14 @@ describe('formatWorktreeOptionLabel', () => {
 });
 
 describe('filterUserFacingWorktrees', () => {
-  it('keeps the main checkout and this repoKey, drops other repoKeys', () => {
+  it('keeps git-listed board slots even when the repo-key folder does not match the workspace basename', () => {
     const workspace = '/repo/minnow';
-    const thisKey = repoKeyFromWorkspacePath(workspace);
     const worktrees = [
       { path: '/repo/minnow', head: 'abc', branch: 'main', detached: false },
       {
-        path: `/home/.minnow/worktrees/${thisKey}/board-a/task-W1-A`,
+        path: '/home/.minnow/worktrees/Minnow-abcd1234/board-a/task-W1-A',
         head: 'def',
         branch: 'minnow/board/a/task/W1-A',
-        detached: false,
-      },
-      {
-        path: '/home/.minnow/worktrees/other-deadbeef/board-b/task-W1-A',
-        head: 'ghi',
-        branch: 'minnow/board/b/task/W1-A',
         detached: false,
       },
       {
@@ -128,27 +120,28 @@ describe('filterUserFacingWorktrees', () => {
     const kept = filterUserFacingWorktrees(worktrees, workspace).map((wt) => wt.path);
     assert.deepEqual(kept, [
       '/repo/minnow',
-      `/home/.minnow/worktrees/${thisKey}/board-a/task-W1-A`,
+      '/home/.minnow/worktrees/Minnow-abcd1234/board-a/task-W1-A',
       '/tmp/user-worktree',
     ]);
   });
 
-  it('always keeps the git principal when Code workspace is a linked worktree', () => {
-    const principal = '/repo/minnow';
-    const linked = '/home/.cursor/worktrees/tool-test-run-c70b26fa';
+  it('keeps board slots when Code workspace is a linked worktree (Windows-style paths)', () => {
+    const principal = 'C:/Users/me/Documents/Development/Minnow';
+    const linked = 'C:/Users/me/.cursor/worktrees/tool-test-run-c70b26fa';
+    const boardSlot =
+      'C:/Users/me/.minnow/worktrees/Minnow-deadbeef/board-a/integration';
     const worktrees = [
       { path: principal, head: 'abc', branch: 'master', detached: false },
       { path: linked, head: 'def', branch: 'tool-test-run', detached: false },
       {
-        path: '/home/.cursor/worktrees/other-slot-deadbeef',
+        path: boardSlot,
         head: 'ghi',
-        branch: 'other',
+        branch: 'minnow/board/a/integration',
         detached: false,
       },
     ];
     const kept = filterUserFacingWorktrees(worktrees, linked).map((wt) => wt.path);
     assert.equal(getPrincipalWorktree(worktrees)?.path, principal);
-    assert.ok(kept.includes(principal));
-    assert.ok(kept.includes(linked));
+    assert.deepEqual(kept, [principal, linked, boardSlot]);
   });
 });

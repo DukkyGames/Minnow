@@ -2246,6 +2246,19 @@ select.ov2-create__input {
   font-size: 11.5px;
 }
 
+.ov2-create__parse-status {
+  margin: 8px 0 0;
+  color: var(--mn-danger-ink);
+  font-size: 12px;
+}
+
+.ov2-create__parse-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
   .ov2-create__error {
   margin: 0;
   color: var(--mn-danger-ink);

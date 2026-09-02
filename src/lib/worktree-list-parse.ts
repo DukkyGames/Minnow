@@ -1,5 +1,3 @@
-import { repoKeyFromWorkspacePath } from './repo-key.mjs';
-
 /**
  * Parse `git worktree list --porcelain` output into structured entries (MIN-198 P3).
  */
@@ -140,7 +138,7 @@ export function formatWorktreeOptionLabel(
   return `${branchLabel} — ${leaf}`;
 }
 
-/** Minnow orchestration branches (board worktrees) — not user checkout targets. */
+/** Minnow orchestration branches created for board worktrees. */
 export function isMinnowBoardBranch(name: string): boolean {
   return name.startsWith('minnow/board/');
 }
@@ -165,13 +163,17 @@ export function branchesLockedToOtherWorktrees(
   return locked;
 }
 
-/** Local branches suitable for user-facing checkout pickers. */
+/**
+ * Local branches suitable for user-facing checkout pickers.
+ * Omits refs already checked out in another worktree (git will refuse).
+ * Board branches stay listed once their worktree is gone (MIN-789).
+ */
 export function filterUserFacingBranches(
   local: string[],
   lockedElsewhere?: Iterable<string>,
 ): string[] {
   const locked = new Set(lockedElsewhere ?? []);
-  return local.filter((b) => !isMinnowBoardBranch(b) && !locked.has(b));
+  return local.filter((b) => !locked.has(b));
 }
 
 function posixPath(p: string): string {
@@ -192,34 +194,18 @@ export function minnowWorktreesRepoKeyFromPath(worktreePath: string): string | n
 }
 
 /**
- * User-facing worktree pickers: keep the git principal checkout, the workspace
- * checkout, paths under it, and `~/.minnow/worktrees/<thisRepoKey>/` slots.
- * Drop other-repo Minnow slots so a stale git-panel list cannot offer
- * workspace B's boards after a switch.
+ * User-facing worktree pickers.
+ *
+ * `git worktree list` is already scoped to this repository, so every porcelain
+ * entry is a checkout of this git dir — including orchestrator slots under
+ * `~/.minnow/worktrees/`. Dropping those by reconstructing a client-side repo
+ * key hid this-repo board worktrees when the Code workspace was a linked
+ * checkout or on Windows (MIN-789). `workspaceRoot` is kept on the signature
+ * so callers stay stable.
  */
 export function filterUserFacingWorktrees(
   worktrees: ParsedWorktree[],
-  workspaceRoot: string,
+  _workspaceRoot: string,
 ): ParsedWorktree[] {
-  const root = posixPath(workspaceRoot);
-  if (!root) return worktrees;
-  const rootKey = root.toLowerCase();
-  const expectedKey = repoKeyFromWorkspacePath(root);
-  const expectedBase = expectedKey.replace(/-[0-9a-f]{8}$/i, '');
-  const principalKey = worktrees[0]?.path
-    ? posixPath(worktrees[0].path).toLowerCase()
-    : '';
-
-  return worktrees.filter((wt, index) => {
-    if (index === 0) return true;
-    const p = posixPath(wt.path);
-    const pKey = p.toLowerCase();
-    if (principalKey && pKey === principalKey) return true;
-    if (pKey === rootKey || pKey.startsWith(`${rootKey}/`)) return true;
-    const slotKey = minnowWorktreesRepoKeyFromPath(p);
-    if (slotKey == null) return true;
-    if (slotKey === expectedKey) return true;
-    const slotBase = slotKey.replace(/-[0-9a-f]{8}$/i, '');
-    return slotBase === expectedBase;
-  });
+  return worktrees.filter((wt, index) => index === 0 || Boolean(wt.path));
 }

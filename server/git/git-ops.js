@@ -168,11 +168,13 @@ export function parseWorktreeLockedBranches(porcelain, mainRepoRoot) {
 }
 
 /**
+ * Checkout pickers: drop refs already used in another worktree.
+ * Board branches (`minnow/board/…`) stay listed once unlocked (MIN-789).
  * @param {string[]} local
  * @param {Set<string>} [lockedElsewhere]
  */
 export function filterUserFacingBranches(local, lockedElsewhere = new Set()) {
-  return local.filter((b) => !isMinnowBoardBranch(b) && !lockedElsewhere.has(b));
+  return local.filter((b) => !lockedElsewhere.has(b));
 }
 
 /**
@@ -557,7 +559,6 @@ export async function branches({ cwd } = {}) {
       ? parseWorktreeLockedBranches(wtResult.stdout ?? '', repoRoot)
       : new Set();
   parsed.local = filterUserFacingBranches(parsed.local, lockedElsewhere);
-  parsed.lockedLocal = (parsed.lockedLocal ?? []).filter((b) => !isMinnowBoardBranch(b));
 
   return { ok: true, ...parsed };
 }

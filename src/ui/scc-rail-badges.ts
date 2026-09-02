@@ -1,7 +1,7 @@
 import { gitStashList, type GitOpResult } from '../state/git-api';
 import { prList, runList, type ForgeStatus } from '../state/forge-api';
 import { getWorkspacePath } from '../state/workspace';
-import { parseWorktreeListPorcelain } from '../lib/worktree-list-parse';
+import { filterUserFacingWorktrees, parseWorktreeListPorcelain } from '../lib/worktree-list-parse';
 import { listWorktrees } from '../state/worktree-service';
 import { rollupChecksRailState } from './scc-checks';
 import type { SccBadge, SccSectionId } from './scc-shared';
@@ -41,9 +41,13 @@ export async function refreshGitRailBadges(
   }
 
   const workspace = getWorkspacePath().trim();
-  const worktrees =
+  const parsed =
     worktreeResult.ok && worktreeResult.output
       ? parseWorktreeListPorcelain(worktreeResult.output)
+      : [];
+  const worktrees =
+    parsed.length > 0
+      ? filterUserFacingWorktrees(parsed, workspace)
       : workspace
         ? [{ path: workspace, head: '', branch: undefined, detached: false }]
         : [];

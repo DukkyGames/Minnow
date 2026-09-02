@@ -23,6 +23,8 @@ Choose a plan file and Minnow creates an Orchestrate planner chat, checks the wo
 
 Plans must live under `documentation/plans/`. Plan mode can write there even though it cannot touch the rest of your repository — that is deliberate, and it is how a planning session hands off to a delivery board.
 
+If the plan does not parse, Boards lists the errors and offers **Repair**. Repair rewrites that file to the required schema (same waves and tasks) and then opens the board.
+
 ## The board
 
 The header is one instrument strip: plan title, status badge, and telemetry — tasks, waves, run, elapsed — over a thin progress bar, then the run controls.

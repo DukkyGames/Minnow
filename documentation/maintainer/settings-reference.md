@@ -289,7 +289,7 @@ Drop-in work agent bundles under `~/.minnow/agent-packs/<pack-id>/` (`manifest.j
 
 Stall, heartbeat, and loop detection are **not** here — see [Watchdog](#watchdog-configjson--chat-sub-agentsjson).
 
-**Types (8):** `generalPurpose`, `explore`, `researcher`, `shell`, `explorer`, `debugger`, `bug-planner`, `plan-reviewer`
+**Types (11):** `generalPurpose`, `explore`, `researcher`, `shell`, `explorer`, `debugger`, `bug-planner`, `issue-writer`, `plan-reviewer`, `pr-reviewer`, `plan-repairer`
 
 Per type: enabled, max concurrent, timeout, max input tokens, context policy, summary schema, allowed/denied tools, sampler, thinking, provider/model.
 

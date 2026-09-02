@@ -116,6 +116,24 @@ describe('sub-agent config', () => {
     assert.ok(r.deniedTools.includes('git_checkout'));
   });
 
+  test('plan-repairer type is registered with save_file and no spawn/shell/git', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, null);
+    const r = merged.types['plan-repairer'];
+    assert.ok(r);
+    assert.equal(r.label, 'Plan repairer');
+    assert.equal(r.maxConcurrent, 1);
+    assert.equal(r.timeoutMs, 300000);
+    assert.ok(r.allowedTools?.includes('save_file'));
+    assert.ok(r.allowedTools?.includes('read_file'));
+    assert.ok(r.allowedTools?.includes('grep'));
+    assert.ok(!r.allowedTools?.includes('execute_command'));
+    assert.ok(!r.allowedTools?.includes('spawn_sub_agent'));
+    assert.ok(r.deniedTools.includes('spawn_sub_agent'));
+    assert.ok(r.deniedTools.includes('execute_command'));
+    assert.ok(r.deniedTools.includes('git_commit'));
+    assert.ok(r.deniedTools.includes('ask_question'));
+  });
+
   test('user override merges sampler fields on a type', () => {
     const merged = mergeSubAgentConfig(DEFAULTS as never, {
       types: {

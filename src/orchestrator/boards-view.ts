@@ -3,7 +3,7 @@ import '../styles/transcript-view.css';
 import '../styles/orchestrate-hub.css';
 import '../styles/orchestrate-plan-screen.css';
 
-import type { BoardState } from '../../server/orchestrator/core/types';
+import type { BoardState, ParseError } from '../../server/orchestrator/core/types';
 import { DEFAULT_BOARD_CONCURRENCY } from '../../server/orchestrator/core/derive.js';
 import {
   createBoardClient,
@@ -60,6 +60,12 @@ import {
   readPlanArtifactMarkdown,
 } from '../chat/plans/plan-preview';
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
+import {
+  cancelPlanRepair,
+  startPlanRepair,
+  type StartPlanRepairInput,
+  type StartPlanRepairResult,
+} from './plan-repair';
 
 const PLAN_LIST_HINTS: Record<string, string> = {
   server_off: 'Open or restart Minnow to list plans.',
@@ -484,6 +490,10 @@ export async function fillBoardsPlanSelect(
   return { plans, error };
 }
 
+export type PlanRepairFn = (
+  input: StartPlanRepairInput,
+) => Promise<StartPlanRepairResult>;
+
 export interface CreateFormHandlers {
   discoverPlans?: () => Promise<DiscoverOrchestratePlansResult>;
   createBoard?: (
@@ -492,6 +502,9 @@ export interface CreateFormHandlers {
   ) => Promise<{ boardId: string }>;
   onCreated: (boardId: string) => void;
   onCancel: () => void;
+  /** Test seam — production uses `startPlanRepair`. */
+  startPlanRepair?: PlanRepairFn;
+  cancelPlanRepair?: (planPath: string) => void;
 }
 
 export interface AskPaneHandlers {
@@ -501,6 +514,23 @@ export interface AskPaneHandlers {
     options?: { boardId?: string; markdown?: string },
   ) => Promise<{ boardId: string }>;
   onCreated: (boardId: string) => void;
+  /** Test seam — production uses `startPlanRepair`. */
+  startPlanRepair?: PlanRepairFn;
+  cancelPlanRepair?: (planPath: string) => void;
+}
+
+/** Context the parse pane needs to run Repair without leaving Boards. */
+export interface CreateErrorRepairContext {
+  planPath: string;
+  boardId?: string;
+  createBoard: (
+    planPath: string,
+    options?: { boardId?: string; markdown?: string },
+  ) => Promise<{ boardId: string }>;
+  onCreated: (boardId: string) => void;
+  startPlanRepair?: PlanRepairFn;
+  cancelPlanRepair?: (planPath: string) => void;
+  setBusy?: (busy: boolean) => void;
 }
 
 export async function mountBoardsAskPane(
@@ -613,9 +643,12 @@ export async function mountBoardsAskPane(
     previewMount,
   };
 
+  // While Repair is running, keep the picker and Open board locked.
+  let repairBusy = false;
+
   const syncStartDisabled = () => {
     const path = sel.value.trim();
-    startBtn.disabled = !path || !isExecutableOrchestratePlan(path);
+    startBtn.disabled = repairBusy || !path || !isExecutableOrchestratePlan(path);
   };
 
   const syncPlanPreview = () => {
@@ -627,7 +660,7 @@ export async function mountBoardsAskPane(
     await fillBoardsPlanSelect(sel, hint, {
       ...(handlers.discoverPlans ? { discoverPlans: handlers.discoverPlans } : {}),
     });
-    sel.disabled = false;
+    sel.disabled = repairBusy;
     syncStartDisabled();
     syncPlanPreview();
   };
@@ -657,7 +690,21 @@ export async function mountBoardsAskPane(
         handlers.onCreated(boardId);
       })
       .catch((err: unknown) => {
-        errors.replaceChildren(renderCreateError(err));
+        errors.replaceChildren(
+          renderCreateError(err, {
+            planPath,
+            createBoard,
+            onCreated: handlers.onCreated,
+            ...(handlers.startPlanRepair ? { startPlanRepair: handlers.startPlanRepair } : {}),
+            ...(handlers.cancelPlanRepair ? { cancelPlanRepair: handlers.cancelPlanRepair } : {}),
+            setBusy: (busy) => {
+              repairBusy = busy;
+              sel.disabled = busy;
+              if (busy) startBtn.disabled = true;
+              else syncStartDisabled();
+            },
+          }),
+        );
       })
       .finally(() => {
         startBtn.textContent = 'Open board';
@@ -746,8 +793,11 @@ export async function mountCreateForm(
   actions.appendChild(button({ label: 'Cancel', variant: 'ghost', onClick: handlers.onCancel }));
   form.appendChild(actions);
 
+  // While Repair is running, keep the plan picker and Create locked.
+  let repairBusy = false;
+
   const syncSubmitEnabled = () => {
-    submit.disabled = !pathSelect.value.trim();
+    submit.disabled = repairBusy || !pathSelect.value.trim();
   };
 
   const loadPlans = async () => {
@@ -755,7 +805,7 @@ export async function mountCreateForm(
     await fillBoardsPlanSelect(pathSelect, pathHint, {
       ...(handlers.discoverPlans ? { discoverPlans: handlers.discoverPlans } : {}),
     });
-    pathSelect.disabled = false;
+    pathSelect.disabled = repairBusy;
     syncSubmitEnabled();
   };
 
@@ -784,7 +834,22 @@ export async function mountCreateForm(
         handlers.onCreated(boardId);
       })
       .catch((err: unknown) => {
-        errors.replaceChildren(renderCreateError(err));
+        errors.replaceChildren(
+          renderCreateError(err, {
+            planPath,
+            ...(idInput.value.trim() ? { boardId: idInput.value.trim() } : {}),
+            createBoard,
+            onCreated: handlers.onCreated,
+            ...(handlers.startPlanRepair ? { startPlanRepair: handlers.startPlanRepair } : {}),
+            ...(handlers.cancelPlanRepair ? { cancelPlanRepair: handlers.cancelPlanRepair } : {}),
+            setBusy: (busy) => {
+              repairBusy = busy;
+              pathSelect.disabled = busy;
+              if (busy) submit.disabled = true;
+              else syncSubmitEnabled();
+            },
+          }),
+        );
       })
       .finally(() => {
         submit.textContent = 'Create';
@@ -797,22 +862,110 @@ export async function mountCreateForm(
   pathSelect.focus();
 }
 
-function renderCreateError(err: unknown): HTMLElement {
-  if (err instanceof PlanParseFailure) {
-    const wrap = el('div', 'ov2-create__parse');
-    wrap.appendChild(el('p', 'ov2-create__parse-title', 'The plan does not parse:'));
-    const items = el('ul', 'ov2-create__parse-list');
-    for (const error of err.errors) {
-      const item = el('li', 'ov2-create__parse-item');
-      item.appendChild(el('span', 'ov2-create__parse-loc', `line ${error.line}:${error.column}`));
-      item.appendChild(el('span', 'ov2-create__parse-msg', error.message));
-      if (error.hint) item.appendChild(el('span', 'ov2-create__parse-hint', error.hint));
-      items.appendChild(item);
-    }
-    wrap.appendChild(items);
-    return wrap;
+function paintParseErrorList(items: HTMLElement, errors: ParseError[]): void {
+  items.replaceChildren();
+  for (const error of errors) {
+    const item = el('li', 'ov2-create__parse-item');
+    item.appendChild(el('span', 'ov2-create__parse-loc', `line ${error.line}:${error.column}`));
+    item.appendChild(el('span', 'ov2-create__parse-msg', error.message));
+    if (error.hint) item.appendChild(el('span', 'ov2-create__parse-hint', error.hint));
+    items.appendChild(item);
   }
-  return el('p', 'ov2-create__error', err instanceof Error ? err.message : String(err));
+}
+
+/** Parse errors plus optional Repair, which stays on Boards and retries Open board. */
+function renderCreateError(err: unknown, repair?: CreateErrorRepairContext): HTMLElement {
+  if (!(err instanceof PlanParseFailure)) {
+    return el('p', 'ov2-create__error', err instanceof Error ? err.message : String(err));
+  }
+
+  const wrap = el('div', 'ov2-create__parse');
+  const title = el('p', 'ov2-create__parse-title', 'The plan does not parse:');
+  wrap.appendChild(title);
+
+  const items = el('ul', 'ov2-create__parse-list');
+  paintParseErrorList(items, err.errors);
+  wrap.appendChild(items);
+
+  if (!repair?.planPath) return wrap;
+
+  // Latest errors go back to the agent on a second Repair click — the original
+  // PlanParseFailure is frozen after the first Open board.
+  let currentErrors: ParseError[] = [...err.errors];
+
+  const status = el('p', 'ov2-create__parse-status');
+  status.hidden = true;
+  status.setAttribute('role', 'status');
+  wrap.appendChild(status);
+
+  const actions = el('div', 'ov2-create__parse-actions');
+  const startRepair = repair.startPlanRepair ?? startPlanRepair;
+  const cancelRepair = repair.cancelPlanRepair ?? cancelPlanRepair;
+
+  let running = false;
+  let succeeded = false;
+
+  const setRunning = (next: boolean) => {
+    running = next;
+    wrap.setAttribute('aria-busy', next ? 'true' : 'false');
+    title.textContent = next ? 'Repairing plan…' : 'The plan does not parse:';
+    repairBtn.disabled = next;
+    cancelBtn.hidden = !next;
+    repair.setBusy?.(next);
+  };
+
+  const repairBtn = button({
+    label: 'Repair',
+    title: 'Rewrite this plan to the required schema, then open the board',
+    variant: 'primary',
+    onClick: () => {
+      if (running) return;
+      status.hidden = true;
+      status.textContent = '';
+      setRunning(true);
+      succeeded = false;
+      void startRepair({
+        planPath: repair.planPath,
+        errors: currentErrors,
+        ...(repair.boardId ? { boardId: repair.boardId } : {}),
+        createBoard: repair.createBoard,
+      })
+        .then((result) => {
+          if (result.ok) {
+            succeeded = true;
+            repair.onCreated(result.boardId);
+            return;
+          }
+          if ('alreadyRunning' in result && result.alreadyRunning) {
+            status.hidden = false;
+            status.textContent = 'Repair is already running.';
+            return;
+          }
+          if ('parseFailure' in result && result.parseFailure) {
+            currentErrors = [...result.parseFailure.errors];
+            paintParseErrorList(items, currentErrors);
+            return;
+          }
+          status.hidden = false;
+          status.textContent = 'error' in result ? result.error : 'Plan repair failed';
+        })
+        .finally(() => {
+          if (!succeeded) setRunning(false);
+        });
+    },
+  });
+
+  const cancelBtn = button({
+    label: 'Cancel',
+    onClick: () => {
+      cancelRepair(repair.planPath);
+    },
+  });
+  cancelBtn.hidden = true;
+
+  actions.append(repairBtn, cancelBtn);
+  wrap.appendChild(actions);
+  return wrap;
 }
 
 function captureFocus(): { key: string; selectionStart: number | null } | null {
