@@ -47,6 +47,11 @@ import { shouldEmitSubAgentLiveTurnEvent } from '../runner/turn-event.js';
 import { resolveAttemptModel } from '../orchestrator/model-binding.js';
 import { peekEngine } from '../orchestrator/engine.js';
 import {
+  DEFAULT_AGENT_MAX_TOKENS,
+  readGlobalSamplerForTurn,
+  wrapSamplerForTurn,
+} from '../agents/sampler.js';
+import {
   flushTranscripts,
   readTranscript,
   recordTranscriptEnd,
@@ -439,8 +444,10 @@ function toAttemptEnd(attemptId, runId, result) {
 }
 
 /**
- * Server-side `RunnerDeps`. Sampler / thinking on the `TurnModel` win;
- * a missing capability probe must not block a turn.
+ * Server-side `RunnerDeps`. Sampler / thinking on the `TurnModel` win
+ * (`bindTypeModel` wraps type JSON as `{ preset, maxTokens }` and inherits
+ * Settings max when the type omits it). The stub is the shipped Settings
+ * default, not 2048. A missing capability probe must not block a turn.
  *
  * @param {import('../runner/adapters').PostChatCompletions} postChatCompletions
  * @returns {import('../runner/adapters').RunnerDeps}
@@ -461,7 +468,9 @@ function createServerRunnerDeps(postChatCompletions) {
       };
     },
     getSubAgentTypeConfig: async (typeId) => (await getSubAgentTypeRow(String(typeId))) ?? {},
-    resolveSamplerPreset: () => ({ preset: {}, maxTokens: 2048 }),
+    // Last-ditch only: production `bindTypeModel` attaches `{ preset, maxTokens }`.
+    // 2048 here reintroduced finish_reason: length when a type omitted maxTokens.
+    resolveSamplerPreset: () => ({ preset: {}, maxTokens: DEFAULT_AGENT_MAX_TOKENS }),
     resolveThinkingMode: () => ({ mode: 'off' }),
     resolveThinkingBudgetTokens: () => ({ budgetTokens: null }),
     loadToolCallsMeta: async () => {},
@@ -480,28 +489,30 @@ function createServerRunnerDeps(postChatCompletions) {
 
 /**
  * Map a type row onto `TurnModel`. Sampler in `sub-agents.json` is a flat
- * preset (`temperature` / `topP` / …). `runTurn` wraps that as
- * `{ preset, maxTokens }` and substitutes the whole object for
- * `deps.resolveSamplerPreset` — passing the JSON row through unchanged makes
- * `applySamplerToBody` read `.preset.temperature` on undefined.
+ * preset (`temperature` / `topP` / …). `runTurn` needs `{ preset, maxTokens }`
+ * because it substitutes the whole object for `deps.resolveSamplerPreset` —
+ * a flat row would crash `applySamplerToBody`. Types that omit `maxTokens`
+ * inherit Settings → Sampler max, not 2048.
  *
  * `thinkingMode: inherit` leaves the bound model alone — a type that does
  * not opt in must not flip thinking.
  *
  * @param {{ providerId: string, id: string }} model
  * @param {Record<string, unknown>} typeRow
+ * @param {{ preset: Record<string, unknown>, maxTokens: number }} [globalSampler]
  * @returns {{ providerId: string, id: string, sampler?: object, thinking?: object }}
  */
-function bindTypeModel(model, typeRow) {
+function bindTypeModel(model, typeRow, globalSampler) {
   /** @type {{ providerId: string, id: string, sampler?: object, thinking?: object }} */
   const turnModel = { ...model };
+  const fallbackMax = globalSampler?.maxTokens ?? DEFAULT_AGENT_MAX_TOKENS;
   if (typeRow.sampler && typeof typeRow.sampler === 'object') {
-    const raw = /** @type {Record<string, unknown>} */ (typeRow.sampler);
-    const maxTokens =
-      typeof raw.maxTokens === 'number' && Number.isFinite(raw.maxTokens) && raw.maxTokens > 0
-        ? Math.floor(raw.maxTokens)
-        : 2048;
-    turnModel.sampler = { preset: raw, maxTokens };
+    // Honor an explicit type cap; otherwise inherit Settings → Sampler max.
+    turnModel.sampler = wrapSamplerForTurn(typeRow.sampler, fallbackMax);
+  } else {
+    // Type omitted sampler entirely — still attach Settings so `runTurn`
+    // does not fall through to the deps stub.
+    turnModel.sampler = globalSampler ?? wrapSamplerForTurn(null, fallbackMax);
   }
   const thinking = typeRow.thinkingMode;
   if (thinking === 'off' || thinking === false) {
@@ -718,7 +729,12 @@ export function createSubAgentEffector(options = {}) {
         typeRow.modelId.trim()
           ? { providerId: typeRow.providerId.trim(), id: typeRow.modelId.trim() }
           : await resolveAttemptModel(null));
-      const model = bindTypeModel(await resolveLibraryAttemptBinding(bound), typeRow);
+      const globalSampler = await readGlobalSamplerForTurn();
+      const model = bindTypeModel(
+        await resolveLibraryAttemptBinding(bound),
+        typeRow,
+        globalSampler,
+      );
 
       const agentConfig = agentContextBudgetFromSubAgentType(
         {

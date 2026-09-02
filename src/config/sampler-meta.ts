@@ -24,7 +24,7 @@ export const DEFAULT_SAMPLER_GLOBAL: SamplerGlobalMeta = {
   minP: SAMPLER_NEUTRAL.minP,
   repetitionPenalty: SAMPLER_NEUTRAL.repetitionPenalty,
   presencePenalty: SAMPLER_NEUTRAL.presencePenalty,
-  maxTokens: 64000,
+  maxTokens: 32768, // keep in sync with DEFAULT_AGENT_MAX_TOKENS
 };
 
 const SAMPLER_META_STORAGE_KEY = 'minnow.samplerMeta';
@@ -32,6 +32,7 @@ const SAMPLER_META_STORAGE_KEY = 'minnow.samplerMeta';
 let cachedSampler: SamplerGlobalMeta | null = null;
 
 function readDrawerTemperature(): number | undefined {
+  if (typeof document === 'undefined') return undefined;
   const el = document.getElementById('temperature') as HTMLInputElement | null;
   if (!el) return undefined;
   const n = parseFloat(el.value);
@@ -39,6 +40,7 @@ function readDrawerTemperature(): number | undefined {
 }
 
 function readDrawerMaxTokens(): number | undefined {
+  if (typeof document === 'undefined') return undefined;
   const el = document.getElementById('maxTokens') as HTMLInputElement | null;
   if (!el) return undefined;
   const n = parseInt(el.value, 10);
@@ -155,7 +157,7 @@ export function readGlobalSamplerForSend(overrides?: {
     drawerMax ??
     meta.maxTokens ??
     DEFAULT_SAMPLER_GLOBAL.maxTokens ??
-    64000;
+    32768;
 
   const preset = clampSamplerPreset({
     temperature,

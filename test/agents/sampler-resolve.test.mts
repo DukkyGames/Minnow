@@ -54,11 +54,39 @@ describe('sampler preset merge', () => {
       kind: 'sub-agent',
       agentKey: 'shell',
       global: { maxTokens: 9999, preset: { temperature: 0.99 } },
-      subAgentMaxTokensFallback: 2048,
       subAgentType: shell,
     });
     assert.equal(resolved.preset.temperature, 0.7);
-    assert.equal(resolved.maxTokens, 2048);
+    // Type omits maxTokens — inherit Settings global, not the old 2048 cap.
+    assert.equal(resolved.maxTokens, 9999);
+  });
+
+  test('sub-agent without type maxTokens uses global Settings max not 2048', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, null);
+    const shell = merged.types.shell;
+    const resolved = resolveSamplerPreset({
+      kind: 'sub-agent',
+      agentKey: 'shell',
+      global: { maxTokens: 131072, preset: { temperature: 0.99 } },
+      subAgentType: shell,
+    });
+    assert.equal(resolved.maxTokens, 131072);
+    assert.equal(resolved.preset.temperature, 0.7);
+  });
+
+  test('sub-agent type maxTokens wins over global Settings max', () => {
+    const merged = mergeSubAgentConfig(DEFAULTS as never, null);
+    const shell = merged.types.shell;
+    const resolved = resolveSamplerPreset({
+      kind: 'sub-agent',
+      agentKey: 'shell',
+      global: { maxTokens: 131072, preset: {} },
+      subAgentType: {
+        ...shell,
+        sampler: { ...shell.sampler, maxTokens: 512 },
+      },
+    });
+    assert.equal(resolved.maxTokens, 512);
   });
 
   test('clampSamplerPreset strips invalid values', () => {

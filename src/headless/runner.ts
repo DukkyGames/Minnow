@@ -16,14 +16,17 @@ import { resolveActiveWorkAgent } from '../agents/resolve-work-agent';
 import { resolveWorkAgentBinding } from '../agents/resolve-work-agent-binding';
 import { getUserWorkAgentOverride } from '../agents/work-agent-registry';
 import { WorkAgentConfigError } from '../agents/work-agent-types';
-import { resolveSamplerPreset } from '../agents/resolve-sampler';
 import { applySamplerToBody } from '../agents/sampler-types';
+import { resolveHeadlessTurnSampler } from './resolve-turn-sampler';
 import { resolveHeadlessOutboundSystemMessages } from './resolve-prompt';
 import { buildHeadlessApiMessages } from './build-messages';
 import { normalizeModeId, type ModeId } from '../chat/modes/types';
 import {
   loadChatMeta,
 } from '../config/chat-meta';
+import {
+  loadSamplerMeta,
+} from '../config/sampler-meta';
 import {
   loadPromptMetaSettings,
   setPromptMetaCacheForTests,
@@ -169,6 +172,7 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
   await detectLocalServer();
   await initHeadlessWorkAgents();
   await loadChatMeta();
+  await loadSamplerMeta();
   await loadPromptMetaWithProfile(options.cli.profile);
   await ensureToolConfigReady();
   if (isServerStorageMode() && !isToolConfigReadyForSettingsUi()) {
@@ -251,11 +255,7 @@ export async function runHeadless(options: RunHeadlessOptions): Promise<Headless
       : '';
 
     const modeId = normalizeModeId(chat.modeId);
-    const resolvedSampler = resolveSamplerPreset({
-      kind: 'work-agent',
-      agentKey: activeWorkAgent?.id ?? null,
-      global: { maxTokens: 4096, preset: { temperature: 0.7 } },
-    });
+    const resolvedSampler = resolveHeadlessTurnSampler(activeWorkAgent?.id ?? null);
 
     let enabledTools = getHeadlessToolDefinitions(modeId);
     if (activeWorkAgent?.allowedTools?.length) {

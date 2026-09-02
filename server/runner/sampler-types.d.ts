@@ -36,6 +36,11 @@ export interface SamplerCompletionFields {
     presence_penalty?: number;
     stop?: string[];
 }
+/**
+ * Shipped Settings → Sampler maxTokens. Last-ditch when a caller omits
+ * `model.sampler` so a missed wrap cannot cap completions at 2048.
+ */
+export declare const DEFAULT_AGENT_MAX_TOKENS: 32768;
 /** Provider-neutral values shown in Settings and omitted from completion bodies. */
 export declare const SAMPLER_NEUTRAL: {
     readonly minP: 0;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { normalizeSamplerPreset } from '../../server/agents/sampler.js';
+import { normalizeSamplerPreset, wrapSamplerForTurn } from '../../server/agents/sampler.js';
 import { normalizeSubAgentsConfig } from '../../server/config/validators.js';
 
 describe('server sampler normalization', () => {
@@ -42,5 +42,14 @@ describe('server sampler normalization', () => {
 
     const empty = normalizeSamplerPreset({ stop: ['  ', ''] });
     assert.equal(empty.stop, undefined);
+  });
+
+  test('wrapSamplerForTurn inherits fallback maxTokens when the row omits it', () => {
+    const wrapped = wrapSamplerForTurn({ temperature: 0.6, topP: 0.95 }, 131072);
+    assert.equal(wrapped.maxTokens, 131072);
+    assert.equal(wrapped.preset.temperature, 0.6);
+    assert.equal('maxTokens' in wrapped.preset, false);
+    const explicit = wrapSamplerForTurn({ temperature: 0.5, maxTokens: 512 }, 131072);
+    assert.equal(explicit.maxTokens, 512);
   });
 });

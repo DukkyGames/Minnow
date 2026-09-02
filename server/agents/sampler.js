@@ -2,6 +2,8 @@
  * Shared sampler preset normalization for work-agents and sub-agents APIs.
  */
 
+import { DEFAULT_AGENT_MAX_TOKENS } from '../runner/sampler-types.js';
+
 const TEMP_MIN = 0;
 const TEMP_MAX = 2;
 const TOP_P_MIN = 0;
@@ -127,3 +129,53 @@ export function normalizeSamplerPreset(raw) {
 
   return Object.keys(out).length > 0 ? out : {};
 }
+
+/**
+ * Wrap a flat sampler row as `{ preset, maxTokens }` for `runTurn`.
+ * `runTurn` substitutes this object for `deps.resolveSamplerPreset`; a flat
+ * `{ temperature, topP }` row would make `applySamplerToBody` read `.preset`
+ * on undefined.
+ *
+ * Rows that omit `maxTokens` inherit `fallbackMaxTokens` (Settings global),
+ * not the old 2048 sub-agent cap.
+ *
+ * @param {unknown} raw
+ * @param {number} [fallbackMaxTokens]
+ * @returns {{ preset: Record<string, unknown>, maxTokens: number }}
+ */
+export function wrapSamplerForTurn(raw, fallbackMaxTokens) {
+  const fallback =
+    typeof fallbackMaxTokens === 'number' &&
+    Number.isFinite(fallbackMaxTokens) &&
+    fallbackMaxTokens >= MAX_TOKENS_MIN
+      ? Math.min(MAX_TOKENS_MAX, Math.floor(fallbackMaxTokens))
+      : DEFAULT_AGENT_MAX_TOKENS;
+  if (!raw || typeof raw !== 'object') {
+    return { preset: {}, maxTokens: fallback };
+  }
+  const src = /** @type {Record<string, unknown>} */ (raw);
+  const explicit = clampMaxTokens(src.maxTokens);
+  const { maxTokens: _drop, ...rest } = src;
+  return { preset: rest, maxTokens: explicit ?? fallback };
+}
+
+/**
+ * Settings → Sampler from `config.json`, shaped for `runTurn`.
+ * Dynamic-import store so this module does not cycle through validators.
+ *
+ * @returns {Promise<{ preset: Record<string, unknown>, maxTokens: number }>}
+ */
+export async function readGlobalSamplerForTurn() {
+  try {
+    const { readResource } = await import('../config/store.js');
+    const meta = await readResource('meta');
+    const block = meta && typeof meta === 'object' ? /** @type {Record<string, unknown>} */ (meta) : null;
+    const sampler =
+      block?.sampler && typeof block.sampler === 'object' ? block.sampler : null;
+    return wrapSamplerForTurn(sampler, DEFAULT_AGENT_MAX_TOKENS);
+  } catch {
+    return wrapSamplerForTurn(null, DEFAULT_AGENT_MAX_TOKENS);
+  }
+}
+
+export { DEFAULT_AGENT_MAX_TOKENS };

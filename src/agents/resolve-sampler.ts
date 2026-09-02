@@ -8,6 +8,7 @@ import { isPassthroughWorkAgentId } from './resolve-work-agent';
 import { getUserWorkAgentOverride } from './work-agent-registry';
 import {
   clampSamplerPreset,
+  DEFAULT_AGENT_MAX_TOKENS,
   mergeSamplerLayers,
   type SamplerPreset,
 } from './sampler-types';
@@ -22,7 +23,7 @@ export interface ResolveSamplerInput {
   kind: SamplerResolveKind;
   /** Main chat: persisted global defaults (+ optional drawer overrides for temp/max). */
   global: GlobalSamplerForSend;
-  /** Sub-agent runs: legacy max token hint when type omits maxTokens. */
+  /** Sub-agent runs: unused when global.maxTokens is set; last-ditch only. */
   subAgentMaxTokensFallback?: number;
   /** Sub-agent merged type row (includes shipped + user sampler). */
   subAgentType?: SubAgentTypeConfig | null;
@@ -33,7 +34,8 @@ export interface ResolvedSampler {
   maxTokens: number;
 }
 
-const DEFAULT_SUB_AGENT_MAX_TOKENS = 2048;
+/** Last-resort when type, global, and fallback all omit a usable max. */
+const DEFAULT_SUB_AGENT_MAX_TOKENS = DEFAULT_AGENT_MAX_TOKENS;
 
 function builtinWorkAgentSampler(agentId: string): SamplerPreset {
   const map = WORK_AGENT_SAMPLER_DEFAULTS as Record<string, SamplerPreset>;
@@ -82,15 +84,22 @@ export function resolveSamplerPreset(input: ResolveSamplerInput): ResolvedSample
     );
   }
 
+  const globalMax =
+    Number.isFinite(input.global.maxTokens) && input.global.maxTokens >= 1
+      ? input.global.maxTokens
+      : undefined;
   let maxTokens =
     input.kind === 'sub-agent'
       ? merged.maxTokens ??
+        globalMax ??
         input.subAgentMaxTokensFallback ??
         DEFAULT_SUB_AGENT_MAX_TOKENS
       : input.global.maxTokens;
   if (!Number.isFinite(maxTokens) || maxTokens < 1) {
     maxTokens =
-      input.kind === 'sub-agent' ? DEFAULT_SUB_AGENT_MAX_TOKENS : 64000;
+      input.kind === 'sub-agent'
+        ? DEFAULT_SUB_AGENT_MAX_TOKENS
+        : DEFAULT_AGENT_MAX_TOKENS;
   }
 
   const { maxTokens: _drop, ...preset } = merged;

@@ -18,6 +18,7 @@ import {
 } from '../../scripts/fake-model-server.mjs';
 import { setTestHome, rmTestHome } from '../config/test-helpers.js';
 import { ensureMinnowLayout, resetMinnowHomeCache } from '../../server/config/home.js';
+import { readConfigJson, writeConfigJson } from '../../server/config/store.js';
 import { createProvider, updateProvider, listProviders } from '../../server/providers/store.js';
 import {
   createMemoryTranscriptStore,
@@ -612,6 +613,47 @@ describe('sub-agent runner effector', { concurrency: false }, () => {
       assert.equal(seenToolNames[0].includes(ASK_QUESTION_TOOL_NAME), false);
     } finally {
       engine.dispose();
+    }
+  });
+
+  test('runTurn receives Settings sampler max tokens when the type omits maxTokens', { timeout: 20_000 }, async () => {
+    const meta = (await readConfigJson('config.json')) ?? {};
+    await writeConfigJson('config.json', {
+      ...meta,
+      sampler: { ...(meta.sampler && typeof meta.sampler === 'object' ? meta.sampler : {}), maxTokens: 131072 },
+    });
+    const parentChatId = 'chat-p8d-sampler-max';
+    const cwd = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'p8d-sampler-'));
+    const journal = createMemoryAgentsJournal();
+    /** @type {import('../../server/runner/run-turn').RunTurnOptions[]} */
+    const seen = [];
+    const box = { engine: /** @type {ReturnType<typeof createEngine> | null} */ (null) };
+    const effector = makeEffector({
+      parentChatId,
+      getState: () => box.engine.getState(),
+      runTurn: async (options) => {
+        seen.push(options);
+        return { outcome: 'pass', summary: 'ok', evidence: [] };
+      },
+    });
+    const engine = createEngine({
+      boardId: parentChatId,
+      effector,
+      journal,
+      graph: subAgentGraph,
+      tickMs: 100_000,
+    });
+    box.engine = engine;
+    await engine.load();
+    try {
+      await engine.append([runRequested(parentChatId, cwd, { agentType: 'explore' })]);
+      await engine.tick();
+      await waitFor(() => seen.length >= 1, 10_000);
+      assert.equal(seen[0]?.model?.sampler?.maxTokens, 131072);
+      assert.ok(seen[0]?.model?.sampler?.preset, 'sampler must be { preset, maxTokens }, not a flat row');
+    } finally {
+      engine.dispose();
+      await writeConfigJson('config.json', meta);
     }
   });
 

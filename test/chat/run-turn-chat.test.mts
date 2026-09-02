@@ -160,7 +160,7 @@ describe('P6-D runTurn chat adapter (MIN-726)', () => {
     setTitlesConfigForTests({ ...DEFAULT_TITLES_CONFIG, enabled: false });
     installChatDom();
     // Distinctive ceiling so a missing model.sampler (2048) or the shipped
-    // default (32768) cannot pass this assertion by accident.
+    // Settings default (32768) cannot pass this assertion by accident.
     setSamplerMetaForTests({ temperature: 1, maxTokens: 131072 });
     const calls: RunTurnOptions[] = [];
     setRunTurnForTests(async (options) => {

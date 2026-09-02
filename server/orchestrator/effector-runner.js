@@ -55,6 +55,10 @@ import {
   slotIdFromWorktreePath,
 } from './worktree-lifecycle.js';
 import { getWorktreeSlotPath } from '../worktree/paths.js';
+import {
+  DEFAULT_AGENT_MAX_TOKENS,
+  readGlobalSamplerForTurn,
+} from '../agents/sampler.js';
 
 /**
  * Attempt ids currently visible to some runner effector's `inspect()`.
@@ -92,9 +96,10 @@ export function cancelOrphanedRunnerGenerations() {
 }
 
 /**
- * Server-side `RunnerDeps` for in-process completions. Sampler / thinking /
- * context policy are no-ops: the attempt's `TurnModel` already carries what
- * `runTurn` forwards, and a missing capability probe must not block a turn.
+ * Server-side `RunnerDeps` for in-process completions. Thinking / context
+ * policy are no-ops: the attempt's `TurnModel` already carries sampler from
+ * Settings (`readGlobalSamplerForTurn`). The stub max is the shipped Settings
+ * default, not 2048 — a missed `model.sampler` must not cap every provider.
  *
  * @param {import('../runner/adapters').PostChatCompletions} postChatCompletions
  * @returns {import('../runner/adapters').RunnerDeps}
@@ -115,7 +120,9 @@ function createServerRunnerDeps(postChatCompletions) {
       };
     },
     getSubAgentTypeConfig: async () => ({}),
-    resolveSamplerPreset: () => ({ preset: {}, maxTokens: 2048 }),
+    // Last-ditch only: production `start()` attaches `model.sampler` from
+    // Settings. 2048 here reintroduced finish_reason: length on every board.
+    resolveSamplerPreset: () => ({ preset: {}, maxTokens: DEFAULT_AGENT_MAX_TOKENS }),
     resolveThinkingMode: () => ({ mode: 'off' }),
     resolveThinkingBudgetTokens: () => ({ budgetTokens: null }),
     loadToolCallsMeta: async () => {},
@@ -650,12 +657,18 @@ export function createRunnerEffector(options = {}) {
         reasoning === 'low' ||
         reasoning === 'medium' ||
         reasoning === 'high';
-      const turnModel =
-        reasoning === 'off'
-          ? { ...model, thinking: { mode: 'off' } }
+      // Board workers have no type-row sampler. Pass Settings → Sampler so
+      // `runTurn` does not fall through to a 2048 stub (`finish_reason: length`).
+      const globalSampler = await readGlobalSamplerForTurn();
+      const turnModel = {
+        ...model,
+        sampler: globalSampler,
+        ...(reasoning === 'off'
+          ? { thinking: { mode: 'off' } }
           : thinkingOn
-            ? { ...model, thinking: { mode: 'on' } }
-            : model;
+            ? { thinking: { mode: 'on' } }
+            : {}),
+      };
 
       const attemptId = `r-${randomUUID()}`;
       /** @type {string} */

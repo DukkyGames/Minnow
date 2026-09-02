@@ -92,7 +92,7 @@ import {
 } from "./thinking-budget.js";
 import { retryOnceOnTransientFetch } from "./transient-fetch-retry.js";
 import { LLAMA_CPP_LOCAL_PROVIDER_ID, MLX_LM_LOCAL_PROVIDER_ID } from "./provider-ids.js";
-import { applySamplerToBody } from "./sampler-types.js";
+import { applySamplerToBody, DEFAULT_AGENT_MAX_TOKENS } from "./sampler-types.js";
 import { buildOpeningMessages } from "./opening-messages.js";
 import {
   modelUsesComposerReasoningDropdown,
@@ -550,13 +550,27 @@ function createSubAgentRunner(deps) {
       let emptyPostToolRetries = 0;
       const hasAskQuestionTool = input.tools.some((t) => t.function.name === "ask_question");
       const typeConfig = await getSubAgentTypeConfig(input.type);
-      const resolvedSampler = resolveSamplerPreset({
-        kind: "sub-agent",
-        agentKey: input.type,
-        global: { maxTokens: 2048, preset: {} },
-        subAgentMaxTokensFallback: 2048,
-        subAgentType: typeConfig
-      });
+      // `runTurn({ type: 'turn' })` is main chat, not a sub-agent type. The
+      // previous 2048 fallback silently capped every provider at
+      // finish_reason: length whenever a caller omitted `model.sampler`.
+      // Work-agent kind + shipped Settings max is the safety net; product
+      // chat still passes `{ preset, maxTokens }` from Settings/drawer.
+      const isMainTurn = input.type === "turn";
+      const resolvedSampler = resolveSamplerPreset(
+        isMainTurn
+          ? {
+              kind: "work-agent",
+              agentKey: null,
+              global: { maxTokens: DEFAULT_AGENT_MAX_TOKENS, preset: {} }
+            }
+          : {
+              kind: "sub-agent",
+              agentKey: input.type,
+              global: { maxTokens: DEFAULT_AGENT_MAX_TOKENS, preset: {} },
+              subAgentMaxTokensFallback: DEFAULT_AGENT_MAX_TOKENS,
+              subAgentType: typeConfig
+            }
+      );
       const parentChat = input.parentChatId ? findChatById(input.parentChatId) : void 0;
       const resolvedThinking = resolveThinkingMode({
         kind: "sub-agent",

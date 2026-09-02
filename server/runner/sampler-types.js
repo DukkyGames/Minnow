@@ -13,6 +13,12 @@ const TOP_K_MAX = 200;
 const MAX_TOKENS_MIN = 1;
 const MAX_TOKENS_MAX = 131072;
 const MAX_STOP_SEQUENCES = 8;
+/**
+ * Shipped Settings → Sampler maxTokens (`config.json` / `DEFAULT_SAMPLER_GLOBAL`).
+ * Safety net when a caller omits `model.sampler` so main-chat-equivalent turns
+ * cannot silently cap every provider at 2048 (`finish_reason: length`).
+ */
+const DEFAULT_AGENT_MAX_TOKENS = 32768;
 const SAMPLER_NEUTRAL = {
   minP: 0,
   repetitionPenalty: 1,
@@ -133,6 +139,7 @@ function applySamplerToBody(body, preset, maxTokens) {
   return { ...body, ...mapped };
 }
 export {
+  DEFAULT_AGENT_MAX_TOKENS,
   SAMPLER_NEUTRAL,
   applySamplerToBody,
   clampSamplerPreset,

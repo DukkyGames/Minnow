@@ -38,6 +38,7 @@ import { subscribeLive } from '../../server/orchestrator/live-events.js';
 import { ATTEMPT_WALL_CLOCK_MS, attemptLimits } from '../../server/orchestrator/attempt-limits.js';
 import { REPORT_TOOL_NAME } from '../../server/orchestrator/report-tool.js';
 import { createMemoryJournal } from '../../server/orchestrator/testing/memory-journal.js';
+import { readConfigJson, writeConfigJson } from '../../server/config/store.js';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ENGINE_JS = path.join(PROJECT_ROOT, 'server', 'orchestrator', 'engine.js');
@@ -680,6 +681,41 @@ describe('runner effector', { concurrency: false }, () => {
       assert.equal(seenAsk[0], null);
     } finally {
       engine.dispose();
+    }
+  });
+
+  test('builder runTurn receives Settings sampler max tokens, not the 2048 fallback', { timeout: 20_000 }, async () => {
+    const meta = (await readConfigJson('config.json')) ?? {};
+    await writeConfigJson('config.json', {
+      ...meta,
+      sampler: { ...(meta.sampler && typeof meta.sampler === 'object' ? meta.sampler : {}), maxTokens: 131072 },
+    });
+    const boardId = 'p2f-sampler-max';
+    const journal = await openBoard(boardId);
+    /** @type {import('../../server/runner/run-turn').RunTurnOptions[]} */
+    const seen = [];
+    const box = { engine: /** @type {ReturnType<typeof createEngine> | null} */ (null) };
+    const effector = makeEffector({
+      boardId,
+      journal,
+      cwd,
+      getState: () => box.engine.getState(),
+      runTurn: async (options) => {
+        seen.push(options);
+        return { outcome: 'pass', summary: 'ok', evidence: [] };
+      },
+    });
+    const engine = createEngine({ boardId, effector, journal, tickMs: 100_000 });
+    box.engine = engine;
+    await engine.load();
+    try {
+      await engine.startBoard(1);
+      await waitFor(() => seen.length >= 1, 10_000);
+      assert.equal(seen[0]?.model?.sampler?.maxTokens, 131072);
+      assert.ok(seen[0]?.model?.sampler?.preset, 'sampler must be { preset, maxTokens }, not a flat row');
+    } finally {
+      engine.dispose();
+      await writeConfigJson('config.json', meta);
     }
   });
 

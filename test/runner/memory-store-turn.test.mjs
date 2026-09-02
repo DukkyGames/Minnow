@@ -98,4 +98,57 @@ describe('in-memory TranscriptStore + fake model host', () => {
     assert.ok(Array.isArray(output.messages));
     assert.equal(transcriptStore.load('unused'), null);
   });
+
+  test('type turn uses work-agent sampler kind and not the 2048 fallback', { timeout: 20_000 }, async () => {
+    const seen = [];
+    const transcriptStore = createMemoryTranscriptStore();
+    const runner = createSubAgentRunner({
+      transcriptStore,
+      postChatCompletions: postChatCompletionsHttp,
+      runHeadlessToolBatch: runHeadlessToolBatchStub,
+      resolveProvider: async () => ({
+        id: 'fake-board',
+        label: 'Fake board model',
+        baseUrl,
+        apiKind: 'openai-v1',
+        chatCompletionsPath: '/v1/chat/completions',
+      }),
+      getSubAgentTypeConfig: async () => ({}),
+      resolveSamplerPreset: (input) => {
+        seen.push(input);
+        return { preset: {}, maxTokens: input.global?.maxTokens ?? 0 };
+      },
+      resolveThinkingMode: () => ({ mode: 'off' }),
+      resolveThinkingBudgetTokens: () => ({ budgetTokens: null }),
+      loadToolCallsMeta: async () => {},
+      getToolCallsMetaSync: () => ({ useConstrainedDecoding: false }),
+      isConstrainedDecodingEnabledForProvider: () => false,
+      readProviderCapabilities: async () => null,
+      isStructuredOutcomeResponseFormatAvailable: () => false,
+      resolveSendCapabilities: () => ({}),
+      resolveModelContextLimit: () => null,
+      applyContextPolicy: async (input) => ({
+        applied: false,
+        messages: input.messages,
+      }),
+    });
+
+    await runner.run({
+      runId: 'run-turn-sampler',
+      type: 'turn',
+      task: 'Say hello.',
+      systemPrompt: 'You are a test.',
+      tools: [],
+      providerId: 'fake-board',
+      modelId: 'fake-board-model',
+      signal: new AbortController().signal,
+      executeTool: async () => ({ content: '' }),
+    });
+
+    assert.equal(seen.length >= 1, true);
+    assert.equal(seen[0].kind, 'work-agent');
+    assert.notEqual(seen[0].global.maxTokens, 2048);
+    const { DEFAULT_AGENT_MAX_TOKENS } = await import('../../server/runner/sampler-types.js');
+    assert.equal(seen[0].global.maxTokens, DEFAULT_AGENT_MAX_TOKENS);
+  });
 });
