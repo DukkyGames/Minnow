@@ -44,7 +44,7 @@ This is what the app is for.
 
 Activity chips in the detail header — **Investigating…**, **Planning…** — are live, and clicking one opens the agent drawer or board chat behind it.
 
-Set the composer to **Debug** when you want the model working this way. Debug is the mode with diagnostics access and the `issue_*` tools pointed at this app.
+**General**, **Build**, **Plan**, and **Debug** all expose `issue_*` tools. Debug also has local diagnostics. Plan can file, update, and attach a plan path to a card; it still cannot edit application code.
 
 ## Git conventions
 

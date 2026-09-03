@@ -106,7 +106,7 @@
         "Related"
       ],
       "section": "Core concepts",
-      "hash": "0930773477b0d7e4ce012c14bf212c9eb87465c47722233bdbe817c293de81ff"
+      "hash": "d74d60167d4d1f52c63fd6e87211d66138fb5ac1f2a60a023945276529a12345"
     },
     {
       "path": "documentation/manual/concepts/tools-and-permissions.md",
@@ -287,7 +287,7 @@
         "Related"
       ],
       "section": "Apps",
-      "hash": "897042de27d5638432fc61807fdc3cd232768ccf690e9e3050ae23ba483bc8b0"
+      "hash": "3a85bb5b4c6b9765cdaac00ce6524833f9e14aeb2c9f3e743d7feb4ea8395884"
     },
     {
       "path": "documentation/manual/apps/scheduler.md",
@@ -361,7 +361,7 @@
         "Related"
       ],
       "section": "Orchestrate",
-      "hash": "fa242b660ad9066e4909e4911a3abf9990e63b25e3ef08424ed0f9fb4d73a833"
+      "hash": "f2fd0e6e46b45ef6f87bb642bf87f9830fc4c01a4cc356e0b693d47001f42887"
     },
     {
       "path": "documentation/manual/orchestrate/agents.md",

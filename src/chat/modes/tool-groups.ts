@@ -211,6 +211,7 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'code-intel',
     'lsp',
     'sub-agents',
+    'issues',
     'mode-mgmt',
     'ask',
     'browser',

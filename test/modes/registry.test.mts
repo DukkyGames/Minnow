@@ -44,6 +44,11 @@ describe('super-plan tool policy', () => {
   test('allows save_file for plan writes', () => {
     assert.equal(isToolAllowedForMode('super-plan', 'save_file'), true);
   });
+
+  test('allows issue_* tools', () => {
+    assert.equal(isToolAllowedForMode('super-plan', 'issue_search'), true);
+    assert.equal(isToolAllowedForMode('super-plan', 'issue_update'), true);
+  });
 });
 
 describe('Email surface mode', () => {

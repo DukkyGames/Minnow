@@ -206,8 +206,15 @@ describe('cross-mode policy invariants', () => {
   const CALENDAR_TOOLS = TOOL_GROUP_IDS.calendar;
   const APPEARANCE_TOOLS = TOOL_GROUP_IDS.appearance;
 
-  test('issue tools allowed in general, build, plan, and debug', () => {
-    const ISSUE_MODES = new Set<ModeId>(['general', 'build', 'plan', 'debug', 'desktop']);
+  test('issue tools allowed in general, build, plan, super-plan, and debug', () => {
+    const ISSUE_MODES = new Set<ModeId>([
+      'general',
+      'build',
+      'plan',
+      'super-plan',
+      'debug',
+      'desktop',
+    ]);
     for (const modeId of MODE_IDS) {
       for (const toolId of TOOL_GROUP_IDS.issues) {
         const allowed = isToolAllowedForMode(modeId, toolId);

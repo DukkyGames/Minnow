@@ -10,7 +10,7 @@ Open the caret under **Plan** in the composer and choose **Super Plan**, or star
 
 On the compose screen, pick the model on the composer bar (same catalog as Code). That binding is what grill, spec, drafts, and finalize use unless you set separate stage overrides in Settings. The sparkles control beside **Start planning** expands your draft into a fuller prompt in place before you send.
 
-Super Plan writes plans and reference documents. Like Plan mode, it cannot edit the rest of your repository — the mutating file and git tools are removed.
+Super Plan writes plans and reference documents. Like Plan mode, it cannot edit the rest of your repository — the mutating file and git tools are removed. Issue tracker tools stay available, so a Super Plan turn can file, update, and attach a plan to an Issues card.
 
 ## The pipeline
 
