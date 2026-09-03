@@ -49,6 +49,7 @@ import {
   ensureChatModelLoadedForTurn,
 } from '../api/ensure-chat-model-loaded';
 import { fetchCachedModels, listModelServes } from '../models/api-client';
+import { formatLoadPercentLabel } from '../models/load-progress.mjs';
 import {
   LIBRARY_MODEL_PROVIDER_ID,
   libraryBindingNeedsServeLoad,
@@ -156,6 +157,7 @@ import type {
   Usage,
 } from '../types';
 import type { StreamingStatusHandle } from '../ui/stream-status';
+import { getModelsState, subscribeModelsStore } from '../ui/models/store';
 import type { Attachment } from '../attachments/types';
 import { linkSentAttachmentsToTurn } from '../design/annotation-store';
 import {
@@ -907,7 +909,25 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       setSidebarStreamPhase('loading_model', chat.id);
       const ensureProviderId = libraryEnsure?.providerId ?? sendProviderId;
       const ensureModelId = libraryEnsure?.modelId ?? sendModelId;
-      await ensureChatModelLoadedImpl(ensureProviderId, ensureModelId, chatSignal);
+      let unsubLoad: (() => void) | null = null;
+      if (isStreamDomVisible(chat.id) && streamStatus) {
+        const status = streamStatus;
+        const syncLoadDetail = (): void => {
+          const live = getModelsState().loads.filter((l) => !l.error);
+          const match = libraryEnsure?.modelId
+            ? (live.find((l) => l.modelId === libraryEnsure.modelId) ?? live[0])
+            : live[0];
+          const pct = formatLoadPercentLabel(match?.percent);
+          status.setRuntimeDetail(pct || null);
+        };
+        unsubLoad = subscribeModelsStore(syncLoadDetail);
+        syncLoadDetail();
+      }
+      try {
+        await ensureChatModelLoadedImpl(ensureProviderId, ensureModelId, chatSignal);
+      } finally {
+        unsubLoad?.();
+      }
       if (libraryEnsure) {
         const cachedAfter = await fetchCachedModels().catch(() => []);
         const libraryAfter = await loadableLibraryFromCached(cachedAfter);
@@ -920,6 +940,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         sendModelId = served.modelId;
       }
       provider = await getActiveProvider(sendProviderId);
+      streamStatus?.setRuntimeDetail(null);
       streamStatus?.setPhase('generating');
       setSidebarStreamPhase('generating', chat.id);
       patchMainTurnActivity(chat.id, { phase: 'generating', currentTool: null });

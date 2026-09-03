@@ -999,6 +999,70 @@ describe('P10-I in-turn steer and context overlay (MIN-774)', () => {
     assert.equal(getContextInFlightOverlay(CHAT_ID), undefined);
   });
 
+  test('pending model load shows load percent beside Loading model…', async () => {
+    setTitlesConfigForTests({ ...DEFAULT_TITLES_CONFIG, enabled: false });
+    installChatDom();
+
+    const { getModelsState } = await import('../../src/ui/models/store.ts');
+    getModelsState().loads = [
+      {
+        serveId: 'serve-load-chat',
+        modelId: 'gguf:acme/model:weights/model-Q4_K_M.gguf',
+        percent: 42,
+        phase: 'Loading weights',
+        phaseKey: 'weights',
+        etaMs: null,
+        bytesTotal: 4_000_000_000,
+        startedAt: 1_700_000_000_000,
+        error: null,
+      },
+    ];
+
+    let releaseLoad!: () => void;
+    let markLoadStarted!: () => void;
+    const loadStarted = new Promise<void>((resolve) => {
+      markLoadStarted = resolve;
+    });
+    const loadHeld = new Promise<void>((resolve) => {
+      releaseLoad = resolve;
+    });
+
+    setChatModelLoadForTests({
+      needsLoad: () => true,
+      ensure: async () => {
+        markLoadStarted();
+        await loadHeld;
+      },
+    });
+    setRunTurnForTests(async (options) => {
+      options.onEvent?.({ type: 'delta', text: 'Ready.' });
+      return { outcome: 'no_report' } satisfies TurnResult;
+    });
+
+    const chat = makeChat();
+    setSessionStateForTests({
+      version: 3,
+      activeId: chat.id,
+      sidebarCollapsed: false,
+      chats: [chat],
+    });
+
+    const { runChatTurn } = await import('../../src/chat/run-turn-chat.ts');
+    const turnPromise = runChatTurn({
+      chat,
+      ...SIMPLE_TURN,
+    });
+
+    await loadStarted;
+    const detail = document.querySelector('.stream-status__detail');
+    assert.equal(detail?.textContent?.trim(), '42%');
+    assert.equal(detail?.hidden, false);
+
+    releaseLoad();
+    await turnPromise;
+    getModelsState().loads.length = 0;
+  });
+
   test('pending model load shows Loading model… in the transcript before completions', async () => {
     setTitlesConfigForTests({ ...DEFAULT_TITLES_CONFIG, enabled: false });
     installChatDom();
