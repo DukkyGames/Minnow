@@ -288,6 +288,49 @@ describe('P9-C — per-board model binding', () => {
     assert.equal(effort.status, 200);
     assert.equal(effort.body.state.model.reasoning, 'medium');
   });
+
+  it('journals board.model.set when create includes a model pair', async () => {
+    const created = await call('POST', '/api/boards', {
+      planPath: 'demo.md',
+      markdown: PLAN,
+      providerId: 'lmstudio',
+      id: 'qwen/qwen3-8b',
+    });
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    assert.deepEqual(created.body.state.model, {
+      providerId: 'lmstudio',
+      id: 'qwen/qwen3-8b',
+      reasoning: null,
+    });
+
+    const journal = await call('GET', `/api/boards/${created.body.boardId}/journal`);
+    const types = journal.body.events.map((e) => e.type);
+    assert.ok(types.includes('board.created'));
+    assert.ok(types.includes('board.model.set'));
+    const event = journal.body.events.find((e) => e.type === 'board.model.set');
+    assert.equal(event.providerId, 'lmstudio');
+    assert.equal(event.id, 'qwen/qwen3-8b');
+  });
+
+  it('Start without a journaled model still 400 when Autopilot and active chat are empty', async () => {
+    const { resolveAttemptModel } = await import('../../server/orchestrator/model-binding.js');
+    effectorFactory = () => ({
+      inspect: () => [],
+      async preflight() {
+        await resolveAttemptModel(null);
+      },
+      async start() {
+        throw new Error('should not start');
+      },
+      async stop() {},
+      onEnd() {},
+    });
+    const boardId = await createBoard();
+    const started = await call('POST', `/api/boards/${boardId}/start`, { concurrency: 1 });
+    assert.equal(started.status, 400);
+    assert.match(started.body.error, /no model bound/);
+    assert.equal(started.body.state.status, 'created');
+  });
 });
 
 // ── board lifecycle ──────────────────────────────────────────────────────────

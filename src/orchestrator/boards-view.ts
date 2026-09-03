@@ -53,6 +53,7 @@ import {
   detachV2BoardHeaderInstruments,
   teardownV2BoardHeaderInstruments,
 } from './board-header-v2';
+import { ensureBoardModelBound } from './board-model-bind';
 import { isBoardJournalReasoning } from './board-journal-reasoning';
 import { isExecutableOrchestratePlan } from '../chat/plans/plan-path';
 import {
@@ -149,6 +150,10 @@ let renamingBoardId: string | null = null;
 const finishReportByBoard = new Map<string, string>();
 const finishReportLoads = new Set<string>();
 const reportDismissed = new Set<string>();
+/** First-paint seed per board. Catalog retries use the menubar watcher, not every SSE paint. */
+const modelSeedAttempted = new Set<string>();
+const modelSeedInflight = new Set<string>();
+let stopModelSelectSeedWatch: (() => void) | null = null;
 
 // ── Mount ────────────────────────────────────────────────────────────────────
 
@@ -223,6 +228,9 @@ export function teardownBoardsView(): void {
   askPlanPreviewRequestId = 0;
   stopElapsedTicker();
   teardownV2BoardHeaderInstruments();
+  stopWatchingModelSelectForSeed();
+  modelSeedAttempted.clear();
+  modelSeedInflight.clear();
   document.getElementById(BOARDS_ROOT_ID)?.remove();
   const area = document.getElementById('chatArea');
   area?.classList.remove(CHAT_AREA_CLASS);
@@ -1046,6 +1054,7 @@ function paintBoard(): void {
       },
     });
   }
+  maybeSeedBoardModel(state);
   const errors = renderEngineErrors(client?.getEngineErrors());
   if (errors) pane.appendChild(errors);
   if (notice) {
@@ -1532,8 +1541,94 @@ async function run(what: string, command: () => Promise<void>): Promise<void> {
   }
 }
 
+function boardModelIsBound(state: BoardState | null): boolean {
+  return Boolean(state?.model?.providerId?.trim() && state?.model?.id?.trim());
+}
+
+function stopWatchingModelSelectForSeed(): void {
+  stopModelSelectSeedWatch?.();
+  stopModelSelectSeedWatch = null;
+}
+
+/** Retry seed once the menubar catalog fills in, if this board is still unbound. */
+function watchModelSelectForSeed(): void {
+  if (stopModelSelectSeedWatch) return;
+  const sel = document.getElementById('modelSelect');
+  if (!(sel instanceof HTMLSelectElement)) return;
+
+  const retry = () => {
+    const boardId = selectedBoardId;
+    if (!boardId || !client) return;
+    const state = client.getState();
+    if (boardModelIsBound(state)) {
+      stopWatchingModelSelectForSeed();
+      return;
+    }
+    void seedBoardModelNow(boardId, state);
+  };
+
+  sel.addEventListener('change', retry);
+  const observer = new MutationObserver(retry);
+  observer.observe(sel, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['value'],
+  });
+  stopModelSelectSeedWatch = () => {
+    sel.removeEventListener('change', retry);
+    observer.disconnect();
+  };
+}
+
+async function seedBoardModelNow(boardId: string, state: BoardState | null): Promise<void> {
+  if (!client || selectedBoardId !== boardId || modelSeedInflight.has(boardId)) return;
+  modelSeedInflight.add(boardId);
+  try {
+    const ok = await ensureBoardModelBound({
+      state,
+      setModel: async (providerId, id) => {
+        await client?.setModel({ providerId, id });
+      },
+    });
+    if (ok) stopWatchingModelSelectForSeed();
+    else watchModelSelectForSeed();
+  } catch {
+    watchModelSelectForSeed();
+  } finally {
+    modelSeedInflight.delete(boardId);
+  }
+}
+
+function maybeSeedBoardModel(state: BoardState): void {
+  const boardId = selectedBoardId;
+  if (!boardId || !client) return;
+  if (boardModelIsBound(state)) {
+    modelSeedAttempted.add(boardId);
+    stopWatchingModelSelectForSeed();
+    return;
+  }
+  if (modelSeedAttempted.has(boardId)) {
+    watchModelSelectForSeed();
+    return;
+  }
+  modelSeedAttempted.add(boardId);
+  void seedBoardModelNow(boardId, state);
+}
+
+async function seedBoundModelBeforeStart(): Promise<void> {
+  if (!client) return;
+  await ensureBoardModelBound({
+    state: client.getState(),
+    setModel: async (providerId, id) => {
+      await client?.setModel({ providerId, id });
+    },
+  });
+}
+
 function commandStart(concurrency: number): Promise<void> {
   return run('Start', async () => {
+    await seedBoundModelBeforeStart();
     await client?.start(concurrency);
     void list?.refresh();
   });
@@ -1595,6 +1690,7 @@ async function commandStartTask(taskId: string): Promise<void> {
   pendingTasks.add(taskId);
   paintBoard();
   try {
+    await seedBoundModelBeforeStart();
     const started = await client.startTask(taskId);
     notice = started
       ? null

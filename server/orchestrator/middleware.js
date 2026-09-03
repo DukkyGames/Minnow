@@ -9,6 +9,7 @@ import { makeEvent } from './core/events.js';
 import { stateToJSON } from './core/snapshot.js';
 import { createScriptedEffector } from './effector-scripted.js';
 import { disposeEngines, getEngine, peekEngine } from './engine.js';
+import { completeModelPair } from './model-binding.js';
 import { listPendingBoardResumes, resolveAllBoardResumes } from './resume-gate.js';
 import {
   appendEvent,
@@ -594,6 +595,18 @@ async function createFromPlan(req, res) {
       workspacePath: path.resolve(getWorkspaceRoot()),
     }),
   );
+
+  // Optional chip/menubar seed from the client so Start and the header share a journaled pair.
+  const model = await completeModelPair(body.providerId, body.id);
+  if (model?.providerId && model.id) {
+    await appendEvent(
+      boardId,
+      makeEvent('board.model.set', {
+        providerId: model.providerId,
+        id: model.id,
+      }),
+    );
+  }
 
   const state = await loadState(boardId);
   return json(res, 201, { ok: true, boardId, state: serialiseState(state) });

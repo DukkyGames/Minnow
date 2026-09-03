@@ -1,6 +1,7 @@
 import type { DiffLine } from '../chat/prompts/text-diff';
 import { foldInto } from '../../server/orchestrator/core/derive.js';
 import { stateFromJSON } from '../../server/orchestrator/core/snapshot.js';
+import { readDisplayedBoardModelSeed } from './board-model-bind';
 import type {
   Attempt,
   BoardState,
@@ -193,11 +194,19 @@ export async function listBoards(): Promise<BoardSummary[]> {
 
 export async function createBoardFromPlan(
   planPath: string,
-  options: { boardId?: string; markdown?: string } = {},
+  options: { boardId?: string; markdown?: string; providerId?: string; id?: string } = {},
 ): Promise<{ boardId: string; state: BoardState }> {
+  const seeded =
+    options.providerId?.trim() && options.id?.trim()
+      ? { providerId: options.providerId.trim(), id: options.id.trim() }
+      : readDisplayedBoardModelSeed();
   const body = await request('', {
     method: 'POST',
-    body: JSON.stringify({ planPath, ...options }),
+    body: JSON.stringify({
+      planPath,
+      ...options,
+      ...(seeded ? { providerId: seeded.providerId, id: seeded.id } : {}),
+    }),
   });
   return { boardId: body.boardId, state: stateFromJSON(body.state) };
 }
