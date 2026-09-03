@@ -165,9 +165,11 @@ html.minnow-os-enabled:has(.main-column--hub) .chat-area--hub {
   overflow: visible;
 }
 
-/* Compact: keep the strip in the composer column so the cog is not stacked above Send. */
-.input-bar--hub.input-bar--composer-compact .composer-controls {
-  grid-column: 1;
+/* Compact hub: controls span the full bar (row 1); Send stays on row 2 column 2.
+   Chat compact still pins to column 1 — see composer-overflow.css. */
+.input-bar.input-bar--hub.input-bar--composer-compact > .composer-controls {
+  grid-column: 1 / -1;
+  justify-self: stretch;
 }
 
 /* Plan / Super Plan caret menu is absolutely positioned below the mode strip.

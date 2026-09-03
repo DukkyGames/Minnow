@@ -246,7 +246,7 @@ describe('composer compact overflow', () => {
     const hubCss = readFileSync(new URL('../../src/styles/hub.css', import.meta.url), 'utf8');
     assert.match(
       hubCss,
-      /\.input-bar--hub\.input-bar--composer-compact \.composer-controls \{\s*grid-column:\s*1;/,
+      /\.input-bar\.input-bar--hub\.input-bar--composer-compact > \.composer-controls \{\s*grid-column:\s*1 \/ -1;/,
     );
   });
 
