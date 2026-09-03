@@ -3,6 +3,9 @@ import type { BoardState, Desired } from './core/types';
 export const INTEGRATION_SLOT: 'integration';
 export const WORKTREE_DISCARDED_TYPE: 'worktree.discarded';
 export const BOARD_GIT_INITIALIZED_TYPE: 'board.git.initialized';
+export const ORPHAN_RECONCILE_BULK_THRESHOLD: 8;
+
+export function setOrphanBulkThresholdForTests(value?: number | null): void;
 
 export function integrationBranch(boardId: string): string;
 export function attemptBranch(boardId: string, slotId: string): string;

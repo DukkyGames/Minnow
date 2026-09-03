@@ -1,6 +1,7 @@
 /** Allocate, commit, and release attempt worktrees. */
 
 import fs from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import path from 'node:path';
 
 import { attemptCount } from './core/derive.js';
@@ -16,11 +17,33 @@ import {
   listWorktrees,
   refreshIntegrationDeps,
   removeWorktree,
+  removeWorktreeSlotsBulk,
 } from '../worktree/worktree-ops.js';
 import { initializeWorkspaceGit } from '../workspace/initialize-git.js';
 
 /** Integration slot name used by `getWorktreeSlotPath`. Never reclaimed as an orphan. */
 export const INTEGRATION_SLOT = 'integration';
+
+/**
+ * Per-slot dirty-check + `git worktree remove` is fine for a handful of crash
+ * leftovers. Above this, switch to bulk `rm` + one prune so engine load cannot
+ * stall the board SSE snapshot (see removeWorktreeSlotsBulk).
+ */
+export const ORPHAN_RECONCILE_BULK_THRESHOLD = 8;
+
+/** @type {number} */
+let orphanBulkThreshold = ORPHAN_RECONCILE_BULK_THRESHOLD;
+
+/**
+ * Test seam: force the bulk vs per-slot path without creating dozens of git worktrees.
+ * @param {number | null | undefined} value
+ */
+export function setOrphanBulkThresholdForTests(value) {
+  orphanBulkThreshold =
+    typeof value === 'number' && Number.isFinite(value) && value >= 0
+      ? value
+      : ORPHAN_RECONCILE_BULK_THRESHOLD;
+}
 
 /**
  * Opaque journal type for dirty work that was discarded on removal.
@@ -89,14 +112,24 @@ function normalizePath(value) {
   return path.resolve(String(value));
 }
 
+/** Resolve macOS `/var` → `/private/var` when the path exists. */
+function realpathIfExists(value) {
+  const resolved = path.resolve(String(value));
+  try {
+    return realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
+}
+
 /**
  * @param {string} a
  * @param {string} b
  * @returns {boolean}
  */
 export function pathsEqual(a, b) {
-  const left = normalizePath(a);
-  const right = normalizePath(b);
+  const left = realpathIfExists(a);
+  const right = realpathIfExists(b);
   if (process.platform === 'win32') return left.toLowerCase() === right.toLowerCase();
   return left === right;
 }
@@ -137,14 +170,34 @@ export function previousWorktreeForTask(state, taskId) {
 }
 
 /**
+ * Path prefixes Node and git disagree about on macOS (`/var` vs `/private/var`).
+ * Try both the unresolved and real path so a synthetic slot still round-trips
+ * when the board dir exists and the slot does not.
+ * @param {string} root
+ * @param {string} absPath
+ * @returns {string | null} relative path inside root, or null
+ */
+function relativeUnder(root, absPath) {
+  const roots = [normalizePath(root), realpathIfExists(root)];
+  const targets = [normalizePath(absPath), realpathIfExists(absPath)];
+  for (const base of roots) {
+    for (const target of targets) {
+      const rel = path.relative(base, target);
+      if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) continue;
+      return rel;
+    }
+  }
+  return null;
+}
+
+/**
  * @param {string} boardId
  * @param {string} worktreePath
  * @returns {string | null}
  */
 export function slotIdFromWorktreePath(boardId, worktreePath) {
-  const dir = getBoardWorktreesDir(boardId);
-  const rel = path.relative(normalizePath(dir), normalizePath(worktreePath));
-  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  const rel = relativeUnder(getBoardWorktreesDir(boardId), worktreePath);
+  if (!rel) return null;
   const slot = rel.split(/[\\/]/)[0];
   return slot || null;
 }
@@ -422,16 +475,32 @@ export async function reconcileOrphanWorktrees(input) {
     ? input.livePaths
     : new Set([...input.livePaths].map(normalizePath));
 
-  /** @type {string[]} */
-  const removed = [];
-  /** @type {Record<string, unknown>[]} */
-  const discarded = [];
-
+  /** @type {Array<{ slotId: string, worktree: string }>} */
+  const orphans = [];
   for (const wt of all) {
     if (!isUnderBoard(dir, wt)) continue;
     const slotId = slotIdFromWorktreePath(boardId, wt);
     if (!slotId || slotId === INTEGRATION_SLOT) continue;
     if ([...live].some((p) => pathsEqual(p, wt))) continue;
+    orphans.push({ slotId, worktree: wt });
+  }
+  if (orphans.length === 0) return { removed: [], discarded: [] };
+
+  // Hundreds of leaked slots must not run git status + worktree remove + prune each.
+  if (orphans.length >= orphanBulkThreshold) {
+    const bulk = await removeWorktreeSlotsBulk({
+      boardId,
+      slotIds: orphans.map((row) => row.slotId),
+    });
+    return { removed: bulk.removed, discarded: [] };
+  }
+
+  /** @type {string[]} */
+  const removed = [];
+  /** @type {Record<string, unknown>[]} */
+  const discarded = [];
+
+  for (const { slotId, worktree: wt } of orphans) {
     const result = await releaseWorktree({ boardId, slotId, worktree: wt });
     if (result.discarded) discarded.push(result.discarded);
     if (result.ok) removed.push(wt);
@@ -445,9 +514,7 @@ export async function reconcileOrphanWorktrees(input) {
  * @returns {boolean}
  */
 function isUnderBoard(boardDir, wtPath) {
-  const rel = path.relative(normalizePath(boardDir), normalizePath(wtPath));
-  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return false;
-  return true;
+  return relativeUnder(boardDir, wtPath) !== null;
 }
 
 /**
@@ -461,4 +528,5 @@ export async function refreshIntegrationDepsAfterMerge(input) {
 /** Test seam: isolation across MINNOW_HOME moves must not skip a real ensure. */
 export function resetEnsuredBoards() {
   ensuredBoards.clear();
+  orphanBulkThreshold = ORPHAN_RECONCILE_BULK_THRESHOLD;
 }

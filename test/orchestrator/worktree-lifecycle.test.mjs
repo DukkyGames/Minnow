@@ -28,6 +28,7 @@ import {
   reconcileOrphanWorktrees,
   releaseWorktree,
   resetEnsuredBoards,
+  setOrphanBulkThresholdForTests,
   slotIdFromWorktreePath,
   WORKTREE_DISCARDED_TYPE,
   wantsReuse,
@@ -595,5 +596,32 @@ describe('P3-A worktree lifecycle', { concurrency: false }, () => {
       livePaths: new Set(),
     });
     assert.deepEqual(result, { removed: [], discarded: [] });
+  });
+
+  test('bulk orphan reclaim skips dirty capture and still removes the slot', async () => {
+    resetEnsuredBoards();
+    setOrphanBulkThresholdForTests(1);
+    const boardId = 'p3a-bulk-orphans';
+    try {
+      await ensureIntegration({ boardId, branch: `minnow/board/${boardId}/integration` });
+      const created = await createWorktree({
+        boardId,
+        slotId: 'bulk-dirty',
+        branch: `minnow/board/${boardId}/bulk-dirty`,
+        baseRef: `minnow/board/${boardId}/integration`,
+      });
+      assert.equal(created.ok, true, created.output || created.error);
+      await fs.writeFile(path.join(created.path, 'uncommitted.txt'), 'bulk skip\n', 'utf8');
+
+      const result = await reconcileOrphanWorktrees({
+        boardId,
+        livePaths: new Set(),
+      });
+      assert.equal(await exists(created.path), false);
+      assert.ok(result.removed.some((p) => p === created.path || p.endsWith('bulk-dirty')));
+      assert.equal(result.discarded.length, 0);
+    } finally {
+      setOrphanBulkThresholdForTests(null);
+    }
   });
 });

@@ -30,6 +30,8 @@ import {
   restoreIntegration,
   verifyIntegrationMerge,
   workspaceLandingStats,
+  listWorktrees,
+  removeWorktreeSlotsBulk,
 } from '../../server/worktree/worktree-ops.js';
 import { getWorktreeSlotPath } from '../../server/worktree/paths.js';
 import { setWorkspaceRoot } from '../../server/workspace/root.js';
@@ -495,6 +497,30 @@ describe('worktree conflict merge and verification', () => {
     const cleaned = await removeWorktree({ boardId, slotId });
     assert.equal(cleaned.ok, true, cleaned.error);
     await assert.rejects(() => fs.access(wtPath));
+  });
+
+  test('removeWorktreeSlotsBulk unregisters missing slots with one prune', async () => {
+    const slots = ['bulk-a', 'bulk-b'];
+    for (const slotId of slots) {
+      const created = await createWorktree({
+        boardId: BOARD_ID,
+        slotId,
+        branch: `minnow/board/${BOARD_ID}/${slotId}`,
+        baseRef: integrationBranch,
+      });
+      assert.equal(created.ok, true, created.output || created.error);
+    }
+
+    const bulk = await removeWorktreeSlotsBulk({ boardId: BOARD_ID, slotIds: slots });
+    assert.equal(bulk.ok, true, JSON.stringify(bulk.failedSlots));
+    assert.equal(bulk.removed.length, 2);
+
+    const listed = await listWorktrees();
+    const text = `${listed.output ?? ''}`;
+    for (const slotId of slots) {
+      assert.equal(text.includes(`/${slotId}`), false, `git still lists ${slotId}: ${text}`);
+      await assert.rejects(() => fs.access(getWorktreeSlotPath(BOARD_ID, slotId, repoDir)));
+    }
   });
 
   test('cleanupBoardWorktrees keeps integration by default and removes all when includeIntegration', async () => {
