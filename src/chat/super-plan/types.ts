@@ -52,6 +52,12 @@ export type SuperPlanCheckpointAction = 'confirm' | 'revise';
 export interface SuperPlanState {
   /** Kebab-case basename shared by spec, research, and plan artifacts. */
   slug: string;
+  /**
+   * Epoch ms when this pipeline instance was created.
+   * Stable across slug reconcile so Activity persist cannot write a prior
+   * run's ledger onto a replacement `superPlan` on the same chat id.
+   */
+  runStartedAt?: number;
   /** Human title from the build spec (or plan) after slug reconciliation. */
   displayTitle?: string;
   /** Original user prompt that started the pipeline. */

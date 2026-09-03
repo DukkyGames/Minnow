@@ -38,8 +38,17 @@ describe('composer-prompt-history', () => {
       { role: 'user', content: 'second\n[skill: git-commit]' },
       { role: 'user', content: 'done', goalAchieved: true },
       { role: 'user', content: '   ' },
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'from a screenshot follow-up' }],
+        toolImageFollowUp: true,
+      } as never,
+      {
+        role: 'user',
+        content: [{ type: 'text', text: 'visible parts row' }],
+      } as never,
     ]);
-    assert.deepEqual(prompts, ['first', 'second']);
+    assert.deepEqual(prompts, ['first', 'second', 'visible parts row']);
   });
 
   it('only intercepts arrows at collapsed composer edges', () => {

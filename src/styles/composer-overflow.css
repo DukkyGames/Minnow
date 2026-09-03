@@ -651,7 +651,7 @@
 .composer-controls--compact .composer-model-trigger-anchor,
 .composer-controls--compact .composer-model-trigger-wrap {
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: 5.5rem;
   max-width: 100%;
 }
 

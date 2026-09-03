@@ -153,6 +153,7 @@ describe('composer compact overflow', () => {
   test('index.html defines the two-page cog sheet', () => {
     const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
     assert.match(html, /id="composerOverflowSettingsPage"/);
+    assert.match(html, /id="codeComposerModelAnchor"/);
     assert.match(html, /id="composerOverflowToolsPage"/);
     assert.match(html, /id="composerOverflowToolsNav"/);
     assert.match(html, /id="composerOverflowToolsBack"/);

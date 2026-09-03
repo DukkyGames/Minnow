@@ -54,4 +54,46 @@ describe('composer model trigger', () => {
       (globalThis as { window: Window }).window = prevWindow;
     }
   });
+
+  test('mounts the Code chip after compact parks Tools out of the trail', async () => {
+    const { Window } = await import('happy-dom');
+    const win = new Window();
+    const doc = win.document;
+    doc.body.innerHTML = `
+      <select id="modelSelect">
+        <option value="qwen/qwen2.5-7b">Qwen 2.5 7B</option>
+      </select>
+      <span id="modelSelectTriggerText">Qwen 2.5 7B</span>
+      <div class="composer-controls" id="composerControls">
+        <div class="composer-controls__trail">
+          <div id="codeComposerModelAnchor" class="composer-model-trigger-anchor"></div>
+        </div>
+      </div>
+      <div id="composerOverflowToolsBody"></div>
+    `;
+
+    const prevDocument = globalThis.document;
+    const prevWindow = globalThis.window;
+    (globalThis as { document: Document }).document = doc as unknown as Document;
+    (globalThis as { window: Window }).window = win as unknown as Window & typeof globalThis.window;
+
+    const chat = createEmptyChatObject('qwen/qwen2.5-7b');
+    setSessionStateForTests({ chats: [chat], activeId: chat.id });
+
+    try {
+      const { initComposerModelTriggers } = await import('../../src/ui/composer-model-trigger.ts');
+      initComposerModelTriggers();
+
+      const wrap = doc.querySelector('#codeComposerModelAnchor .composer-model-trigger-wrap');
+      assert.ok(wrap, 'Code composer model trigger should mount without Tools in the trail');
+      assert.equal(
+        doc.querySelector('#codeComposerModelAnchor .composer-model-trigger__label')?.textContent,
+        'Qwen 2.5 7B',
+      );
+    } finally {
+      setSessionStateForTests(null);
+      (globalThis as { document: Document }).document = prevDocument;
+      (globalThis as { window: Window }).window = prevWindow;
+    }
+  });
 });

@@ -12,10 +12,15 @@ import {
   ensureChatsWorkspace,
   getChatsWorkspacePath,
   isAllowedWorkspaceRoot,
+  isAllowedWorkspaceRootAsync,
 } from '../../server/chats-workspace/paths.js';
-import { ensureMinnowLayout } from '../../server/config/home.js';
 import { executeServerTool } from '../../server/runtime/tools-middleware.js';
-import { initWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
+import {
+  initWorkspaceRoot,
+  setWorkspaceRoot,
+  touchRecentWorkspacePath,
+} from '../../server/workspace/root.js';
+import { ensureMinnowLayout } from '../../server/config/home.js';
 import { rmTestHome, setTestHome } from '../config/test-helpers.js';
 
 function createChatsTestServer() {
@@ -155,6 +160,14 @@ describe('chats workspace allowlist', () => {
     assert.equal(isAllowedWorkspaceRoot(getBenchmarkWorkspacePath()), true);
     assert.equal(isAllowedWorkspaceRoot(getSchedulerWorkspacePath()), true);
     assert.equal(isAllowedWorkspaceRoot(path.join(homeDir, 'other')), false);
+  });
+
+  it('isAllowedWorkspaceRootAsync accepts folders on the workspace MRU list', async () => {
+    const recentDir = path.join(homeDir, 'recent-project');
+    await fs.mkdir(recentDir, { recursive: true });
+    await touchRecentWorkspacePath(recentDir);
+    assert.equal(isAllowedWorkspaceRoot(recentDir), false);
+    assert.equal(await isAllowedWorkspaceRootAsync(recentDir), true);
   });
 
   it('executeServerTool honors workspaceRoot override under chats sandbox', async () => {

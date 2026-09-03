@@ -197,7 +197,7 @@ function findLiveFileAttachment(
  */
 export function renderUserMessageBubble(
   bubble: HTMLDivElement,
-  historyContent: string,
+  historyContent: unknown,
   options?: UserBubbleRenderOptions,
 ): void {
   bubble.replaceChildren();
@@ -232,7 +232,7 @@ export function renderUserMessageBubble(
     parsed.designRefs.length > 0;
   if (!hasChips) {
     if (!parsed.text) {
-      bubble.textContent = displaySource.trim() || historyContent;
+      bubble.textContent = displaySource.trim() || displaySource;
       bubble.classList.remove('msg-bubble--user-parts');
     }
     return;

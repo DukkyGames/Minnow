@@ -98,7 +98,11 @@ import { syncSuperPlanChrome } from './super-plan-chrome';
 import { openSettings } from './settings-page';
 import { readDefaultModelBinding } from './default-model';
 import { setStatus } from './status';
+import { initSuperPlanState } from '../chat/super-plan/state';
+import { isSuperPlanPipelineResumable } from '../chat/super-plan/resumable';
+import { isReusableEmptyPlanChat } from '../chat/super-plan/spare-chat';
 import { isChatInCurrentWorkspace, type PlanLibraryEntry } from '../chat/super-plan/plan-library';
+import { getWorkspacePath } from '../state/workspace';
 
 export const ORCHESTRATE_PLAN_SCREEN_ROOT_ID = 'orchestratePlanScreen';
 export const ORCHESTRATE_PLAN_SCREEN_PROMPT_ID = 'orchestratePlanScreenPrompt';
@@ -599,18 +603,45 @@ function wirePlanScreenActivityListener(chatId: string): void {
   });
 }
 
-function findReusableEmptyPlanChat(modeId: 'plan' | 'super-plan'): Chat | null {
+function chatMatchesOpenWorkspace(chat: Chat): boolean {
+  const ws = getWorkspacePath();
+  if (!ws?.trim()) return true;
+  return isChatInCurrentWorkspace(chat);
+}
+
+function findReusableEmptyPlanChat(
+  modeId: 'plan' | 'super-plan',
+  excludeChatId?: string,
+): Chat | null {
   if (!sessionState) return null;
-  const hit = sessionState.chats.find(
-    (c) => normalizeModeId(c.modeId) === modeId && c.history.length === 0,
-  );
+  // A live Super Plan often still has history: [] (lazy summaries or pre-interview).
+  // isReusableEmptyPlanChat requires no superPlan and a truly empty transcript.
+  const hit = sessionState.chats.find((c) => {
+    if (excludeChatId && c.id === excludeChatId) return false;
+    if (!isReusableEmptyPlanChat(c, modeId)) return false;
+    if (!chatMatchesOpenWorkspace(c)) return false;
+    if (isChatStreaming(c.id)) return false;
+    if (isSuperPlanAdvancing(c.id)) return false;
+    return true;
+  });
   return hit ?? null;
 }
 
-function resolveOrCreatePlanChat(): Chat {
+function resolveOrCreatePlanChat(excludeChatId?: string): Chat {
   const targetMode =
     normalizeModeId(getActiveChat().modeId) === 'super-plan' ? 'super-plan' : 'plan';
-  const reusable = findReusableEmptyPlanChat(targetMode);
+  const active = getActiveChat();
+  const activeIsSpare =
+    (!excludeChatId || active.id !== excludeChatId) &&
+    isReusableEmptyPlanChat(active, targetMode) &&
+    chatMatchesOpenWorkspace(active) &&
+    !isChatStreaming(active.id) &&
+    !isSuperPlanAdvancing(active.id);
+  if (activeIsSpare) {
+    setChatMode(targetMode);
+    return active;
+  }
+  const reusable = findReusableEmptyPlanChat(targetMode, excludeChatId);
   if (reusable) {
     if (sessionState && sessionState.activeId !== reusable.id) {
       switchChat(reusable.id);
@@ -850,7 +881,43 @@ async function startPlanningFromPrompt(
   options?: StartPlanningFromPromptOptions,
 ): Promise<void> {
   teardownOrchestrateHub();
-  const chat = options?.useActiveChat ? getActiveChat() : resolveOrCreatePlanChat();
+  let chat = options?.useActiveChat ? getActiveChat() : resolveOrCreatePlanChat();
+
+  if (
+    normalizeModeId(chat.modeId) === 'super-plan' &&
+    isSuperPlanPipelineResumable(chat) &&
+    chat.superPlan!.prompt.trim() !== promptText.trim()
+  ) {
+    // Never replace a live pipeline with a different brief — open a spare chat.
+    chat = resolveOrCreatePlanChat(chat.id);
+  }
+
+  const isSuper = normalizeModeId(chat.modeId) === 'super-plan';
+  if (
+    isSuper &&
+    isSuperPlanPipelineResumable(chat) &&
+    chat.superPlan!.prompt.trim() !== promptText.trim()
+  ) {
+    // Still on the live chat (no spare could be allocated) — refuse rather than mix runs.
+    return;
+  }
+
+  // Init Super Plan *before* mounting the page so PlanActivityCollector.start()
+  // cannot replay the previous run's activityLog into the new buffer.
+  if (isSuper) {
+    const existing = chat.superPlan;
+    const finished = existing?.stages.present?.status === 'done';
+    const samePromptResume =
+      Boolean(existing) &&
+      !existing!.cancelled &&
+      !finished &&
+      existing!.prompt.trim() === promptText.trim();
+    if (!samePromptResume) {
+      initSuperPlanState(chat, promptText);
+      renderSidebar();
+    }
+  }
+
   ensureStreamEndListener();
 
   planSession = {
@@ -866,7 +933,7 @@ async function startPlanningFromPrompt(
     savedPrompt: promptText,
   });
 
-  if (normalizeModeId(chat.modeId) === 'super-plan') {
+  if (isSuper) {
     wireSuperPlanControllerListener(chat);
     await startSuperPlan(chat, promptText);
     return;
@@ -1216,7 +1283,10 @@ function buildSuperPlanScreenDom(
     },
     onNewPlan: () => {
       superPlanDocPath = null;
-      renderOrchestratePlanScreen({ phase: 'prompt', chatId: opts.chatId });
+      // Mirror hub "Make a plan": a fresh compose chat, prior run left running.
+      void import('./super-plan-entry').then((m) => {
+        void m.openSuperPlanScreen({ preferNew: true });
+      });
     },
     onDeleteEntry: (entry) => {
       void deleteSuperPlanLibraryEntry(entry);

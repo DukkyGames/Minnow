@@ -27,9 +27,44 @@ import {
 
 const MODELS_TIMEOUT_MS = 15_000;
 
+const UNREACHABLE_NET_CODES = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_SOCKET',
+]);
+
+/**
+ * True when the models catalog host is down (LM Studio not running, etc.).
+ * HTTP 4xx/5xx from a live upstream are not unreachable.
+ * @param {unknown} err
+ */
+export function isUpstreamCatalogUnreachable(err) {
+  if (!err) return false;
+  const name = err instanceof Error ? err.name : '';
+  if (name === 'AbortError' || name === 'TimeoutError') return true;
+  const message = err instanceof Error ? err.message : String(err);
+  if (/aborted|timeout/i.test(message) && !message.startsWith('Upstream models HTTP')) {
+    return true;
+  }
+  if (message === 'fetch failed' || /fetch failed/i.test(message)) return true;
+  /** @type {unknown} */
+  let cursor = err;
+  for (let i = 0; i < 4 && cursor && typeof cursor === 'object'; i++) {
+    const code = 'code' in cursor ? String(/** @type {{ code?: unknown }} */ (cursor).code ?? '') : '';
+    if (UNREACHABLE_NET_CODES.has(code)) return true;
+    cursor = 'cause' in cursor ? /** @type {{ cause?: unknown }} */ (cursor).cause : undefined;
+  }
+  return false;
+}
+
 /**
  * @param {string} id
  * Fake board-testing provider is registered but returns no models until the host starts.
+ * A local runtime that is simply not up returns an empty catalog (not HTTP 500).
  */
 export async function proxyModels(id) {
   validateProviderId(id);
@@ -84,6 +119,12 @@ export async function proxyModels(id) {
       })),
     };
     return normalized;
+  } catch (err) {
+    if (isUpstreamCatalogUnreachable(err)) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { data: [], unreachable: true, error: message };
+    }
+    throw err;
   } finally {
     clearTimeout(timer);
   }

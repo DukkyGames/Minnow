@@ -1,8 +1,11 @@
 import '../styles/super-plan-page.css';
 
 import { collectSuperPlanRuns, isChatInCurrentWorkspace } from '../chat/super-plan/plan-library';
+import { isReusableEmptyPlanChat } from '../chat/super-plan/spare-chat';
 import { normalizeModeId } from '../chat/modes/types';
+import { isChatStreaming } from '../chat/streaming-state';
 import { findChatById, sessionState } from '../state/sessions';
+import { getWorkspacePath } from '../state/workspace';
 import type { Chat } from '../types';
 import {
   derivePlanScreenPhaseFromSuperPlan,
@@ -46,14 +49,19 @@ function findLiveSuperPlanChat(): Chat | null {
   return null;
 }
 
+function chatMatchesOpenWorkspace(chat: Chat): boolean {
+  const ws = getWorkspacePath();
+  if (!ws?.trim()) return true;
+  return isChatInCurrentWorkspace(chat);
+}
+
 /** An empty super-plan chat is a spare composer; reuse it before making another. */
 function resolveOrCreateComposeChat(): Chat | null {
   const spare = sessionState?.chats.find(
     (c) =>
-      isSuperPlanChat(c) &&
-      isChatInCurrentWorkspace(c) &&
-      c.history.length === 0 &&
-      !c.superPlan,
+      isReusableEmptyPlanChat(c, 'super-plan') &&
+      chatMatchesOpenWorkspace(c) &&
+      !isChatStreaming(c.id),
   );
   if (spare) return spare;
 

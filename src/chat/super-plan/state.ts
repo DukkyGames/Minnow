@@ -4,6 +4,7 @@ import { findChatById, scheduleSaveSessions, touchChat } from '../../state/sessi
 import type { Chat } from '../../types';
 import { executeTool } from '../../tools/client';
 import { planInvolvesUi } from './review-helpers';
+import { syncSuperPlanChatTitle } from './plan-library';
 import {
   createInterimPlanSlug,
   ensureUniquePlanSlug,
@@ -60,6 +61,8 @@ export function createSuperPlanState(prompt: string): SuperPlanState {
   const slug = createInterimPlanSlug();
   return {
     slug,
+    // Identity for Activity persist — must not change when the slug is renamed.
+    runStartedAt: Date.now(),
     prompt: prompt.trim(),
     activeStage: 'grill',
     stages: createInitialSuperPlanStages(),
@@ -68,6 +71,16 @@ export function createSuperPlanState(prompt: string): SuperPlanState {
     planPath: superPlanPlanPath(slug),
     uiInvolved: detectUiInvolvement(prompt),
   };
+}
+
+/** Stable key for one pipeline instance (slug changes after spec confirm). */
+export function superPlanRunKey(state: SuperPlanState): string {
+  if (typeof state.runStartedAt === 'number' && Number.isFinite(state.runStartedAt)) {
+    return `t:${state.runStartedAt}`;
+  }
+  // Legacy rows persisted before runStartedAt: slug+prompt is unique enough
+  // until the spec-confirm rename, which those rows already survived.
+  return `s:${state.slug}\0${state.prompt}`;
 }
 
 export function detectUiInvolvement(text: string): boolean {
@@ -90,6 +103,9 @@ export function ensureSuperPlanState(chat: Chat): SuperPlanState {
 export function initSuperPlanState(chat: Chat, prompt: string): SuperPlanState {
   const state = createSuperPlanState(prompt);
   chat.superPlan = state;
+  // Stamp an interim "Plan <slug>" name so the Code sidebar can list this run
+  // before the build spec exists.
+  syncSuperPlanChatTitle(chat);
   touchChat(chat);
   scheduleSaveSessions();
   return state;
@@ -178,6 +194,8 @@ export async function reconcileSuperPlanSlugFromSpec(chat: Chat): Promise<void> 
     researchPath: newResearch,
     planPath: newPlan,
   });
+  // runStartedAt is unchanged — Activity persist still belongs to this run.
+  syncSuperPlanChatTitle(chat);
 
   const normalizedOldPlan = normalizeOrchestratePlanPath(oldPlan);
   const fromChat = normalizeOrchestratePlanPath(chat.orchestratePlanPath ?? '');

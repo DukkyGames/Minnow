@@ -13,6 +13,7 @@ import {
   pruneEphemeralEmptyChats,
 } from '../../src/state/session-workspace-scope.ts';
 import { createEmptyChatObject } from '../../src/state/sessions.ts';
+import { createSuperPlanState } from '../../src/chat/super-plan/state.ts';
 import type { SessionState } from '../../src/types.ts';
 
 const WS = 'C:\\workspace\\draft-sidebar';
@@ -87,6 +88,27 @@ describe('chat sidebar listing', () => {
     const state = stateWithChats(keep, unloadedUnknown);
     pruneEphemeralEmptyChats(state, keep.id);
     assert.ok(state.chats.some((c) => c.id === unloadedUnknown.id));
+  });
+
+  test('super-plan chats with pipeline state appear even with empty history', () => {
+    const run = createEmptyChatObject('', WS);
+    run.modeId = 'super-plan';
+    run.superPlan = createSuperPlanState('Add OAuth login');
+    assert.equal(isEphemeralEmptyChat(run), false);
+    assert.equal(isSidebarListedChat(run), true);
+
+    const keep = createEmptyChatObject('', WS);
+    keep.history.push({ role: 'user', content: 'anchor' });
+    const state = stateWithChats(keep, run);
+    pruneEphemeralEmptyChats(state, keep.id);
+    assert.ok(state.chats.some((c) => c.id === run.id));
+  });
+
+  test('a blank super-plan composer without pipeline state stays hidden', () => {
+    const spare = createEmptyChatObject('', WS);
+    spare.modeId = 'super-plan';
+    assert.equal(isEphemeralEmptyChat(spare), true);
+    assert.equal(isSidebarListedChat(spare), false);
   });
 
   test('pruneEphemeralEmptyChats keeps the active row and listed chats', () => {

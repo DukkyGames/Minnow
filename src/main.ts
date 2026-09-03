@@ -309,6 +309,8 @@ export async function initApp(): Promise<void> {
   initComposerRunTarget();
   initViewModeToggle();
   initWorkAgentDevUi();
+  // Model chip lives in the trail; mount before compact parks Tools out of that row.
+  initComposerModelTriggers();
   initComposerCompact();
   await bindExpertsSettingsCheckbox();
   await detectLocalServer();

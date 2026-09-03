@@ -1,3 +1,5 @@
+import { apiMessageContentToText } from '../api/message-content';
+
 /** One inlined text/PDF attachment from history. */
 export interface HistoryFilePart {
   name: string;
@@ -95,20 +97,21 @@ function stripAttachmentMarkers(content: string): string {
   return withoutImages.replace(/\n{3,}/g, '\n\n').trim();
 }
 
-export function parseHistoryUserContent(content: string): ParsedHistoryUserMessage {
+export function parseHistoryUserContent(content: unknown): ParsedHistoryUserMessage {
+  const text = apiMessageContentToText(content);
   const files: HistoryFilePart[] = [];
   const images: HistoryImagePart[] = [];
   const codeRefs: HistoryCodeRefPart[] = [];
   const elementRefs: HistoryElementRefPart[] = [];
   const designRefs: HistoryDesignRefPart[] = [];
 
-  for (const match of content.matchAll(FILE_BLOCK_RE)) {
+  for (const match of text.matchAll(FILE_BLOCK_RE)) {
     const name = match[1] ?? '';
     const body = match[2] ?? '';
     if (name) files.push({ name, body });
   }
 
-  for (const match of content.matchAll(CODE_REF_BLOCK_RE)) {
+  for (const match of text.matchAll(CODE_REF_BLOCK_RE)) {
     const workspacePath = match[1] ?? '';
     const startLine = Number(match[2]);
     const endLine = Number(match[3]);
@@ -123,7 +126,7 @@ export function parseHistoryUserContent(content: string): ParsedHistoryUserMessa
     }
   }
 
-  for (const match of content.matchAll(ELEMENT_REF_BLOCK_RE)) {
+  for (const match of text.matchAll(ELEMENT_REF_BLOCK_RE)) {
     const selector = match[1] ?? '';
     const uid = match[2] != null ? Number(match[2]) : null;
     const pageUrl = match[3] ?? '';
@@ -162,7 +165,7 @@ export function parseHistoryUserContent(content: string): ParsedHistoryUserMessa
     }
   }
 
-  for (const match of content.matchAll(DESIGN_REF_BLOCK_RE)) {
+  for (const match of text.matchAll(DESIGN_REF_BLOCK_RE)) {
     const kind = match[1] ?? '';
     const pageUrl = match[2] ?? '';
     const anchorType = match[3];
@@ -184,13 +187,13 @@ export function parseHistoryUserContent(content: string): ParsedHistoryUserMessa
     }
   }
 
-  for (const match of content.matchAll(IMAGE_PLACEHOLDER_RE)) {
+  for (const match of text.matchAll(IMAGE_PLACEHOLDER_RE)) {
     const name = (match[1] ?? '').trim();
     if (name) images.push({ name });
   }
 
   return {
-    text: stripAttachmentMarkers(content),
+    text: stripAttachmentMarkers(text),
     files,
     images,
     codeRefs,
@@ -200,17 +203,18 @@ export function parseHistoryUserContent(content: string): ParsedHistoryUserMessa
 }
 
 /** True when content includes inlined files or image placeholders. */
-export function historyUserContentHasAttachments(content: string): boolean {
+export function historyUserContentHasAttachments(content: unknown): boolean {
+  const text = apiMessageContentToText(content);
   FILE_BLOCK_RE.lastIndex = 0;
   CODE_REF_BLOCK_RE.lastIndex = 0;
   ELEMENT_REF_BLOCK_RE.lastIndex = 0;
   DESIGN_REF_BLOCK_RE.lastIndex = 0;
   IMAGE_PLACEHOLDER_RE.lastIndex = 0;
   return (
-    FILE_BLOCK_RE.test(content) ||
-    CODE_REF_BLOCK_RE.test(content) ||
-    ELEMENT_REF_BLOCK_RE.test(content) ||
-    DESIGN_REF_BLOCK_RE.test(content) ||
-    IMAGE_PLACEHOLDER_RE.test(content)
+    FILE_BLOCK_RE.test(text) ||
+    CODE_REF_BLOCK_RE.test(text) ||
+    ELEMENT_REF_BLOCK_RE.test(text) ||
+    DESIGN_REF_BLOCK_RE.test(text) ||
+    IMAGE_PLACEHOLDER_RE.test(text)
   );
 }

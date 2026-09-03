@@ -53,8 +53,8 @@ export async function continueFailedTurn(chatId: string): Promise<void> {
       skillId = tagged.skillId ?? slash.skillId;
       rawText = tagged.displayText;
       userText = slash.userText || tagged.displayText;
-      displayText = userRow.content;
-      historyContent = userRow.content;
+      displayText = tagged.displayText;
+      historyContent = tagged.displayText;
     }
   }
 

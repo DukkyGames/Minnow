@@ -2,6 +2,7 @@ import { isChatStreaming, subscribeChatStreamEnd } from '../streaming-state';
 import { isChatTurnInProgress, isChatTurnSetupPending } from '../chat-turn-guard';
 import type { Chat, TurnRunRecord } from '../../types';
 import { cancelResearch } from '../../research/client';
+import { isSuperPlanPipelineResumable } from './resumable';
 import {
   cancelSuperPlanState,
   initSuperPlanState,
@@ -144,6 +145,9 @@ export async function startSuperPlan(chat: Chat, prompt: string): Promise<void> 
     await resumeSuperPlanPipeline(chat);
     return;
   }
+  // Two briefs must not share one advancingChats slot or one activityLog.
+  // The UI allocates a fresh compose chat; this is the last-line guard.
+  if (isSuperPlanPipelineResumable(chat)) return;
   initSuperPlanState(chat, prompt);
   await advanceSuperPlan(chat);
 }

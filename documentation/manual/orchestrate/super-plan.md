@@ -8,6 +8,8 @@ It is slower than asking for a plan. That is the entire point.
 
 Open the caret under **Plan** in the composer and choose **Super Plan**, or start from the Orchestrate plan screen. Describe what you want in as much or as little detail as you have.
 
+**New plan** (left rail, or Make a plan from Orchestrate) always starts a fresh Super Plan chat. Any pipeline already running keeps going on its own chat. Those runs also appear in the Code chat sidebar from the moment the pipeline starts, with an interim title until you confirm the build spec.
+
 On the compose screen, pick the model on the composer bar (same catalog as Code). That binding is what grill, spec, drafts, and finalize use unless you set separate stage overrides in Settings. The sparkles control beside **Start planning** expands your draft into a fuller prompt in place before you send.
 
 Super Plan writes plans and reference documents. Like Plan mode, it cannot edit the rest of your repository — the mutating file and git tools are removed. Issue tracker tools stay available, so a Super Plan turn can file, update, and attach a plan to an Issues card.

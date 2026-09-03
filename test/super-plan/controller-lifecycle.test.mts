@@ -79,6 +79,7 @@ const {
   pauseSuperPlan,
   resetSuperPlanControllerForTests,
   skipSuperPlanStage,
+  startSuperPlan,
 } = await import('../../src/chat/super-plan/controller.ts');
 const {
   createInitialSuperPlanStages,
@@ -519,5 +520,39 @@ describe('advanceSuperPlan post-interview recovery', () => {
     assert.equal(chat.superPlan!.activeStage, 'spec_confirm');
     assert.notEqual(chat.superPlan!.stages.spec_confirm.status, 'pending');
     assert.ok(!chat.superPlan!.paused);
+  });
+});
+
+describe('startSuperPlan reuse guard', () => {
+  test.after(() => resetSuperPlanControllerForTests());
+
+  test('does not replace a live pipeline that is running a different prompt', async () => {
+    runSuperPlanStageImpl = async () => ({ kind: 'blocked_user' });
+    const chat = makeChat('grill');
+    chat.superPlan!.stages.grill.status = 'running';
+    const slug = chat.superPlan!.slug;
+    const startedAt = chat.superPlan!.runStartedAt;
+    registerChatForLookup(chat);
+
+    await startSuperPlan(chat, 'A completely different brief');
+
+    assert.equal(chat.superPlan!.prompt, 'Add OAuth login');
+    assert.equal(chat.superPlan!.slug, slug);
+    assert.equal(chat.superPlan!.runStartedAt, startedAt);
+  });
+
+  test('restarts a finished pipeline on the same chat', async () => {
+    runSuperPlanStageImpl = async () => ({ kind: 'blocked_user' });
+    const chat = makeChat('present');
+    markSuperPlanStageStatus(chat, 'present', 'done');
+    const oldSlug = chat.superPlan!.slug;
+    registerChatForLookup(chat);
+
+    await startSuperPlan(chat, 'Plan the next feature');
+    await settle(30);
+
+    assert.equal(chat.superPlan!.prompt, 'Plan the next feature');
+    assert.notEqual(chat.superPlan!.slug, oldSlug);
+    assert.equal(chat.superPlan!.activeStage, 'grill');
   });
 });

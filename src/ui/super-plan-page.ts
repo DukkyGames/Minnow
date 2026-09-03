@@ -453,8 +453,6 @@ class SuperPlanPage {
     if (this.chatId === chatId) return;
     this.chatId = chatId;
     this.manualSegment = null;
-    this.renderedEntryIds.clear();
-    this.firstLedgerPaint = true;
     this.resetDocLoader();
     this.startCollector();
   }
@@ -1252,6 +1250,13 @@ class SuperPlanPage {
   private startCollector(): void {
     this.collector?.stop();
     this.unsubBuffer?.();
+    this.unsubBuffer = null;
+    this.collector = null;
+    // New buffer + empty DOM: paintLedger will not drop stale rows when the
+    // first paint is empty (the previous run's entries would otherwise remain).
+    this.renderedEntryIds.clear();
+    this.firstLedgerPaint = true;
+    this.ledgerEl?.replaceChildren();
     this.buffer = new ActivityLogBuffer();
     this.unsubBuffer = this.buffer.subscribe(() => this.paintLedger());
     this.collector = new PlanActivityCollector(this.chatId, this.buffer);

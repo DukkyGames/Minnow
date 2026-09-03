@@ -6,6 +6,7 @@ import {
   type SuperPlanStageId,
   type SuperPlanState,
 } from '../chat/super-plan/types';
+import { superPlanRunKey } from '../chat/super-plan/state';
 import { findChatById, scheduleSaveSessions } from '../state/sessions';
 import type { Chat } from '../types';
 import {
@@ -41,6 +42,8 @@ export class PlanActivityCollector {
   private lastReviewerKey = '';
   private wiredResearchId: string | null = null;
   private lastPaused: boolean | null = null;
+  /** Pipeline instance this collector is bound to; persist no-ops after a replacement. */
+  private boundRunKey: string | null = null;
 
   constructor(chatId: string, buffer: ActivityLogBuffer) {
     this.chatId = chatId;
@@ -52,8 +55,10 @@ export class PlanActivityCollector {
     this.stop();
     const chat = findChatById(this.chatId);
     if (chat?.superPlan) {
+      const snapshot = chat.superPlan;
+      this.boundRunKey = superPlanRunKey(snapshot);
       let researchLog: ResearchProgress[] = [];
-      const researchId = chat.superPlan.researchId?.trim();
+      const researchId = snapshot.researchId?.trim();
       if (researchId) {
         try {
           const detail = await fetchResearchDetail(researchId);
@@ -61,12 +66,26 @@ export class PlanActivityCollector {
         } catch {
         }
       }
-      this.replayPersistedActivity(chat.superPlan, researchLog);
-      this.recordStage(chat.superPlan);
-      if (chat.superPlan.paused) {
-        this.buffer.append(entryFromSuperPlanStage(chat.superPlan.activeStage, 'paused'));
+      // Drop the snapshot if a new pipeline replaced this chat while we waited.
+      const current = findChatById(this.chatId)?.superPlan;
+      if (!current || superPlanRunKey(current) !== this.boundRunKey) {
+        this.boundRunKey = current ? superPlanRunKey(current) : null;
+        if (current) {
+          this.replayPersistedActivity(current, []);
+          this.recordStage(current);
+          if (current.paused) {
+            this.buffer.append(entryFromSuperPlanStage(current.activeStage, 'paused'));
+          }
+          this.wireResearch(current.researchId);
+        }
+      } else {
+        this.replayPersistedActivity(snapshot, researchLog);
+        this.recordStage(snapshot);
+        if (snapshot.paused) {
+          this.buffer.append(entryFromSuperPlanStage(snapshot.activeStage, 'paused'));
+        }
+        this.wireResearch(snapshot.researchId);
       }
-      this.wireResearch(chat.superPlan.researchId);
     }
 
     this.unsubBuffer = this.buffer.subscribe(() => this.persistBuffer());
@@ -85,6 +104,7 @@ export class PlanActivityCollector {
 
     this.unsubController = subscribeSuperPlanController((updated) => {
       if (updated.id !== this.chatId || !updated.superPlan) return;
+      if (this.boundRunKey && superPlanRunKey(updated.superPlan) !== this.boundRunKey) return;
       this.recordStage(updated.superPlan);
       const paused = Boolean(updated.superPlan.paused);
       if (this.lastPaused === null) {
@@ -129,6 +149,7 @@ export class PlanActivityCollector {
     this.lastMainTurnKey = '';
     this.lastReviewerKey = '';
     this.lastPaused = null;
+    this.boundRunKey = null;
   }
 
   /** Write the live buffer back onto the chat, capped, for the next mount to replay. */
@@ -136,6 +157,8 @@ export class PlanActivityCollector {
     if (this.replaying) return;
     const chat = findChatById(this.chatId);
     if (!chat?.superPlan) return;
+    // Replacing superPlan on this chat id must not inherit the previous ledger.
+    if (this.boundRunKey && superPlanRunKey(chat.superPlan) !== this.boundRunKey) return;
 
     const entries = this.buffer.getEntries();
     if (!entries.length && chat.superPlan.activityLog?.length) return;

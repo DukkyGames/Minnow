@@ -118,6 +118,12 @@ describe('preview middleware', () => {
     assert.match(res.body, /color: red/);
   });
 
+  test('missing workspace file is 404', async () => {
+    const res = await httpRequest(baseUrl, 'GET', '/api/preview/file/no-such-file.md?raw=1');
+    assert.equal(res.status, 404);
+    assert.match(res.json.error, /ENOENT/);
+  });
+
   test('rejects path traversal', async () => {
     const res = await httpRequest(baseUrl, 'GET', '/api/preview/file/..%2F..%2Fetc%2Fpasswd');
     assert.equal(res.status, 400);

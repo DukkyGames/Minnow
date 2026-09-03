@@ -8,10 +8,12 @@ import path from 'node:path';
 import { getBenchmarkWorkspacePath } from '../benchmark-workspace/paths.js';
 import { getSchedulerWorkspacePath } from '../scheduler-workspace/paths.js';
 import { getMinnowHome } from '../config/home.js';
+import { readConfigJson } from '../config/store.js';
 import {
   getWorkspaceRoot,
   getScratchWorkspacePath,
   normalizeWorkspacePathKey,
+  readRecentPathsFromMeta,
 } from '../workspace/root.js';
 import { isResolvedPathUnderRoot } from '../workspace/safe-path.js';
 import {
@@ -27,7 +29,7 @@ const README_BODY = `# Minnow Chats Workspace
 This directory is a sandbox for chat-scoped files (attachments, exports, and session artifacts).
 
 - Files here stay separate from your active Code workspace unless tools are explicitly pointed at this path.
-- The server allows tool \`workspaceRoot\` overrides for your Code workspace, chats folder, Scratch workspace, benchmark workspace, scheduler workspace, and board task worktrees under ~/.minnow/worktrees.
+- The server allows tool \`workspaceRoot\` overrides for your Code workspace, chats folder, Scratch workspace, benchmark workspace, scheduler workspace, folders in the workspace MRU list, and board task worktrees under ~/.minnow/worktrees.
 - Do not store secrets here if you sync or share ~/.minnow.
 `;
 
@@ -57,6 +59,7 @@ export async function ensureChatsWorkspace() {
 /**
  * True when rootPath is the active Code workspace, chats sandbox, benchmark workspace,
  * scheduler workspace, a registered git worktree, or repo-local `.worktrees/`.
+ * Recent MRU folders are checked in `isAllowedWorkspaceRootAsync`.
  * @param {string} rootPath
  */
 export function isAllowedWorkspaceRoot(rootPath) {
@@ -86,14 +89,28 @@ export function isAllowedWorkspaceRoot(rootPath) {
 }
 
 /**
- * Async allowlist check including registered git worktrees (`git worktree list`).
+ * True when rootPath is a folder in config.json workspace.recentPaths (MRU).
+ * Preview and context-document reads still pass the previous Code folder after a switch.
+ * @param {string} resolved
+ */
+async function isRecentWorkspaceRoot(resolved) {
+  const meta = (await readConfigJson('config.json')) ?? {};
+  const recents = readRecentPathsFromMeta(meta);
+  const key = normalizeWorkspacePathKey(resolved);
+  return recents.some((p) => normalizeWorkspacePathKey(p) === key);
+}
+
+/**
+ * Async allowlist check including registered git worktrees (`git worktree list`)
+ * and persisted recent workspace folders.
  * @param {string} rootPath
  * @returns {Promise<boolean>}
  */
 export async function isAllowedWorkspaceRootAsync(rootPath) {
   if (isAllowedWorkspaceRoot(rootPath)) return true;
   const resolved = path.resolve(String(rootPath).trim());
-  return isRegisteredGitWorktreePath(resolved);
+  if (await isRegisteredGitWorktreePath(resolved)) return true;
+  return isRecentWorkspaceRoot(resolved);
 }
 
 /**
@@ -105,7 +122,7 @@ export async function validateAllowedWorkspaceRoot(rootPath) {
   const allowed = await isAllowedWorkspaceRootAsync(rootPath);
   if (!allowed) {
     throw new Error(
-      'workspaceRoot is not in the allowlist (Code workspace, chats workspace, Scratch workspace, benchmark workspace, scheduler workspace, registered git worktree, or repo-local .worktrees/)',
+      'workspaceRoot is not in the allowlist (Code workspace, chats workspace, Scratch workspace, benchmark workspace, scheduler workspace, recent workspace, registered git worktree, or repo-local .worktrees/)',
     );
   }
   const resolved = path.resolve(String(rootPath).trim());

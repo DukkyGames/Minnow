@@ -19,7 +19,12 @@ import {
   titleFromPlanPath,
   type PlanLibraryEntry,
 } from '../../src/chat/super-plan/plan-library.ts';
-import { createInitialSuperPlanStages } from '../../src/chat/super-plan/state.ts';
+import {
+  createInitialSuperPlanStages,
+  initSuperPlanState,
+  markSuperPlanStageStatus,
+  setSuperPlanActiveStage,
+} from '../../src/chat/super-plan/state.ts';
 import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/sessions.ts';
 import { resetWorkspaceStateForTests, setWorkspaceFromServer } from '../../src/state/workspace.ts';
 import type { Chat } from '../../src/types.ts';
@@ -34,7 +39,6 @@ import {
   pauseSuperPlan,
   resetSuperPlanControllerForTests,
 } from '../../src/chat/super-plan/controller.ts';
-import { markSuperPlanStageStatus, setSuperPlanActiveStage } from '../../src/chat/super-plan/state.ts';
 
 let activeWindow: Window | undefined;
 /** Restored after this file so a 404 stub cannot leak into later tests in the worker. */
@@ -430,6 +434,36 @@ describe('super plan page', () => {
     assert.equal(root.querySelectorAll('.sp-entry').length, before);
   });
 
+  test('retarget clears the prior run ledger from the DOM', () => {
+    installTestWindow();
+    const first = makeRunChat('sp-retarget-a', 'research');
+    const second = makeRunChat('sp-retarget-b', 'grill');
+    setSessionStateForTests({
+      version: 5,
+      activeId: first.id,
+      sidebarCollapsed: false,
+      chats: [first, second],
+    });
+    const root = buildSuperPlanPageDom({
+      chatId: first.id,
+      mode: 'run',
+      handlers: stubHandlers(),
+    });
+    document.body.appendChild(root);
+    seedSuperPlanLedgerForTests([
+      { id: 'old-run', atMs: 1_000, kind: 'stage', label: 'Stage', detail: 'Research · running' },
+    ]);
+    assert.ok(root.querySelector('[data-entry-id="old-run"]'));
+
+    syncSuperPlanPage(second);
+
+    assert.equal(
+      root.querySelector('[data-entry-id="old-run"]'),
+      null,
+      'switching plans must not leave the previous Activity rows painted',
+    );
+  });
+
   test('composer offers the pipeline chips and refuses an empty prompt', () => {
     installTestWindow();
     const chat = makeRunChat('sp7', 'grill');
@@ -786,5 +820,35 @@ describe('super plan activity ledger persistence (MIN-599)', () => {
 
     collector.stop();
     resetSuperPlanControllerForTests();
+  });
+
+  test('replacing superPlan does not persist the prior buffer onto the new run', async () => {
+    const chat = makeRunChat('sp-activity-leak', 'research');
+    chat.superPlan!.runStartedAt = 1_000;
+    chat.superPlan!.activityLog = [
+      seedEntry({ kind: 'info', label: 'Model', detail: 'thinking…' }),
+    ];
+    setSessionStateForTests({ version: 5, activeId: chat.id, chats: [chat] });
+
+    const buffer = new ActivityLogBuffer();
+    const collector = new PlanActivityCollector(chat.id, buffer);
+    await collector.start();
+    assert.ok(buffer.getEntries().some((e) => e.detail === 'thinking…'));
+
+    initSuperPlanState(chat, 'A brand new plan');
+    buffer.append(seedEntry({ kind: 'tool', label: 'Tool', detail: 'stale-leak' }));
+    collector.stop();
+
+    const persisted = chat.superPlan!.activityLog ?? [];
+    assert.equal(
+      persisted.some((e) => e.detail === 'stale-leak'),
+      false,
+      'the old collector must not write onto the replacement pipeline',
+    );
+    assert.equal(
+      persisted.some((e) => e.detail === 'thinking…'),
+      false,
+      'the new run starts with an empty ledger',
+    );
   });
 });

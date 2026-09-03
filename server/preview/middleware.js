@@ -71,6 +71,16 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
+/** Missing files are 404; allowlist / path errors stay 400. */
+function previewCatchStatus(err) {
+  if (err && typeof err === 'object' && 'code' in err && err.code === 'ENOENT') {
+    return 404;
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  if (message.includes('ENOENT')) return 404;
+  return 400;
+}
+
 /**
  * Decode the path segment after /api/preview/file/ (may contain slashes).
  * @param {string} pathname
@@ -181,7 +191,7 @@ export async function handlePreviewRequest(req, res, pathname, searchParams, dep
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      sendJson(res, 400, { error: message });
+      sendJson(res, previewCatchStatus(err), { error: message });
       return true;
     }
   }
@@ -282,7 +292,7 @@ export async function handlePreviewRequest(req, res, pathname, searchParams, dep
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    sendJson(res, 400, { error: message });
+    sendJson(res, previewCatchStatus(err), { error: message });
     return true;
   }
 }

@@ -113,7 +113,7 @@ export async function forkFromUserIndex(
     replaySnapshot = {
       ...replaySnapshot,
       forkHistoryIndex: userHistoryIndex,
-      userContent: userRow.content,
+      userContent: tagged.displayText,
       skillId,
     };
   } else if (overrides) {
@@ -129,8 +129,8 @@ export async function forkFromUserIndex(
     rawText: tagged.displayText,
     userText,
     skillId,
-    displayText: userRow.content,
-    historyContent: userRow.content,
+    displayText: tagged.displayText,
+    historyContent: tagged.displayText,
     validAttachments: [],
     shouldScheduleTitle: false,
     replaySnapshot,

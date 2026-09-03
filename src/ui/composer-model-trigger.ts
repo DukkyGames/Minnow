@@ -850,6 +850,26 @@ export function unmountBoardModelChipTrigger(): void {
   boardModelTriggerContext = null;
 }
 
+/** Mount the Code composer model chip into the trail, even when Tools is parked. */
+function mountCodeComposerModelTrigger(): void {
+  const existing = document.getElementById('codeComposerModelAnchor');
+  if (existing) {
+    mountComposerModelTrigger(existing, 'code');
+    return;
+  }
+
+  const codeTrail = document.querySelector('.composer-controls__trail');
+  if (!codeTrail) return;
+
+  const codeAnchor = document.createElement('div');
+  codeAnchor.id = 'codeComposerModelAnchor';
+  codeAnchor.className = 'composer-model-trigger-anchor';
+  // Compact overflow parks Tools out of the trail; only use it as a sibling when it is still here.
+  const toolsInTrail = codeTrail.querySelector('.composer-tools-anchor');
+  codeTrail.insertBefore(codeAnchor, toolsInTrail ?? codeTrail.firstChild);
+  mountComposerModelTrigger(codeAnchor, 'code');
+}
+
 function mountChatAppComposerModelTrigger(): void {
   const chatInputRow = document.querySelector('.chat-app-input');
   const chatToolsAnchor = chatInputRow?.querySelector('.chat-app-tools-anchor');
@@ -896,16 +916,7 @@ export function initComposerModelTriggers(): void {
     mountComposerModelTrigger(desktopAnchor, 'desktop');
   }
 
-  const codeTrail = document.querySelector('.composer-controls__trail');
-  const toolsAnchor = codeTrail?.querySelector('.composer-tools-anchor');
-  if (codeTrail && toolsAnchor) {
-    const codeAnchor = document.createElement('div');
-    codeAnchor.id = 'codeComposerModelAnchor';
-    codeAnchor.className = 'composer-model-trigger-anchor';
-    codeTrail.insertBefore(codeAnchor, codeTrail.firstChild);
-    mountComposerModelTrigger(codeAnchor, 'code');
-  }
-
+  mountCodeComposerModelTrigger();
   mountChatAppComposerModelTrigger();
 
   if (!activityFeedUnsub) {

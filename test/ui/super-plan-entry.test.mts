@@ -21,6 +21,7 @@ import { createEmptyChatObject, setSessionStateForTests } from '../../src/state/
 import type { Chat } from '../../src/types.ts';
 
 let activeWindow: Window | undefined;
+const originalFetch = globalThis.fetch;
 
 /** Code shell reduced to the nodes the surface and its chrome touch. */
 function installShellDom(): void {
@@ -33,6 +34,7 @@ function installShellDom(): void {
   const g = globalThis as unknown as { CustomEvent: unknown; Event: unknown };
   g.CustomEvent = window.CustomEvent;
   g.Event = window.Event;
+  globalThis.fetch = (async () => new Response('{}', { status: 404 })) as typeof fetch;
 
   const sidebar = document.createElement('aside');
   sidebar.id = 'chatSidebar';
@@ -90,12 +92,14 @@ function seed(chats: Chat[], activeId: string): void {
 }
 
 describe('super plan top-bar entry', () => {
-  afterEach(() => {
+  afterEach(async () => {
     resetSuperPlanEntryForTests();
     resetOrchestratePlanScreenForTests();
     activeWindow?.close();
     activeWindow = undefined;
     setSessionStateForTests(null);
+    globalThis.fetch = originalFetch;
+    await new Promise((resolve) => setImmediate(resolve));
   });
 
   test('the Code view bar carries a Super Plan button beside Orchestrate', () => {
@@ -199,6 +203,23 @@ describe('super plan top-bar entry', () => {
       'Make a plan must open a blank composer, not the last or live run',
     );
     assert.equal(session?.phase, 'prompt');
+  });
+
+  test('preferNew never reuses a live Super Plan chat as the composer', async () => {
+    installShellDom();
+    const chat = createEmptyChatObject('general');
+    const live = makeLiveSuperPlanChat();
+    // Empty history is what the old finder treated as a spare composer.
+    assert.equal(live.history.length, 0);
+    seed([chat, live], chat.id);
+
+    await openSuperPlanScreen({ preferNew: true });
+
+    const session = getOrchestratePlanScreenSession();
+    assert.notEqual(session?.chatId, live.id);
+    assert.equal(session?.phase, 'prompt');
+    assert.ok(live.superPlan, 'the prior run stays attached to its own chat');
+    assert.equal(live.superPlan?.prompt, 'Add OAuth login');
   });
 
   test('the button toggles the surface', async () => {

@@ -1,5 +1,6 @@
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import type { Message, SessionState } from '../types';
+import { isHiddenTranscriptUserMessage } from '../chat/hidden-transcript-user-messages';
 import { stripSkillTagFromHistory } from '../skills/history-content';
 import { getWorkspacePath } from '../state/workspace';
 import {
@@ -25,6 +26,8 @@ export function collectChatUserPrompts(history: Message[]): string[] {
   for (const row of history) {
     if (row.role !== 'user') continue;
     if ('goalAchieved' in row && row.goalAchieved) continue;
+    // Hidden / leaked VLM follow-ups are not composer recall; skip before text work.
+    if (isHiddenTranscriptUserMessage(row)) continue;
     const text = stripSkillTagFromHistory(row.content);
     if (!text.trim()) continue;
     prompts.push(text);

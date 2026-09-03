@@ -14,11 +14,11 @@
   min-width: 0;
 }
 
-/* Code / hub trail: shrink model label; keep tools button adjacent on the right */
+/* Code / hub trail: shrink the label, never the chip (logo + a few chars + chevron). */
 .composer-controls__trail .composer-model-trigger-anchor,
 .composer-controls__trail .composer-model-trigger-wrap {
   flex: 0 1 auto;
-  min-width: 0;
+  min-width: 5.5rem;
   max-width: min(18rem, 42vw);
   overflow: hidden;
 }

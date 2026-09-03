@@ -196,6 +196,21 @@ describe('provider CRUD + proxy', () => {
     assert.equal(chat.status, 404);
   });
 
+  it('GET models returns an empty catalog when the upstream host is down', async () => {
+    const create = await httpRequest(baseUrl, 'POST', '/api/providers', {
+      id: 'dead-local-fixed',
+      label: 'Dead Local',
+      baseUrl: 'http://127.0.0.1:1',
+      apiKind: 'openai-v1',
+    });
+    assert.equal(create.status, 201);
+
+    const models = await httpRequest(baseUrl, 'GET', '/api/providers/dead-local-fixed/models');
+    assert.equal(models.status, 200);
+    assert.deepEqual(models.json.data, []);
+    assert.equal(models.json.unreachable, true);
+  });
+
   it('rejects deleting last provider', async () => {
     const deleteIds = new Set(
       (await httpRequest(baseUrl, 'GET', '/api/providers')).json.providers.map((p) => p.id),

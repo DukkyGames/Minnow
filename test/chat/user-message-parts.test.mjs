@@ -197,4 +197,16 @@ describe('parseHistoryUserContent', () => {
     );
     assert.equal(historyUserContentHasAttachments('plain hello'), false);
   });
+
+  test('coerces leaked ContentPart[] instead of throwing on replace', () => {
+    const parsed = parseHistoryUserContent([
+      { type: 'text', text: 'Look at this\n\n[image: shot.png]' },
+    ]);
+    assert.equal(parsed.text, 'Look at this');
+    assert.deepEqual(parsed.images, [{ name: 'shot.png' }]);
+    assert.equal(
+      historyUserContentHasAttachments([{ type: 'text', text: '[image: shot.png]' }]),
+      true,
+    );
+  });
 });

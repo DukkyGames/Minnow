@@ -10,6 +10,14 @@ describe('resend-from-index helpers', () => {
     assert.equal(parsed.displayText, 'fix bug');
   });
 
+  test('parseSkillTagFromHistory coerces leaked ContentPart[] content', () => {
+    const parsed = parseSkillTagFromHistory([
+      { type: 'text', text: 'fix bug\n\n[skill: git-commit]' },
+    ]);
+    assert.equal(parsed.skillId, 'git-commit');
+    assert.equal(parsed.displayText, 'fix bug');
+  });
+
   test('sliceHistoryAtTurn before resend leaves user row at cut', () => {
     const history = [
       { role: 'user', content: 'hello' },

@@ -7,6 +7,7 @@ import { describe, test } from 'node:test';
 import {
   createInitialSuperPlanStages,
   createSuperPlanState,
+  initSuperPlanState,
   isSuperPlanPipelineOwningChatTurns,
   markSuperPlanStageStatus,
   setSuperPlanActiveStage,
@@ -55,6 +56,7 @@ describe('Super Plan state helpers', () => {
       `documentation/plans/references/${state.slug}-research.md`,
     );
     assert.equal(state.planPath, `documentation/plans/${state.slug}.md`);
+    assert.equal(typeof state.runStartedAt, 'number');
   });
 
   test('markSuperPlanStageStatus records timestamps on transitions', () => {
@@ -82,5 +84,13 @@ describe('Super Plan state helpers', () => {
     assert.equal(isSuperPlanPipelineOwningChatTurns(chat), false);
     chat.superPlan!.paused = true;
     assert.equal(isSuperPlanPipelineOwningChatTurns(chat), false);
+  });
+
+  test('initSuperPlanState stamps an interim sidebar title', () => {
+    const chat = createEmptyChatObject('sp-title');
+    chat.modeId = 'super-plan';
+    initSuperPlanState(chat, 'Add OAuth login');
+    assert.match(chat.name, /^Plan [a-f0-9]{8}$/i);
+    assert.equal(chat.superPlan?.prompt, 'Add OAuth login');
   });
 });

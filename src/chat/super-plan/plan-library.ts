@@ -3,6 +3,7 @@ import { executeTool } from '../../tools/client';
 import { isLocalServerAvailable } from '../../tools/config';
 import { isExecutableOrchestratePlan } from '../plans/plan-path';
 import { normalizeModeId } from '../modes/types';
+import { isPlaceholderChatName } from '../titles/placeholder';
 import { sessionState } from '../../state/sessions';
 import { getWorkspacePath } from '../../state/workspace';
 import type { Chat } from '../../types';
@@ -69,6 +70,33 @@ export function titleFromPlanPath(path: string): string {
   const words = base.replace(/[-_]+/g, ' ').trim();
   if (!words) return base;
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** Interim slug titles look like "Plan a1b2c3d4" until the spec is confirmed. */
+const INTERIM_SUPER_PLAN_TITLE = /^Plan [a-f0-9]{8}$/i;
+
+/** True when the sidebar name is still auto-managed (not a user rename). */
+export function isManagedSuperPlanChatTitle(name: string): boolean {
+  const trimmed = name.trim();
+  if (!trimmed) return true;
+  if (isPlaceholderChatName(trimmed)) return true;
+  if (trimmed === 'Untitled plan') return true;
+  return INTERIM_SUPER_PLAN_TITLE.test(trimmed);
+}
+
+/**
+ * Keep the chat's sidebar name in lockstep with the pipeline title while it
+ * is still auto-managed. Returns true when `chat.name` changed.
+ */
+export function syncSuperPlanChatTitle(chat: Chat): boolean {
+  if (normalizeModeId(chat.modeId) !== 'super-plan') return false;
+  const sp = chat.superPlan;
+  if (!sp) return false;
+  if (!isManagedSuperPlanChatTitle(chat.name)) return false;
+  const next = resolveSuperPlanDisplayTitle(sp);
+  if (chat.name === next) return false;
+  chat.name = next;
+  return true;
 }
 
 /** UI label for a Super Plan run — never the full opening prompt. */

@@ -41,7 +41,15 @@ export async function fetchModelsForProvider(
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`);
   }
-  const json = (await res.json()) as { data?: LmModelRecord[] };
+  const json = (await res.json()) as {
+    data?: LmModelRecord[];
+    unreachable?: boolean;
+    error?: string;
+  };
+  // 200 + unreachable: host is down (LM Studio off). Keep picker "unreachable" without a 500.
+  if (json.unreachable) {
+    throw new Error(json.error?.trim() || 'Provider unreachable');
+  }
   const raw = json.data || [];
   const normalized = normalizeModelsForUi(provider, raw);
   return normalized.filter((m) => m.type === 'llm' || m.type === 'vlm');

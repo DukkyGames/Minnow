@@ -132,11 +132,11 @@ Update [`documentation/context.md`](../context.md) Super Plan paragraph:
 
 ## Todos
 
-- [ ] Harden `findReusableEmptyPlanChat` + compose spare resolution (exclude `superPlan`, lazy history, streaming/advancing)
-- [ ] Wire Super Plan **New plan** to create/switch a fresh compose chat; leave prior run running
-- [ ] Fix start/render order so Activity never replays a replaced run’s `activityLog`; clear ledger DOM on retarget/collector restart
-- [ ] Guard `startSuperPlan` against replacing an in-flight different prompt on the same chat
-- [ ] Make Super Plan chats sidebar-listable from `superPlan` presence; sensible interim title
-- [ ] Add regression tests (reuse, Activity isolation, sidebar listing, retarget DOM)
-- [ ] Update `documentation/context.md`
-- [ ] Run scoped tests (`test/ui/super-plan-page.test.mts`, plan-screen / sidebar listing / controller lifecycle); verify in browser: two concurrent runs, Activity isolated, both visible in rail + sidebar
+- [x] Harden `findReusableEmptyPlanChat` + compose spare resolution (exclude `superPlan`, lazy history, streaming/advancing)
+- [x] Wire Super Plan **New plan** to create/switch a fresh compose chat; leave prior run running
+- [x] Fix start/render order so Activity never replays a replaced run’s `activityLog`; clear ledger DOM on retarget/collector restart
+- [x] Guard `startSuperPlan` against replacing an in-flight different prompt on the same chat
+- [x] Make Super Plan chats sidebar-listable from `superPlan` presence; sensible interim title
+- [x] Add regression tests (reuse, Activity isolation, sidebar listing, retarget DOM)
+- [x] Update `documentation/context.md`
+- [x] Run scoped tests (`test/ui/super-plan-page.test.mts`, plan-screen / sidebar listing / controller lifecycle); verify in browser: two concurrent runs, Activity isolated, both visible in rail + sidebar
