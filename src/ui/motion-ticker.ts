@@ -29,6 +29,10 @@ let observer: MutationObserver | null = null;
 const parked = new Set<SteppableAnimation>();
 /** Coalesce mutation-driven getAnimations into one rAF (MIN-584). */
 let discoveryRaf: number | null = null;
+/** Subtrees added since the last discovery frame — scoped so streaming never walks the whole document (MIN-793). */
+const pendingDiscovery = new Set<Element>();
+/** Above this many added subtrees one document-wide walk is cheaper than N scoped ones. */
+const MAX_SCOPED_TARGETS = 32;
 
 /** Only looping animations are worth parking; a finite one ends on its own. */
 function isInfinite(anim: SteppableAnimation): boolean {
@@ -109,30 +113,51 @@ function mutationObserverCtor(): typeof MutationObserver | null {
 }
 
 /** A newly inserted element (thinking caret, tool spinner) may already be running at vsync. */
+function documentHost(): AnimationsHost {
+  return (
+    (document.documentElement as unknown as AnimationsHost) ??
+    (document as unknown as AnimationsHost)
+  );
+}
+
+/**
+ * Walk only what was added. `documentElement.getAnimations({ subtree: true })` forces a style
+ * update over the whole document, and during streaming that lands on nearly every frame.
+ */
+function runDiscovery(): void {
+  if (pendingDiscovery.size === 0) return;
+  if (pendingDiscovery.size > MAX_SCOPED_TARGETS) {
+    pendingDiscovery.clear();
+    parkTarget(documentHost(), true);
+    return;
+  }
+  const targets = [...pendingDiscovery];
+  pendingDiscovery.clear();
+  for (const target of targets) {
+    if (!target.isConnected) continue;
+    parkTarget(target as unknown as AnimationsHost, true);
+  }
+}
+
 function onMutations(records: MutationRecord[]): void {
-  let added = false;
   for (const rec of records) {
     if (rec.type !== 'childList') continue;
     for (const node of rec.addedNodes) {
-      if (node.nodeType === 1) {
-        added = true;
-        break;
-      }
+      if (node.nodeType !== 1) continue;
+      pendingDiscovery.add(node as Element);
+      if (pendingDiscovery.size > MAX_SCOPED_TARGETS) break;
     }
-    if (added) break;
+    if (pendingDiscovery.size > MAX_SCOPED_TARGETS) break;
   }
-  if (!added) return;
-  const host =
-    (document.documentElement as unknown as AnimationsHost) ??
-    (document as unknown as AnimationsHost);
+  if (pendingDiscovery.size === 0) return;
   if (typeof requestAnimationFrame !== 'function') {
-    parkTarget(host, true);
+    runDiscovery();
     return;
   }
   if (discoveryRaf != null) return;
   discoveryRaf = requestAnimationFrame(() => {
     discoveryRaf = null;
-    parkTarget(host, true);
+    runDiscovery();
   });
 }
 
@@ -158,6 +183,7 @@ function stopDiscovery(): void {
     cancelAnimationFrame(discoveryRaf);
   }
   discoveryRaf = null;
+  pendingDiscovery.clear();
   observer?.disconnect();
   observer = null;
   if (typeof document !== 'undefined') {

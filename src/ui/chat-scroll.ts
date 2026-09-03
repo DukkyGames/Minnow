@@ -13,6 +13,8 @@ export const CHAT_APP_JUMP_CHIP_ID = 'chatAppJumpLatest';
 let stickToBottom = true;
 /** Ignore scroll events triggered by our own scrollTop writes during stream follow. */
 let programmaticScroll = false;
+/** Only the newest scheduled release clears the flag — overlapping scrolls must not unpin (MIN-793). */
+let programmaticScrollToken = 0;
 let chatAreaEl: HTMLElement | null = null;
 let jumpChipEl: HTMLButtonElement | null = null;
 let chatAppJumpChipEl: HTMLButtonElement | null = null;
@@ -128,9 +130,13 @@ function updateJumpChipVisibility(): void {
 function applyInstantScroll(area: HTMLElement, scrollTop: number): void {
   const prev = area.style.scrollBehavior;
   programmaticScroll = true;
+  programmaticScrollToken += 1;
+  const token = programmaticScrollToken;
   area.style.scrollBehavior = 'auto';
   area.scrollTop = scrollTop;
   requestAnimationFrame(() => {
+    // A later scroll is still landing; releasing here would read it as a user scroll.
+    if (token !== programmaticScrollToken) return;
     programmaticScroll = false;
     if (prev) area.style.scrollBehavior = prev;
     else area.style.removeProperty('scroll-behavior');

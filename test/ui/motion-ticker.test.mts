@@ -226,8 +226,16 @@ describe('ticked motion', () => {
     const late = new FakeAnimation();
     const spinner = mounted.win.document.createElement('div');
     installGetAnimations(
-      mounted.win.document.documentElement as unknown as { getAnimations?: GetAnimationsFn },
+      spinner as unknown as { getAnimations?: GetAnimationsFn },
       (opts) => (opts?.subtree ? [late] : []),
+    );
+    let rootSubtreeWalks = 0;
+    installGetAnimations(
+      mounted.win.document.documentElement as unknown as { getAnimations?: GetAnimationsFn },
+      (opts) => {
+        if (opts?.subtree) rootSubtreeWalks += 1;
+        return [];
+      },
     );
     mounted.win.document.body.appendChild(spinner);
 
@@ -236,6 +244,39 @@ describe('ticked motion', () => {
       await new Promise((r) => setTimeout(r, 10));
     }
     assert.equal(late.playState, 'paused', 'mid-turn spinner must be parked without a sweep timer');
+    // A whole-document walk forces a style update; during streaming that is every frame (MIN-793).
+    assert.equal(rootSubtreeWalks, 0, 'discovery must be scoped to the added subtree');
+  });
+
+  it('falls back to one document walk when a burst adds many subtrees', async () => {
+    const mounted = mountWindow();
+    restore = mounted.restore;
+    const doc = mounted.win.document as unknown as { getAnimations?: GetAnimationsFn };
+    installGetAnimations(doc, () => []);
+
+    release = acquireTickedMotion();
+
+    const late = new FakeAnimation();
+    let rootSubtreeWalks = 0;
+    installGetAnimations(
+      mounted.win.document.documentElement as unknown as { getAnimations?: GetAnimationsFn },
+      (opts) => {
+        if (!opts?.subtree) return [];
+        rootSubtreeWalks += 1;
+        return [late];
+      },
+    );
+    // A transcript rebuild adds far more rows than it is worth walking one at a time.
+    for (let i = 0; i < 40; i += 1) {
+      mounted.win.document.body.appendChild(mounted.win.document.createElement('div'));
+    }
+
+    const started = Date.now();
+    while (late.playState !== 'paused' && Date.now() - started < 250) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    assert.equal(late.playState, 'paused');
+    assert.equal(rootSubtreeWalks, 1, 'a burst collapses to a single document walk');
   });
 
   it('parks looping animations that start via animationstart on existing chrome', () => {

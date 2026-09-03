@@ -164,6 +164,7 @@ import {
   restorePendingAttachments,
 } from '../attachments/store';
 import { getActiveProvider } from '../providers/store';
+import { isLocalProvider } from '../providers/provider-host';
 import { canSendImagesToModel } from '../providers/vision-model.ts';
 import { acquireTickedMotion } from '../ui/motion-ticker';
 import { executeTool, getEnabledToolDefinitionsForChat } from '../tools/client';
@@ -1122,7 +1123,11 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       },
     });
 
-    releaseTickedMotion = acquireTickedMotion();
+    // Local inference shares the GPU with the compositor, so stepping looping animations at
+    // STEP_HZ buys tok/s back. A cloud turn reclaims nothing and only looks choppier (MIN-793).
+    if (isLocalProvider(provider)) {
+      releaseTickedMotion = acquireTickedMotion();
+    }
 
     let systemPrompt = 'You are a helpful assistant.';
     let injectionBlocks: Awaited<ReturnType<typeof composeRunTurnChatSystemPrompt>>['injectionBlocks'] = {
