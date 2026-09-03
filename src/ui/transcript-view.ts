@@ -13,7 +13,7 @@ import {
   STREAM_LABEL_GENERATING,
   STREAM_LABEL_THINKING,
 } from './stream-status';
-import { renderThoughtsToggle } from './thought-bubbles';
+import { renderThoughtsToggle, updateThoughtsToggleSegments } from './thought-bubbles';
 
 /** Parse stored tool `arguments` JSON for display. */
 export function parseToolArgsForTranscriptDisplay(raw: string): Record<string, unknown> {
@@ -220,12 +220,104 @@ export function appendTranscriptLiveTail(
   live: SubAgentTranscriptLive | undefined,
   messages: unknown[] = [],
 ): void {
-  body.querySelector('.transcript-view__live-tail')?.remove();
-  if (!live?.isLive) return;
+  const existing = body.querySelector<HTMLElement>('.transcript-view__live-tail');
+  if (!live?.isLive) {
+    existing?.remove();
+    return;
+  }
 
+  const phase = live.phase ?? 'generating';
+  const toolName = live.currentToolName?.trim() ?? '';
+
+  if (existing && canReuseLiveTail(existing, phase, toolName)) {
+    syncReusedLiveTail(existing, live, messages);
+    return;
+  }
+
+  existing?.remove();
   const tail = document.createElement('div');
   tail.className = 'transcript-view__live-tail';
+  tail.dataset.livePhase = phase;
+  if (toolName) tail.dataset.toolName = toolName;
 
+  fillLiveTail(tail, live, messages);
+
+  if (tail.childNodes.length > 0) {
+    body.appendChild(tail);
+  }
+}
+
+/** Same phase (and tool name) means the existing tail can mutate instead of remount. */
+function canReuseLiveTail(
+  tail: HTMLElement,
+  phase: string,
+  toolName: string,
+): boolean {
+  if (tail.dataset.livePhase !== phase) return false;
+  if (phase === 'tools') return tail.dataset.toolName === toolName || !toolName;
+  return true;
+}
+
+/** Grow thinking text / generating partials on an already-mounted live tail. */
+function syncReusedLiveTail(
+  tail: HTMLElement,
+  live: SubAgentTranscriptLive,
+  messages: unknown[],
+): void {
+  const phase = live.phase;
+  if (phase === 'thinking') {
+    if (messagesHaveThinking(messages)) {
+      tail.remove();
+      return;
+    }
+    const reasoning = live.partialReasoning?.trim();
+    const toggleWrap = tail.querySelector('.thoughts-panel-wrap');
+    if (toggleWrap instanceof HTMLElement && reasoning) {
+      updateThoughtsToggleSegments(toggleWrap, [reasoning]);
+      return;
+    }
+    if (!toggleWrap && reasoning) {
+      tail.replaceChildren();
+      renderThoughtsToggle(tail, [reasoning], liveThoughtsToggleOptions(live));
+    }
+    return;
+  }
+  if (phase === 'generating') {
+    syncGeneratingPartial(tail, live);
+    return;
+  }
+  if (phase === 'tools') {
+    const toolName = live.currentToolName?.trim();
+    const label = tail.querySelector('.tool-start-indicator__label');
+    if (label && toolName) {
+      const next = `Calling ${humanizeToolName(toolName)}…`;
+      if (label.textContent !== next) label.textContent = next;
+      tail.dataset.toolName = toolName;
+    }
+  }
+}
+
+function liveThoughtsToggleOptions(live: SubAgentTranscriptLive): {
+  pulse: true;
+  label: string;
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
+} {
+  return {
+    pulse: true,
+    label: STREAM_LABEL_THINKING,
+    ...(live.thoughtsExpanded ? { expanded: true } : {}),
+    ...(live.onThoughtsExpandedChange
+      ? { onExpandedChange: live.onThoughtsExpandedChange }
+      : {}),
+  };
+}
+
+function fillLiveTail(
+  tail: HTMLElement,
+  live: SubAgentTranscriptLive,
+  messages: unknown[],
+): void {
   const phase = live.phase;
   const toolName = live.currentToolName?.trim();
 
@@ -233,10 +325,7 @@ export function appendTranscriptLiveTail(
     if (!messagesHaveThinking(messages)) {
       const reasoning = live.partialReasoning?.trim();
       if (reasoning) {
-        renderThoughtsToggle(tail, [reasoning], {
-          pulse: true,
-          label: STREAM_LABEL_THINKING,
-        });
+        renderThoughtsToggle(tail, [reasoning], liveThoughtsToggleOptions(live));
       } else {
         tail.appendChild(createTranscriptStreamStatus('thinking'));
       }
@@ -247,13 +336,23 @@ export function appendTranscriptLiveTail(
   } else if (phase === 'tools' && toolName) {
     tail.appendChild(createTranscriptToolIndicator(toolName));
   } else if (live.isLive) {
+    tail.dataset.livePhase = 'generating';
     tail.appendChild(createTranscriptStreamStatus('generating'));
     appendGeneratingPartial(tail, live);
   }
+}
 
-  if (tail.childNodes.length > 0) {
-    body.appendChild(tail);
+/** Keep "Generating response…" and grow the partial row without remounting. */
+function syncGeneratingPartial(tail: HTMLElement, live: SubAgentTranscriptLive): void {
+  const text = live.partialText?.trim();
+  if (!text) return;
+  let partial = tail.querySelector<HTMLElement>('.transcript-view__assistant--partial');
+  if (!partial) {
+    partial = document.createElement('div');
+    partial.className = 'transcript-view__assistant transcript-view__assistant--partial';
+    tail.appendChild(partial);
   }
+  if (partial.textContent !== text) partial.textContent = text;
 }
 
 /** Index of the last assistant row (for live Thinking… pulse on that turn). */

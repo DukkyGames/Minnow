@@ -15,19 +15,22 @@ import {
   type TaskFilesView,
   type TranscriptView,
 } from './board-render';
-import type { TaskFileStat } from './client';
-import { adaptAttemptTranscript, liveTailPhase } from './transcript-adapter';
+import type { TaskFileStat, LiveActivity } from './client';
+import { adaptAttemptTranscript, liveTailPhase, transcriptStructureKey } from './transcript-adapter';
 import { el, empty, pill } from './dom';
 import { createIcon } from '../ui/icon';
 import { renderUnifiedPromptDiff } from '../ui/prompt-diff-unified';
 import { setAssistantBubbleContent } from '../markdown/renderer';
 import { appendTranscriptLiveTail, renderTranscriptView } from '../ui/transcript-view';
+import type { SubAgentTranscriptLive } from '../ui/sub-agent-live-status';
 
 const ui = {
   expandedSummaries: new Set<string>(),
   followThread: true,
   threadScrollTop: 0,
   specOpen: null as boolean | null,
+  /** Live Thoughts toggles the user expanded, keyed by attempt id. */
+  expandedLiveThoughts: new Set<string>(),
 };
 
 // ── Reset ────────────────────────────────────────────────────────────────────
@@ -40,6 +43,7 @@ export function resetTaskDetailLogUi(): void {
 export function resetTaskDetailUi(): void {
   resetTaskDetailLogUi();
   ui.expandedSummaries.clear();
+  ui.expandedLiveThoughts.clear();
   ui.specOpen = null;
 }
 
@@ -55,6 +59,7 @@ export function renderTaskDetail(
 
   const overlay = el('div', 'ov2-detail-overlay');
   overlay.dataset.focusKey = 'detail-overlay';
+  overlay.dataset.taskId = task.id;
   overlay.addEventListener('click', () => actions.select(null));
 
   const detail = el('section', 'ov2-detail');
@@ -91,6 +96,120 @@ export function renderTaskDetail(
 
   overlay.appendChild(detail);
   return overlay;
+}
+
+export type TaskDetailSyncMode = {
+  /** Refresh the Work list (journal-rate: attempt started/ended). */
+  syncWork?: boolean;
+  /** How to refresh the right-hand thread. */
+  thread?: 'tail' | 'body' | 'pane' | 'auto';
+};
+
+/**
+ * Patch an already-open detail overlay instead of tearing it down.
+ *
+ * Live thinking must not remount this dialog: that restarts chat/tool
+ * animations and drops the collapsed Thoughts caret.
+ */
+export function syncTaskDetailOverlay(
+  overlay: HTMLElement,
+  state: BoardState,
+  task: TaskState,
+  actions: BoardActions,
+  options: BoardViewOptions,
+  mode: TaskDetailSyncMode = {},
+): void {
+  overlay.dataset.taskId = task.id;
+
+  if (mode.syncWork !== false) {
+    syncWorkPanel(overlay, task, actions, options);
+  }
+
+  const thread = overlay.querySelector('.ov2-thread');
+  if (thread instanceof HTMLElement) {
+    syncThreadPane(thread, task, options, mode.thread ?? 'auto');
+  }
+}
+
+function syncWorkPanel(
+  overlay: HTMLElement,
+  task: TaskState,
+  actions: BoardActions,
+  options: BoardViewOptions,
+): void {
+  const rail = overlay.querySelector('.ov2-detail__rail');
+  if (!(rail instanceof HTMLElement)) return;
+  const current = findRailPanel(rail, 'Work');
+  const next = renderWorkSection(task, actions, options);
+  if (current) current.replaceWith(next);
+  else rail.appendChild(next);
+}
+
+function findRailPanel(rail: HTMLElement, title: string): HTMLElement | null {
+  for (const panel of rail.querySelectorAll(':scope > .ov2-panel')) {
+    if (!(panel instanceof HTMLElement)) continue;
+    if (panel.querySelector('.ov2-panel__title')?.textContent === title) return panel;
+  }
+  return null;
+}
+
+function syncThreadPane(
+  pane: HTMLElement,
+  task: TaskState,
+  options: BoardViewOptions,
+  threadMode: NonNullable<TaskDetailSyncMode['thread']>,
+): void {
+  const view = options.transcript;
+  const attempt = view
+    ? task.attempts.find((a) => a.attemptId === view.attemptId)
+    : undefined;
+  const body = pane.querySelector<HTMLElement>('[data-thread-scroller]');
+
+  if (!view || !attempt) {
+    if (threadMode === 'tail') return;
+    pane.replaceChildren(renderThreadPlaceholder(task));
+    return;
+  }
+
+  let mode = threadMode;
+  if (view.status === 'loading' || view.status === 'error') {
+    if (mode === 'tail') return;
+    mode = 'pane';
+  } else if (mode === 'auto') {
+    if (!body || body.dataset.threadScroller !== attempt.attemptId) mode = 'pane';
+    else if ((attempt.ended ? '1' : '0') !== pane.dataset.attemptEnded) mode = 'pane';
+    else if (
+      view.status === 'ready' &&
+      body.dataset.structureKey === transcriptStructureKey(view.events)
+    ) {
+      mode = 'tail';
+    } else {
+      mode = 'body';
+    }
+  }
+
+  if (mode === 'pane' || !body) {
+    const next = renderThreadPane(task, options);
+    pane.replaceWith(next);
+    return;
+  }
+
+  pane.dataset.attemptEnded = attempt.ended ? '1' : '0';
+
+  if (mode === 'tail' && view.status === 'ready') {
+    const { messages } = adaptAttemptTranscript(view.events);
+    appendTranscriptLiveTail(
+      body,
+      threadLive(attempt, view, options.liveActivity?.get(task.id) ?? null),
+      messages,
+    );
+    if (body.querySelector('.transcript-view__live-tail')) {
+      body.querySelector('.ov2-empty')?.remove();
+    }
+    return;
+  }
+
+  paintThread(body, view, attempt, options.liveActivity?.get(task.id) ?? null);
 }
 
 // ── Head ─────────────────────────────────────────────────────────────────────
@@ -569,10 +688,10 @@ function renderSummary(attempt: Attempt): HTMLElement {
  */
 function renderThreadPane(task: TaskState, options: BoardViewOptions): HTMLElement {
   const pane = el('div', 'ov2-thread');
-
   const attempt = options.transcript
     ? task.attempts.find((a) => a.attemptId === options.transcript?.attemptId)
     : undefined;
+  pane.dataset.attemptEnded = attempt && !attempt.ended ? '0' : attempt?.ended ? '1' : '';
 
   if (!options.transcript || !attempt) {
     pane.appendChild(renderThreadPlaceholder(task));
@@ -597,7 +716,7 @@ function renderThreadPane(task: TaskState, options: BoardViewOptions): HTMLEleme
     return pane;
   }
 
-  paintThread(body, view, attempt);
+  paintThread(body, view, attempt, options.liveActivity?.get(task.id) ?? null);
   return pane;
 }
 
@@ -649,11 +768,54 @@ function renderThreadPlaceholder(task: TaskState): HTMLElement {
   return wrap;
 }
 
-function paintThread(body: HTMLElement, view: TranscriptView, attempt: Attempt): void {
+/**
+ * Live tail for the open thread: prefer the SSE activity map (token-fresh)
+ * over the last coalesced disk event.
+ */
+function threadLive(
+  attempt: Attempt,
+  view: TranscriptView,
+  activity?: LiveActivity | null,
+): SubAgentTranscriptLive | undefined {
+  if (attempt.ended) return undefined;
+  const tail = liveTailPhase(view.events);
+  const thinking = activity?.kind === 'thinking';
+  const tool = activity?.kind === 'tool';
+  const reasoning = thinking ? activity.text : tail.reasoning;
+  const toolName = tool ? activity.text : tail.toolName;
+  const phase = thinking ? 'thinking' : tool ? 'tools' : tail.phase;
+  return {
+    isLive: true,
+    phase,
+    currentToolName: toolName ?? null,
+    ...(reasoning ? { partialReasoning: reasoning } : {}),
+    thoughtsExpanded: ui.expandedLiveThoughts.has(attempt.attemptId),
+    onThoughtsExpandedChange: (expanded) => {
+      if (expanded) ui.expandedLiveThoughts.add(attempt.attemptId);
+      else ui.expandedLiveThoughts.delete(attempt.attemptId);
+    },
+  };
+}
+
+function paintThread(
+  body: HTMLElement,
+  view: TranscriptView,
+  attempt: Attempt,
+  activity?: LiveActivity | null,
+): void {
   const { messages, end } = adaptAttemptTranscript(view.events);
   const live = !attempt.ended;
+  body.dataset.structureKey = transcriptStructureKey(view.events);
 
   if (messages.length === 0 && !end) {
+    body.replaceChildren();
+    if (live) {
+      appendTranscriptLiveTail(body, threadLive(attempt, view, activity), messages);
+      if (body.childNodes.length > 0) {
+        restoreThreadScroll(body, true);
+        return;
+      }
+    }
     body.appendChild(
       empty(
         live
@@ -681,17 +843,7 @@ function paintThread(body: HTMLElement, view: TranscriptView, attempt: Attempt):
   }
 
   if (live) {
-    const tail = liveTailPhase(view.events);
-    appendTranscriptLiveTail(
-      body,
-      {
-        isLive: true,
-        phase: tail.phase,
-        currentToolName: tail.toolName ?? null,
-        ...(tail.reasoning ? { partialReasoning: tail.reasoning } : {}),
-      },
-      messages,
-    );
+    appendTranscriptLiveTail(body, threadLive(attempt, view, activity), messages);
   } else if (end) {
     body.appendChild(renderThreadEnd(end.outcome, end.summary));
   }
@@ -713,11 +865,14 @@ function renderThreadEnd(outcome: string, summary: string): HTMLElement {
 
 /** Stick to the bottom while an agent is working; hold position once it stops. */
 function restoreThreadScroll(body: HTMLElement, live: boolean): void {
-  body.addEventListener('scroll', () => {
-    const distance = body.scrollHeight - body.scrollTop - body.clientHeight;
-    ui.followThread = distance <= 32;
-    ui.threadScrollTop = body.scrollTop;
-  });
+  if (!body.dataset.scrollBound) {
+    body.dataset.scrollBound = '1';
+    body.addEventListener('scroll', () => {
+      const distance = body.scrollHeight - body.scrollTop - body.clientHeight;
+      ui.followThread = distance <= 32;
+      ui.threadScrollTop = body.scrollTop;
+    });
+  }
   queueMicrotask(() => {
     if (!body.isConnected) return;
     body.scrollTop = live && ui.followThread ? body.scrollHeight : ui.threadScrollTop;

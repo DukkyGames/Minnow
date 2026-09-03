@@ -29,6 +29,7 @@ import {
   renderMergeQueue,
   renderTaskList,
   renderTimeline,
+  syncTaskCardActivity,
   type FileDiffView,
   type TaskFilesView,
   type TranscriptView,
@@ -41,6 +42,7 @@ import {
   renderTaskDetail,
   resetTaskDetailLogUi,
   resetTaskDetailUi,
+  syncTaskDetailOverlay,
 } from './task-detail';
 import {
   discoverOrchestratePlans,
@@ -54,6 +56,8 @@ import {
   teardownV2BoardHeaderInstruments,
 } from './board-header-v2';
 import { ensureBoardModelBound } from './board-model-bind';
+import { transcriptStructureKey } from './transcript-adapter';
+import { scheduleAnimationFrame } from '../lib/schedule-animation-frame';
 import { isBoardJournalReasoning } from './board-journal-reasoning';
 import { isExecutableOrchestratePlan } from '../chat/plans/plan-path';
 import {
@@ -129,6 +133,7 @@ let surface: Surface | null = null;
 let list: BoardListClient | null = null;
 let client: BoardClient | null = null;
 let unsubscribeBoard: (() => void) | null = null;
+let unsubscribeLive: (() => void) | null = null;
 let unsubscribeList: (() => void) | null = null;
 
 let selectedBoardId: string | null = null;
@@ -218,6 +223,8 @@ export function teardownBoardsView(): void {
   document.removeEventListener('keydown', onBoardsDocumentKeydown, true);
   unsubscribeBoard?.();
   unsubscribeBoard = null;
+  unsubscribeLive?.();
+  unsubscribeLive = null;
   client?.close();
   client = null;
   unsubscribeList?.();
@@ -330,6 +337,8 @@ function selectBoard(boardId: string | null): void {
   if (boardId === selectedBoardId) return;
   unsubscribeBoard?.();
   unsubscribeBoard = null;
+  unsubscribeLive?.();
+  unsubscribeLive = null;
   client?.close();
   client = null;
 
@@ -346,6 +355,7 @@ function selectBoard(boardId: string | null): void {
   if (boardId) {
     client = createBoardClient(boardId, { openStream });
     unsubscribeBoard = client.subscribe(() => paintBoard());
+    unsubscribeLive = client.subscribeLive(scheduleLiveUi);
     client.connect();
   }
   paintList();
@@ -1084,25 +1094,8 @@ function paintBoard(): void {
     return;
   }
 
-  const actions = {
-    startTask: (taskId: string) => void commandStartTask(taskId),
-    abandonTask: (taskId: string) => void commandAbandonTask(taskId),
-    rerun: (taskIds?: string[]) => void commandRerun(taskIds),
-    select: (taskId: string | null) => selectTaskDetail(taskId),
-    openTranscript: (attemptId: string) => void toggleTranscript(attemptId),
-    toggleFileDiff: (path: string) => void toggleFileDiff(path),
-    openFile: (path: string) => openTaskFile(path),
-  };
-  const options = {
-    selectedTaskId,
-    pendingTaskIds: pendingTasks,
-    liveActivity: client?.getLiveActivity(),
-    attemptStartedAt: client?.getAttemptStartedAt(),
-    now: Date.now(),
-    engineErrors: client?.getEngineErrors(),
-    transcript,
-    files: taskFilesView(),
-  };
+  const actions = boardActions();
+  const options = boardViewOptions();
 
   pane.appendChild(renderTaskList(state, actions, options));
   pane.appendChild(renderMergeQueue(state));
@@ -1114,13 +1107,78 @@ function paintBoard(): void {
 
   const selected = selectedTaskId ? state.tasks.get(selectedTaskId) : undefined;
   surface.root.classList.toggle('is-detail-open', Boolean(selected));
-  surface.root.querySelector('.ov2-detail-overlay')?.remove();
-  if (selected) surface.root.appendChild(renderTaskDetail(state, selected, actions, options));
+  const existingOverlay = surface.root.querySelector<HTMLElement>('.ov2-detail-overlay');
+  if (!selected) {
+    existingOverlay?.remove();
+  } else if (existingOverlay && existingOverlay.dataset.taskId === selected.id) {
+    // Same task: patch work + thread. Remounting would restart chat animations.
+    syncTaskDetailOverlay(existingOverlay, state, selected, actions, options, {
+      syncWork: true,
+      thread: 'auto',
+    });
+  } else {
+    existingOverlay?.remove();
+    surface.root.appendChild(renderTaskDetail(state, selected, actions, options));
+  }
   syncLogPolling(state);
   syncElapsedTicker(state);
 
   restoreFocus(focused);
 }
+
+function boardActions() {
+  return {
+    startTask: (taskId: string) => void commandStartTask(taskId),
+    abandonTask: (taskId: string) => void commandAbandonTask(taskId),
+    rerun: (taskIds?: string[]) => void commandRerun(taskIds),
+    select: (taskId: string | null) => selectTaskDetail(taskId),
+    openTranscript: (attemptId: string) => void toggleTranscript(attemptId),
+    toggleFileDiff: (path: string) => void toggleFileDiff(path),
+    openFile: (path: string) => openTaskFile(path),
+  };
+}
+
+function boardViewOptions() {
+  return {
+    selectedTaskId,
+    pendingTaskIds: pendingTasks,
+    liveActivity: client?.getLiveActivity(),
+    attemptStartedAt: client?.getAttemptStartedAt(),
+    now: Date.now(),
+    engineErrors: client?.getEngineErrors(),
+    transcript,
+    files: taskFilesView(),
+  };
+}
+
+/**
+ * Live thinking/tool frames: patch cards and the open thread. Never paintBoard —
+ * replacing the card between mousedown and mouseup is why detail would not open.
+ */
+function patchLiveUi(): void {
+  if (!surface || !client) return;
+  const live = client.getLiveActivity();
+  const started = client.getAttemptStartedAt();
+  const now = Date.now();
+  for (const [taskId, activity] of live) {
+    const card = surface.root.querySelector<HTMLElement>(
+      `.ov2-task[data-task-id="${CSS.escape(taskId)}"]`,
+    );
+    if (!card) continue;
+    syncTaskCardActivity(card, activity, started.get(activity.attemptId) ?? null, now);
+  }
+
+  const overlay = surface.root.querySelector<HTMLElement>('.ov2-detail-overlay');
+  const state = client.getState();
+  const task = selectedTaskId && state ? state.tasks.get(selectedTaskId) : undefined;
+  if (!overlay || !task || !state) return;
+  syncTaskDetailOverlay(overlay, state, task, boardActions(), boardViewOptions(), {
+    syncWork: false,
+    thread: 'tail',
+  });
+}
+
+const scheduleLiveUi = scheduleAnimationFrame(patchLiveUi);
 
 // ── Elapsed clocks ───────────────────────────────────────────────────────────
 
@@ -1210,7 +1268,21 @@ async function refreshTranscript(attemptId: string): Promise<void> {
   try {
     const result = await readAttemptTranscript(boardId, attemptId, { limit: 500 });
     if (transcript?.attemptId !== attemptId || boardId !== selectedBoardId) return;
+    const previous = transcript;
+    const sameStructure =
+      previous?.status === 'ready' &&
+      transcriptStructureKey(previous.events) === transcriptStructureKey(result.events);
     transcript = { attemptId, status: 'ready', ...result };
+    const overlay = surface?.root.querySelector<HTMLElement>('.ov2-detail-overlay');
+    const state = client?.getState();
+    const task = selectedTaskId && state ? state.tasks.get(selectedTaskId) : undefined;
+    if (overlay && task && state) {
+      syncTaskDetailOverlay(overlay, state, task, boardActions(), boardViewOptions(), {
+        syncWork: false,
+        thread: sameStructure ? 'tail' : 'body',
+      });
+      return;
+    }
     paintBoard();
   } catch {}
 }

@@ -65,6 +65,9 @@ export interface SubAgentTranscriptLive {
   currentToolName?: string | null;
   partialReasoning?: string;
   partialText?: string;
+  /** Restore expanded Thoughts on a rare remount of the live toggle. */
+  thoughtsExpanded?: boolean;
+  onThoughtsExpandedChange?: (expanded: boolean) => void;
 }
 
 /** Build live tail props from a run snapshot. */

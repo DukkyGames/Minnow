@@ -62,6 +62,12 @@ export interface BoardClient {
   getAttemptStartedAt(): ReadonlyMap<string, number>;
   getEngineErrors(): ReadonlyMap<string, EngineError>;
   subscribe(listener: (state: BoardState | null) => void): () => void;
+  /**
+   * Thinking and in-flight tool frames. These must not go through `subscribe`:
+   * the board view patches cards and the open thread in place instead of
+   * tearing the overlay down on every token.
+   */
+  subscribeLive(listener: () => void): () => void;
   connect(): void;
   close(): void;
 
@@ -399,6 +405,7 @@ export function createBoardClient(
   let pending: Record<string, unknown>[] = [];
 
   const listeners = new Set<(state: BoardState | null) => void>();
+  const liveListeners = new Set<() => void>();
 
   const emit = () => {
     for (const listener of listeners) {
@@ -406,6 +413,17 @@ export function createBoardClient(
         listener(view);
       } catch (err) {
         console.error('[orchestrator] board subscriber threw', err);
+      }
+    }
+  };
+
+  /** Notify live-activity listeners without a journal/state paint. */
+  const emitLiveActivity = () => {
+    for (const listener of liveListeners) {
+      try {
+        listener();
+      } catch (err) {
+        console.error('[orchestrator] board live subscriber threw', err);
       }
     }
   };
@@ -493,7 +511,7 @@ export function createBoardClient(
         const thought = typeof inner.text === 'string' ? inner.text.trim() : '';
         if (!thought) return;
         liveActivity.set(taskId, { ...base, kind: 'thinking', text: thought, settled: false });
-        emit();
+        emitLiveActivity();
         return;
       }
 
@@ -505,7 +523,7 @@ export function createBoardClient(
           text: name,
           settled: inner.type === 'tool_result',
         });
-        emit();
+        emitLiveActivity();
       }
     } catch (err) {
       console.error('[orchestrator] could not read a live attempt event', err);
@@ -574,6 +592,11 @@ export function createBoardClient(
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
+    },
+
+    subscribeLive(listener) {
+      liveListeners.add(listener);
+      return () => liveListeners.delete(listener);
     },
 
     connect() {

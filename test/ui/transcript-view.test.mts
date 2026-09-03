@@ -7,7 +7,7 @@ import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 
 import { MULTIMODAL_PROBE_PROMPT } from '../../src/benchmark/fixtures/multimodal-probe.ts';
-import { renderTranscriptView } from '../../src/ui/transcript-view.ts';
+import { appendTranscriptLiveTail, renderTranscriptView } from '../../src/ui/transcript-view.ts';
 import { subAgentTranscriptLiveFromRun } from '../../src/ui/sub-agent-live-status.ts';
 
 function setupDom(): Window {
@@ -260,5 +260,66 @@ describe('renderTranscriptView', () => {
     const partial = body.querySelector('.transcript-view__assistant--partial');
     assert.ok(partial);
     assert.equal(partial?.textContent, 'Here is what I found in src/.');
+  });
+
+  test('growing live thinking keeps the same collapsed Thoughts toggle', () => {
+    setupDom();
+    const body = document.getElementById('transcriptBody')!;
+    renderTranscriptView(body, [{ role: 'user', content: 'Go' }], {
+      isLive: true,
+      phase: 'thinking',
+      partialReasoning: 'Need to check',
+    });
+    const toggle = body.querySelector('.thoughts-toggle');
+    const caret = body.querySelector('.thoughts-caret');
+    assert.ok(toggle);
+    assert.equal(toggle?.getAttribute('aria-expanded'), 'false');
+
+    appendTranscriptLiveTail(
+      body,
+      {
+        isLive: true,
+        phase: 'thinking',
+        partialReasoning: 'Need to check package.json first.',
+      },
+      [{ role: 'user', content: 'Go' }],
+    );
+
+    assert.equal(body.querySelector('.thoughts-toggle'), toggle);
+    assert.equal(body.querySelector('.thoughts-caret'), caret);
+    assert.equal(toggle?.getAttribute('aria-expanded'), 'false');
+    assert.equal(
+      body.querySelector('.thoughts-segment')?.textContent,
+      'Need to check package.json first.',
+    );
+  });
+
+  test('live tail remounts when the phase changes from thinking to tools', () => {
+    setupDom();
+    const body = document.getElementById('transcriptBody')!;
+    renderTranscriptView(body, [{ role: 'user', content: 'Go' }], {
+      isLive: true,
+      phase: 'thinking',
+      partialReasoning: 'Need to check package.json first.',
+    });
+    const toggle = body.querySelector('.thoughts-toggle');
+    assert.ok(toggle);
+
+    appendTranscriptLiveTail(
+      body,
+      {
+        isLive: true,
+        phase: 'tools',
+        currentToolName: 'read_file',
+      },
+      [{ role: 'user', content: 'Go' }],
+    );
+
+    assert.equal(body.querySelector('.thoughts-toggle'), null);
+    assert.ok(body.querySelector('.tool-start-indicator'));
+    assert.match(
+      body.querySelector('.tool-start-indicator__label')?.textContent ?? '',
+      /Read/i,
+    );
   });
 });

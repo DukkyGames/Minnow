@@ -12,6 +12,7 @@ import { describe, it } from 'node:test';
 import {
   adaptAttemptTranscript,
   liveTailPhase,
+  transcriptStructureKey,
 } from '../../src/orchestrator/transcript-adapter.ts';
 
 type Msg = Record<string, unknown>;
@@ -179,5 +180,25 @@ describe('liveTailPhase', () => {
 
   it('is generating when nothing has been recorded at all', () => {
     assert.equal(liveTailPhase([]).phase, 'generating');
+  });
+});
+
+describe('transcriptStructureKey', () => {
+  it('ignores growing thinking text so a coalesced thought is the same structure', () => {
+    const first = transcriptStructureKey([{ type: 'thinking', text: 'Need to' }]);
+    const grown = transcriptStructureKey([
+      { type: 'thinking', text: 'Need to check package.json first.' },
+    ]);
+    assert.equal(first, grown);
+    assert.equal(first, 'thinking');
+  });
+
+  it('changes when a tool call arrives after thinking', () => {
+    const thinking = transcriptStructureKey([{ type: 'thinking', text: 'hm' }]);
+    const withTool = transcriptStructureKey([
+      { type: 'thinking', text: 'hm' },
+      { type: 'tool_call', id: 't1', name: 'read_file' },
+    ]);
+    assert.notEqual(thinking, withTool);
   });
 });

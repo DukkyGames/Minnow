@@ -25,6 +25,7 @@ import {
   renderRunLedger,
   renderTaskList,
   retryCount,
+  syncTaskCardActivity,
   type BoardActions,
 } from '../../src/orchestrator/board-render.ts';
 import {
@@ -303,6 +304,41 @@ describe('renderTaskList', () => {
     const activity = node.querySelector('[data-task-id="W1-B"] .ov2-activity')!;
     assert.ok(activity.classList.contains('ov2-activity--thinking'));
     assert.match(activity.textContent!, /vite config/);
+  });
+
+  test('syncTaskCardActivity grows thinking without replacing the card head', () => {
+    setupDom();
+    const state = board();
+    let selected: string | null = null;
+    const actions: BoardActions = {
+      ...NO_ACTIONS,
+      select: (taskId) => {
+        selected = taskId;
+      },
+    };
+    const node = renderTaskList(state, actions, OPTIONS);
+    const card = node.querySelector<HTMLElement>('[data-task-id="W1-B"]')!;
+    const head = card.querySelector<HTMLElement>('.ov2-task__head')!;
+    const row = card.querySelector<HTMLElement>('.ov2-activity')!;
+
+    syncTaskCardActivity(
+      card,
+      {
+        attemptId: 'b1',
+        role: 'builder',
+        kind: 'thinking',
+        text: 'The scaffold already has a vite config.',
+        settled: false,
+      },
+      1_000,
+      2_000,
+    );
+
+    assert.equal(card.querySelector('.ov2-task__head'), head);
+    assert.equal(card.querySelector('.ov2-activity'), row);
+    assert.match(row.querySelector('.ov2-activity__label')!.textContent!, /vite config/);
+    head.click();
+    assert.equal(selected, 'W1-B');
   });
 
   test('a card with no attempt running shows no activity line at all', () => {

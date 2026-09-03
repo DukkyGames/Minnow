@@ -179,3 +179,26 @@ export function liveTailPhase(
   }
   return { phase: 'generating' };
 }
+
+/**
+ * Cheap identity for "did the thread gain a tool/round, or only grow a thought?"
+ *
+ * Thinking text is omitted so a coalesced thought can patch in place without
+ * treating every token as a new transcript.
+ */
+export function transcriptStructureKey(
+  events: readonly Record<string, unknown>[],
+): string {
+  return events
+    .map((event) => {
+      const type = typeof event.type === 'string' ? event.type : '';
+      if (type === 'thinking') return 'thinking';
+      if (type === 'tool_call' || type === 'tool_result') {
+        return `${type}:${text(event.id) || text(event.name)}`;
+      }
+      if (type === 'round_end') return `round_end:${text(event.index)}`;
+      if (type === 'attempt_end') return `attempt_end:${text(event.name)}`;
+      return type;
+    })
+    .join('|');
+}

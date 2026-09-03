@@ -347,6 +347,8 @@ export interface ThoughtsToggleOptions {
   pulse?: boolean;
   /** Override the collapsed toggle label (e.g. live "Thinking…"). */
   label?: string;
+  /** Fired when the user expands or collapses the toggle. */
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 export function renderThoughtsToggle(
@@ -425,6 +427,7 @@ export function renderThoughtsToggle(
       'aria-label',
       nowExpanded ? 'Hide reasoning' : currentLabel,
     );
+    resolved.onExpandedChange?.(nowExpanded);
   });
 
   panelWrap.appendChild(btn);
@@ -435,5 +438,38 @@ export function renderThoughtsToggle(
     wrap.insertBefore(panelWrap, bubble);
   } else {
     wrap.appendChild(panelWrap);
+  }
+}
+
+/**
+ * Rewrite the prose inside an existing Thoughts toggle without remounting it.
+ *
+ * Live thinking grows in place; replacing the toggle would restart the caret
+ * pulse and drop the user's expanded/collapsed choice.
+ */
+export function updateThoughtsToggleSegments(
+  wrap: HTMLElement,
+  segments: string[],
+): void {
+  const flow = wrap.querySelector('.thoughts-flow');
+  if (!(flow instanceof HTMLElement)) return;
+  const normalized = splitThinkingSegments(segments.join('\n\n'));
+  const list = normalized.length > 0 ? normalized : segments.filter((s) => s.trim());
+  if (list.length === 0) return;
+
+  const existing = [...flow.querySelectorAll('.thoughts-segment')];
+  if (list.length === existing.length) {
+    for (let i = 0; i < list.length; i += 1) {
+      if (existing[i].textContent !== list[i]) existing[i].textContent = list[i];
+    }
+    return;
+  }
+
+  flow.replaceChildren();
+  for (const seg of list) {
+    const pre = document.createElement('pre');
+    pre.className = 'thoughts-segment';
+    pre.textContent = seg;
+    flow.appendChild(pre);
   }
 }

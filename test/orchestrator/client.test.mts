@@ -315,6 +315,47 @@ describe('board client — reading', () => {
     }
   });
 
+  it('notifies subscribeLive, not subscribe, on thinking and tool frames', async () => {
+    const boardId = await makeBoard();
+    const client = createBoardClient(boardId, { openStream: openTestStream });
+    try {
+      client.connect();
+      await until(() => client.getState() !== null, 'the snapshot frame');
+
+      let stateCalls = 0;
+      let liveCalls = 0;
+      client.subscribe(() => {
+        stateCalls += 1;
+      });
+      client.subscribeLive(() => {
+        liveCalls += 1;
+      });
+
+      emitLive({
+        boardId,
+        attemptId: 'r-live-bus',
+        taskId: 'W1-A',
+        role: 'builder',
+        event: { type: 'thinking', text: 'Checking the scaffold.' },
+      });
+      await until(() => liveCalls === 1, 'the live thinking subscriber');
+      assert.equal(stateCalls, 0, 'thinking must not trigger a board state paint');
+
+      emitLive({
+        boardId,
+        attemptId: 'r-live-bus',
+        taskId: 'W1-A',
+        role: 'builder',
+        event: { type: 'tool_call', name: 'read_file' },
+      });
+      await until(() => liveCalls === 2, 'the live tool subscriber');
+      assert.equal(stateCalls, 0, 'tool frames must not trigger a board state paint');
+      assert.equal(client.getLiveActivity().get('W1-A')?.kind, 'tool');
+    } finally {
+      client.close();
+    }
+  });
+
   it('reads the raw journal', async () => {
     const boardId = await makeBoard();
     const { events, truncated } = await readJournal(boardId);

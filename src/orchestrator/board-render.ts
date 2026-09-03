@@ -472,6 +472,7 @@ export function renderActivity(
 ): HTMLElement {
   const row = el('div', 'ov2-activity');
   row.setAttribute('aria-live', 'polite');
+  row.dataset.activityKind = activityKindKey(activity);
 
   const glyph = el('span', 'ov2-activity__glyph');
   glyph.setAttribute('aria-hidden', 'true');
@@ -508,6 +509,91 @@ export function renderActivity(
     row.appendChild(clock);
   }
   return row;
+}
+
+/** Stable key so in-place sync can skip replacing a spinner that is already spinning. */
+function activityKindKey(activity: LiveActivity | null): string {
+  if (!activity) return 'starting';
+  if (activity.kind === 'thinking') return 'thinking';
+  return activity.settled ? 'tool-settled' : 'tool';
+}
+
+function activityLabel(activity: LiveActivity | null): { text: string; title?: string } {
+  if (activity?.kind === 'tool') return { text: humanizeToolName(activity.text) };
+  if (activity?.kind === 'thinking') return { text: activity.text, title: activity.text };
+  return { text: 'Starting up' };
+}
+
+function paintActivityGlyph(
+  glyph: HTMLElement,
+  row: HTMLElement,
+  activity: LiveActivity | null,
+): void {
+  const key = activityKindKey(activity);
+  if (row.dataset.activityKind === key && glyph.childNodes.length > 0) return;
+  row.dataset.activityKind = key;
+  row.classList.toggle('ov2-activity--thinking', activity?.kind === 'thinking');
+  glyph.replaceChildren();
+  if (activity?.kind === 'tool' && !activity.settled) {
+    glyph.appendChild(el('span', 'tool-call-spinner'));
+    return;
+  }
+  if (activity?.kind === 'tool') {
+    glyph.appendChild(createIcon(getToolIcon(activity.text), { size: 13 }));
+    return;
+  }
+  if (activity?.kind === 'thinking') {
+    glyph.appendChild(createIcon('sparkles', { size: 13 }));
+    return;
+  }
+  glyph.appendChild(el('span', 'tool-call-spinner'));
+}
+
+/**
+ * Update a card's activity line without replacing the card (or its click target).
+ *
+ * Live thinking arrives at token rate; rebuilding the card dropped the click
+ * that opens task detail and restarted every spinner on the board.
+ */
+export function syncTaskCardActivity(
+  card: HTMLElement,
+  activity: LiveActivity | null,
+  startedAt: number | null,
+  now?: number,
+): void {
+  let row = card.querySelector<HTMLElement>('.ov2-activity');
+  if (!row) {
+    const controls = card.querySelector('.ov2-task__controls');
+    row = renderActivity(activity, startedAt, now);
+    if (controls) card.insertBefore(row, controls);
+    else card.appendChild(row);
+    return;
+  }
+
+  const glyph = row.querySelector<HTMLElement>('.ov2-activity__glyph');
+  if (glyph) paintActivityGlyph(glyph, row, activity);
+
+  const label = row.querySelector<HTMLElement>('.ov2-activity__label');
+  if (label) {
+    const next = activityLabel(activity);
+    if (label.textContent !== next.text) label.textContent = next.text;
+    if (next.title) label.title = next.title;
+    else label.removeAttribute('title');
+  }
+
+  let clock = row.querySelector<HTMLElement>('.ov2-activity__elapsed');
+  if (typeof startedAt === 'number' && startedAt > 0) {
+    const at = typeof now === 'number' ? now : Date.now();
+    if (!clock) {
+      clock = el('span', 'ov2-activity__elapsed', formatElapsed(at - startedAt));
+      clock.title = 'How long this agent has been running';
+      clock.dataset.startedAt = String(startedAt);
+      row.appendChild(clock);
+    } else if (clock.dataset.startedAt !== String(startedAt)) {
+      clock.dataset.startedAt = String(startedAt);
+      clock.textContent = formatElapsed(at - startedAt);
+    }
+  }
 }
 
 function renderCardControls(
