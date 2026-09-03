@@ -25,6 +25,11 @@ function filteredIds(modeId: ModeId): Set<string> {
   return new Set(filterToolsByMode(BUILT_IN_TOOLS, modeId).map((t) => t.id));
 }
 
+/** Persisted `desktop` / `email` remap to general's matrix; other ids have their own row. */
+function groupsForMode(modeId: ModeId) {
+  return MODE_ALLOWED_GROUPS[modeId === 'desktop' || modeId === 'email' ? 'general' : modeId];
+}
+
 function estimateToolPayloadTokens(defs: { definition: { function: { name: string; description: string; parameters: unknown } } }[]): number {
   const json = JSON.stringify(defs.map((t) => t.definition));
   return Math.round(json.length / 4);
@@ -111,62 +116,22 @@ describe('filterToolsByMode', () => {
     );
   });
 
-  test('email keeps mail workflow tools and denies unrelated developer controls', () => {
-    const filtered = filteredIds('email');
-    for (const id of [
-      'list_mail',
-      'search_mail',
-      'get_thread',
-      'draft_reply',
-      'summarize_inbox',
-      'generate_reply_variants',
-      'email_action',
-      'manage_calendar',
-      'web_search',
-      'read_file',
-      'save_file',
-      'create_pdf',
-      'brain_search',
-      'ask_question',
-    ]) {
-      assert.ok(filtered.has(id), `email should allow ${id}`);
-    }
-    for (const id of [
-      'execute_command',
-      'git_commit',
-      'spawn_sub_agent',
-      'update_settings',
-      'launch_minnow_app',
-      'browser_navigate',
-    ]) {
-      assert.ok(!filtered.has(id), `email should deny ${id}`);
-    }
+  test('email mode id resolves to general tool policy', () => {
+    const emailFiltered = filterToolsByMode(BUILT_IN_TOOLS, 'email');
+    const generalFiltered = filterToolsByMode(BUILT_IN_TOOLS, 'general');
+    assert.deepEqual(
+      new Set(emailFiltered.map((t) => t.id)),
+      new Set(generalFiltered.map((t) => t.id)),
+    );
   });
 });
 
 describe('per-mode matrix groups', () => {
   for (const modeId of MODE_IDS) {
     test(`${modeId} matches MODE_ALLOWED_GROUPS matrix`, () => {
-      const allowedGroups = new Set(MODE_ALLOWED_GROUPS[modeId]);
+      const allowedGroups = new Set(groupsForMode(modeId));
       for (const groupId of TOOL_GROUP_ID_LIST) {
         const shouldAllow = allowedGroups.has(groupId);
-        if (modeId === 'desktop') {
-          // Persisted desktop chats normalize to general policy at runtime.
-          const generalGroups = new Set(MODE_ALLOWED_GROUPS.general);
-          const generalShouldAllow = generalGroups.has(groupId);
-          if (generalShouldAllow) {
-            assert.ok(
-              groupFullyAllowed(modeId, groupId),
-              `${modeId} should allow full group ${groupId}`,
-            );
-          } else {
-            assert.ok(
-              groupFullyDenied(modeId, groupId),
-              `${modeId} should deny full group ${groupId}`,
-            );
-          }
-          continue;
-        }
         if (groupId === 'files-write' && (modeId === 'plan' || modeId === 'super-plan')) {
           // Plan / Super Plan: partial files-write — only save_file + make_directory
           assert.ok(isToolAllowedForMode(modeId, 'save_file'));
@@ -202,8 +167,6 @@ describe('cross-mode policy invariants', () => {
     ...TOOL_GROUP_IDS['brain-core'],
     ...TOOL_GROUP_IDS['brain-admin'],
   ];
-  const EMAIL_TOOLS = TOOL_GROUP_IDS.email;
-  const CALENDAR_TOOLS = TOOL_GROUP_IDS.calendar;
   const APPEARANCE_TOOLS = TOOL_GROUP_IDS.appearance;
 
   test('issue tools allowed in general, build, plan, super-plan, and debug', () => {
@@ -214,6 +177,7 @@ describe('cross-mode policy invariants', () => {
       'super-plan',
       'debug',
       'desktop',
+      'email',
     ]);
     for (const modeId of MODE_IDS) {
       for (const toolId of TOOL_GROUP_IDS.issues) {
@@ -239,16 +203,18 @@ describe('cross-mode policy invariants', () => {
     }
   });
 
-  test('email and calendar tools stay inside Email mode only', () => {
-    for (const modeId of MODE_IDS) {
-      for (const toolId of [...EMAIL_TOOLS, ...CALENDAR_TOOLS]) {
-        const allowed = isToolAllowedForMode(modeId, toolId);
-        const expected = modeId === 'email';
-        assert.ok(
-          allowed === expected,
-          `${toolId} in ${modeId}: expected ${expected}`,
-        );
-      }
+  test('removed mail tools are not in the catalog', () => {
+    const ids = new Set(BUILT_IN_TOOLS.map((t) => t.id));
+    for (const toolId of [
+      'list_mail',
+      'search_mail',
+      'get_thread',
+      'draft_reply',
+      'summarize_inbox',
+      'generate_reply_variants',
+      'email_action',
+    ]) {
+      assert.equal(ids.has(toolId), false, `${toolId} should be gone`);
     }
   });
 
@@ -290,12 +256,14 @@ describe('tool payload token reduction', () => {
 
     assert.ok(allTokens > 9_000, `baseline should exceed 9k, got ${allTokens}`);
     // Ceiling covers issue v2 tools in the issues group (~900 tok) plus shell-run clarifiers
-    // and recent tool-definition growth (observed ~11586 on main).
+    // and recent tool-definition growth (observed ~11577 after Email/Calendar removal).
     assert.ok(
       buildTokens >= 7_000 && buildTokens <= 12_000,
       `build payload expected ~7k-12k tok, got ${buildTokens} (all=${allTokens})`,
     );
-    assert.ok(buildTokens < allTokens - 2_000, 'build should save at least 2k tokens');
+    // Gated Email/Calendar tools used to inflate the unfiltered catalog; remaining
+    // savings is appearance + a few other denied groups (~1.3k tok).
+    assert.ok(buildTokens < allTokens - 1_000, `build should save at least 1k tokens (all=${allTokens} build=${buildTokens})`);
   });
 
   test('every built-in tool belongs to at least one group', () => {
@@ -310,7 +278,7 @@ describe('tool payload token reduction', () => {
 
   test('group expansion covers all allowed tools for each mode', () => {
     for (const modeId of MODE_IDS) {
-      const fromGroups = new Set(expandToolGroups(MODE_ALLOWED_GROUPS[modeId]));
+      const fromGroups = new Set(expandToolGroups(groupsForMode(modeId)));
       const fromPolicy = filteredIds(modeId);
       for (const id of fromPolicy) {
         assert.ok(

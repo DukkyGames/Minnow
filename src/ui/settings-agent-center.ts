@@ -92,7 +92,6 @@ export async function loadAgentCenterCards(
   const cards: AgentCenterCard[] = [];
 
   for (const mode of listModes()) {
-    if (mode.id === 'desktop') continue;
     const defaultAgent = findDefaultWorkAgentForMode(mode.id, agents);
     cards.push({
       id: `mode:${mode.id}`,

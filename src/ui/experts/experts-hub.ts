@@ -20,7 +20,6 @@ import { isExpertsPageOpen, setExpertsPageOpen } from '../../app-state';
 import { loadExpertsConfig, getExpertsConfigSync } from '../../config/experts-config';
 import { normalizeModeId } from '../../chat/modes/types';
 import { resolveEffectiveChatModelBinding } from '../default-model';
-import { getDesktopWorkspacePath } from '../../lib/desktop-workspace';
 import {
   activateChatById,
   createExpertChatFromSeed,
@@ -333,10 +332,6 @@ export async function startExpertChat(expertId: string): Promise<void> {
   const sourceChat = getActiveChat();
   const binding = resolveEffectiveChatModelBinding(sourceChat);
   let chatsWorkspace = getWorkspacePath();
-  if (isOsEmbedded()) {
-    const desktopPath = await getDesktopWorkspacePath();
-    if (desktopPath) chatsWorkspace = desktopPath;
-  }
 
   const source = {
     providerId: sourceChat.providerId?.trim() || binding.providerId,

@@ -7,6 +7,28 @@ release/
 build/macos-signing/
 public/material-icons/
 test.log
+.DS_Store
+
+# Local CI / test dumps that should never be committed
+.ci-gh-watch.log
+.ci-windows.log
+debug.log
+test-output.txt
+test-run-output.txt
+untitled.txt
+
+# Impeccable local critique / live sessions (design.json stays tracked)
+.impeccable/critique/
+.impeccable/live/
+
+# Repo-root Minnow design scratch (runtime home is ~/.minnow)
+.minnow/
+
+# Cursor plan drafts (not product plans under documentation/plans/)
+.cursor/plans/
+
+# Upstream Impeccable install target; shipped copy is src/skills/impeccable/
+.agents/skills/impeccable/
 
 # Built Landlock helper (MIN-553) — compile on Linux via native/minnow-sandbox/build.sh
 native/minnow-sandbox/minnow-sandbox

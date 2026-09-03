@@ -1,6 +1,5 @@
 /**
  * Phase A.1 — JSON → SQLite import: fresh install, kitchen-sink, idempotent reopen, corrupt JSON.
- * Mirrors server/email/cache.js migrateJsonCacheIfNeeded patterns.
  */
 
 import assert from 'node:assert/strict';

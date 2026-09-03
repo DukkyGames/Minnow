@@ -5,7 +5,7 @@ import {
   type PaneSlotId,
   type SlotContent,
 } from '../state/file-panel';
-import { getForegroundAppId, getOsView } from '../os/instances';
+import { getOsView } from '../os/instances';
 import { isMobileLayout } from './file-layout';
 import {
   activePreviewIdForSlot,
@@ -24,11 +24,9 @@ import {
 import { adoptActiveViewerTabPath, getActiveViewerTabPath } from './file-viewer-tab-store';
 import { activatePreviewTab } from './preview-tab-store';
 
-/** Same surface rule as desktop-workspace-mounts (no import — avoids module cycle). */
-function isDesktopWorkspaceHostingSurface(): boolean {
-  const codeForeground = getOsView() === 'app' && getForegroundAppId() === 'code';
-  if (codeForeground) return false;
-  return false || getOsView() === 'workspaces';
+/** Same surface rule as the workspace gate (no floating desktop drawers). */
+function isWorkspaceGateSurface(): boolean {
+  return getOsView() === 'workspaces';
 }
 
 export const WORKSPACE_PREVIEW_SECONDARY_INSTANCE = 'workspace-preview-secondary';
@@ -38,7 +36,7 @@ export function isRightPaneSplitActive(): boolean {
   return (
     state.rightPaneSplit.enabled &&
     !isMobileLayout() &&
-    !isDesktopWorkspaceHostingSurface()
+    !isWorkspaceGateSurface()
   );
 }
 
@@ -232,7 +230,7 @@ function moveContentToSlot(content: SlotContent, target: PaneSlotId): void {
 
 /** Enable the split: the primary group adopts every open tab, then `secondary` (when given) moves across under {@link moveContentToSlot}'s rule. */
 export function enableRightPaneSplit(secondary?: SlotContent): void {
-  if (isMobileLayout() || isDesktopWorkspaceHostingSurface()) return;
+  if (isMobileLayout() || isWorkspaceGateSurface()) return;
 
   bootstrapSlotTabsOnSplitEnable();
   patchFilePanelState({
@@ -255,7 +253,7 @@ export function enableRightPaneSplit(secondary?: SlotContent): void {
 
 /** Split right from whichever pane is focused, moving its active tab across. */
 export function splitRightPane(): void {
-  if (isMobileLayout() || isDesktopWorkspaceHostingSurface()) return;
+  if (isMobileLayout() || isWorkspaceGateSurface()) return;
 
   if (!isRightPaneSplitLayoutEnabled()) {
     enableRightPaneSplit(defaultPrimarySlotContent());
@@ -271,7 +269,7 @@ export function splitRightPane(): void {
 
 /** Open a unified tab in the other pane (creates the split when needed). */
 export function openTabToRightPane(kind: 'file' | 'preview', id: string): void {
-  if (isMobileLayout() || isDesktopWorkspaceHostingSurface()) return;
+  if (isMobileLayout() || isWorkspaceGateSurface()) return;
   const content: SlotContent =
     kind === 'file' ? { kind: 'viewer', tabPath: id } : { kind: 'preview', tabId: id };
   if (!isRightPaneSplitLayoutEnabled()) {

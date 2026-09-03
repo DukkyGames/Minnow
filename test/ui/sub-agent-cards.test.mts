@@ -3,9 +3,6 @@ import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 import { resetInstancesForTests } from '../../src/os/instances.ts';
 import {
-  resetDesktopStateForTests,
-} from '../helpers/legacy-desktop-state.ts';
-import {
   initOsPageBridge,
   resetOsPageBridgeForTests,
 } from '../../src/os/page-bridge.ts';
@@ -66,7 +63,6 @@ describe('sub-agent cards', { concurrency: false }, () => {
   afterEach(() => {
     teardownHub();
     setSessionStateForTests(null);
-    resetDesktopStateForTests();
     resetInstancesForTests();
     resetOsPageBridgeForTests();
   });

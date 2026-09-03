@@ -164,12 +164,6 @@ const STANDALONE_PROBE_PROMPTS: Record<string, string> = {
   'knowledge-recall':
     'Earlier in this conversation I gave you a deployment checklist. What was the third item on it? Look it up in the conversation history instead of guessing.',
 
-  'apps-email-list': 'Show me my unread mail from this week, then open the first thread.',
-  'apps-email-draft':
-    'Draft a reply to the top thread in my inbox saying I will review it tomorrow. Do not send anything.',
-  'apps-email-summarize':
-    'Summarise my inbox, then give me three reply options for the top thread.',
-  'apps-calendar': 'What is on my calendar tomorrow?',
   'apps-settings-appearance': 'Switch me to the dark theme and raise the font size.',
 
   'mode-set-chat-mode':

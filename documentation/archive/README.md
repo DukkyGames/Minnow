@@ -1,10 +1,10 @@
-# Historical migration artifacts
+# Archive
 
-This folder holds **read-only snapshots** from the one-time Vite migration extractor (`scripts/migrate-extract.mjs`). They are **not** loaded by the app, tests, or build.
+Shipped one-off plans and historical snapshots. Nothing here is loaded by the app, tests, or build.
 
-| File | Description |
+| Contents | Description |
 | --- | --- |
-| `_extracted-app.js` | Inline `<script>` body copied from legacy monolithic `index.html` before modularization under `src/`. |
-| `_extracted-body.html` | `<body>` markup fragment from the same extraction (CDN tail stripped). |
+| `*.md` | Completed ticket and UI/bug plans moved out of [`documentation/plans/`](../plans/). Keep them for history; do not treat them as the live work queue. |
+| Live plans | Stay in [`documentation/plans/`](../plans/) — in-flight work (`repo-dead-code-cleanup.md`, `orchestrator-v2*.md`, beta-review pack, open tickets). |
 
-**Current source of truth:** TypeScript modules under `src/` (especially `src/types.ts` for shared shapes). Re-running `node scripts/migrate-extract.mjs` overwrites these archive files only if you still have the old monolithic `index.html` layout; normal development does not need them.
+The Vite migration extractor dumps (`_extracted-app.js`, `_extracted-body.html`) were deleted; current source of truth is TypeScript under `src/`.

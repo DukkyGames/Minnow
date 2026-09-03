@@ -19,13 +19,12 @@ describe('appIdForChat', () => {
     );
   });
 
-  test('returns code for Email-scoped chats when Email app is release-hidden', async () => {
+  test('returns code for former Email-scoped chats after the app was removed', async () => {
     const { appIdForChat } = await import('../../src/notifications/app-for-chat.ts');
     assert.equal(
       appIdForChat({
         id: 'email-chat-1',
         name: 'Inbox help',
-        appScope: 'email',
         workspacePath: 'C:/Users/me/.minnow/chats',
         modelId: '',
         modeId: 'email',

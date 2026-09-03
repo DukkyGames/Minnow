@@ -6,7 +6,6 @@ const appState = await import('../../src/app-state.ts');
 const { setSessionStateForTests, createEmptyChatObject } = await import(
   '../../src/state/sessions.ts'
 );
-const { setDesktopStateForTests } = await import('../helpers/legacy-desktop-state.ts');
 const {
   setComposerStreamingMode,
   shouldAllowComposerPrimaryAction,
@@ -51,7 +50,6 @@ function setupDesktopSendButton() {
   input.id = 'desktopInput';
   document.body.appendChild(input);
 
-  setDesktopStateForTests('chatActive');
   return { btn, input };
 }
 
@@ -90,7 +88,6 @@ describe('setComposerStreamingMode', () => {
     appState.setStreaming(false);
     setSessionStateForTests(null);
     if (globalThis.document) {
-      setDesktopStateForTests('idle');
     }
   });
 

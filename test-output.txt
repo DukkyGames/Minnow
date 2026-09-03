@@ -1,4 +1,0 @@
-﻿Γû╢ restoreDesktopSessionOnForeground
-  Γ£ö switches off orchestrator chat for desktop workspace (795.1776ms)
-  Γ£û keeps expert chat active when workspace is not the desktop sandbox (68.3832ms)
-Γ£û restoreDesktopSessionOnForeground (864.101ms)

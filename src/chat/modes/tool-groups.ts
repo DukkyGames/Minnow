@@ -100,16 +100,6 @@ export const TOOL_GROUP_IDS = {
   settings: ['search_settings', 'get_settings', 'update_settings'],
   appearance: ['get_appearance', 'update_appearance', 'upload_appearance_asset'],
   diagnostics: ['read_diagnostics'],
-  email: [
-    'list_mail',
-    'search_mail',
-    'get_thread',
-    'draft_reply',
-    'summarize_inbox',
-    'generate_reply_variants',
-    'email_action',
-  ],
-  calendar: ['manage_calendar'],
   impeccable: ['load_impeccable_context', 'load_aesthetics_reference', 'run_impeccable'],
   todo: ['todo_write'],
 } as const;
@@ -124,24 +114,12 @@ export const TOOL_GROUP_ID_LIST: ToolGroupId[] = Object.keys(
 /** Plan mode: files-write limited to planner doc writes (see context-reduction matrix footnote 1). */
 export const PLAN_FILES_WRITE_ALLOW = ['save_file', 'make_directory'] as const;
 
-/** Desktop chat: every built-in tool group (full Minnow assistant surface). */
-export const DESKTOP_ALLOWED_GROUPS: readonly ToolGroupId[] = TOOL_GROUP_ID_LIST;
+/** Modes that still have a registry entry (persisted `desktop` / `email` remap to general). */
+export type RegisteredModeId = Exclude<ModeId, 'desktop' | 'email'>;
 
 // ── Matrix ───────────────────────────────────────────────────────────────────
 
-export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
-  desktop: DESKTOP_ALLOWED_GROUPS,
-  email: [
-    'util-basic',
-    'web',
-    'files-read',
-    'files-write',
-    'ask',
-    'brain-core',
-    'brain-admin',
-    'email',
-    'calendar',
-  ],
+export const MODE_ALLOWED_GROUPS: Record<RegisteredModeId, readonly ToolGroupId[]> = {
   general: [
     'util-basic',
     'web',
@@ -254,7 +232,7 @@ export const MODE_ALLOWED_GROUPS: Record<ModeId, readonly ToolGroupId[]> = {
     'todo',
     'diagnostics',
   ],
-  /** First-run wizard tour guide — safe demo set: no shell, no writes, no email/calendar. */
+  /** First-run wizard tour guide — safe demo set: no shell, no writes. */
   onboarding: [
     'util-basic',
     'web',

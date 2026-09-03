@@ -11,7 +11,6 @@ const appState = await import('../../src/app-state.ts');
 const { setSessionStateForTests, createEmptyChatObject, getActiveChat } = await import(
   '../../src/state/sessions.ts'
 );
-const { resetDesktopStateForTests } = await import('../helpers/legacy-desktop-state.ts');
 const { switchChat } = await import('../../src/ui/sidebar.ts');
 
 /** @type {import('happy-dom').Window | undefined} */
@@ -57,7 +56,6 @@ describe('switchChat while another chat streams', { concurrency: false }, () => 
     appState.setStreaming(false);
     await new Promise((resolve) => setImmediate(resolve));
     setSessionStateForTests(null);
-    resetDesktopStateForTests();
     if (win) {
       await teardownHappyDomAsync(win);
       win = undefined;

@@ -98,7 +98,6 @@ export function clearComposerAfterSend(
   scheduleSaveSessions({ chatId: chat.id });
   void import('./sidebar').then((m) => m.renderSidebar());
   void import('./chat-app').then((m) => m.refreshChatAppSessionRail());
-  void import('./desktop-chat-rail').then((m) => m.refreshDesktopChatRail());
 }
 
 /** Snapshot the active composer into a chat before leaving it. */
@@ -121,13 +120,7 @@ export function applyComposerDraftForChat(chat: Chat): void {
   if (!input) return;
   draftRestoreSuspended = true;
   input.value = chat.composerDraft ?? '';
-  if (input.id === 'desktopInput') {
-    void import('../os/desktop-composer-resize').then((m) =>
-      m.autoResizeDesktopComposer(input),
-    );
-  } else {
-    autoResize(input);
-  }
+  autoResize(input);
   draftRestoreSuspended = false;
 }
 
@@ -149,7 +142,6 @@ export function handleComposerDraftInput(): void {
   if (visibilityChanged) {
     void import('./sidebar').then((m) => m.renderSidebar());
     void import('./chat-app').then((m) => m.refreshChatAppSessionRail());
-    void import('./desktop-chat-rail').then((m) => m.refreshDesktopChatRail());
   } else {
     scheduleComposerDraftSidebarLabelSync(chat);
   }

@@ -105,8 +105,8 @@ async function handleUnloadLocalModels(): Promise<void> {
 }
 
 async function handleNewChat(): Promise<void> {
-  const { startNewDesktopGeneralChat } = await import('./os/desktop-chat');
-  await startNewDesktopGeneralChat();
+  const { launchCodeChat } = await import('./os/chat-launch');
+  await launchCodeChat();
 }
 
 function handleOpenSettings(): void {

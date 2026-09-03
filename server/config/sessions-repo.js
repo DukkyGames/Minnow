@@ -185,7 +185,7 @@ function stitchChat(row, children) {
   };
 
   if (row.kind) chat.kind = row.kind;
-  if (row.app_scope) chat.appScope = row.app_scope;
+  // Stored app_scope calendar/email (removed apps) is dropped.
   if (row.expert_id) chat.expertId = row.expert_id;
   if (row.workspace_path) chat.workspacePath = row.workspace_path;
   else chat.workspacePath = '';

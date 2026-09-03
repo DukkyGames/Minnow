@@ -80,8 +80,6 @@
 | `models-page.css` | Models |
 | `research-page.css`, `research-library-window.css`, `research-activity.css` | Research |
 | `brain-page.css`, `brain-graph.css` | Brain |
-| `email.css` | Email |
-| `calendar.css`, `calendar-window.css` | Calendar |
 | `scheduler-page.css`, `scheduler-side-panel.css`, `scheduler-editor-window.css` | Scheduler |
 | `experts-hub.css`, `experts-summon.css` | Experts |
 | `issues.css` | Issues app (list/board/detail) |

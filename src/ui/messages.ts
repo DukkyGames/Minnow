@@ -84,7 +84,6 @@ import {
   isCodeChatMount,
   resolveChatMount,
   runWithChatMount,
-  shouldPaintDesktopChatSurface,
 } from './chat-mount';
 import { dismissCodeOverviewForNavigation } from './code-overview';
 import { dismissDevServerScreenForNavigation } from './dev-server-screen';
@@ -223,10 +222,6 @@ export function paintChatTranscriptHistoryPending(mount?: string | HTMLElement):
 
 /** Route pending transcript paint to the active foreground shell (Code / Chat app / desktop). */
 export function paintChatHistoryPendingInForegroundShell(): void {
-  if (shouldPaintDesktopChatSurface()) {
-    paintChatTranscriptHistoryPending('#desktopChatCol');
-    return;
-  }
   if (isChatAppForeground()) {
     paintChatTranscriptHistoryPending('#chatAppMessageCol');
     return;
@@ -704,10 +699,6 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
 
 /** Re-render the chat transcript in whichever shell is currently foreground. */
 export function renderChatInForegroundShell(chat: Chat): void {
-  if (shouldPaintDesktopChatSurface()) {
-    void import('../os/desktop-chat').then((m) => m.activateDesktopChatSession(chat.id));
-    return;
-  }
   if (isChatAppForeground()) {
     renderChatFromHistory(chat, '#chatAppMessageCol');
     return;

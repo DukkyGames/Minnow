@@ -24,7 +24,7 @@ This is the one page that talks about work not yet shipped. The manual describes
 
 ## Behind the release gate
 
-Compare, Benchmarking, Experts, Calendar, and Email remain in the codebase with tests but do not appear on the shipped app rail. They move to released only when their workflows, reliability, accessibility, documentation, and support burden meet the same bar as the core apps.
+Compare, Benchmarking, and Experts remain in the codebase with tests but do not appear on the shipped app rail. They move to released only when their workflows, reliability, accessibility, documentation, and support burden meet the same bar as the core apps.
 
 See [Apps overview](manual/apps/overview.md) for what users see today.
 

@@ -8,14 +8,21 @@ import path from 'node:path';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
 import { mergeConfigMeta } from '../config/validators.js';
 import { maybeAutoApplyWorkspaceProfile } from '../profiles/handlers.js';
-import {
-  ensureDesktopWorkspace,
-  getDefaultDesktopSandboxPath,
-} from '../desktop-workspace/paths.js';
+import { getMinnowHome } from '../config/home.js';
 import { realpathForBoundaryCheck } from './safe-path.js';
 
 /** UI label for the Minnow-owned scratch sandbox (~/.minnow/workspace). */
 export const SCRATCH_WORKSPACE_LABEL = 'Scratch';
+
+const SCRATCH_DIR_NAME = 'workspace';
+
+const SCRATCH_README_BODY = `# Minnow Scratch Workspace
+
+This directory is Minnow's Scratch sandbox — attachments, notes, and session artifacts when no project folder is open.
+
+- Files here stay separate from your active Code project workspace unless tools are explicitly pointed elsewhere.
+- Do not store secrets here if you sync or share ~/.minnow.
+`;
 
 /** Directory where `npm start` was launched (Minnow install); overridable for packaged Electron. */
 let APP_ROOT = path.resolve(process.cwd());
@@ -71,7 +78,22 @@ export function isPlaceholderWorkspacePath(absPath) {
 
 /** Absolute path to the Scratch sandbox (~/.minnow/workspace). */
 export function getScratchWorkspacePath() {
-  return getDefaultDesktopSandboxPath();
+  return path.join(getMinnowHome(), SCRATCH_DIR_NAME);
+}
+
+/** Create the Scratch directory (and README on first run). */
+async function ensureScratchWorkspaceDir() {
+  const root = getScratchWorkspacePath();
+  await fs.mkdir(root, { recursive: true });
+
+  const readmePath = path.join(root, 'README.md');
+  try {
+    await fs.access(readmePath);
+  } catch {
+    await fs.writeFile(readmePath, SCRATCH_README_BODY, 'utf8');
+  }
+
+  return root;
 }
 
 /** True when absPath is the registered Scratch workspace root. */
@@ -275,7 +297,7 @@ function resolveWorkspaceUserChosenFromMeta(meta, savedPath) {
  * @returns {Promise<string>} absolute Scratch path
  */
 export async function ensureScratchWorkspaceRegistered() {
-  const scratchPath = await ensureDesktopWorkspace();
+  const scratchPath = await ensureScratchWorkspaceDir();
   const meta = (await readConfigJson('config.json')) ?? {};
   const scratchKey = normalizeWorkspacePathKey(scratchPath);
   const existingScratch =

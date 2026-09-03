@@ -6,10 +6,6 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
 import {
-  resetDesktopStateForTests,
-  setDesktopStateForTests,
-} from '../helpers/legacy-desktop-state.ts';
-import {
   initOsPageBridge,
   resetOsPageBridgeForTests,
 } from '../../src/os/page-bridge.ts';
@@ -45,7 +41,6 @@ describe('question-cards-modal chat scope', () => {
     installHappyDomGlobals(win);
     setupDom(win);
     resetInstancesForTests();
-    resetDesktopStateForTests();
     resetOsPageBridgeForTests();
     initOsPageBridge();
 
@@ -67,7 +62,6 @@ describe('question-cards-modal chat scope', () => {
       '../../src/ui/question-cards-modal.ts'
     );
     resetQuestionCardsModalForTests();
-    resetDesktopStateForTests();
     resetInstancesForTests();
     resetOsPageBridgeForTests();
     setSessionStateForTests(null);

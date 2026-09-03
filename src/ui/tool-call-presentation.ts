@@ -40,7 +40,6 @@ const TOOL_ICON: Record<string, IconName> = {
   get_appearance: 'designMode',
   update_appearance: 'designMode',
   upload_appearance_asset: 'designMode',
-  manage_calendar: 'appCalendar',
   load_impeccable_context: 'designMode',
   load_aesthetics_reference: 'designMode',
   run_impeccable: 'designMode',
@@ -125,14 +124,6 @@ const TOOL_ICON: Record<string, IconName> = {
   explain_symbol: 'sparkles',
   get_lsp_diagnostics: 'appConsole',
   list_lsp_servers: 'appServers',
-
-  list_mail: 'inbox',
-  search_mail: 'search',
-  get_thread: 'mailOpen',
-  draft_reply: 'reply',
-  summarize_inbox: 'inbox',
-  generate_reply_variants: 'compose',
-  email_action: 'mail',
 };
 
 /** Action word shown first in the row. */
@@ -158,7 +149,6 @@ const TOOL_ACTION: Record<string, string> = {
   get_appearance: 'Read theme',
   update_appearance: 'Change theme',
   upload_appearance_asset: 'Upload asset',
-  manage_calendar: 'Calendar',
   load_impeccable_context: 'Load design context',
   load_aesthetics_reference: 'Load design reference',
   run_impeccable: 'Design pass',
@@ -243,14 +233,6 @@ const TOOL_ACTION: Record<string, string> = {
   explain_symbol: 'Explain symbol',
   get_lsp_diagnostics: 'Diagnostics',
   list_lsp_servers: 'Language servers',
-
-  list_mail: 'Mail',
-  search_mail: 'Search mail',
-  get_thread: 'Read thread',
-  draft_reply: 'Draft reply',
-  summarize_inbox: 'Summarize inbox',
-  generate_reply_variants: 'Draft replies',
-  email_action: 'Mail action',
 };
 
 const TOOL_LABEL_BY_ID = new Map(BUILT_IN_TOOLS.map((t) => [t.id, t.label]));

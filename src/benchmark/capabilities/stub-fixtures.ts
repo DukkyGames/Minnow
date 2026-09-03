@@ -20,9 +20,6 @@ export const CAP_STUB_SNAPSHOT_UIDS = [7, 8] as const;
 /** Sub-agent id returned as still running (agents-sub-agent-control probe). */
 export const CAP_STUB_SUB_AGENT_ID = 'sub-agent-cap-42';
 
-/** Thread id returned by the mail listing stub (apps-email-list probe). */
-export const CAP_STUB_THREAD_ID = 'thread-cap-9001';
-
 const STUB_BY_TOOL: Record<string, unknown> = {
   browser_list: {
     tabs: [
@@ -58,30 +55,6 @@ const STUB_BY_TOOL: Record<string, unknown> = {
     index: 3,
     role: 'user',
     text: 'Deployment checklist: 1) tag, 2) build, 3) smoke test staging.',
-  },
-
-  list_mail: {
-    messages: [
-      {
-        threadId: CAP_STUB_THREAD_ID,
-        from: 'sam@example.com',
-        subject: 'Contract review',
-        unread: true,
-      },
-      {
-        threadId: 'thread-cap-9002',
-        from: 'devops@example.com',
-        subject: 'Nightly build failed',
-        unread: true,
-      },
-    ],
-  },
-  get_thread: {
-    threadId: CAP_STUB_THREAD_ID,
-    messages: [{ from: 'sam@example.com', body: 'Can you look at the contract this week?' }],
-  },
-  summarize_inbox: {
-    summary: 'Two unread: a contract review from Sam and a failed nightly build.',
   },
 
   get_system_info: { platform: 'linux', arch: 'x64', cpus: 16, totalMemoryGb: 64 },

@@ -95,12 +95,10 @@ Currently hidden (MIN-471):
 | **Compare** | Blind A/B across 2–6 models, win-rate history under `~/.minnow/compare/`. |
 | **Benchmarking** (`bench`) | In-app benchmark battery + run history. |
 | **Experts** | Experts' Lab roster of specialist sandbox chats. |
-| **Calendar** | Local SQLite calendar, `.ics`, RRULE, encrypted CalDAV sync. |
-| **Email** | IMAP triage, AI digests, review-first automations, explicit-send SMTP. |
 
-Tools follow their app. Catalog entries with an `appId` filter out of the model tool list and Settings → Tools while hidden or disabled (MIN-472).
+No catalog entries carry an `appId`. Email and Calendar apps were removed (not gated).
 
-**Removed, not gated:** **Reef** mini-app and mode (MIN-473).
+**Removed, not gated:** **Reef** mini-app and mode (MIN-473); **Email** and **Calendar** apps.
 
 ---
 
@@ -121,8 +119,8 @@ Entered elsewhere (not in the strip):
 |------|--------------|
 | **Orchestrate** | Orchestrate hub in Code sidebar / boards. |
 | **Super Plan** | Caret under **Plan**, or Orchestrate plan screen. |
-| **Desktop** | Legacy tool policy id (widest allowlist); not a separate UI surface. |
-| **Email** | Hidden Email app (when released). |
 | **Onboarding** | First-run wizard only. |
+
+Persisted `'desktop'` and `'email'` remaps to **General** (`normalizeModeId`); they are not live registry entries.
 
 **Reef** mode was removed in MIN-473.

@@ -1,6 +1,6 @@
 import { beginChatTurnSetup, endChatTurnSetup, isChatTurnSetupPending } from './chat-turn-guard';
 
-import { findIncompleteToolBatchAtTail, chatAwaitingUserInputTool } from './incomplete-tool-batch';
+import { findIncompleteToolBatchAtTail } from './incomplete-tool-batch';
 
 import { isChatStreaming, isStreamDomVisible } from './streaming-state';
 
@@ -298,39 +298,8 @@ export async function bootIncompleteToolResumeForChats(chats: readonly Chat[]): 
 
   }
 
-  await ensureAskQuestionSurfaceForChat(active);
-
   await resumeIncompleteToolBatch(active, { ownsGlobalStreaming: true });
 
-}
-
-
-
-
-async function ensureAskQuestionSurfaceForChat(chat: Chat): Promise<void> {
-
-  if (!chatAwaitingUserInputTool(chat)) {
-
-    return;
-
-  }
-
-  const { isOsShellEnabled } = await import('../os/page-bridge');
-
-  if (!isOsShellEnabled()) {
-
-    return;
-
-  }
-
-  if (chat.modeId !== 'desktop') {
-    return;
-  }
-
-  const { launchApp } = await import('../os/router');
-  launchApp('code', { chatId: chat.id });
-  const { renderChatFromHistory } = await import('../ui/messages');
-  renderChatFromHistory(chat);
 }
 
 

@@ -30,12 +30,6 @@ function notifyAppUnavailable(appId: AppId): void {
   });
 }
 
-/**
- * @deprecated Legacy no-op — window sheets were removed with the window manager.
- */
-function parkPhoneWindowSheets(): void {
-}
-
 /** Block unavailable apps: toast (when user-disabled) and return to desktop. */
 function rejectUnavailableApp(appId: AppId): boolean {
   if (isAppAvailable(appId)) return false;
@@ -108,11 +102,18 @@ export function resolveLegacyHash(hash: string): {
   if (trimmed === '#/scheduler' || trimmed.startsWith('#/scheduler/')) {
     return { hash: '#/app/scheduler' };
   }
+  // Removed Calendar / Email apps — old bookmarks land on the workspace gate.
   if (trimmed === '#/calendar' || trimmed.startsWith('#/calendar/')) {
-    return { hash: legacyHashForApp('calendar') };
+    return { hash: '#/workspaces' };
+  }
+  if (trimmed === '#/app/calendar' || trimmed.startsWith('#/app/calendar/')) {
+    return { hash: '#/workspaces' };
   }
   if (trimmed === '#/email' || trimmed.startsWith('#/email/')) {
-    return { hash: legacyHashForApp('email') };
+    return { hash: '#/workspaces' };
+  }
+  if (trimmed === '#/app/email' || trimmed.startsWith('#/app/email/')) {
+    return { hash: '#/workspaces' };
   }
   if (trimmed === '#/bugs' || trimmed.startsWith('#/bugs/')) {
     return { hash: '#/app/issues' };
@@ -245,7 +246,6 @@ function syncForegroundLifecycle(nextApp: AppId | null): void {
 function applyRoute(route: OsRoute, options?: LaunchOptions): void {
   if (route.view === 'workspaces') {
     syncForegroundLifecycle(null);
-    parkPhoneWindowSheets();
     showWorkspaces();
     void import('./workspace-gate').then((m) => m.syncWorkspaceGateFromRoute());
     return;

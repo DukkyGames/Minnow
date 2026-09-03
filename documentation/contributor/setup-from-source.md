@@ -118,7 +118,7 @@ A bare request without the header returns `401 Unauthorized` — that is the gat
 - **Skills** — Settings → Tools & integrations → **Skills** / **Skills Library**: 19 built-in skills ship in-tree, plus third-party `SKILL.md` packs.
 - **Webhooks** — Settings → Tools & integrations → **Webhooks**: HMAC-signed outbound deliveries.
 
-> **Compare, Benchmarking, Experts, Calendar, and Email** are release-gated off in this build — see [apps-and-routes.md](apps-and-routes.md).
+> **Compare, Benchmarking, and Experts** are release-gated off in this build — see [apps-and-routes.md](apps-and-routes.md).
 
 ## 7. Next steps
 

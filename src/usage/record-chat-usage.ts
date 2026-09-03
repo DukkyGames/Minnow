@@ -9,10 +9,10 @@ import { listProviders } from '../providers/store';
 import type { Chat, Stats, Usage } from '../types';
 import { computeCostUsd, hasMeasurableUsage, resolveModelPricing } from './pricing';
 import { recordTokenUsage, type RecordTokenUsageInput } from './token-ledger';
-import type { TokenLedgerSource } from './types.ts';
+import type { TokenLedgerWriteSource } from './types.ts';
 
 export interface RecordChatCompletionUsageInput {
-  source: TokenLedgerSource;
+  source: TokenLedgerWriteSource;
   providerId: string;
   modelId: string;
   usage: Usage;

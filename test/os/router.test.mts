@@ -95,6 +95,9 @@ describe('resolveLegacyHash', () => {
     assert.deepEqual(resolveLegacyHash('#/experts/gallery'), {
       hash: '#/workspaces',
     });
+    assert.deepEqual(resolveLegacyHash('#/calendar'), { hash: '#/workspaces' });
+    assert.deepEqual(resolveLegacyHash('#/calendar/week'), { hash: '#/workspaces' });
+    assert.deepEqual(resolveLegacyHash('#/app/calendar'), { hash: '#/workspaces' });
   });
 });
 
@@ -241,13 +244,13 @@ describe('os router navigation', () => {
     assert.equal(getInstanceSnapshot().view, 'workspaces');
   });
 
-  test('hash route for a developer-hidden app falls back to workspaces', () => {
+  test('hash route for a removed Email app falls back to workspaces', () => {
     window.location.hash = '#/app/email';
     syncOsRouteFromHashForTests();
     assert.equal(window.location.hash, '#/workspaces');
     assert.equal(getInstanceSnapshot().view, 'workspaces');
     assert.equal(
-      getInstanceSnapshot().instances.some((inst) => inst.appId === 'email'),
+      getInstanceSnapshot().instances.some((inst) => (inst.appId as string) === 'email'),
       false,
     );
   });

@@ -59,14 +59,12 @@ describe('onboarding step count (MIN-438)', () => {
     assert.equal(steps.some((step) => step.id === 'model-pick'), true);
     assert.equal(steps.some((step) => step.id === 'context7'), true);
     assert.equal(steps.some((step) => step.id === 'email'), false);
-    assert.equal(steps.some((step) => step.id === 'calendar'), false);
   });
 
-  test('hidden email and calendar apps omit setup steps even when server is up', () => {
+  test('hidden email app omits setup steps even when server is up', () => {
     setupDom();
     const steps = getApplicableSteps(ctxWith({ providerPath: 'local' }));
     assert.equal(steps.some((step) => step.id === 'email'), false);
-    assert.equal(steps.some((step) => step.id === 'calendar'), false);
   });
 
   test('sidebar progress label updates when filtered steps grow', () => {

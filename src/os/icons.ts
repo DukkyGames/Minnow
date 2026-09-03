@@ -12,8 +12,6 @@ export type OsIconName =
   | 'bench'
   | 'compare'
   | 'scheduler'
-  | 'calendar'
-  | 'email'
   | 'issues'
   | 'chip'
   | 'brain'
@@ -44,8 +42,6 @@ const OS_TO_ICON: Record<OsIconName, IconName> = {
   bench: 'appBenchmark',
   compare: 'appCompare',
   scheduler: 'appScheduler',
-  calendar: 'appCalendar',
-  email: 'appEmail',
   issues: 'appIssues',
   chip: 'appModels',
   brain: 'appBrain',

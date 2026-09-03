@@ -14,7 +14,6 @@ import {
 import { getActiveComposerSurface } from './composer-surface';
 import { createIcon, type IconName } from './icon';
 import { autoResize } from './input';
-import { autoResizeDesktopComposer } from '../os/desktop-composer-resize';
 import { setStatus } from './status';
 import { renderUserMessageBubble } from './user-message-bubble';
 
@@ -23,11 +22,7 @@ function loadQueueItemIntoComposer(text: string): void {
   if (!inputEl) return;
   inputEl.value = text;
   inputEl.focus();
-  if (inputEl.id === 'desktopInput') {
-    autoResizeDesktopComposer(inputEl);
-  } else {
-    autoResize(inputEl);
-  }
+  autoResize(inputEl);
 }
 
 function queuedIconButton(

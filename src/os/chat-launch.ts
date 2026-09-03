@@ -2,8 +2,7 @@
  * Code app launch helper — switch workspace chat from OS deep-links.
  */
 
-import { isChatsWorkspacePath } from '../lib/chats-workspace';
-import { isDesktopWorkspacePath } from '../lib/desktop-workspace';
+import { isMinnowSandboxWorkspacePath } from '../lib/workspace-sandbox';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { sessionState } from '../state/sessions';
 import { getWorkspacePath } from '../state/workspace';
@@ -13,7 +12,7 @@ import { launchApp } from './router';
 function isProjectWorkspacePath(path: string): boolean {
   const trimmed = path.trim();
   if (!trimmed) return false;
-  return !isChatsWorkspacePath(trimmed) && !isDesktopWorkspacePath(trimmed);
+  return !isMinnowSandboxWorkspacePath(trimmed);
 }
 
 /** Switch the Code workspace when a deep-linked chat lives in another project folder. */
@@ -76,12 +75,19 @@ export async function switchToCodeChat(chatId: string): Promise<void> {
   trySwitch();
 }
 
-/** Activate an assistant thread after desktop chat is active (notification deep-link). */
+/** Tray / native entry: foreground Code chat (sessions already restore the last thread). */
+export async function launchCodeChat(): Promise<void> {
+  launchApp('code', { codeSection: 'chat' });
+  const { ensureSessionsReady } = await import('../state/sessions');
+  await ensureSessionsReady();
+}
+
+/** Activate an assistant thread after Code chat is active (notification deep-link). */
 export async function switchToDesktopChatThread(chatId: string): Promise<void> {
   await switchToCodeChat(chatId);
 }
 
-/** @deprecated Legacy Chat app thread switch — routes to desktop chat. */
+/** @deprecated Legacy Chat app thread switch — routes to Code chat. */
 export async function switchToChatAppThread(chatId: string): Promise<void> {
   await switchToDesktopChatThread(chatId);
 }

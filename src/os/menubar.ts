@@ -15,7 +15,6 @@ import { createAppIcon, createOsIcon } from './icons';
 import { chatToggleAriaLabel, isChatToggleVisible } from './menubar-visibility';
 import { initOsNotificationsMenu } from './notifications-menu';
 import { initShellMenubarChrome } from './menubar-window-controls';
-import { isPhoneWindowSheetOpen } from './shell-chrome';
 import { initMenubarModelChip } from './menubar-model-chip';
 import { initUpdateMenubarPill } from './update-menubar';
 import { openProductWiki } from '../ui/product-wiki';
@@ -153,8 +152,7 @@ export function renderMenubar(root: HTMLElement): () => void {
   function syncMenubar(): void {
     const view = getOsView();
     const fgApp = getForegroundAppId();
-    const phoneSheet = isPhoneWindowSheetOpen();
-    const onWorkspaces = view === 'workspaces' && !phoneSheet;
+    const onWorkspaces = view === 'workspaces';
 
     root.dataset.view = onWorkspaces ? 'workspaces' : 'app';
     brand.hidden = !onWorkspaces;

@@ -90,14 +90,16 @@ function ensureLastActiveMap(raw) {
   return out;
 }
 
-/** Preserve app-scoped active chat ids without treating app ids as file paths. */
+/** Preserve app-scoped active chat ids without treating app ids as file paths.
+ *  Drop the removed Calendar app key so leftover session blobs do not keep it. */
 function ensureLastActiveAppMap(raw) {
   if (!raw || typeof raw !== 'object') return {};
   const out = {};
   for (const [key, value] of Object.entries(raw)) {
     const appId = typeof key === 'string' ? key.trim() : '';
     const chatId = typeof value === 'string' ? value.trim() : '';
-    if (appId && chatId) out[appId] = chatId;
+    if (!appId || !chatId || appId === 'calendar' || appId === 'email') continue;
+    out[appId] = chatId;
   }
   return out;
 }
@@ -118,6 +120,7 @@ const DEFAULT_MODE_ID = 'build';
 
 /** Normalize persisted or unknown mode ids. */
 function normalizeModeId(value) {
+  if (value === 'desktop' || value === 'email') return 'general';
   if (typeof value === 'string' && MODE_IDS.includes(value)) return value;
   return DEFAULT_MODE_ID;
 }
@@ -1042,7 +1045,7 @@ export function normalizeChatRow(raw) {
       typeof row.name === 'string' && row.name.trim()
         ? row.name.trim()
         : PLACEHOLDER_CHAT_NAME,
-    ...(row.appScope === 'email' ? { appScope: 'email' } : {}),
+    // Stored appScope 'calendar' / 'email' (removed apps) is dropped.
     ...(row.background === true ? { background: true } : {}),
     ...(typeof row.backgroundKey === 'string' && row.backgroundKey.trim()
       ? { backgroundKey: row.backgroundKey.trim() }

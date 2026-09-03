@@ -73,26 +73,12 @@ const ISSUES_SHORTCUTS: ShortcutDoc[] = [
   { section: 'Issues', keys: 'Shift + ArrowLeft / ArrowRight', label: 'Move the card to the neighbouring board column' },
 ];
 
-const MAIL_SHORTCUTS: ShortcutDoc[] = [
-  { section: 'Email', appId: 'email', keys: 'j / k', label: 'Next / previous conversation' },
-  { section: 'Email', appId: 'email', keys: 'e', label: 'Archive' },
-  { section: 'Email', appId: 'email', keys: '#', label: 'Trash' },
-  { section: 'Email', appId: 'email', keys: 'c', label: 'Compose' },
-  {
-    section: 'Email',
-    appId: 'email',
-    keys: '?',
-    label: 'Email-only shortcut list (when mail app is focused)',
-  },
-];
-
 const ALL_KEYBOARD_SHORTCUTS: ShortcutDoc[] = [
   ...SHELL_SHORTCUTS,
   ...CHAT_SHORTCUTS,
   ...CODE_SHORTCUTS,
   ...BOARD_SHORTCUTS,
   ...ISSUES_SHORTCUTS,
-  ...MAIL_SHORTCUTS,
 ];
 
 /** Full shortcut catalog (includes release-gated apps). */
@@ -104,11 +90,7 @@ export function getVisibleKeyboardShortcuts(): ShortcutDoc[] {
 }
 
 function keyboardHelpIntro(): string {
-  const base = 'Shortcuts are suppressed while you type in a text field.';
-  if (isDeveloperReleased('email')) {
-    return `${base} Email has additional bindings when the mail app is focused.`;
-  }
-  return base;
+  return 'Shortcuts are suppressed while you type in a text field.';
 }
 
 let sheetOpen = false;

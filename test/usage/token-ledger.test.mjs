@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   emptyLedger,
+  formatSourceLabel,
   mergeTotals,
   recordTokenUsage,
   resetTokenLedger,
@@ -106,6 +107,26 @@ describe('recordTokenUsage', () => {
     });
     assert.equal(result, null);
     assert.equal(chat.tokenLedger, undefined);
+  });
+
+  test('does not record new reef-widget rows', () => {
+    const chat = makeChat();
+    const result = recordTokenUsage(chat, {
+      source: { kind: 'reef-widget' },
+      providerId: 'p1',
+      modelId: 'm',
+      usage: USAGE_A,
+      costUsd: null,
+    });
+    assert.equal(result, null);
+    assert.equal(chat.tokenLedger, undefined);
+  });
+});
+
+describe('historical reef-widget source', () => {
+  test('still has a rollup key and display label', () => {
+    assert.equal(sourceKey({ kind: 'reef-widget' }), 'reef-widget');
+    assert.equal(formatSourceLabel({ kind: 'reef-widget' }), 'Legacy widget (Reef)');
   });
 });
 

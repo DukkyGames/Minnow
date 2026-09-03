@@ -5,10 +5,7 @@ import {
   installHappyDomGlobals,
   teardownHappyDomAsync,
 } from '../os/dom-helpers.mts';
-import {
-  launchInstance,
-  resetInstancesForTests,
-} from '../../src/os/instances.ts';
+import { resetInstancesForTests } from '../../src/os/instances.ts';
 
 const appState = await import('../../src/app-state.ts');
 const { setSessionStateForTests, createEmptyChatObject, EXPERT_LAB_CHAT_ID } =
@@ -121,26 +118,6 @@ describe('streaming-state helpers', () => {
     assert.equal(isActiveChatStreaming(), true);
     assert.equal(isStreamDomVisible('chat-a'), true);
     assert.equal(isStreamDomVisible('chat-b'), false);
-  });
-
-  test('Email stream DOM is visible only while the scoped assistant dock is open', () => {
-    const { a } = seedTwoChats('chat-a');
-    a.appScope = 'email';
-    a.modeId = 'email';
-    document.body.innerHTML = `
-      <aside class="email-assistant-dock is-open" aria-hidden="false">
-        <div id="emailAssistantMessageCol"></div>
-      </aside>
-    `;
-    launchInstance('email');
-    appState.setStreaming(true, 'chat-a');
-
-    assert.equal(isStreamDomVisible('chat-a'), true);
-
-    const dock = document.querySelector('.email-assistant-dock');
-    dock.classList.remove('is-open');
-    dock.setAttribute('aria-hidden', 'true');
-    assert.equal(isStreamDomVisible('chat-a'), false);
   });
 
   test('isStreamDomVisible false for build task chat during full board view', () => {

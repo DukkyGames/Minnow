@@ -26,15 +26,9 @@ import { decodeModelSelectKey } from '../lib/model-select-key';
 import {
   CHAT_APP_ID,
   CODE_APP_ID,
-  DESKTOP_APP_ID,
-  EMAIL_APP_ID,
   createAssistantChat,
-  createDesktopChat,
-  createEmailAssistantChat,
   getAssistantChats as filterAssistantChats,
   getChatsForChatsWorkspace as filterChatsForChatsWorkspace,
-  getEmailAssistantChats as filterEmailAssistantChats,
-  getListedEmailAssistantChats as filterListedEmailAssistantChats,
   getChatLastMessageAt,
   getChatsForWorkspace as filterChatsForWorkspace,
   getSidebarListedChatsForWorkspace as filterSidebarListedChatsForWorkspace,
@@ -47,13 +41,12 @@ import {
   migrateSessionStateV1ToV2 as migrateSessionJsonToV2,
   rememberActiveChatForApp as rememberActiveChatForAppInState,
   resolveActiveAssistantChatId,
-  resolveActiveEmailAssistantChatId,
   resolveActiveChatIdForWorkspace as pickActiveChatIdForWorkspace,
   createFreshChatIdForWorkspaceEntry as pickFreshChatIdForWorkspaceEntry,
   type RawSessionJson,
 } from './session-workspace-scope';
 import { getForegroundAppId } from '../os/instances';
-import { isChatAppForeground, shouldPaintDesktopChatSurface } from '../ui/chat-mount';
+import { isChatAppForeground } from '../ui/chat-mount';
 import { setStatus } from '../ui/status';
 import { ensureTokenLedger } from '../usage/token-ledger';
 import { getWorkspacePath } from './workspace';
@@ -1203,14 +1196,6 @@ function maybeRememberActiveChatForForegroundApp(
   chat: Chat,
 ): void {
   if (normalizeModeId(chat.modeId) === 'super-plan') return;
-  if (shouldPaintDesktopChatSurface()) {
-    rememberActiveChatForAppInState(state, DESKTOP_APP_ID, chat.id);
-    return;
-  }
-  if (getForegroundAppId() === EMAIL_APP_ID && chat.appScope === 'email') {
-    rememberActiveChatForAppInState(state, EMAIL_APP_ID, chat.id);
-    return;
-  }
   if (getForegroundAppId() === 'code' || isChatAppForeground()) {
     rememberActiveChatForAppInState(state, CODE_APP_ID, chat.id);
   }
@@ -1270,14 +1255,6 @@ function syncRememberedActiveChatAfterDelete(
   state.lastActiveChatIdByWorkspace[workspaceKey] = next.id;
   markSessionScalarsDirty();
 
-  if (victim.appScope === 'email') {
-    rememberActiveChatForAppInState(state, EMAIL_APP_ID, next.id);
-    return;
-  }
-  if (normalizeModeId(victim.modeId) === 'desktop') {
-    rememberActiveChatForAppInState(state, DESKTOP_APP_ID, next.id);
-    return;
-  }
   rememberActiveChatForAppInState(state, CODE_APP_ID, next.id);
 }
 
@@ -1337,22 +1314,6 @@ export function getChatsForChatsWorkspace(
   return filterChatsForChatsWorkspace(state, chatsWorkspacePath);
 }
 
-/** All Email-scoped chats for the chats workspace sandbox. */
-export function getEmailAssistantChats(
-  chatsWorkspacePath: string,
-  state: SessionState = requireSessionState(),
-): Chat[] {
-  return filterEmailAssistantChats(state, chatsWorkspacePath);
-}
-
-/** Email history rows with a committed turn or unsent draft. */
-export function getListedEmailAssistantChats(
-  chatsWorkspacePath: string,
-  state: SessionState = requireSessionState(),
-): Chat[] {
-  return filterListedEmailAssistantChats(state, chatsWorkspacePath);
-}
-
 /** Persist last active chat id for a Minnow app. */
 export function rememberActiveChatForApp(appId: string, chatId: string): void {
   const state = requireSessionState();
@@ -1380,81 +1341,6 @@ export function activateAssistantChatForApp(chatsWorkspacePath: string): Chat {
   state.activeId = nextId;
   markSessionScalarsDirty();
   rememberActiveChatForAppInState(state, CODE_APP_ID, nextId);
-  scheduleSaveSessions();
-  return getActiveChat();
-}
-
-/** Activate the remembered Email assistant chat or create one in Email mode. */
-export function activateEmailAssistantChatForApp(chatsWorkspacePath: string): Chat {
-  const state = requireSessionState();
-  const nextId = resolveActiveEmailAssistantChatId(
-    chatsWorkspacePath,
-    state,
-    (workspaceKey) => createEmailAssistantChat(workspaceKey, newChatId()),
-  );
-  state.activeId = nextId;
-  markSessionScalarsDirty();
-  rememberActiveChatForAppInState(state, EMAIL_APP_ID, nextId);
-  scheduleSaveSessions();
-  return getActiveChat();
-}
-
-/** Create, activate, and persist a fresh Email-scoped assistant chat. */
-export function createEmailAssistantChatForApp(
-  chatsWorkspacePath: string,
-  fallbackModelId = '',
-): Chat {
-  const state = requireSessionState();
-  const chat = createEmailAssistantChat(
-    chatsWorkspacePath,
-    newChatId(),
-    fallbackModelId,
-  );
-  state.chats.unshift(chat);
-  state.activeId = chat.id;
-  markSessionScalarsDirty();
-  touchChat(chat);
-  pruneEphemeralEmptyChats(state, chat.id);
-  rememberActiveChatForAppInState(state, EMAIL_APP_ID, chat.id);
-  scheduleSaveSessions();
-  notifySessionCreated(chat.id, chat.workspacePath);
-  return chat;
-}
-
-/**
- * Activate the last desktop chat or create one (desktop mode).
- * Requires the absolute desktop workspace path from `getDesktopWorkspacePath()`.
- */
-export function activateDesktopAssistantChatForApp(desktopWorkspacePath: string): Chat {
-  const state = requireSessionState();
-  const key = normalizeWorkspacePath(desktopWorkspacePath);
-  const nextId = resolveActiveAssistantChatId(
-    desktopWorkspacePath,
-    state,
-    (workspaceKey) => {
-      const fresh = createDesktopChat(workspaceKey, newChatId());
-      touchChat(fresh);
-      return fresh;
-    },
-    DESKTOP_APP_ID,
-  );
-  if (
-    key &&
-    !getLastActiveChatIdForApp(state, DESKTOP_APP_ID) &&
-    getLastActiveChatIdForApp(state, CHAT_APP_ID)
-  ) {
-    const legacy = state.chats.find(
-      (c) =>
-        c.id === getLastActiveChatIdForApp(state, CHAT_APP_ID) &&
-        normalizeWorkspacePath(c.workspacePath ?? '') === key,
-    );
-    if (legacy) {
-      rememberActiveChatForAppInState(state, DESKTOP_APP_ID, legacy.id);
-    }
-  }
-  state.activeId = nextId;
-  markSessionScalarsDirty();
-  rememberActiveChatForAppInState(state, DESKTOP_APP_ID, nextId);
   scheduleSaveSessions();
   return getActiveChat();
 }

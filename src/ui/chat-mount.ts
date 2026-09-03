@@ -5,24 +5,12 @@ import {
   queryBoardChatTranscriptHost,
 } from './orchestrate-board-chat-state';
 
-/** Desktop chat surface was removed with the workspace-first shell. */
-export function shouldPaintDesktopChatSurface(): boolean {
-  return false;
-}
-
 /** True when desktop chat or the legacy Chat app is the active UI. */
 export function isChatAppForeground(): boolean {
   const foregroundAppId = getForegroundAppId();
   if (foregroundAppId === 'code') return false;
   if (foregroundAppId != null) return false;
   return document.getElementById('chatView')?.classList.contains('is-open') ?? false;
-}
-
-/** True when the foreground Email app currently exposes its assistant transcript. */
-export function isEmailAssistantForeground(): boolean {
-  if (getForegroundAppId() !== 'email') return false;
-  const dock = document.querySelector<HTMLElement>('.email-assistant-dock.is-open');
-  return Boolean(dock && dock.getAttribute('aria-hidden') !== 'true');
 }
 
 let mountOverride: HTMLElement | null = null;
@@ -58,12 +46,6 @@ function getChatAppMessageCol(): HTMLElement | null {
 
 /** Column shell for inset overlays (sub-agent drawer, goal eval) on the active chat surface. */
 export function resolveSubAgentOverlayMount(): HTMLElement | null {
-  if (shouldPaintDesktopChatSurface()) {
-    return (
-      document.querySelector<HTMLElement>('.mn-os-desktop-chat') ??
-      document.getElementById('osDesktopLayer')
-    );
-  }
   if (isChatAppForeground()) {
     return (
       document.querySelector<HTMLElement>('.chat-app-main') ??
@@ -79,10 +61,6 @@ export function getActiveChatMountElement(): HTMLElement {
   const boardChatHost = isBoardChatEmbedOpen() ? queryBoardChatTranscriptHost() : null;
   if (boardChatHost) return boardChatHost;
   if (turnMount) return turnMount;
-  if (isEmailAssistantForeground()) {
-    const emailCol = document.getElementById('emailAssistantMessageCol');
-    if (emailCol) return emailCol;
-  }
   if (isChatAppForeground()) {
     const col = getChatAppMessageCol();
     if (col) return col;

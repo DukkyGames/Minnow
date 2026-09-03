@@ -21,7 +21,7 @@ Manual end-to-end checklist for validating Minnow before a release. Use it after
 
 Code, Research, Models, Brain, Issues, Scheduler, Settings — plus composer modes **General**, **Build**, **Plan**, **Debug**, **Super Plan**, and **Orchestrate** (hub). Chat sessions live in **Code** (`#/app/code/chat`).
 
-**Out of scope unless you are flipping a release gate** — Compare, Bench, Experts, Calendar, Email (hidden per MIN-471). A short appendix lists smoke checks if you enable them locally.
+**Out of scope unless you are flipping a release gate** — Compare, Bench, Experts (hidden per MIN-471). A short appendix lists smoke checks if you enable them locally.
 
 **Not a substitute for automation** — this guide exercises the product the way users do. Keep running `npm test` on Windows and Ubuntu before you sign off.
 
@@ -101,7 +101,6 @@ Mark each section **Pass / Fail / Skip (reason)**.
 - [ ] Model pick: menubar chip lists models after refresh
 - [ ] Extras / permissions / memory steps complete without console errors
 - [ ] Finish step opens **Code** (or workspaces picker → Code); chat rail is usable
-- [ ] Skip: Email and Calendar steps (not applicable when apps are hidden)
 
 ### First minute after onboarding
 
@@ -482,8 +481,6 @@ Only when `releaseState` is flipped to `released` in `src/os/app-registry.ts`:
 | Compare | Start blind compare; vote; reveal |
 | Bench | Run one benchmark battery |
 | Experts | Open Experts' Lab; one expert chat |
-| Calendar | Create event; ICS export |
-| Email | Add account; sync; triage keyboard `j`/`k` |
 
 ---
 

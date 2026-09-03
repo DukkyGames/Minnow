@@ -92,7 +92,7 @@ mock.module('../../src/benchmark/llm-driver.ts', {
 
 const { getCapabilityById } = await import('../../src/benchmark/capabilities/catalog.ts');
 const { runCapabilityProbe } = await import('../../src/benchmark/capabilities/run-probe.ts');
-const { CAP_STUB_SNAPSHOT_UIDS, CAP_STUB_THREAD_ID } = await import(
+const { CAP_STUB_SNAPSHOT_UIDS, CAP_STUB_SUB_AGENT_ID } = await import(
   '../../src/benchmark/capabilities/stub-fixtures.ts'
 );
 
@@ -145,18 +145,18 @@ describe('runCapabilityProbe execution plumbing', () => {
   });
 
   test('a probe that reuses the stubbed id scores above one that guesses', async () => {
-    const cap = getCapabilityById('apps-email-list');
+    const cap = getCapabilityById('agents-sub-agent-control');
     assert.ok(cap);
 
     scriptedCalls = [
-      { name: 'list_mail', args: { unread: true } },
-      { name: 'get_thread', args: { threadId: CAP_STUB_THREAD_ID } },
+      { name: 'list_sub_agents', args: {} },
+      { name: 'cancel_sub_agent', args: { id: CAP_STUB_SUB_AGENT_ID } },
     ];
     assert.equal((await runCapabilityProbe(ctx, cap!)).verdict, 'pass');
 
     scriptedCalls = [
-      { name: 'list_mail', args: { unread: true } },
-      { name: 'get_thread', args: { threadId: 'invented-id' } },
+      { name: 'list_sub_agents', args: {} },
+      { name: 'cancel_sub_agent', args: { id: 'invented-id' } },
     ];
     assert.equal((await runCapabilityProbe(ctx, cap!)).verdict, 'partial');
   });

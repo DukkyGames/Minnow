@@ -116,17 +116,6 @@ export const PATH_RUNNER_RULES = [
   { pattern: 'test/super-plan/controller-lifecycle.test.mts', runner: 'tsx-mocks-loader' },
   { pattern: 'test/ui/orchestrate-plan-screen.test.mts', runner: 'tsx-mocks-loader' },
   { pattern: 'test/ui/settings-layout-links.test.mjs', runner: 'tsx-mocks-loader' },
-  // Mocks server/email/{accounts,imap-session}.js to drive sync against a fake server.
-  { pattern: 'test/email/incremental-sync.test.mjs', runner: 'tsx-mocks' },
-  // Mocks server/email/smtp.js so the undo window is exercised without SMTP.
-  { pattern: 'test/email/outbox.test.mjs', runner: 'tsx-mocks' },
-  // Mocks imap-actions STORE so mark-all-read chunking/partial failure is offline.
-  { pattern: 'test/email/mark-all-read.test.mjs', runner: 'tsx-mocks' },
-  // Mock server/email/{accounts,imap-session}.js (and nodemailer) to exercise
-  // attachment download, draft mirroring, and the Sent APPEND without a server.
-  { pattern: 'test/email/attachment-fetch.test.mjs', runner: 'tsx-mocks' },
-  { pattern: 'test/email/drafts.test.mjs', runner: 'tsx-mocks' },
-  { pattern: 'test/email/sent-append.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/server/**/*.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/brain/synthesis-run-route.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/workspace/*.test.js', runner: 'tsx-mocks' },
@@ -144,7 +133,6 @@ export const PATH_RUNNER_RULES = [
   { pattern: 'test/models/admit-serve.test.mjs', runner: 'node' },
   { pattern: 'test/providers/local-completion-admission.test.mjs', runner: 'tsx-mocks' },
   { pattern: 'test/settings/**', runner: 'node-tsx' },
-  { pattern: 'test/os/email-app.test.mts', runner: 'node-tsx' },
 ];
 
 /**
@@ -205,16 +193,6 @@ export const SCOPED_SUITES = {
   },
   notifications: {
     patterns: ['test/notifications/**/*.test.mjs'],
-  },
-  calendar: {
-    patterns: ['test/calendar/**/*.test.mjs', 'test/os/calendar-app.test.mts'],
-  },
-  email: {
-    patterns: [
-      'test/email/**/*.test.mjs',
-      'test/email/**/*.test.mts',
-      'test/os/email-app.test.mts',
-    ],
   },
   memory: {
     patterns: ['test/memory/**/*.test.mjs'],

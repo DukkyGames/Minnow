@@ -122,7 +122,7 @@ export function upsertChatRow(db, chat, sortIndex, derived) {
     sort_index: sortIndex,
     name: typeof chat.name === 'string' ? chat.name : '',
     kind: typeof chat.kind === 'string' ? chat.kind : '',
-    app_scope: typeof chat.appScope === 'string' ? chat.appScope : '',
+    app_scope: '',
     expert_id: typeof chat.expertId === 'string' ? chat.expertId : '',
     workspace_path: typeof chat.workspacePath === 'string' ? chat.workspacePath : '',
     provider_id: typeof chat.providerId === 'string' ? chat.providerId : '',

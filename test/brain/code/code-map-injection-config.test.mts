@@ -14,7 +14,6 @@ import {
   shouldInjectCodeMap,
 } from '../../../src/brain/code-injection-config.ts';
 import { resetConfigFileCacheForTests } from '../../../src/config/config-file-cache.ts';
-import { resetDesktopWorkspacePathCache } from '../../../src/lib/desktop-workspace.ts';
 import { setLocalServerAvailableForTests } from '../../../src/tools/config.ts';
 import type { Chat } from '../../../src/types.ts';
 
@@ -120,23 +119,16 @@ describe('saveCodeMapInjectionDefault', () => {
 });
 
 describe('shouldInjectCodeMap', () => {
-  it('returns false for desktop sandbox workspace chats', async () => {
-    resetDesktopWorkspacePathCache();
+  it('returns false for Scratch workspace chats', async () => {
     setLocalServerAvailableForTests(true);
-    const desktopPath = 'C:/Users/me/.minnow/workspace';
+    const scratchPath = 'C:/Users/me/.minnow/workspace';
     const chat = baseChat({
-      workspacePath: desktopPath,
+      workspacePath: scratchPath,
       codeMapInjection: 'on',
     });
 
     globalThis.fetch = async (input) => {
       const url = String(input);
-      if (url.includes('/api/desktop-workspace')) {
-        return {
-          ok: true,
-          json: async () => ({ path: desktopPath, fileCount: 0 }),
-        } as Response;
-      }
       if (url.includes('/api/config/file')) {
         return {
           ok: true,
@@ -155,6 +147,5 @@ describe('shouldInjectCodeMap', () => {
     assert.equal(await shouldInjectCodeMap(chat), false);
     assert.equal(await chatUsesDesktopSandboxWorkspace(chat), true);
     setLocalServerAvailableForTests(false);
-    resetDesktopWorkspacePathCache();
   });
 });

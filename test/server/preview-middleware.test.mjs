@@ -145,16 +145,16 @@ describe('preview middleware workspaceRoot override', () => {
   before(async () => {
     const { setTestHome, rmTestHome } = await import('../config/test-helpers.js');
     const { ensureMinnowLayout } = await import('../../server/config/home.js');
-    const { ensureDesktopWorkspace, getDesktopWorkspacePath } = await import(
-      '../../server/desktop-workspace/paths.js'
+    const { ensureScratchWorkspaceRegistered, getScratchWorkspacePath } = await import(
+      '../../server/workspace/root.js'
     );
     const { resolveSafePath, runWithPathAccess } = await import('../../server/runtime/path-access.js');
     const { initWorkspaceRoot, setWorkspaceRoot } = await import('../../server/workspace/root.js');
 
     homeDir = setTestHome(process.env, 'minnow-test-preview-workspace-root');
     await ensureMinnowLayout();
-    await ensureDesktopWorkspace();
-    desktopRoot = getDesktopWorkspacePath();
+    await ensureScratchWorkspaceRegistered();
+    desktopRoot = getScratchWorkspacePath();
     await fs.writeFile(path.join(desktopRoot, 'desktop-only.txt'), 'desktop workspace file\n', 'utf8');
 
     workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-preview-code-'));

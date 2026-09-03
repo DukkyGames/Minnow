@@ -40,16 +40,6 @@ import {
   matchModeLabel,
   resolveInsertLineFromAnchor,
 } from '../tools/flexible-match.js';
-import { toolManageCalendar } from '../calendar/tool-handler.js';
-import {
-  toolDraftReply,
-  toolEmailAction,
-  toolGenerateReplyVariants,
-  toolGetThread,
-  toolListMail,
-  toolSearchMail,
-  toolSummarizeInbox,
-} from '../email/tool-handler.js';
 import {
   toolBrainAppendLog,
   toolBrainIngestSource,
@@ -1403,14 +1393,6 @@ const SERVER_TOOL_HANDLERS = {
       2,
     );
   },
-  manage_calendar: toolManageCalendar,
-  list_mail: toolListMail,
-  search_mail: toolSearchMail,
-  get_thread: toolGetThread,
-  draft_reply: toolDraftReply,
-  summarize_inbox: toolSummarizeInbox,
-  generate_reply_variants: toolGenerateReplyVariants,
-  email_action: toolEmailAction,
   ...BROWSER_DRIVER_TOOL_HANDLERS,
 };
 

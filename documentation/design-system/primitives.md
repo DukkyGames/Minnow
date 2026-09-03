@@ -79,6 +79,6 @@ Used across Settings, Compare, Scheduler, and other settings-like surfaces.
 
 These repeat 2× but differ in context; do **not** extract until a third identical use appears:
 
-- App-specific page headers (Research, Brain, Email)
+- App-specific page headers (Research, Brain)
 - Orchestrate board card chrome (domain-specific layout)
 - Benchmark chart legends (data-viz specific)

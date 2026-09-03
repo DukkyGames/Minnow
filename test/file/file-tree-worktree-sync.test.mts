@@ -6,7 +6,6 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
-import { resetDesktopWorkspaceMountsForTests } from '../../src/os/desktop-workspace-mounts.ts';
 import {
   panelPathsEqual,
   resolvePanelWorktreeCwd,
@@ -57,7 +56,6 @@ function setupDom(): void {
 beforeEach(() => {
   setStorageModeForTests('localStorage');
   resetInstancesForTests();
-  resetDesktopWorkspaceMountsForTests();
 });
 
 afterEach(async () => {
@@ -73,7 +71,6 @@ afterEach(async () => {
   resetFilePanelStateForTests();
   setFileTreeServerAvailable(false);
   resetInstancesForTests();
-  resetDesktopWorkspaceMountsForTests();
   setStorageModeForTests(null);
 });
 

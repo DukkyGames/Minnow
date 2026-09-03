@@ -54,10 +54,6 @@ const GROUP_BY_HEADER_PREFIX = [
   { prefix: 'minnow_docs_*', group: 'knowledge' },
   { prefix: 'save_memory', group: 'knowledge' },
   { prefix: 'recall_chat_context', group: 'knowledge' },
-  { prefix: 'Email: list', group: 'apps' },
-  { prefix: 'Email: draft_reply', group: 'apps' },
-  { prefix: 'summarize_inbox', group: 'apps' },
-  { prefix: 'manage_calendar', group: 'apps' },
   { prefix: 'Settings & appearance', group: 'apps' },
   { prefix: 'set_chat_mode', group: 'mode-control' },
   { prefix: 'create_chat_with_mode', group: 'mode-control' },
@@ -69,7 +65,6 @@ const GROUP_BY_HEADER_PREFIX = [
   { prefix: 'Orchestrate', group: 'modes' },
   { prefix: 'Debug', group: 'modes' },
   { prefix: 'Desktop', group: 'modes' },
-  { prefix: 'Email', group: 'modes' },
   { prefix: 'Onboarding', group: 'modes' },
   { prefix: 'Research', group: 'features' },
   { prefix: 'Compare', group: 'features' },
@@ -121,10 +116,6 @@ const ID_BY_HEADER = {
   'minnow_docs_*': 'knowledge-minnow-docs',
   'save_memory': 'knowledge-save-memory',
   'recall_chat_context / recall_turn_full': 'knowledge-recall',
-  'Email: list / search / get_thread': 'apps-email-list',
-  'Email: draft_reply / email_action': 'apps-email-draft',
-  'summarize_inbox / reply_variants': 'apps-email-summarize',
-  'manage_calendar': 'apps-calendar',
   'Settings & appearance tools': 'apps-settings-appearance',
   'set_chat_mode / propose_mode_switch': 'mode-set-chat-mode',
   'create_chat_with_mode / launch app': 'mode-create-chat',
@@ -136,7 +127,6 @@ const ID_BY_HEADER = {
   'Orchestrate': 'modes-orchestrate',
   'Debug': 'modes-debug',
   'Desktop': 'modes-desktop',
-  'Email': 'modes-email',
   'Onboarding': 'modes-onboarding',
   'Research': 'features-research',
   'Compare': 'features-compare',
@@ -168,13 +158,15 @@ const AUTO_SCOPE_NOTES = {
   'browser-eval': 'Probe scores the emitted screenshot/eval calls; the browser pane is stubbed.',
   'agents-sub-agent-control': 'Probe scores list-then-cancel against a stubbed running agent.',
   'knowledge-recall': 'Probe scores whether the model calls a recall tool instead of guessing.',
-  'apps-email-list': 'Probe scores list-then-open against a stubbed mailbox.',
-  'apps-email-draft': 'Probe scores drafting and the never-send rule against a stubbed mailbox.',
-  'apps-email-summarize': 'Probe scores the summary and reply-variant calls against a stubbed mailbox.',
-  'apps-calendar': 'Probe scores the emitted manage_calendar call; the provider is stubbed.',
 };
 
 const SKIP_GROUP = 'modes';
+/** Removed Email app probes — skip leftover spreadsheet columns. */
+const SKIP_HEADERS = new Set([
+  'Email: list / search / get_thread',
+  'Email: draft_reply / email_action',
+  'summarize_inbox / reply_variants',
+]);
 
 // ── Parsers ──────────────────────────────────────────────────────────────────
 
@@ -221,6 +213,7 @@ for (let C = 10; C <= range.e.c; C++) {
   if (!cell?.v) continue;
   const header = String(cell.v).trim();
   if (header === 'Blocking issues' || header === 'Notes') break;
+  if (SKIP_HEADERS.has(header) || header.startsWith('Email:')) continue;
   const comment = cell.c?.[0]?.t ?? '';
   const tier = parseTier(comment);
   const howToTest = parseHowToTest(comment);
@@ -254,9 +247,9 @@ for (let C = 10; C <= range.e.c; C++) {
   });
 }
 
-if (entries.length !== 58) throw new Error(`expected 58 entries, got ${entries.length}`);
+if (entries.length !== 52) throw new Error(`expected 52 entries, got ${entries.length}`);
 const autoCount = entries.filter((e) => e.scoreMode === 'auto').length;
-if (autoCount !== 54) throw new Error(`expected 54 auto, got ${autoCount}`);
+if (autoCount !== 48) throw new Error(`expected 48 auto, got ${autoCount}`);
 
 // ── Write file ───────────────────────────────────────────────────────────────
 

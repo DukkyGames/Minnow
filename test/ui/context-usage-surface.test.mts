@@ -5,10 +5,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { resetInstancesForTests } from '../../src/os/instances.ts';
-import {
-  resetDesktopStateForTests,
-  setDesktopStateForTests,
-} from '../helpers/legacy-desktop-state.ts';
 
 function setupDom(win: import('happy-dom').Window): void {
   win.document.body.innerHTML = `
@@ -35,11 +31,9 @@ describe('context-usage-surface', () => {
     g.HTMLElement = win.HTMLElement;
     setupDom(win);
     resetInstancesForTests();
-    resetDesktopStateForTests();
   });
 
   afterEach(() => {
-    resetDesktopStateForTests();
     resetInstancesForTests();
   });
 
@@ -52,7 +46,6 @@ describe('context-usage-surface', () => {
   });
 
   test('desktop chat active resolves to desktop ring', async () => {
-    setDesktopStateForTests('chatActive');
     const { getActiveContextUsageSurface } = await import(
       '../../src/ui/context-usage-surface.ts'
     );
@@ -62,7 +55,6 @@ describe('context-usage-surface', () => {
 
   test('Code foreground uses code ring even when desktop chat is active', async () => {
     const { launchInstance } = await import('../../src/os/instances.ts');
-    setDesktopStateForTests('chatActive');
     launchInstance('code');
 
     const { getActiveContextUsageSurface } = await import(

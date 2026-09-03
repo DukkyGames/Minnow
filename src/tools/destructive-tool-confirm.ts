@@ -33,10 +33,6 @@ export function applyDestructiveConfirmationAfterUserApproval(
     return;
   }
 
-  if (permissionToolId === 'manage_calendar' && String(args.action ?? '').trim() === 'delete') {
-    args.confirmed = true;
-  }
-
   if (permissionToolId === 'manage_dev_servers' && String(args.action ?? '').trim() === 'delete') {
     args.confirmed = true;
   }

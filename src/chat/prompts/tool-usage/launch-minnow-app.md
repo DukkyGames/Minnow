@@ -21,7 +21,7 @@ When another Minnow app clearly fits the user's goal better than staying in the 
 | Scheduled jobs | `scheduler` | — |
 | Change providers, tools, or preferences | `settings` | — |
 
-Optional apps (`bench`, `experts`, `compare`, `calendar`, `email`) are **off by default** — only offer them if the user has enabled the app in **Settings → Apps** (otherwise the tool errors).
+Optional apps (`bench`, `experts`, `compare`) are **off by default** — only offer them if the user has enabled the app in **Settings → Apps** (otherwise the tool errors).
 
 ### Rules
 

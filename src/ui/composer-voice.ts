@@ -1,4 +1,3 @@
-import { autoResizeDesktopComposer } from '../os/desktop-composer-resize';
 import { getActiveComposerSurface } from './composer-surface';
 import { autoResize } from './input';
 import { setStatus } from './status';
@@ -49,10 +48,6 @@ const MIC_BUTTON_MARKUP =
 // ── Input ────────────────────────────────────────────────────────────────────
 
 function resizeComposerInput(input: HTMLTextAreaElement): void {
-  if (input.id === 'desktopInput') {
-    autoResizeDesktopComposer(input);
-    return;
-  }
   autoResize(input);
 }
 

@@ -59,7 +59,7 @@ The shell is a single full-stage surface. Do not introduce floating-window chrom
 
 ## Wallpaper modes
 
-Prefs in `minnow.os.*` ([`desktop-prefs.ts`](../../src/os/desktop-prefs.ts)):
+Theme family backgrounds ([`src/theme.ts`](../../src/theme.ts)):
 
 - underwater (default), minnow fish (boids + glyph), aurora, starfield, gradient, flat
 - custom image (IndexedDB via [`asset-store.ts`](../../src/appearance/asset-store.ts))

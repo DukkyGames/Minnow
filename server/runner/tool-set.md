@@ -41,4 +41,4 @@ These already run through `executeServerTool` with cwd-guard, host-kill, host-po
 
 ## Intentionally omitted from the default (server-side but not agent work)
 
-`update_settings` / `get_settings` / `search_settings` (host config), `manage_brain` (destructive), calendar/email, `board_provision_infra`, notifications. A caller can still pass them in `allowedToolNames` / `tools`.
+`update_settings` / `get_settings` / `search_settings` (host config), `manage_brain` (destructive), email, `board_provision_infra`, notifications. A caller can still pass them in `allowedToolNames` / `tools`.

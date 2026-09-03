@@ -1,6 +1,6 @@
 /**
  * SQLite schema for the per-workspace Brain code index (~/.minnow/brain/code/<key>.db).
- * Modelled on server/calendar/store.js (WAL + singleton handle).
+ * WAL + singleton handle, same pattern as other SQLite stores under ~/.minnow.
  */
 
 import fs from 'node:fs';

@@ -14,8 +14,6 @@ import {
 import { providerManagedStep } from './managed';
 import { modelPickStep } from './model';
 import { extrasStep } from './extras';
-import { emailStep } from './email';
-import { calendarStep } from './calendar';
 import { apiKeysStep } from './api-keys';
 import { context7Step } from './context7';
 import { permissionsStep, memoryStep, doneStep } from './remaining';
@@ -33,8 +31,6 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   extrasStep,
   permissionsStep,
   memoryStep,
-  emailStep,
-  calendarStep,
   apiKeysStep,
   context7Step,
   doneStep,

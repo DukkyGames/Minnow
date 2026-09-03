@@ -19,12 +19,9 @@ describe('resolveModePromptPath', () => {
     );
   });
 
-  test('email full', () => {
-    assert.ok(resolveModePromptPath('email', 'full').endsWith('modes/email.full.md'));
-  });
-
-  test('email lite', () => {
-    assert.ok(resolveModePromptPath('email', 'lite').endsWith('modes/email.lite.md'));
+  test('email remaps to general prompt files', () => {
+    assert.ok(resolveModePromptPath('email', 'full').endsWith('modes/general.full.md'));
+    assert.ok(resolveModePromptPath('email', 'lite').endsWith('modes/general.lite.md'));
   });
 
   test('build full', () => {

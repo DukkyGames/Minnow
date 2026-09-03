@@ -1,7 +1,6 @@
 import { createAgentPacksMiddleware } from '../agent-packs/routes.js';
 import { createBenchmarkWorkspaceMiddleware } from '../benchmark-workspace/middleware.js';
 import { createChatsWorkspaceMiddleware } from '../chats-workspace/middleware.js';
-import { createDesktopWorkspaceMiddleware } from '../desktop-workspace/middleware.js';
 import { createBenchmarksMiddleware } from '../benchmarks/middleware.js';
 import { createCompareMiddleware } from '../compare/middleware.js';
 import { createBrowserAllowlistMiddleware } from '../browser-allowlist-middleware.js';
@@ -32,8 +31,6 @@ import { createTerminalMiddleware } from '../terminal/middleware.js';
 import { createSystemMiddleware } from '../system/middleware.js';
 import { createModelsMiddleware } from '../models/index.js';
 import { createSchedulerMiddleware } from '../scheduler/middleware.js';
-import { createCalendarMiddleware } from '../calendar/middleware.js';
-import { createEmailMiddleware } from '../email/middleware.js';
 import { createWebhooksMiddleware } from '../webhooks/middleware.js';
 import { createWorkspaceMiddleware } from '../workspace/middleware.js';
 import { createGitMiddleware } from '../git/middleware.js';
@@ -96,13 +93,10 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createAgentsMiddleware());
   connectApp.use(createBoardTestingMiddleware());
   connectApp.use(createChatsWorkspaceMiddleware());
-  connectApp.use(createDesktopWorkspaceMiddleware());
   connectApp.use(createBenchmarkWorkspaceMiddleware());
   connectApp.use(createSystemMiddleware());
   connectApp.use(createModelsMiddleware());
   connectApp.use(createSchedulerMiddleware());
-  connectApp.use(createCalendarMiddleware());
-  connectApp.use(createEmailMiddleware());
   connectApp.use(
     createPreviewMiddleware({
       resolveSafePath,

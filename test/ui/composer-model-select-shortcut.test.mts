@@ -8,10 +8,6 @@ import {
   createEmptyChatObject,
   setSessionStateForTests,
 } from '../../src/state/sessions.ts';
-import {
-  resetDesktopStateForTests,
-  setDesktopStateForTests,
-} from '../helpers/legacy-desktop-state.ts';
 
 describe('composer model select shortcut', () => {
   test('Mod+M opens the per-chat model picker on the active composer', async () => {
@@ -39,8 +35,6 @@ describe('composer model select shortcut', () => {
 
     const chat = createEmptyChatObject('qwen/qwen2.5-7b');
     setSessionStateForTests({ chats: [chat], activeId: chat.id });
-    setDesktopStateForTests('chatActive');
-
     try {
       const {
         initComposerModelTriggers,
@@ -63,7 +57,6 @@ describe('composer model select shortcut', () => {
       closeComposerModelMenu();
     } finally {
       globalThis.requestAnimationFrame = prevRaf;
-      resetDesktopStateForTests();
       setSessionStateForTests(null);
       (globalThis as { document: Document }).document = prevDocument;
       (globalThis as { window: Window }).window = prevWindow;

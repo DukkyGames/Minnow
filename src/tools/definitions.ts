@@ -249,7 +249,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
     id: 'set_chat_mode',
     label: 'Set chat mode',
     description:
-      'Switch the active chat operating mode (General, Desktop, Build, Plan, Orchestrate, Debug) after the user chooses a handoff option.',
+      'Switch the active chat operating mode (General, Build, Plan, Orchestrate, Debug) after the user chooses a handoff option.',
     category: 'utility',
     serverRequired: false,
     definition: toolSchema(
@@ -258,7 +258,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         mode_id: {
           type: 'string',
-          enum: ['general', 'desktop', 'build', 'plan', 'orchestrate', 'debug'],
+          enum: ['general', 'build', 'plan', 'orchestrate', 'debug'],
           description: 'Target operating mode for the active chat',
         },
       },
@@ -278,7 +278,7 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
       {
         mode_id: {
           type: 'string',
-          enum: ['general', 'desktop', 'build', 'plan', 'orchestrate', 'debug'],
+          enum: ['general', 'build', 'plan', 'orchestrate', 'debug'],
           description: 'Operating mode for the new chat',
         },
         plan_path: {
@@ -2283,178 +2283,6 @@ export const BUILT_IN_TOOLS: ToolDefinition[] = [
         },
       },
       ['symbol'],
-    ),
-  },
-  {
-    id: 'manage_calendar',
-    label: 'Manage calendar',
-    description:
-      'List, create, update, or delete local calendar events. Requires Minnow running locally.',
-    category: 'utility',
-    appId: 'calendar',
-    serverRequired: true,
-    definition: toolSchema(
-      'manage_calendar',
-      'Calendar ops.',
-      {
-        action: {
-          type: 'string',
-          enum: ['list', 'create', 'update', 'delete', 'find_free_time'],
-        },
-        calendarId: { type: 'string' },
-        eventId: { type: 'string' },
-        title: { type: 'string' },
-        startsAt: { type: 'string' },
-        endsAt: { type: 'string' },
-        from: { type: 'string' },
-        to: { type: 'string' },
-        limit: { type: 'number' },
-        offset: { type: 'number' },
-        date: { type: 'string' },
-        minMinutes: { type: 'number' },
-        description: { type: 'string' },
-        location: { type: 'string' },
-        allDay: { type: 'boolean' },
-        rrule: { type: 'string' },
-        confirmed: { type: 'boolean' },
-      },
-      ['action'],
-    ),
-  },
-  {
-    id: 'list_mail',
-    label: 'List mail',
-    description: 'List recent cached email summaries from a configured IMAP account.',
-    category: 'utility',
-    appId: 'email',
-    serverRequired: true,
-    definition: toolSchema(
-      'list_mail',
-      'Return bounded recent email summaries from the local cache (max 20). Sync inbox in the Email app first. Does not expose full mailbox dumps.',
-      {
-        accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
-        folder: { type: 'string', description: 'IMAP folder (optional — all cached folders)' },
-        query: { type: 'string', description: 'Case-insensitive filter on subject/from/preview' },
-        limit: { type: 'number', description: 'Max rows (default 20, max 20)' },
-      },
-      [],
-    ),
-  },
-  {
-    id: 'search_mail',
-    label: 'Search mail',
-    description: 'Full-text search over cached mail, semantically reranked when embeddings are on.',
-    category: 'utility',
-    appId: 'email',
-    serverRequired: true,
-    definition: toolSchema(
-      'search_mail',
-      'Search cached mail (FTS over subject/from/body, semantic rerank when available). Returns message and thread ids usable with get_thread and email_action.',
-      {
-        query: { type: 'string', description: 'Search query (words, names, topics)' },
-        accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
-        limit: { type: 'number', description: 'Max rows (default 20, max 20)' },
-      },
-      ['query'],
-    ),
-  },
-  {
-    id: 'get_thread',
-    label: 'Get email thread',
-    description: 'Return one full cached thread with untrusted bodies fenced.',
-    category: 'utility',
-    appId: 'email',
-    serverRequired: true,
-    definition: toolSchema(
-      'get_thread',
-      'Return every cached message in a thread (bodies fenced as untrusted email content). Use thread ids from search_mail/list_mail.',
-      {
-        threadId: { type: 'string', description: 'Thread id from search_mail or list_mail' },
-        accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
-      },
-      ['threadId'],
-    ),
-  },
-  {
-    id: 'draft_reply',
-    label: 'Draft email reply',
-    description: 'Compose a reply draft for a thread — does not send.',
-    category: 'utility',
-    appId: 'email',
-    serverRequired: true,
-    definition: toolSchema(
-      'draft_reply',
-      'Create a reply draft for a cached email thread. Returns To/Subject/body for user review. Never sends automatically.',
-      {
-        threadId: { type: 'string', description: 'Thread id from list_mail or the Email app' },
-        accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
-        instructions: {
-          type: 'string',
-          description: 'Optional guidance for the opening paragraph',
-        },
-      },
-      ['threadId'],
-    ),
-  },
-  {
-    id: 'summarize_inbox',
-    label: 'Summarize inbox',
-    description: 'Return the rolling inbox digest with urgency stats and highlight threads.',
-    category: 'utility',
-    appId: 'email',
-    serverRequired: true,
-    definition: toolSchema(
-      'summarize_inbox',
-      'Return the active inbox narrative, validated suggested action groups, and top triaged highlights from the local cache. Sync inbox first.',
-      {
-        accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
-      },
-      [],
-    ),
-  },
-  {
-    id: 'generate_reply_variants',
-    label: 'Generate reply variants',
-    description: 'Create 2–3 labeled reply drafts for a thread (does not send).',
-    category: 'utility',
-    appId: 'email',
-    serverRequired: true,
-    definition: toolSchema(
-      'generate_reply_variants',
-      'Generate labeled reply variant bodies for a cached thread. Never sends automatically.',
-      {
-        threadId: { type: 'string', description: 'Thread id from list_mail or the Email app' },
-        accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
-        instructions: { type: 'string', description: 'Optional reprompt guidance' },
-        messageId: { type: 'string', description: 'Optional specific message id for variant storage' },
-      },
-      ['threadId'],
-    ),
-  },
-  {
-    id: 'email_action',
-    label: 'Email action',
-    description: 'Archive, delete, or flag a cached message (non-destructive flags only via agent).',
-    category: 'utility',
-    appId: 'email',
-    serverRequired: true,
-    definition: toolSchema(
-      'email_action',
-      'Perform a mail action. A single messageId executes immediately; multiple messageIds are queued as a pending action the user must approve in the Email app.',
-      {
-        accountId: { type: 'string', description: 'Email account id (optional — uses default)' },
-        messageId: { type: 'string', description: 'Cached message id (folder:uid)' },
-        messageIds: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Multiple message ids — queued for user review, never executed directly',
-        },
-        action: {
-          type: 'string',
-          description: 'One of: archive, delete, read, unread, flag',
-        },
-      },
-      ['action'],
     ),
   },
 

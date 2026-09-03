@@ -9,8 +9,7 @@ import { stopGeneration } from '../chat/stop-generation';
 import { getActiveChat, sessionState } from '../state/sessions';
 import { clearComposerAfterSend } from './composer-draft';
 import { getActiveComposerSurface } from './composer-surface';
-import { getForegroundAppId } from '../os/instances';
-import { isChatAppForeground, shouldPaintDesktopChatSurface } from './chat-mount';
+import { isChatAppForeground } from './chat-mount';
 import { setStatus } from './status';
 import { syncBackgroundStreamHint } from './composer-stream-hint';
 import { syncGoalActiveHint } from './goal-active-hint';
@@ -77,14 +76,6 @@ function syncChatAppStopButton(streaming: boolean): void {
   stopBtn.disabled = !streaming;
 }
 
-/** Show or hide the Email dock's dedicated stop control. */
-function syncEmailAssistantStopButton(streaming: boolean): void {
-  const stopBtn = document.getElementById('emailAssistantStopBtn') as HTMLButtonElement | null;
-  if (!stopBtn) return;
-  stopBtn.hidden = !streaming;
-  stopBtn.disabled = !streaming;
-}
-
 /** Toggle send vs stop affordance on the composer primary button. */
 export function setComposerStreamingMode(mode: ComposerStreamingMode): void {
   const { sendBtnEl: sendBtn, inputEl: input } = getActiveComposerSurface();
@@ -92,11 +83,9 @@ export function setComposerStreamingMode(mode: ComposerStreamingMode): void {
 
   const isStreaming = mode === 'streaming';
   const chatApp = isChatAppForeground() && !false;
-  const emailAssistant = getForegroundAppId() === 'email';
 
-  if (chatApp || emailAssistant) {
+  if (chatApp) {
     if (chatApp) syncChatAppStopButton(isStreaming);
-    if (emailAssistant) syncEmailAssistantStopButton(isStreaming);
     sendBtn.disabled = isStreaming ? false : recoveryBlocked;
     sendBtn.setAttribute('aria-busy', isStreaming ? 'true' : 'false');
     sendBtn.dataset.mode = 'send';
@@ -131,9 +120,7 @@ export function setComposerStreamingMode(mode: ComposerStreamingMode): void {
     input.disabled = recoveryBlocked;
   }
   if (sendBtn && !isStreaming) {
-    const emptyDesktop =
-      shouldPaintDesktopChatSurface() && !composerInputHasText();
-    sendBtn.disabled = recoveryBlocked || emptyDesktop;
+    sendBtn.disabled = recoveryBlocked;
   }
 
   syncDesktopComposerFishSwim();
@@ -145,7 +132,7 @@ export function syncDesktopComposerFishSwim(): void {
   const sendBtn = document.getElementById('desktopSendBtn');
   if (!composer) return;
 
-  const swimming = shouldPaintDesktopChatSurface() && isActiveChatStreaming();
+  const swimming = isActiveChatStreaming();
   composer.classList.toggle('is-streaming', swimming);
   sendBtn?.setAttribute('aria-busy', swimming ? 'true' : 'false');
 }

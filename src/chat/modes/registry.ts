@@ -20,22 +20,6 @@ const MODE_DEFINITIONS: ModeDefinition[] = [
     toolPolicy: allowGroupsToolPolicy('general', MODE_ALLOWED_GROUPS.general),
   },
   {
-    id: 'desktop',
-    label: 'Desktop',
-    description:
-      'Minnow desktop assistant — full tool access for everyday tasks on the desktop surface.',
-    promptId: 'desktop',
-    toolPolicy: allowGroupsToolPolicy('desktop', MODE_ALLOWED_GROUPS.desktop),
-  },
-  {
-    id: 'email',
-    label: 'Email',
-    description:
-      'Email assistant with review-first mail actions plus calendar, web, document, and Brain tools.',
-    promptId: 'email',
-    toolPolicy: allowGroupsToolPolicy('email', MODE_ALLOWED_GROUPS.email),
-  },
-  {
     id: 'build',
     label: 'Build',
     description: 'Default development mode with broad tool access.',
@@ -88,20 +72,18 @@ export function listModes(): ModeDefinition[] {
   return [...MODE_DEFINITIONS];
 }
 
-/** Composer mode strip (excludes Orchestrate, Super Plan, Desktop, and Onboarding). */
+/** Composer mode strip (excludes Orchestrate, Super Plan, and Onboarding). */
 export function listComposerModes(): ModeDefinition[] {
   return MODE_DEFINITIONS.filter(
     (m) =>
       m.id !== 'orchestrate' &&
       m.id !== 'super-plan' &&
-      m.id !== 'desktop' &&
-      m.id !== 'email' &&
       m.id !== 'onboarding',
   );
 }
 
 export function getMode(id: ModeId): ModeDefinition {
-  const resolvedId = id === 'desktop' ? 'general' : id;
+  const resolvedId = id === 'desktop' || id === 'email' ? 'general' : id;
   const mode = MODE_DEFINITIONS.find((m) => m.id === resolvedId);
   if (!mode) {
     throw new Error(`Unknown mode id: ${id}`);
@@ -113,14 +95,15 @@ export function getMode(id: ModeId): ModeDefinition {
  * Logical relative path for built-in mode prompt files (used in tests).
  */
 export function resolveModePromptPath(id: ModeId, profile: 'full' | 'lite'): string {
-  return `modes/${id}.${profile}.md`;
+  const resolvedId = id === 'desktop' || id === 'email' ? 'general' : id;
+  return `modes/${resolvedId}.${profile}.md`;
 }
 
 /**
  * Load mode prompt body for compose / tests.
  */
 export function loadModePromptBody(id: ModeId, profile: 'full' | 'lite'): string {
-  const resolvedId = id === 'desktop' ? 'general' : id;
+  const resolvedId = id === 'desktop' || id === 'email' ? 'general' : id;
   const loadProfile: PromptProfile = profile;
   const loaded = loadPromptById('mode', resolvedId, loadProfile);
   return loaded?.body?.trim() ?? '';

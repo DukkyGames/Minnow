@@ -20,12 +20,18 @@ describe('shell keyboard help', () => {
     assert.ok(sections.has('Issues'));
   });
 
-  test('visible catalog omits release-gated apps', () => {
-    const sections = new Set(
+  test('catalog omits cancelled Email and Calendar apps', () => {
+    const visibleSections = new Set(
       getVisibleKeyboardShortcuts().map((row) => row.section).filter(Boolean),
     );
-    assert.ok(!sections.has('Email'));
-    assert.ok(GLOBAL_KEYBOARD_SHORTCUTS.some((row) => row.section === 'Email'));
+    const allSections = new Set(
+      GLOBAL_KEYBOARD_SHORTCUTS.map((row) => row.section).filter(Boolean),
+    );
+    // Email/Calendar were removed, not gated — no leftover help rows.
+    assert.ok(!visibleSections.has('Email'));
+    assert.ok(!visibleSections.has('Calendar'));
+    assert.ok(!allSections.has('Email'));
+    assert.ok(!allSections.has('Calendar'));
   });
 
   test('catalog documents question mark shortcut', () => {

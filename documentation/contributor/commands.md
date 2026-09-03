@@ -94,8 +94,6 @@ Scoped suites (each delegates to `node test/run-all.mjs --suite <name>`):
 | `npm run test:research` | Deep research |
 | `npm run test:benchmark` | Benchmark app |
 | `npm run test:evals` | Eval harness |
-| `npm run test:calendar` | Calendar app + CalDAV/ICS |
-| `npm run test:email` | Email app |
 | `npm run test:webhooks` | Outgoing webhooks |
 | `npm run test:notifications` | Notification inbox |
 | `npm run test:servers` | Managed server processes |

@@ -5,8 +5,8 @@ import {
 } from '../chat/chat-search';
 import { searchSessions } from '../config/api-client';
 import { isServerStorageMode } from '../config/storage-mode';
-import { getChatsWorkspacePath, isChatsWorkspacePath } from '../lib/chats-workspace';
-import { getDesktopWorkspacePath, isDesktopWorkspacePath } from '../lib/desktop-workspace';
+import { getChatsWorkspacePath } from '../lib/chats-workspace';
+import { isMinnowSandboxWorkspacePath } from '../lib/workspace-sandbox';
 import { findChatById, sessionState } from '../state/sessions';
 import { getWorkspacePath } from '../state/workspace';
 import type { Chat } from '../types';
@@ -19,8 +19,7 @@ const ALL_WORKSPACES_STORAGE_KEY = 'minnow.chatSearch.allWorkspaces';
 
 /** True when the chat opens on the desktop chat surface (assistant or desktop sandbox). */
 function isDesktopSurfaceChat(chat: Chat): boolean {
-  const path = chat.workspacePath ?? '';
-  return isChatsWorkspacePath(path) || isDesktopWorkspacePath(path);
+  return isMinnowSandboxWorkspacePath(chat.workspacePath ?? '');
 }
 
 let popoverEl: HTMLDivElement | null = null;
@@ -378,7 +377,6 @@ export function openChatSearchPopover(anchor: HTMLElement): void {
   closeChatSearchPopover();
 
   void getChatsWorkspacePath();
-  void getDesktopWorkspacePath();
 
   searchContext = resolveSearchContext(anchor);
   searchAllWorkspaces = readSearchAllWorkspacesPreference();

@@ -67,8 +67,8 @@ describe('app registry availability invariants', () => {
     assert.deepEqual(listOptionalReleasedApps(), []);
   });
 
-  test('every app has availability + releaseState; five apps are hidden', () => {
-    assert.equal(APPS.length, 12);
+  test('every app has availability + releaseState; three apps are hidden', () => {
+    assert.equal(APPS.length, 10);
     assert.equal(listReleasedApps().length, 7);
     for (const app of APPS) {
       assert.ok(app.availability === 'core' || app.availability === 'optional');
@@ -109,7 +109,6 @@ describe('app preferences', () => {
         'not-an-app',
         12,
         'bench',
-        'email',
       ]),
       [],
     );
@@ -150,9 +149,9 @@ describe('app preferences', () => {
   });
 
   test('developer-hidden apps cannot be toggled or persisted as disabled', () => {
-    setAppEnabled('email', false);
-    assert.equal(isAppEnabled('email'), false);
-    assert.equal(getAppUnavailableReason('email'), 'developer-hidden');
+    setAppEnabled('experts', false);
+    assert.equal(isAppEnabled('experts'), false);
+    assert.equal(getAppUnavailableReason('experts'), 'developer-hidden');
     assert.equal(loadDisabledAppIds().size, 0);
   });
 

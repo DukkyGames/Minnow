@@ -472,50 +472,6 @@ export const CAPABILITY_CATALOG_ENTRIES: CapabilityCatalogEntry[] =
     "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores whether the model calls a recall tool instead of guessing."
   },
   {
-    "id": "apps-email-list",
-    "group": "apps",
-    "header": "Email: list / search / get_thread",
-    tier: 3,
-    "scoreMode": "auto",
-    "howToTest": "'Show me unread mail from this week.'",
-    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Show me unread mail from this week.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores list-then-open against a stubbed mailbox."
-  },
-  {
-    "id": "apps-email-draft",
-    "group": "apps",
-    "header": "Email: draft_reply / email_action",
-    tier: 3,
-    "scoreMode": "auto",
-    "howToTest": "'Draft a reply to the top thread.' Must draft, never send.",
-    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Draft a reply to the top thread.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores drafting and the never-send rule against a stubbed mailbox."
-  },
-  {
-    "id": "apps-email-summarize",
-    "group": "apps",
-    "header": "summarize_inbox / reply_variants",
-    tier: 3,
-    "scoreMode": "auto",
-    "howToTest": "'Summarise my inbox and give me three reply options.'",
-    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "Summarise my inbox and give me three reply options.",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores the summary and reply-variant calls against a stubbed mailbox."
-  },
-  {
-    "id": "apps-calendar",
-    "group": "apps",
-    "header": "manage_calendar",
-    tier: 3,
-    "scoreMode": "auto",
-    "howToTest": "'What is on my calendar tomorrow?'",
-    "setup": "Benchmark scratch workspace with tool server running; capability-matrix fixtures seeded when required.",
-    "prompt": "What is on my calendar tomorrow?",
-    "passCriteria": "Automated probe returns pass, partial, or fail; n-a when requirements (vision, LSP, workspace, mode prompt) are missing. Probe scores the emitted manage_calendar call; the provider is stubbed."
-  },
-  {
     "id": "apps-settings-appearance",
     "group": "apps",
     "header": "Settings & appearance tools",

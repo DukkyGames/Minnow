@@ -1002,9 +1002,6 @@ export interface TurnRunRecord {
 /** Expert thread or legacy Expert Lab session (hidden from main sidebar). */
 export type ChatKind = 'expert' | 'expert-lab';
 
-/** Minnow app-owned chat scopes that stay out of unrelated session rails. */
-export type ChatAppScope = 'email';
-
 /** Follow-up message queued while the agent turn is in progress (MIN-200). */
 export interface QueuedComposerMessage {
   id: string;
@@ -1053,8 +1050,6 @@ export interface Chat {
   name: string;
   /** expert = per-expert thread; expert-lab = legacy hidden session (migrated away). */
   kind?: ChatKind;
-  /** App-owned conversation scope, separate from Code, Desktop, and Chat rails. */
-  appScope?: ChatAppScope;
   /**
    * True when this chat holds background work (issue workflow, dev-server
    * Detect, scheduled run) rather than a user conversation (MIN-637). Background
@@ -1246,6 +1241,7 @@ export type {
   TokenLedgerEntry,
   TokenLedgerSource,
   TokenLedgerTotals,
+  TokenLedgerWriteSource,
 } from './usage/types';
 
 // ── Session ──────────────────────────────────────────────────────────────────

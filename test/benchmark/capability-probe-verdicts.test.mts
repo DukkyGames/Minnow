@@ -13,7 +13,6 @@ import { CAPABILITY_PROBE_BY_ID } from '../../src/benchmark/capabilities/probes.
 import {
   CAP_STUB_SNAPSHOT_UIDS,
   CAP_STUB_SUB_AGENT_ID,
-  CAP_STUB_THREAD_ID,
 } from '../../src/benchmark/capabilities/stub-fixtures.ts';
 import { CAP_MATRIX_HAYSTACK_NEEDLE } from '../../src/benchmark/capabilities/fixture-paths.ts';
 import { getCapabilityProbePrompt } from '../../src/benchmark/capabilities/probe-prompts.ts';
@@ -201,19 +200,6 @@ describe('capability probe verdicts', () => {
     });
     assert.equal(verdictOf('agents-sub-agent-control', wrongId), 'partial');
     assert.equal(verdictOf('agents-sub-agent-control', out()), 'fail');
-  });
-
-  test('apps-email-draft fails a model that archives instead of drafting', () => {
-    const drafted = out({ toolCalls: [call('draft_reply', { threadId: CAP_STUB_THREAD_ID })] });
-    assert.equal(verdictOf('apps-email-draft', drafted), 'pass');
-
-    const draftedAndArchived = out({
-      toolCalls: [call('draft_reply', {}), call('email_action', { action: 'archive' })],
-    });
-    assert.equal(verdictOf('apps-email-draft', draftedAndArchived), 'partial');
-
-    const deleted = out({ toolCalls: [call('email_action', { action: 'delete' })] });
-    assert.equal(verdictOf('apps-email-draft', deleted), 'fail');
   });
 
   test('mode-impeccable scores load-before-edit ordering', () => {

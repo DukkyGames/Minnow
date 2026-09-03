@@ -35,19 +35,17 @@ const PART_SEPARATOR = '\n\n---\n\n';
 /** Operating modes that receive the shared mode-handoff tool-usage fragment. */
 const MODE_HANDOFF_MODE_IDS = new Set<ModeId>([
   'general',
-  'desktop',
   'plan',
   'build',
   'orchestrate',
 ]);
 
 /** Modes that receive the fact-verification tool-usage fragment. */
-const FACT_VERIFICATION_MODE_IDS = new Set<ModeId>(['general', 'desktop', 'plan', 'build']);
+const FACT_VERIFICATION_MODE_IDS = new Set<ModeId>(['general', 'plan', 'build']);
 
 /** Modes that receive the investigate-before-answer tool-usage fragment. */
 const INVESTIGATE_BEFORE_ANSWER_MODE_IDS = new Set<ModeId>([
   'general',
-  'desktop',
   'plan',
   'build',
   'debug',
@@ -160,7 +158,7 @@ function isPartEnabled(
   }
   if (partId === 'info') {
     if (!ctx.infoPresetId) return false;
-    return ctx.modeId === 'general' || ctx.modeId === 'desktop';
+    return ctx.modeId === 'general';
   }
   return true;
 }
@@ -404,14 +402,10 @@ function contextHasSettingsTools(ctx: ComposeContext): boolean {
   return (ctx.enabledToolIds ?? []).includes('update_settings');
 }
 
-function contextHasAppearanceTools(ctx: ComposeContext): boolean {
-  return (ctx.enabledToolIds ?? []).includes('update_appearance');
-}
-
 /** Settings agent tools guidance when update_settings is enabled. */
 function resolveManageSettingsBody(ctx: ComposeContext, profile: PromptProfile): string {
   const modeId = ctx.modeId ?? '';
-  if ((modeId !== 'general' && modeId !== 'desktop') || !contextHasSettingsTools(ctx)) {
+  if (modeId !== 'general' || !contextHasSettingsTools(ctx)) {
     return '';
   }
   const loadProfile = profile === 'lite' ? 'lite' : 'full';
@@ -419,21 +413,10 @@ function resolveManageSettingsBody(ctx: ComposeContext, profile: PromptProfile):
   return loaded?.body?.trim() ?? '';
 }
 
-/** Desktop appearance tools guidance when update_appearance is enabled. */
-function resolveManageAppearanceBody(ctx: ComposeContext, profile: PromptProfile): string {
-  const modeId = ctx.modeId ?? '';
-  if (modeId !== 'desktop' || !contextHasAppearanceTools(ctx)) {
-    return '';
-  }
-  const loadProfile = profile === 'lite' ? 'lite' : 'full';
-  const loaded = loadPromptById('tool-usage', 'manage-appearance', loadProfile);
-  return loaded?.body?.trim() ?? '';
-}
-
 /** General-mode Minnow app routing when launch_minnow_app is enabled. */
 function resolveLaunchMinnowAppBody(ctx: ComposeContext, profile: PromptProfile): string {
   const modeId = ctx.modeId ?? '';
-  if ((modeId !== 'general' && modeId !== 'desktop') || !contextHasLaunchMinnowAppTool(ctx)) {
+  if (modeId !== 'general' || !contextHasLaunchMinnowAppTool(ctx)) {
     return '';
   }
   const loadProfile = profile === 'lite' ? 'lite' : 'full';
@@ -581,13 +564,6 @@ export function composeSystemPrompt(ctx: ComposeContext): string {
         const manageInterpolated = interpolatePromptBody(manageSettingsRaw, vars);
         if (manageInterpolated.trim()) {
           sections.push(manageInterpolated.trim());
-        }
-      }
-      const manageAppearanceRaw = resolveManageAppearanceBody(ctx, profileKey);
-      if (manageAppearanceRaw.trim()) {
-        const appearanceInterpolated = interpolatePromptBody(manageAppearanceRaw, vars);
-        if (appearanceInterpolated.trim()) {
-          sections.push(appearanceInterpolated.trim());
         }
       }
       const githubCliRaw = resolveGithubCliBody(ctx, profileKey);

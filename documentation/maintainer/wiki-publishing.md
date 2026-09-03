@@ -55,7 +55,7 @@ Published:
 
 Not published — excluded by directory segment (`PRODUCT_WIKI_EXCLUDED_SEGMENTS` in [`src/product-wiki/path-filter.mjs`](../../src/product-wiki/path-filter.mjs)):
 
-`archive/` · `extracts/` · `images/` · `memory/` · `plans/` · `schemas/` · `specs/` · `templates/`
+`archive/` · `images/` · `memory/` · `plans/` · `schemas/` · `specs/` · `templates/`
 
 Plus `documentation/MEMORY.md` by filename. Only `.md` files are ever collected, so images are never copied into either wiki — a published page that references one must link to the repository blob instead.
 

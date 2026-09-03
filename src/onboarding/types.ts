@@ -17,13 +17,13 @@ export type OnboardingStepId =
   | 'extras'
   | 'permissions'
   | 'memory'
-  | 'email'
-  | 'calendar'
   | 'api-keys'
   | 'context7'
   | 'explainer'
   /** Legacy id — S11 merged into 'explainer'; kept so old persisted records stay typed. */
   | 'demo-chat'
+  /** Legacy id — Email setup was removed with the Email app. */
+  | 'email'
   | 'done';
 
 /** Per-step completion metadata written on commit or skip. */

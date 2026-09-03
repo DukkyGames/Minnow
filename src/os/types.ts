@@ -8,19 +8,11 @@ export type AppId =
   | 'models'
   | 'brain'
   | 'scheduler'
-  | 'calendar'
-  | 'email'
   | 'issues'
   | 'settings';
 
 /** Shell surface: workspace gate vs a foreground app. */
 export type OsView = 'workspaces' | 'app';
-
-/** Persisted desktop appearance (localStorage `minnow.os.*`). */
-export interface DesktopPrefs {
-  /** `dock` = bottom launcher bar; `grid` = app tile grid below hero. */
-  desktopLayout: 'dock' | 'grid';
-}
 
 import type { ModeId } from '../chat/modes/types';
 

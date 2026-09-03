@@ -11,7 +11,6 @@ import { getActiveChat } from '../state/sessions';
 import { getActiveComposerSurface } from './composer-surface';
 import { createIcon, type IconName } from './icon';
 import { autoResize } from './input';
-import { autoResizeDesktopComposer } from '../os/desktop-composer-resize';
 import { setStatus } from './status';
 import { refreshComposerStreamingAffordance } from './composer-send';
 import { syncQueuedTranscript } from './queued-transcript';
@@ -104,11 +103,7 @@ function loadQueueItemIntoComposer(text: string): void {
   if (!inputEl) return;
   inputEl.value = text;
   inputEl.focus();
-  if (inputEl.id === 'desktopInput') {
-    autoResizeDesktopComposer(inputEl);
-  } else {
-    autoResize(inputEl);
-  }
+  autoResize(inputEl);
 }
 
 function renderQueueItem(item: { id: string; text: string }): HTMLElement {

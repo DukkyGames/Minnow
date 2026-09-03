@@ -1,12 +1,7 @@
 import { expertsPageOpen, streamingChatIds } from '../app-state';
 import { getActiveChat } from '../state/sessions';
-import { getForegroundAppId } from '../os/instances';
 import { isOrchestratePlanScreenSuppressingChatDom } from '../ui/orchestrate-plan-screen';
-import {
-  isChatAppForeground,
-  isEmailAssistantForeground,
-  shouldPaintDesktopChatSurface,
-} from '../ui/chat-mount';
+import { isChatAppForeground } from '../ui/chat-mount';
 import { isMainColumnOverlaySuppressingChatDom } from '../ui/main-column-overlay';
 import { isBoardChatEmbedOpenForChat } from '../ui/orchestrate-board-chat-state';
 import { isBoardViewActive } from '../ui/view-mode-toggle';
@@ -142,10 +137,6 @@ export function isBackgroundStreamBlockingSend(): boolean {
 export function isStreamDomVisible(chatId: string): boolean {
   const active = getActiveChat();
   if (active.id !== chatId) return false;
-  if (getForegroundAppId() === 'email') {
-    return active.appScope === 'email' && isEmailAssistantForeground();
-  }
-  if (shouldPaintDesktopChatSurface()) return true;
   if (isBoardChatEmbedOpenForChat(chatId)) return true;
   if (isOrchestratePlanScreenSuppressingChatDom(chatId)) return false;
   if (isMainColumnOverlaySuppressingChatDom()) return false;

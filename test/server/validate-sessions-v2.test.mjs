@@ -65,7 +65,7 @@ describe('validateSessionState workspace schema', () => {
     assert.equal(out.chats[0].boardGroupId, 'grp-1');
   });
 
-  it('preserves Email mode and app scope for Email-owned conversations', () => {
+  it('drops stored Email appScope and remaps email mode to general', () => {
     const out = validateSessionState({
       version: 6,
       activeId: 'email-chat-1',
@@ -85,9 +85,9 @@ describe('validateSessionState workspace schema', () => {
       ],
     });
 
-    assert.equal(out.chats[0].modeId, 'email');
-    assert.equal(out.chats[0].appScope, 'email');
-    assert.equal(out.lastActiveChatIdByApp.email, 'email-chat-1');
+    assert.equal(out.chats[0].modeId, 'general');
+    assert.equal(out.chats[0].appScope, undefined);
+    assert.equal(out.lastActiveChatIdByApp.email, undefined);
   });
 
   it('preserves MIN-275 worktree isolation fields on chats and board tasks', () => {

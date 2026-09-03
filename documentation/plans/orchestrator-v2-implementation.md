@@ -601,7 +601,7 @@ One turn loop for chat. Leftover exclusive `loop.ts` behaviour is a **caller ove
 
 **MIN-727** · MIN-728 P7-A Measure stream long tasks · MIN-729 P7-B Coalesce painter `onEvent` onto one paint · MIN-730 P7-C Cheap thinking stats + ticked-motion rescan · MIN-731 P7-D `STEP_HZ` hygiene and accept
 
-Full research plan: [`chat-stream-ui-lag.md`](./chat-stream-ui-lag.md). Phases 1 and 6 do not fix this: upstream SSE is already server-side; the freeze is token→DOM on the renderer. P6-A batched `TurnEvent` grain to cumulative snapshots (~80 ms `delta`); it did **not** coalesce renderer paints.
+Full research plan: [`chat-stream-ui-lag.md`](../archive/chat-stream-ui-lag.md). Phases 1 and 6 do not fix this: upstream SSE is already server-side; the freeze is token→DOM on the renderer. P6-A batched `TurnEvent` grain to cumulative snapshots (~80 ms `delta`); it did **not** coalesce renderer paints.
 
 **P7-A PASS (static, 2026-08-31).** `loop.ts` is gone. Insertion point is `src/chat/run-turn-chat-paint.ts` (`createChatTurnEventPainter.onEvent`). At measure time `acquireTickedMotion` had no production caller — P7-C re-wired it. Live Chromium profiles were deferred and remain **manual QA** (see P7-D).
 

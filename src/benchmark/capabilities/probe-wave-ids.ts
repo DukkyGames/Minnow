@@ -50,10 +50,6 @@ export const PHASE_2D_EMIT_ONLY_CAPABILITY_IDS = [
   'browser-eval',
   'agents-sub-agent-control',
   'knowledge-recall',
-  'apps-email-list',
-  'apps-email-draft',
-  'apps-email-summarize',
-  'apps-calendar',
 ] as const;
 
 /** Phase 2e — conditional probes (workspace / git / LSP / vision gates). */

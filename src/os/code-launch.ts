@@ -3,7 +3,6 @@
  */
 
 import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
-import { setWorkspacePath } from '../config/workspace-api';
 import { sendMessageWithTools } from '../chat/messaging';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { getWorkspacePath } from '../state/workspace';
@@ -13,12 +12,10 @@ import { executeWorkspaceSwitch } from '../ui/workspace-switch-guard';
 import { createChatWithMode } from '../ui/sidebar';
 import { syncComposerFromStreamingState } from '../ui/composer-send';
 
-/** Repoint file tree / git panel to the Code project workspace (not desktop sandbox). */
+/** Repoint file tree / git panel to the Code project workspace. */
 async function syncCodeFileTreeChrome(): Promise<void> {
-  const { syncDesktopWorkspaceMounts } = await import('./desktop-workspace-mounts');
   const { clearPanelCwdUserOverride, syncPanelFromActiveChat } = await import('../ui/git-panel');
   clearPanelCwdUserOverride();
-  await syncDesktopWorkspaceMounts();
   syncPanelFromActiveChat({ forceFileTree: true });
 }
 

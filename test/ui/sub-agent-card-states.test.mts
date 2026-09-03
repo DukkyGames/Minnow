@@ -8,7 +8,6 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 import { resetInstancesForTests } from '../../src/os/instances.ts';
-import { resetDesktopStateForTests } from '../helpers/legacy-desktop-state.ts';
 import { resetOsPageBridgeForTests } from '../../src/os/page-bridge.ts';
 import type { SubAgentRun } from '../../src/agents/types.ts';
 
@@ -65,7 +64,6 @@ describe('sub-agent card states (P8-F view)', { concurrency: false }, () => {
     clearSubAgentCardDomRegistry();
     resetSubAgentOrchestrator();
     setSessionStateForTests(null);
-    resetDesktopStateForTests();
     resetInstancesForTests();
     resetOsPageBridgeForTests();
   });

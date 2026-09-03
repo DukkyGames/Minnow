@@ -24,8 +24,6 @@ export async function loadBuiltinModePromptMap(): Promise<Record<string, string>
   const modesDir = repoPath('src/chat/prompts/modes');
   const ids = [
     'general',
-    'desktop',
-    'email',
     'build',
     'plan',
     'super-plan',

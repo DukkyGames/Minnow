@@ -7,7 +7,6 @@ import {
   getChatsForWorkspace,
 } from '../state/session-workspace-scope';
 import { getActiveChat, sessionState } from '../state/sessions';
-import { autoResizeDesktopComposer } from '../os/desktop-composer-resize';
 import { resolveHistoryNavigation } from './terminal-history-nav';
 
 /** Matches `HUB_ROOT_ID` in hub.ts — DOM probe avoids a hub import cycle. */
@@ -82,10 +81,6 @@ export function isComposerCaretAtEnd(input: HTMLTextAreaElement): boolean {
 }
 
 function resizeComposerInput(input: HTMLTextAreaElement): void {
-  if (input.id === 'desktopInput') {
-    autoResizeDesktopComposer(input);
-    return;
-  }
   void import('./input').then((m) => m.autoResize(input));
 }
 

@@ -148,7 +148,7 @@ describe('buildComposeContext cwd', () => {
     assert.equal(ctx.cwd, MAIN_REPO);
   });
 
-  it('uses desktop sandbox workspace for desktop mode chats', async () => {
+  it('uses Scratch workspace cwd for chats bound to ~/.minnow/workspace', async () => {
     const desktopWs = 'C:/Users/me/.minnow/workspace';
     const chat = baseChat({ modeId: 'desktop', workspacePath: desktopWs });
     const ctx = await buildComposeContext(chat);

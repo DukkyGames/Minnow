@@ -1,7 +1,4 @@
-import {
-  isChatAppForeground,
-  isEmailAssistantForeground,
-} from './chat-mount';
+import { isChatAppForeground } from './chat-mount';
 import { OB_CHAT_SCROLL_SELECTOR } from './orchestrate-board-chat-state';
 
 /** Distance from bottom that still counts as "pinned" (larger than terminal — more padding in .chat-area). */
@@ -47,9 +44,6 @@ function resolveChatScrollRoot(): HTMLElement | null {
     `[data-testid="${BOARD_INIT_SPLIT_CHAT_TESTID}"]`,
   ) as HTMLElement | null;
   if (splitPane) return splitPane;
-  if (isEmailAssistantForeground()) {
-    return document.querySelector<HTMLElement>('.email-assistant-scroll');
-  }
   if (isChatAppForeground()) {
     return document.getElementById('chatAppArea') ?? chatAreaEl;
   }
@@ -106,7 +100,6 @@ function isBoardViewChromeActive(): boolean {
 
 /** Jump chip for the active transcript surface (Code vs Chat app). */
 function getActiveJumpChip(): HTMLButtonElement | null {
-  if (isEmailAssistantForeground()) return null;
   if (isChatAppForeground()) return chatAppJumpChipEl;
   return jumpChipEl;
 }

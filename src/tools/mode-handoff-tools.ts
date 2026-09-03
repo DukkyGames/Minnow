@@ -18,7 +18,6 @@ import {
 
 const HANDOFF_MODES = new Set<ModeId>([
   'general',
-  'desktop',
   'plan',
   'build',
   'orchestrate',

@@ -58,7 +58,6 @@ import {
   maybeBlockToolForUserApproval,
 } from './permission-gate';
 import { getChatsWorkspacePath } from '../lib/chats-workspace';
-import { getDesktopWorkspacePath } from '../lib/desktop-workspace';
 import { isChatAppForeground } from '../ui/chat-mount';
 import { runWithFileTreeAutoRefresh } from '../ui/file-tree-auto-refresh';
 import { executeWithResultCache } from './result-cache';
@@ -755,10 +754,6 @@ async function resolveToolWorkspaceRoot(
       const scoped = resolveChatToolWorkspaceRoot(chat, sessionState.groups);
       if (scoped) return scoped;
     }
-  }
-  if (false) {
-    const path = await getDesktopWorkspacePath();
-    return path ?? undefined;
   }
   if (!isChatAppForeground()) return undefined;
   const path = await getChatsWorkspacePath();

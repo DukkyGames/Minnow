@@ -1,4 +1,3 @@
-import { autoResizeDesktopComposer } from '../os/desktop-composer-resize';
 import { fetchExpandedPrompt, EXPAND_FAILED_MESSAGE } from './composer-expand-client';
 import { iconHtml } from './icon';
 import { autoResize } from './input';
@@ -101,10 +100,6 @@ function resolveInput(
 }
 
 function resizeComposerInput(input: HTMLTextAreaElement): void {
-  if (input.id === 'desktopInput') {
-    autoResizeDesktopComposer(input);
-    return;
-  }
   autoResize(input);
 }
 

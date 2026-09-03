@@ -23,8 +23,6 @@ const APP_LAYER_IDS: Record<AppId, string> = {
   models: 'modelsView',
   brain: 'brainView',
   scheduler: 'schedulerView',
-  calendar: 'calendarView',
-  email: 'emailView',
   issues: 'issuesView',
   experts: 'expertsView',
 };
@@ -102,8 +100,6 @@ const PAGE_OPEN_LAYER_APPS = new Set<AppId>([
   'brain',
   'bench',
   'compare',
-  'calendar',
-  'email',
   'issues',
   'research',
   'experts',
@@ -156,8 +152,6 @@ function closeAllAppPages(): void {
     'modelsView',
     'brainView',
     'schedulerView',
-    'calendarView',
-    'emailView',
     'issuesView',
     'researchView',
     'expertsView',
@@ -268,16 +262,6 @@ async function openAppPage(
     case 'scheduler': {
       const { openScheduler } = await import('../ui/scheduler-page');
       await openScheduler();
-      break;
-    }
-    case 'calendar': {
-      const { openCalendar } = await import('../ui/calendar-page');
-      await openCalendar();
-      break;
-    }
-    case 'email': {
-      const { openEmail } = await import('../ui/email-page');
-      await openEmail();
       break;
     }
     case 'issues': {

@@ -656,6 +656,19 @@
     ]
   },
   {
+    "key": "apps.optional.email",
+    "label": "Email app",
+    "category": "apps",
+    "area": "apps",
+    "storage": "section",
+    "type": "string",
+    "sensitivity": "normal",
+    "writable": false,
+    "refreshAreas": [
+      "apps"
+    ]
+  },
+  {
     "key": "apps.issues.types",
     "label": "Issue types",
     "description": "Customize issue type labels and ids.",
@@ -5172,214 +5185,6 @@
     "storage": "resource",
     "resource": "tools",
     "path": "permissions.default.explain_symbol",
-    "type": "enum",
-    "allowedValues": [
-      "off",
-      "ask",
-      "full"
-    ],
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "tools"
-    ]
-  },
-  {
-    "key": "integrations.tools.permission.manage_calendar",
-    "label": "Tool permission: manage_calendar",
-    "description": "Permission mode for the manage_calendar tool (off, ask, or full).",
-    "keywords": [
-      "manage_calendar",
-      "permission",
-      "tools"
-    ],
-    "category": "integrations",
-    "area": "tools",
-    "storage": "resource",
-    "resource": "tools",
-    "path": "permissions.default.manage_calendar",
-    "type": "enum",
-    "allowedValues": [
-      "off",
-      "ask",
-      "full"
-    ],
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "tools"
-    ]
-  },
-  {
-    "key": "integrations.tools.permission.list_mail",
-    "label": "Tool permission: list_mail",
-    "description": "Permission mode for the list_mail tool (off, ask, or full).",
-    "keywords": [
-      "list_mail",
-      "permission",
-      "tools"
-    ],
-    "category": "integrations",
-    "area": "tools",
-    "storage": "resource",
-    "resource": "tools",
-    "path": "permissions.default.list_mail",
-    "type": "enum",
-    "allowedValues": [
-      "off",
-      "ask",
-      "full"
-    ],
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "tools"
-    ]
-  },
-  {
-    "key": "integrations.tools.permission.search_mail",
-    "label": "Tool permission: search_mail",
-    "description": "Permission mode for the search_mail tool (off, ask, or full).",
-    "keywords": [
-      "search_mail",
-      "permission",
-      "tools"
-    ],
-    "category": "integrations",
-    "area": "tools",
-    "storage": "resource",
-    "resource": "tools",
-    "path": "permissions.default.search_mail",
-    "type": "enum",
-    "allowedValues": [
-      "off",
-      "ask",
-      "full"
-    ],
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "tools"
-    ]
-  },
-  {
-    "key": "integrations.tools.permission.get_thread",
-    "label": "Tool permission: get_thread",
-    "description": "Permission mode for the get_thread tool (off, ask, or full).",
-    "keywords": [
-      "get_thread",
-      "permission",
-      "tools"
-    ],
-    "category": "integrations",
-    "area": "tools",
-    "storage": "resource",
-    "resource": "tools",
-    "path": "permissions.default.get_thread",
-    "type": "enum",
-    "allowedValues": [
-      "off",
-      "ask",
-      "full"
-    ],
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "tools"
-    ]
-  },
-  {
-    "key": "integrations.tools.permission.draft_reply",
-    "label": "Tool permission: draft_reply",
-    "description": "Permission mode for the draft_reply tool (off, ask, or full).",
-    "keywords": [
-      "draft_reply",
-      "permission",
-      "tools"
-    ],
-    "category": "integrations",
-    "area": "tools",
-    "storage": "resource",
-    "resource": "tools",
-    "path": "permissions.default.draft_reply",
-    "type": "enum",
-    "allowedValues": [
-      "off",
-      "ask",
-      "full"
-    ],
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "tools"
-    ]
-  },
-  {
-    "key": "integrations.tools.permission.summarize_inbox",
-    "label": "Tool permission: summarize_inbox",
-    "description": "Permission mode for the summarize_inbox tool (off, ask, or full).",
-    "keywords": [
-      "summarize_inbox",
-      "permission",
-      "tools"
-    ],
-    "category": "integrations",
-    "area": "tools",
-    "storage": "resource",
-    "resource": "tools",
-    "path": "permissions.default.summarize_inbox",
-    "type": "enum",
-    "allowedValues": [
-      "off",
-      "ask",
-      "full"
-    ],
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "tools"
-    ]
-  },
-  {
-    "key": "integrations.tools.permission.generate_reply_variants",
-    "label": "Tool permission: generate_reply_variants",
-    "description": "Permission mode for the generate_reply_variants tool (off, ask, or full).",
-    "keywords": [
-      "generate_reply_variants",
-      "permission",
-      "tools"
-    ],
-    "category": "integrations",
-    "area": "tools",
-    "storage": "resource",
-    "resource": "tools",
-    "path": "permissions.default.generate_reply_variants",
-    "type": "enum",
-    "allowedValues": [
-      "off",
-      "ask",
-      "full"
-    ],
-    "sensitivity": "normal",
-    "writable": true,
-    "refreshAreas": [
-      "tools"
-    ]
-  },
-  {
-    "key": "integrations.tools.permission.email_action",
-    "label": "Tool permission: email_action",
-    "description": "Permission mode for the email_action tool (off, ask, or full).",
-    "keywords": [
-      "email_action",
-      "permission",
-      "tools"
-    ],
-    "category": "integrations",
-    "area": "tools",
-    "storage": "resource",
-    "resource": "tools",
-    "path": "permissions.default.email_action",
     "type": "enum",
     "allowedValues": [
       "off",

@@ -29,7 +29,6 @@ describe('companionToolRequiresApproval', () => {
     assert.equal(companionToolRequiresApproval('save_file'), true);
     assert.equal(companionToolRequiresApproval('git_commit'), true);
     assert.equal(companionToolRequiresApproval('execute_command'), true);
-    assert.equal(companionToolRequiresApproval('email_action'), true);
   });
 
   test('does not force an extra prompt for read-only tools', () => {

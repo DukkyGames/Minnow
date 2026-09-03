@@ -8,7 +8,6 @@ import {
   saveDiagnosticsPref,
 } from '../diagnostics/prefs';
 import { loadNotificationPrefs, saveNotificationPref } from '../notifications/prefs';
-import { loadDesktopPrefs, saveDesktopPref } from '../os/desktop-prefs';
 import {
   getFollowSystem,
   getStoredTheme,

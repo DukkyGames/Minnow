@@ -232,11 +232,11 @@ See [`src/config/voice-meta.ts`](../../src/config/voice-meta.ts) and [`src/voice
 
 Settings UI: **Agents → Rules** — grouped list with per-rule enable switches; add/edit via anchored popover; **Delete group** on extra empty groups ([`src/ui/settings-rules.ts`](../../src/ui/settings-rules.ts), [`src/ui/settings-rules-popover.ts`](../../src/ui/settings-rules-popover.ts), [`removeUserRuleGroup`](../../src/config/user-rules.ts)). A group that still has rules cannot be deleted (message includes the count) so rules are never dropped or remapped. Enabled rules compose into a second system message on parent chat send ([`src/config/user-rules.ts`](../../src/config/user-rules.ts)). Legacy v1 `{ text }` blobs migrate automatically.
 
-### Modes (9)
+### Modes (7 live + persist remaps)
 
 Composer strip: `general` · `build` · `plan` · `debug`
 
-Entered elsewhere: `orchestrate` (hub) · `super-plan` (Plan sub-menu) · `desktop` (Minnow chat) · `email` (assistant dock, ships with the hidden Email app) · `onboarding` (first run). `reef` was removed in MIN-473.
+Entered elsewhere: `orchestrate` (hub) · `super-plan` (Plan sub-menu) · `onboarding` (first run). Persisted `desktop` and `email` remap to `general`. `reef` was removed in MIN-473.
 
 | Per-mode | Notes |
 |----------|-------|
@@ -361,7 +361,7 @@ Managed **SearXNG** install/start/stop (`~/.minnow/servers/`).
 | Limit tool result size | `toolOutput.enabled` (default on) |
 | Maximum characters per result | `toolOutput.maxChars` (default 128000; clamp 8000–2000000) |
 
-**Per-tool permissions:** each of **106 built-in tools** exposed in a default build (`off` / `ask` / `full`); the full catalog is **114** (eight calendar/email tools are hidden while those apps are release-gated). MCP servers add additional `mcp__…` tools with the same permission model.
+**Per-tool permissions:** each of **105 built-in tools** exposed in a default build (`off` / `ask` / `full`); the full catalog is **112** (seven email tools are hidden while that app is release-gated). MCP servers add additional `mcp__…` tools with the same permission model.
 
 ### Browser (`config.json` → `browser`)
 
@@ -388,9 +388,8 @@ Preview panel automation for `browser_*` tools (Electron desktop shell only).
 | **Brain** | Search, Read page, List pages, Write page, Append log, Ingest source |
 | **LSP** | Get diagnostics, List LSP servers |
 | **Skills** | Load Impeccable context, Run Impeccable |
-| **Calendar/Email** *(hidden)* | Manage calendar, List mail, Search mail, Get thread, Draft reply, Summarize inbox, Generate reply variants, Email action |
 
-> Catalog entries carrying an `appId` are filtered out of both the model's tool list and this page while that app is release-gated or user-disabled (MIN-472). The eight calendar/email tools are hidden in a default build (113 total, 105 exposed).
+No catalog entries carry an `appId`. The catalog is 105 built-in tools, all shipped.
 
 ### Skills (`skills.json`)
 
@@ -559,7 +558,7 @@ Most features require `npm start` for full persistence.
 | `profiles/` | Setup profile bundles |
 | `prompts/` | Prompt overrides |
 | `evals/` | Eval packs + runs |
-| `calendar/`, `email/`, `scheduler.json` | App-specific data |
+| `email/`, `scheduler.json` | App-specific data |
 
 ---
 

@@ -12,6 +12,7 @@ import {
   type TokenLedgerEntry,
   type TokenLedgerSource,
   type TokenLedgerTotals,
+  type TokenLedgerWriteSource,
 } from './types.ts';
 import { hasMeasurableUsage, usageTokenCounts } from './pricing.ts';
 
@@ -130,12 +131,17 @@ export function resetTokenLedger(chat: Chat): void {
 export interface RecordTokenUsageInput {
   id?: string;
   at?: number;
-  source: TokenLedgerSource;
+  source: TokenLedgerWriteSource;
   providerId: string;
   modelId: string;
   usage: Usage;
   stats?: Stats;
   costUsd: number | null;
+}
+
+/** Retired MIN-473 kind; JS callers can still pass it even though WriteSource excludes it. */
+function isRetiredUsageKind(kind: string): boolean {
+  return kind === 'reef-widget';
 }
 
 /**
@@ -144,6 +150,8 @@ export interface RecordTokenUsageInput {
  */
 export function recordTokenUsage(chat: Chat, input: RecordTokenUsageInput): TokenLedgerEntry | null {
   if (!hasMeasurableUsage(input.usage)) return null;
+  // Reef widgets are gone; never grow historical reef-widget ledger rows.
+  if (isRetiredUsageKind(input.source.kind)) return null;
 
   const ledger = ensureTokenLedger(chat);
   const key = sourceKey(input.source);

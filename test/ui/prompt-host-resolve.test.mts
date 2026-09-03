@@ -6,10 +6,6 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
 import {
-  resetDesktopStateForTests,
-  setDesktopStateForTests,
-} from '../helpers/legacy-desktop-state.ts';
-import {
   initOsPageBridge,
   resetOsPageBridgeForTests,
 } from '../../src/os/page-bridge.ts';
@@ -54,13 +50,11 @@ describe('prompt-host-resolve', () => {
     g.HTMLElement = win.HTMLElement;
     setupDom(win);
     resetInstancesForTests();
-    resetDesktopStateForTests();
     resetOsPageBridgeForTests();
     initOsPageBridge();
   });
 
   afterEach(() => {
-    resetDesktopStateForTests();
     resetInstancesForTests();
     resetOsPageBridgeForTests();
   });
@@ -82,7 +76,6 @@ describe('prompt-host-resolve', () => {
   });
 
   test('hidden chat app shell is not chosen during desktop chat', async () => {
-    setDesktopStateForTests('chatActive');
     const { resolveQuestionHost } = await import('../../src/ui/prompt-host-resolve.ts');
 
     const host = resolveQuestionHost();
@@ -95,18 +88,5 @@ describe('prompt-host-resolve', () => {
 
     const host = resolveQuestionHost();
     assert.equal(host?.id, 'globalQuestionHost');
-  });
-
-  test('Email foreground routes prompts and composer hiding to the assistant dock', async () => {
-    launchInstance('email');
-    const {
-      resolvePromptComposerShell,
-      resolveQuestionHost,
-      resolveToolApprovalHost,
-    } = await import('../../src/ui/prompt-host-resolve.ts');
-
-    assert.equal(resolveQuestionHost()?.id, 'emailAssistantQuestionHost');
-    assert.equal(resolveToolApprovalHost()?.id, 'emailAssistantToolApprovalHost');
-    assert.equal(resolvePromptComposerShell()?.className, 'email-assistant-composer');
   });
 });

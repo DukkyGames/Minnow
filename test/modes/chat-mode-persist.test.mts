@@ -25,6 +25,19 @@ describe('chat modeId persistence', () => {
     assert.equal(chat.modeId, 'build');
   });
 
+  test('persisted desktop modeId remaps to general', () => {
+    const raw = {
+      id: '66666666-6666-6666-6666-666666666666',
+      name: 'Legacy desktop chat',
+      modelId: 'm1',
+      modeId: 'desktop',
+      history: [],
+      updatedAt: 1710000000000,
+    };
+    const chat = ensureChatShape(raw);
+    assert.equal(chat.modeId, 'general');
+  });
+
   test('round-trip preserves debug mode', () => {
     const raw = {
       id: '55555555-5555-5555-5555-555555555555',

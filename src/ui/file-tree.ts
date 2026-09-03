@@ -10,7 +10,6 @@ import {
 } from '../tools/result-cache';
 import { getFilePanelState, patchFilePanelState } from '../state/file-panel';
 import { getWorkspacePath } from '../state/workspace';
-import { isDesktopWorkspaceHostingActive } from '../os/desktop-workspace-mounts';
 import {
   buildFileTreeToolContext,
   fileTreeListingRootsEqual,
@@ -396,23 +395,6 @@ export async function syncFileTreeToPanelWorktree(
   panelCwd?: string,
   options?: { force?: boolean },
 ): Promise<void> {
-  if (isDesktopWorkspaceHostingActive()) {
-    const { getDesktopWorkspacePath } = await import('../lib/desktop-workspace');
-    const desktopPath = await getDesktopWorkspacePath();
-    const nextRoot = desktopPath ?? undefined;
-    const prevRoot = getFileTreeListingWorkspaceRoot();
-
-    if (!fileTreeListingRootsEqual(prevRoot, nextRoot)) {
-      await refreshFileTreeForListingRootChange(nextRoot, prevRoot);
-    } else if (options?.force) {
-      await refreshFileTree();
-    }
-
-    startFileTreeGitStatusPoll(nextRoot ?? getFileTreeListingWorkspaceRoot());
-    syncFileSidebarTitleFromFileTree();
-    return;
-  }
-
   const nextRoot = resolveFileTreeListingRoot(panelCwd);
   const prevRoot = getFileTreeListingWorkspaceRoot();
 

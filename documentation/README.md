@@ -47,5 +47,5 @@ Inputs to tools and agents — not primary reading:
 - [`plans/`](plans/) — feature plans (Plan mode writes under `documentation/plans/` in your workspace too).
 - [`schemas/`](schemas/), [`templates/`](templates/), [`specs/`](specs/) — JSON schemas and scaffolding.
 - [`memory/`](memory/), [`MEMORY.md`](MEMORY.md) — curated notes for agents on Minnow itself.
-- [`extracts/`](extracts/), [`archive/`](archive/) — portable extracts and migration snapshots.
+- [`archive/`](archive/) — migration snapshots and shipped one-off plans.
 - [`images/`](images/) — README screenshots.

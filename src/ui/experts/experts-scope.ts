@@ -159,5 +159,4 @@ export function teardownExpertScopeShell(): void {
     delete shell.dataset.scope;
     delete shell.dataset.expertId;
   }
-  void import('../desktop-chat-rail').then((m) => m.clearDesktopExpertScopeRail());
 }

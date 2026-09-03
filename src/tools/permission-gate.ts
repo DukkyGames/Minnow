@@ -70,9 +70,6 @@ const COMPANION_MUTATING_TOOLS = new Set([
   'update_appearance',
   'upload_appearance_asset',
   'save_memory',
-  'manage_calendar',
-  'draft_reply',
-  'email_action',
 ]);
 
 /** Whether a built-in mutation must always prompt from a companion device. */

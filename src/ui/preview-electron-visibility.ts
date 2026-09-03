@@ -15,8 +15,6 @@ const FULLSCREEN_OVERLAY_IDS = [
   'brainView',
   'schedulerView',
   'compareView',
-  'calendarView',
-  'emailView',
 ] as const;
 
 const MAX_LAYOUT_STABLE_FRAMES = 6;

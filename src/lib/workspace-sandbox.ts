@@ -5,6 +5,13 @@
 
 import { normalizeWorkspacePath } from './normalize-workspace-path';
 
+/** True when the path is Minnow Scratch (~/.minnow/workspace). */
+export function isScratchWorkspacePath(workspacePath: string): boolean {
+  const normalized = normalizeWorkspacePath(workspacePath);
+  if (!normalized) return false;
+  return normalized.endsWith('/.minnow/workspace');
+}
+
 /** True when the path is a Minnow chat/desktop sandbox under ~/.minnow. */
 export function isMinnowSandboxWorkspacePath(workspacePath: string): boolean {
   const normalized = normalizeWorkspacePath(workspacePath);

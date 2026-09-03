@@ -17,7 +17,10 @@ export interface ProviderPricing {
   models?: Record<string, ModelPricingRates>;
 }
 
-/** Who initiated the completion (for rollups). */
+/**
+ * Who initiated the completion (for rollups).
+ * `reef-widget` remains so persisted historical rows still type-check (MIN-473).
+ */
 export type TokenLedgerSource =
   | { kind: 'main'; modeId: string; workAgentId?: string | null }
   | { kind: 'sub-agent'; subAgentType: string; runId: string }
@@ -25,6 +28,9 @@ export type TokenLedgerSource =
   | { kind: 'reef-widget' }
   | { kind: 'orchestrate-board' }
   | { kind: 'work-agent'; workAgentId: string };
+
+/** Sources live code may record. Excludes retired `reef-widget`. */
+export type TokenLedgerWriteSource = Exclude<TokenLedgerSource, { kind: 'reef-widget' }>;
 
 export interface TokenLedgerEntry {
   id: string;

@@ -6,10 +6,6 @@ import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import { launchInstance, resetInstancesForTests } from '../../src/os/instances.ts';
 import {
-  resetDesktopStateForTests,
-  setDesktopStateForTests,
-} from '../helpers/legacy-desktop-state.ts';
-import {
   initOsPageBridge,
   resetOsPageBridgeForTests,
 } from '../../src/os/page-bridge.ts';
@@ -59,14 +55,12 @@ describe('ask-question-display', () => {
     g.HTMLElement = win.HTMLElement;
     setupDom(win);
     resetInstancesForTests();
-    resetDesktopStateForTests();
     resetOsPageBridgeForTests();
     initOsPageBridge();
     seedChat('chat-a');
   });
 
   afterEach(() => {
-    resetDesktopStateForTests();
     resetInstancesForTests();
     resetOsPageBridgeForTests();
     setSessionStateForTests(null);
@@ -99,27 +93,9 @@ describe('ask-question-display', () => {
   });
 
   test('isAskQuestionDomVisible is true for desktop chat', async () => {
-    setDesktopStateForTests('chatActive');
     const { isAskQuestionDomVisible } = await import('../../src/chat/ask-question-display.ts');
 
     assert.equal(isAskQuestionDomVisible('chat-a'), true);
-  });
-
-  test('Email questions are visible only for an Email-scoped chat with an open dock', async () => {
-    const { isAskQuestionDomVisible } = await import('../../src/chat/ask-question-display.ts');
-    const { sessionState } = await import('../../src/state/sessions.ts');
-    const chat = sessionState?.chats[0];
-    assert.ok(chat);
-    chat.appScope = 'email';
-    chat.modeId = 'email';
-    launchInstance('email');
-
-    assert.equal(isAskQuestionDomVisible('chat-a'), true);
-
-    const dock = document.querySelector<HTMLElement>('.email-assistant-dock');
-    dock?.classList.remove('is-open');
-    dock?.setAttribute('aria-hidden', 'true');
-    assert.equal(isAskQuestionDomVisible('chat-a'), false);
   });
 
   test('waitForAskQuestionDisplayContext resolves when chat becomes active surface', async () => {

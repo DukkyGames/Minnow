@@ -9,6 +9,7 @@ import {
   listComposerModes,
   listModes,
 } from '../../src/chat/modes/registry.ts';
+import { normalizeModeId } from '../../src/chat/modes/types.ts';
 import { isToolAllowedForMode } from '../../src/chat/modes/tool-policy.ts';
 
 describe('mode registry super-plan', () => {
@@ -51,10 +52,35 @@ describe('super-plan tool policy', () => {
   });
 });
 
-describe('Email surface mode', () => {
-  test('is registered but hidden from the Code composer strip', () => {
-    assert.equal(getMode('email').label, 'Email');
-    assert.ok(listModes().some((mode) => mode.id === 'email'));
+describe('persisted email mode remap', () => {
+  test("normalizeModeId('email') === 'general'", () => {
+    assert.equal(normalizeModeId('email'), 'general');
+  });
+
+  test('getMode remaps email to the general definition', () => {
+    const mode = getMode('email');
+    assert.equal(mode.id, 'general');
+    assert.equal(mode.label, 'General');
+  });
+
+  test('email is not a live registry entry', () => {
+    assert.ok(!listModes().some((mode) => mode.id === 'email'));
     assert.ok(!listComposerModes().some((mode) => mode.id === 'email'));
+  });
+});
+
+describe('persisted desktop mode remap', () => {
+  test("normalizeModeId('desktop') === 'general'", () => {
+    assert.equal(normalizeModeId('desktop'), 'general');
+  });
+
+  test('getMode remaps desktop to the general definition', () => {
+    const mode = getMode('desktop');
+    assert.equal(mode.id, 'general');
+    assert.equal(mode.label, 'General');
+  });
+
+  test('desktop is not a live registry entry', () => {
+    assert.ok(!listModes().some((mode) => mode.id === 'desktop'));
   });
 });
