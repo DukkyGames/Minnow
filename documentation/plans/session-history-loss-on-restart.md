@@ -192,7 +192,7 @@ history read hydrate first.
 
 ### Phase 6 — Guardrails
 
-- Rotating DB snapshot on boot. The JSON mirror is skipped over a size cap, so it is not a backup.
+- Rotating DB snapshot on boot. **Shipped** — the JSON mirror it replaces was skipped over a size cap, so it was not a backup.
 - Log every write that reduces total message count, with the caller and the affected chat ids.
 
 ## Todos
@@ -212,7 +212,7 @@ history read hydrate first.
 - [x] Tests: delete-by-absence, two-client race, mid-flight append, >64 KiB shutdown flush
 - [x] Update `documentation/context.md`
 - [ ] ~~Recovery script + FTS rebuild~~ — dropped; the affected chats were deleted by hand
-- [ ] Guardrail: rotating DB snapshot on boot (the JSON mirror is size-capped, so it is not a backup)
+- [x] Guardrail: rotating DB snapshot on boot (replaces the size-capped JSON mirror)
 
 ## What shipped
 
@@ -220,9 +220,16 @@ Phase 5 (recovery) was dropped at the user's request — the emptied chats were
 deleted rather than restored. The `messages_fts` orphans they left behind go with
 them.
 
-One guardrail is still open: there is no real rotating backup of `sessions.db`.
-The JSON mirror skips itself above a size cap, so a large store has no snapshot at
-all. Everything else in Phases 1-4 and 6 is implemented and covered by
+The last open guardrail closed with [`server/config/sessions-snapshot.js`](../../server/config/sessions-snapshot.js):
+a post-boot `db.backup()` writes `sessions/snapshots/sessions-<ISO>.db`, keeping the
+newest 3, skipping when the newest is under 12 h old or free disk is under 2× the
+store, and discarding any copy that fails `pragma quick_check`. Corrupt-DB recovery
+in `getSessionsDb()` now restores the newest verified snapshot before falling back
+to `state.json.migrated`. The size-capped JSON mirror it replaces is deleted — it
+had stopped flushing entirely above 128 MB, and its documented `closeSessionsDb()`
+flush never ran in production. Covered by
+[`test/config/sessions-snapshot.test.js`](../../test/config/sessions-snapshot.test.js).
+Everything else in Phases 1-4 and 6 is implemented and covered by
 [`test/config/sessions-history-loss.test.js`](../../test/config/sessions-history-loss.test.js),
 [`test/state/session-persistence.test.mts`](../../test/state/session-persistence.test.mts),
 [`test/state/lazy-history.test.mts`](../../test/state/lazy-history.test.mts) and

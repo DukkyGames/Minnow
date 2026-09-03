@@ -20,11 +20,6 @@ import {
   upsertTerminalHistoryRow,
 } from './sessions-import.js';
 import {
-  flushSessionsJsonMirror,
-  markSessionsJsonMirrorDirty,
-  registerSessionsJsonMirrorSource,
-} from './sessions-json-mirror.js';
-import {
   migrateChatRowV5ToV6,
   normalizeChatRow,
   normalizeGroupRow,
@@ -342,8 +337,6 @@ export function readWholeSessionState() {
 
   return validateSessionState(raw);
 }
-
-registerSessionsJsonMirrorSource(() => readWholeSessionState());
 
 /**
  * @param {unknown} raw
@@ -717,7 +710,6 @@ export function writeWholeSessionState(state, options = {}) {
     bumpSessionRevision();
   });
   tx();
-  markSessionsJsonMirrorDirty();
 }
 
 /**
@@ -786,7 +778,6 @@ export function appendTerminalRun(chatId, record) {
     db.prepare('UPDATE chats SET updated_at = ? WHERE id = ?').run(Date.now(), trimmed);
   });
   tx();
-  markSessionsJsonMirrorDirty();
 }
 
 /**
@@ -1348,7 +1339,6 @@ export function patchSessionState(delta) {
     revision = bumpSessionRevision();
   });
   tx();
-  markSessionsJsonMirrorDirty();
   return { ok: true, applied, revision };
 }
 
@@ -1409,5 +1399,3 @@ function applyPartialScalars(db, scalars) {
 export function useJsonSessionsStore() {
   return process.env.MINNOW_SESSIONS_STORE === 'json';
 }
-
-export { flushSessionsJsonMirror };

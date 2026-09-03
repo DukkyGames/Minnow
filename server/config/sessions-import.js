@@ -2,7 +2,6 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { validateSessionState } from './validators.js';
 import {
-  sessionsJsonBackupPath,
   sessionsJsonMigratedPath,
   sessionsJsonPath,
 } from './sessions-paths.js';
@@ -529,9 +528,10 @@ export function importJsonSessionsIfNeeded(db, options = {}) {
     return { migrated: false, reason: 'already_migrated' };
   }
 
-  const candidates = options.recovery
-    ? [sessionsJsonMigratedPath(), sessionsJsonBackupPath()]
-    : [sessionsJsonPath()];
+  // Recovery fallback only: snapshots (server/config/sessions-snapshot.js) are
+  // tried first, and `.migrated` is all that is left for a very old profile that
+  // never got past the one-time JSON import.
+  const candidates = options.recovery ? [sessionsJsonMigratedPath()] : [sessionsJsonPath()];
 
   let filePath;
   let raw;

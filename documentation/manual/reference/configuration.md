@@ -33,6 +33,7 @@ The simplest approach is to back up the whole `.minnow` folder and exclude `mode
 | `config.json` | Workspace, features, voice, terminal, tool security, fallbacks |
 | `.key` | The encryption key for secrets (restricted permissions on Unix) |
 | `sessions/` | Chat history in SQLite, with a full-text search index |
+| `sessions/snapshots/` | Rotating copies of the chat history database — the three newest, taken at most twice a day |
 | `brain/` | Wiki pages, vectors, ingested sources, code index databases, proposals |
 | `providers/` | Provider profiles, encrypted secrets, reported capabilities |
 | `models/` | Downloaded model artifacts; voice models under `models/voice/` |
@@ -57,9 +58,11 @@ The simplest approach is to back up the whole `.minnow` folder and exclude `mode
 | `logs/` | `diagnostics.jsonl` and `crash.jsonl` |
 | `worktrees/` | Git worktrees created for isolated board tasks |
 | `workspace/` | **Scratch** workspace folder (`~/.minnow/workspace`) for chats without a project root |
-| `backups/` | Rotating backups of session state |
+| `backups/` | Brain wiki backups (created when you export or restore the wiki) |
 
 Some folders in there are scaffolded ahead of the features that fill them and stay empty. That is normal, and nothing needs cleaning up.
+
+One exception: older profiles may still hold a large `sessions/state.json.backup`. It was an earlier backup format, nothing reads it any more, and the `sessions/snapshots/` copies replace it. Minnow leaves it alone — delete it yourself if you want the space back.
 
 ## Encrypted secrets
 

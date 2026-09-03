@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import Database from 'better-sqlite3';
 import { getMinnowHome } from './home.js';
 import {
@@ -13,7 +14,7 @@ import {
   SESSIONS_DB_SCHEMA_VERSION,
 } from './sessions-schema.js';
 import { importJsonSessionsIfNeeded } from './sessions-import.js';
-import { flushSessionsJsonMirror } from './sessions-json-mirror.js';
+import { restoreSessionsDbFromNewestSnapshot } from './sessions-snapshot.js';
 
 /** @type {Map<string, import('better-sqlite3').Database>} */
 const dbByCacheKey = new Map();
@@ -76,11 +77,19 @@ export function getSessionsDb() {
   if (quickCheck !== 'ok') {
     db.close();
     const ts = quarantineCorruptSessionsDb();
+    // A verified snapshot is a whole DB (FTS index, runs, meta, revision), so it
+    // beats the legacy JSON blob; fall back to that only when none is usable.
+    const restored = restoreSessionsDbFromNewestSnapshot();
     db = openSessionsDatabase();
     writeSessionMeta(db, 'dbCorruptRecoveredAt', new Date().toISOString());
     writeSessionMeta(db, 'dbCorruptQuickCheck', String(quickCheck));
     writeSessionMeta(db, 'dbCorruptQuarantineTs', ts);
-    importJsonSessionsIfNeeded(db, { recovery: true });
+    if (restored) {
+      writeSessionMeta(db, 'dbRestoredFromSnapshotAt', new Date().toISOString());
+      writeSessionMeta(db, 'dbRestoredFromSnapshotFile', path.basename(restored.file));
+    } else {
+      importJsonSessionsIfNeeded(db, { recovery: true });
+    }
   } else {
     importJsonSessionsIfNeeded(db);
   }
@@ -93,10 +102,6 @@ export function closeSessionsDb() {
   const cacheKey = sessionsDbCacheKey();
   const db = dbByCacheKey.get(cacheKey);
   if (!db) return false;
-  try {
-    flushSessionsJsonMirror();
-  } catch {
-  }
   db.close();
   dbByCacheKey.delete(cacheKey);
   return true;

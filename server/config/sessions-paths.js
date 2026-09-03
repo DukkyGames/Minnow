@@ -1,5 +1,6 @@
 /**
- * Filesystem paths for the sessions SQLite store and legacy JSON blob.
+ * Filesystem paths for the sessions SQLite store, its rotating snapshots and the
+ * legacy JSON blob.
  * Bypasses ALLOWED_CONFIG_FILES deliberately (same pattern as email/paths.js).
  */
 
@@ -21,9 +22,9 @@ export function sessionsJsonPath() {
   return path.join(sessionsRootDir(), 'state.json');
 }
 
-/** Rotating JSON mirror written after successful SQLite saves (Phase A.2). */
-export function sessionsJsonBackupPath() {
-  return path.join(sessionsRootDir(), 'state.json.backup');
+/** Rotating SQLite snapshots (~/.minnow/sessions/snapshots). */
+export function sessionsSnapshotsDir() {
+  return path.join(sessionsRootDir(), 'snapshots');
 }
 
 /** One-time import retirement path (never deleted — only renamed). */

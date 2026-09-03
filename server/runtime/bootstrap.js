@@ -16,6 +16,7 @@ import { initServersApi } from '../servers/index.js';
 import { initMemoryApi } from '../memory/routes.js';
 import { initBrainApi } from '../brain/routes.js';
 import { ensureProviderRegistry } from '../providers/store.js';
+import { snapshotSessionsDbIfDue } from '../config/sessions-snapshot.js';
 import { initPluginsApi } from '../tools/middleware.js';
 import { initWorkspaceRoot } from '../workspace/root.js';
 import { recomputeAllNextRuns } from '../scheduler/store.js';
@@ -23,6 +24,8 @@ import { recomputeAllNextRuns } from '../scheduler/store.js';
 /**
  * Ensure ~/.minnow layout, load workspace and API registries.
  * Sweep old generation checkpoints so they do not outlive a returning client.
+ * Take a rotating `sessions.db` snapshot off the critical path (throttled to at
+ * most one per 12 h, so a restart loop cannot thrash the disk).
  * @returns {Promise<{ workspacePath: string, homePath: string }>}
  */
 export async function bootstrapMinnowRuntime() {
@@ -45,6 +48,9 @@ export async function bootstrapMinnowRuntime() {
   sweepCheckpoints();
   setImmediate(() => {
     void import('../terminal-runner.js').then((m) => m.warmupTerminalPlatformCaches());
+  });
+  setImmediate(() => {
+    void snapshotSessionsDbIfDue();
   });
   const homePath = getMinnowHome();
   return {
