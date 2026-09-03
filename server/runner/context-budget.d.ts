@@ -5,6 +5,8 @@ export type ContextEnforcementPolicy = 'summarize' | 'dropMiddle' | 'slide' | 't
 /** Shipped default when a row omits policy (LLM summarize). */
 export declare const DEFAULT_CONTEXT_ENFORCEMENT_POLICY: ContextEnforcementPolicy;
 export declare const SAFETY_MARGIN = 0.9;
+/** Message-budget sanity floor used by tests; generation is not subtracted from the ceiling. */
+export declare const LOCAL_PROMPT_FLOOR_TOKENS = 4096;
 /** Prefix injected before compressed prior-turn summaries (LLM or extractive). */
 export declare const SUMMARY_HEADER = "## Prior context (compressed)\n";
 /** Agent-level budget declaration (work agents + sub-agent types). */
@@ -72,6 +74,31 @@ export declare function resolveContextBudget(params: {
      */
     effectiveLimitOverride?: number | null;
 }): ResolvedContextBudget;
+export declare function isLocalKvCacheProvider(providerId: string | null | undefined): boolean;
+export interface LocalGenerationReserveParams {
+    providerId?: string | null;
+    maxTokens?: number | null;
+    modelLimit?: number | null;
+    toolsReserveTokens?: number | null;
+    messages?: ApiMessage[] | null;
+}
+export declare function localGenerationReserveTokens(params: LocalGenerationReserveParams): number;
+export interface LocalRequestMaxTokensParams {
+    providerId?: string | null;
+    maxTokens?: number | null;
+    modelLimit?: number | null;
+    generationReserveTokens?: number | null;
+}
+export declare function localRequestMaxTokens(params: LocalRequestMaxTokensParams): number;
+export interface LocalWindowReserves {
+    generationReserveTokens: number;
+    /** Tool-schema tokens only — do not add generation; that is requestMaxTokens. */
+    reservedTokens: number;
+    requestMaxTokens: number;
+}
+export declare function resolveLocalWindowReserves(params: LocalGenerationReserveParams & {
+    maxTokens?: number | null;
+}): LocalWindowReserves;
 export declare function countPinnedSystemMessages(messages: ApiMessage[]): number;
 export declare function partitionTurns(messages: ApiMessage[], systemEnd: number): TurnSlice[];
 export declare function rebuildFromTurns(messages: ApiMessage[], systemEnd: number, turns: TurnSlice[]): ApiMessage[];

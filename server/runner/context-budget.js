@@ -6,8 +6,15 @@ import {
   ESTIMATE_IMAGE_URL_TOKENS
 } from "./token-estimate-core.js";
 import { isToolImageFollowUpMessage } from "./tool-image-follow-up.js";
+import { LLAMA_CPP_LOCAL_PROVIDER_ID, MLX_LM_LOCAL_PROVIDER_ID } from "./provider-ids.js";
 const DEFAULT_CONTEXT_ENFORCEMENT_POLICY = "summarize";
 const SAFETY_MARGIN = 0.9;
+/**
+ * Minimum tokens we still leave for the message estimate after tools when a
+ * caller asks "is the ceiling usable?" in tests. Generation is **not** subtracted
+ * from this ceiling — llama.cpp leftover is applied to `max_tokens` instead.
+ */
+const LOCAL_PROMPT_FLOOR_TOKENS = 4096;
 const TRUNCATION_MARKER = "[\u2026 truncated for context budget]";
 const SUMMARY_HEADER = "## Prior context (compressed)\n";
 function normalizePositiveInt(value) {
@@ -82,6 +89,67 @@ function resolveContextBudget(params) {
   }
   const effectiveLimit = modelLimit != null ? Math.max(1, Math.floor(modelLimit * SAFETY_MARGIN) - reservedTokens) : null;
   return { effectiveLimit, modelLimit, policy, reservedTokens };
+}
+function isLocalKvCacheProvider(providerId) {
+  return providerId === LLAMA_CPP_LOCAL_PROVIDER_ID || providerId === MLX_LM_LOCAL_PROVIDER_ID;
+}
+/**
+ * Tokens llama.cpp / mlx can spend on n_predict given the live prompt.
+ * This is a `max_tokens` cap, not a tax on the message ceiling — subtracting
+ * Settings maxTokens (32k) from a 70k window was what crashed chats that the
+ * context wheel still showed as mostly empty.
+ */
+function localGenerationReserveTokens(params) {
+  if (!isLocalKvCacheProvider(params?.providerId)) return 0;
+  const requested = Math.floor(params.maxTokens ?? 0);
+  if (requested <= 0) return 0;
+  const window = Math.floor(params.modelLimit ?? 0);
+  if (window <= 0) return 0;
+  const tools = Math.max(0, Math.floor(params.toolsReserveTokens ?? 0));
+  const currentMessages = estimateApiMessagesTokens(
+    Array.isArray(params.messages) ? params.messages : [],
+  );
+  const usable = Math.floor(window * SAFETY_MARGIN);
+  const leftover = usable - tools - currentMessages;
+  if (leftover <= 0) return 0;
+  return Math.min(requested, leftover);
+}
+/**
+ * Request `max_tokens` for a local host. When n_ctx is known this is leftover
+ * after the live prompt (at least 1) so the body cannot claim the whole window.
+ * Unknown n_ctx keeps the Settings max.
+ */
+function localRequestMaxTokens(params) {
+  const requested = Math.floor(params?.maxTokens ?? 0);
+  if (!isLocalKvCacheProvider(params?.providerId)) return requested;
+  const window = Math.floor(params.modelLimit ?? 0);
+  if (window <= 0) return requested;
+  return Math.max(1, Math.floor(params.generationReserveTokens ?? 0));
+}
+function resolveLocalWindowReserves(params) {
+  const toolsReserveTokens = Math.max(0, Math.floor(params?.toolsReserveTokens ?? 0));
+  const requestedMax = Math.floor(params?.maxTokens ?? 0);
+  const generationReserveTokens = localGenerationReserveTokens({
+    providerId: params?.providerId,
+    maxTokens: requestedMax,
+    modelLimit: params?.modelLimit,
+    toolsReserveTokens,
+    messages: params?.messages
+  });
+  return {
+    generationReserveTokens,
+    // Trim against tool schemas only. Prompt + n_predict sharing n_ctx is
+    // handled by capping requestMaxTokens, not by shrinking the message budget.
+    reservedTokens: toolsReserveTokens,
+    requestMaxTokens: isLocalKvCacheProvider(params?.providerId)
+      ? localRequestMaxTokens({
+        providerId: params.providerId,
+        maxTokens: requestedMax,
+        modelLimit: params.modelLimit,
+        generationReserveTokens
+      })
+      : requestedMax
+  };
 }
 function isPriorContextSummary(msg) {
   return msg.role === "user" && typeof msg.content === "string" && msg.content.startsWith(SUMMARY_HEADER);
@@ -436,6 +504,7 @@ function applyContextBudget(messages, resolved, agentConfig) {
 }
 export {
   DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
+  LOCAL_PROMPT_FLOOR_TOKENS,
   SAFETY_MARGIN,
   SUMMARY_HEADER,
   agentContextBudgetFromSubAgentType,
@@ -449,8 +518,12 @@ export {
   estimateApiMessagesTokens,
   formatContextTrimStatus,
   injectSummaryMessage,
+  isLocalKvCacheProvider,
+  localGenerationReserveTokens,
+  localRequestMaxTokens,
   partitionTurns,
   rebuildFromTurns,
   resolveContextBudget,
+  resolveLocalWindowReserves,
   serializeApiMessageForEstimate
 };

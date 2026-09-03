@@ -9,8 +9,11 @@ import {
   estimateApiMessageTokens,
   estimateApiMessagesTokens,
   formatContextTrimStatus,
+  LOCAL_PROMPT_FLOOR_TOKENS,
+  localGenerationReserveTokens,
   partitionTurns,
   resolveContextBudget,
+  resolveLocalWindowReserves,
   SAFETY_MARGIN,
 } from '../../src/chat/context-budget.ts';
 import { ESTIMATE_IMAGE_URL_TOKENS } from '../../src/chat/prompts/token-estimate-core.ts';
@@ -91,6 +94,93 @@ describe('resolveContextBudget', () => {
       reservedTokens: 999999,
     });
     assert.equal(resolved.effectiveLimit, 1);
+  });
+
+  test('32k window plus 32k maxTokens still leaves a multi-thousand-token message ceiling', () => {
+    // Generation leftover caps max_tokens; it must not shrink the message budget.
+    const toolsReserve = 1200;
+    for (const providerId of ['llama-cpp-local', 'mlx-lm-local'] as const) {
+      const window = resolveLocalWindowReserves({
+        providerId,
+        maxTokens: 32768,
+        modelLimit: 32768,
+        toolsReserveTokens: toolsReserve,
+      });
+      assert.equal(window.reservedTokens, toolsReserve);
+      const resolved = resolveContextBudget({
+        agentConfig: { enforcementPolicy: 'summarize' },
+        modelLimit: 32768,
+        reservedTokens: window.reservedTokens,
+      });
+      assert.ok(
+        resolved.effectiveLimit! >= LOCAL_PROMPT_FLOOR_TOKENS,
+        `${providerId} message ceiling ${resolved.effectiveLimit} should stay at the prompt floor`,
+      );
+      assert.ok(window.requestMaxTokens <= 32768);
+      assert.ok(window.requestMaxTokens < 32768);
+      assert.ok(
+        resolved.effectiveLimit! + window.reservedTokens
+          <= Math.floor(32768 * SAFETY_MARGIN) + 1,
+      );
+    }
+  });
+
+  test('70k window plus 32k maxTokens does not tax a 20k-token prompt as over budget', () => {
+    // The regression after the first reserve cap: floor was system+last-user
+    // (or 4096), so a 70k serve still reserved the full Settings 32k and a
+    // normal Minnow system+history estimate looked "over" while the wheel
+    // still showed plenty of room.
+    const messages = [
+      { role: 'system' as const, content: 's'.repeat(120_000) },
+      { role: 'assistant' as const, content: 'a'.repeat(20_000) },
+      { role: 'user' as const, content: 'hello again' },
+    ];
+    const toolsReserve = 12_000;
+    const prompt = estimateApiMessagesTokens(messages);
+    const window = resolveLocalWindowReserves({
+      providerId: 'llama-cpp-local',
+      maxTokens: 32768,
+      modelLimit: 70_000,
+      toolsReserveTokens: toolsReserve,
+      messages,
+    });
+    const resolved = resolveContextBudget({
+      agentConfig: { enforcementPolicy: 'summarize' },
+      modelLimit: 70_000,
+      reservedTokens: window.reservedTokens,
+    });
+    assert.ok(prompt > 20_000, `fixture prompt should be bulky, got ${prompt}`);
+    assert.equal(window.reservedTokens, toolsReserve);
+    assert.ok(
+      prompt <= (resolved.effectiveLimit ?? 0),
+      `prompt ${prompt} must fit message ceiling ${resolved.effectiveLimit}`,
+    );
+    assert.ok(window.requestMaxTokens >= 1);
+    assert.ok(window.requestMaxTokens <= 32768);
+  });
+
+  test('unknown local n_ctx does not reserve Settings maxTokens', () => {
+    assert.equal(
+      localGenerationReserveTokens({
+        providerId: 'llama-cpp-local',
+        maxTokens: 32768,
+        modelLimit: null,
+        toolsReserveTokens: 0,
+      }),
+      0,
+    );
+  });
+
+  test('cloud providers do not reserve generation tokens against n_ctx', () => {
+    assert.equal(
+      localGenerationReserveTokens({
+        providerId: 'openai',
+        maxTokens: 32768,
+        modelLimit: 32768,
+        toolsReserveTokens: 1200,
+      }),
+      0,
+    );
   });
 
   test('an explicit override replaces both margin and reserve', () => {

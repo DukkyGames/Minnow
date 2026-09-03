@@ -5,6 +5,7 @@ import {
   dropOldestTurnsUntilUnderLimit,
   estimateApiMessagesTokens,
   injectSummaryMessage,
+  isLocalKvCacheProvider,
   rebuildFromTurns,
   resolveContextBudget,
   type AgentContextBudgetConfig,
@@ -57,11 +58,9 @@ async function applyLlmSummarizePolicy(
   );
 
   if (droppedTurns === 0) {
-    const fallback = applyContextBudget(messages, resolved, {
-      ...agentConfig,
-      enforcementPolicy: 'truncate',
-    });
-    return fallback;
+    // resolved.policy is still 'summarize'; applyContextBudget no-ops that.
+    // Pass truncate on the resolved budget so a 1-turn thread actually shrinks.
+    return applyContextBudget(messages, { ...resolved, policy: 'truncate' }, agentConfig);
   }
 
   onStatus?.('spin', 'Summarizing context…');
@@ -95,10 +94,11 @@ async function applyLlmSummarizePolicy(
 
   let tokensAfter = estimateApiMessagesTokens(nextMessages);
   if (tokensAfter > limit) {
-    const tightened = applyContextBudget(nextMessages, resolved, {
-      ...agentConfig,
-      enforcementPolicy: 'dropMiddle',
-    });
+    const tightened = applyContextBudget(
+      nextMessages,
+      { ...resolved, policy: 'dropMiddle' },
+      agentConfig,
+    );
     if (tightened.applied) {
       return {
         ...tightened,
@@ -160,6 +160,16 @@ export async function applyContextPolicy(
   }
 
   if (resolved.policy === 'summarize') {
+    // llama.cpp / mlx default to --parallel 1. A second completion for
+    // summarize fights the only slot and paints "Summarizing context…" on a
+    // two-message chat. Use extractive dropMiddle on those hosts.
+    if (isLocalKvCacheProvider(params.providerId)) {
+      return applyContextBudget(
+        params.messages,
+        { ...resolved, policy: 'dropMiddle' },
+        params.agentConfig,
+      );
+    }
     try {
       return await applyLlmSummarizePolicy(
         params.messages,
@@ -222,7 +232,11 @@ export function estimateContextPolicyTrim(
       minRecentTurns,
     );
     if (droppedTurns === 0) {
-      const applied = applyContextBudget(messages, resolved, agentConfig);
+      const applied = applyContextBudget(
+        messages,
+        { ...resolved, policy: 'truncate' },
+        agentConfig,
+      );
       return {
         historyTokens: applied.tokensAfter,
         compressedEstimateTokens: 0,

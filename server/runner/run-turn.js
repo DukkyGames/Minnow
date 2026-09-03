@@ -2,6 +2,7 @@ import { sumUsageSegments } from './stats-math.js';
 import { createSubAgentRunner } from './sub-agent-runner.js';
 import { buildOpeningTranscript } from './opening-messages.js';
 import { STOPPED_TOOL_MSG } from './tool-batch.js';
+import { SUB_AGENT_CONTEXT_BUDGET_ERROR } from './sub-agent-outcome.js';
 import {
   ASK_QUESTION_TIMEOUT_ERROR,
   ASK_QUESTION_TOOL_NAME,
@@ -637,6 +638,8 @@ export async function runTurn(options) {
   const usageSegments = [];
   /** @type {Record<string, number> | undefined} */
   let usage;
+  /** @type {import('../../src/agents/types').SubAgentRunnerOutput | null} */
+  let ran = null;
 
   /**
    * @param {import('./run-turn').TurnResult} result
@@ -648,7 +651,7 @@ export async function runTurn(options) {
   };
 
   try {
-    const ran = await runner.run({
+    ran = await runner.run({
       runId: chatId,
       type: 'turn',
       task: seed,
@@ -757,5 +760,13 @@ export async function runTurn(options) {
 
   if (captured) return withUsage(captured);
   if (timeoutCtrl.signal.aborted) return withUsage({ outcome: 'timeout' });
+  // Compact that cannot shrink used to fall through as a quiet success.
+  if (ran?.contextBudgetExhausted) {
+    const error =
+      typeof ran.summary === 'string' && ran.summary.trim()
+        ? ran.summary.trim()
+        : SUB_AGENT_CONTEXT_BUDGET_ERROR;
+    return withUsage({ outcome: 'crashed', error });
+  }
   return withUsage({ outcome: 'no_report' });
 }

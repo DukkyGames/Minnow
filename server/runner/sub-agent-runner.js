@@ -46,7 +46,8 @@ import {
   DEFAULT_CONTEXT_ENFORCEMENT_POLICY,
   SAFETY_MARGIN,
   estimateApiMessagesTokens,
-  resolveContextBudget
+  resolveContextBudget,
+  resolveLocalWindowReserves
 } from "./context-budget.js";
 import { estimateToolsTokens } from "./token-estimate-core.js";
 import {
@@ -111,14 +112,6 @@ function isAbortLikeStreamError(err, signal) {
   if (signal?.aborted) return true;
   const name = err instanceof Error ? err.name : "";
   return name === "AbortError" || name === "TimeoutError";
-}
-
-function localGenerationReserveTokens(providerId, maxTokens) {
-  if (providerId !== LLAMA_CPP_LOCAL_PROVIDER_ID && providerId !== MLX_LM_LOCAL_PROVIDER_ID) {
-    return 0;
-  }
-  const n = Math.floor(maxTokens ?? 0);
-  return n > 0 ? n : 0;
 }
 
 // ── Runner ───────────────────────────────────────────────────────────────────
@@ -720,9 +713,16 @@ function createSubAgentRunner(deps) {
         toolCallsMeta
       );
       const toolsReserveTokens = estimateToolsTokens(input.tools);
-      const reservedTokens =
-        toolsReserveTokens +
-        localGenerationReserveTokens(input.providerId, resolvedSampler.maxTokens);
+      // llama.cpp / mlx count prompt + n_predict against n_ctx. Trim against
+      // tools only; leftover after the live prompt becomes request max_tokens.
+      const refreshLocalWindowReserves = () => resolveLocalWindowReserves({
+        providerId: input.providerId,
+        maxTokens: resolvedSampler.maxTokens,
+        modelLimit: modelContextLimit,
+        toolsReserveTokens,
+        messages
+      });
+      let { reservedTokens, requestMaxTokens } = refreshLocalWindowReserves();
       const noteContextStatus = (turnIndex, label, estimatedTokens) => {
         if (!label) return;
         budgetEvents.push({
@@ -732,6 +732,7 @@ function createSubAgentRunner(deps) {
         });
       };
       const enforceContextBudget = async (turnIndex, effectiveLimitOverride) => {
+        ({ reservedTokens, requestMaxTokens } = refreshLocalWindowReserves());
         const calibrated = contextCalibratedMessageLimit(
           input.modelId,
           modelContextLimit,
@@ -792,7 +793,7 @@ function createSubAgentRunner(deps) {
             stream: true
           },
           resolvedSampler.preset,
-          resolvedSampler.maxTokens
+          requestMaxTokens
         );
         mergeThinkingIntoCompletionBody(
           body,
@@ -943,7 +944,7 @@ function createSubAgentRunner(deps) {
             stream: true
           },
           resolvedSampler.preset,
-          resolvedSampler.maxTokens
+          requestMaxTokens
         );
         const llamaSupportsThinkingBudget = provider.id === LLAMA_CPP_LOCAL_PROVIDER_ID && providerCapabilities?.supportsThinkingBudget === true;
         const { nativeBudgetApplied } = mergeThinkingIntoCompletionBody(
@@ -1076,7 +1077,7 @@ function createSubAgentRunner(deps) {
                 stream: true
               },
               resolvedSampler.preset,
-              resolvedSampler.maxTokens
+              requestMaxTokens
             );
             mergeThinkingIntoCompletionBody(
               continuationBody,

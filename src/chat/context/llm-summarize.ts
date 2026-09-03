@@ -15,6 +15,30 @@ Output plain text only — no preamble.`;
 
 const SUMMARIZE_TIMEOUT_MS = 45_000;
 
+type SummarizeCompleteFn = typeof completeNonStreamingViaGenerations;
+type SummarizeProviderFn = typeof getActiveProvider;
+
+/** Test-only overrides so timeout abort coverage does not wait 45s or hit the network. */
+let summarizeTimeoutMsForTests: number | null = null;
+let summarizeCompleteForTests: SummarizeCompleteFn | null = null;
+let summarizeProviderForTests: SummarizeProviderFn | null = null;
+
+export function setSummarizeTimeoutMsForTests(ms: number | null): void {
+  summarizeTimeoutMsForTests = ms;
+}
+
+export function setSummarizeCompleteForTests(fn: SummarizeCompleteFn | null): void {
+  summarizeCompleteForTests = fn;
+}
+
+export function setSummarizeProviderForTests(fn: SummarizeProviderFn | null): void {
+  summarizeProviderForTests = fn;
+}
+
+function summarizeTimeoutMs(): number {
+  return summarizeTimeoutMsForTests ?? SUMMARIZE_TIMEOUT_MS;
+}
+
 export interface LlmSummarizeParams {
   droppedText: string;
   providerId: string;
@@ -50,12 +74,18 @@ function extractCompletionText(message: unknown): string {
   return content;
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, signal?: AbortSignal): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  signal?: AbortSignal,
+  onTimeout?: () => void,
+): Promise<T> {
   if (signal?.aborted) {
     return Promise.reject(new DOMException('Aborted', 'AbortError'));
   }
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
+      onTimeout?.();
       reject(new Error('Context summarization timed out'));
     }, ms);
     const onAbort = (): void => {
@@ -99,7 +129,7 @@ export async function summarizeDroppedTurns(
   }
 
   try {
-    const provider = await getActiveProvider(providerId);
+    const provider = await (summarizeProviderForTests ?? getActiveProvider)(providerId);
     const body = {
       model: modelId,
       stream: false,
@@ -114,24 +144,46 @@ export async function summarizeDroppedTurns(
       ],
     } as ChatCompletionBody & { stream: false };
 
-    const chunk = await withTimeout(
-      completeNonStreamingViaGenerations(provider, body, params.signal ?? new AbortController().signal, {
-        fallbackRole: 'context-summarize',
-      }),
-      SUMMARIZE_TIMEOUT_MS,
-      params.signal,
-    );
-
-    const raw = extractCompletionText(chunk.choices?.[0]?.message);
-    const trimmed = raw.trim();
-    if (!trimmed) {
-      return { summaryBody: fallback, usedLlm: false };
+    // Abort the in-flight generation on timeout so a hung utility call cannot
+    // pin llama.cpp's single slot while the main turn continues.
+    const timeoutCtrl = new AbortController();
+    const onParentAbort = (): void => {
+      timeoutCtrl.abort(params.signal?.reason);
+    };
+    if (params.signal?.aborted) {
+      timeoutCtrl.abort(params.signal.reason);
+    } else {
+      params.signal?.addEventListener('abort', onParentAbort, { once: true });
     }
 
-    const maxChars = Math.max(128, budgetTokens * 4);
-    const bodyText =
-      trimmed.length > maxChars ? `${trimmed.slice(0, maxChars)}\n…` : trimmed;
-    return { summaryBody: bodyText, usedLlm: true };
+    try {
+      const chunk = await withTimeout(
+        (summarizeCompleteForTests ?? completeNonStreamingViaGenerations)(
+          provider,
+          body,
+          timeoutCtrl.signal,
+          {
+            fallbackRole: 'context-summarize',
+          },
+        ),
+        summarizeTimeoutMs(),
+        timeoutCtrl.signal,
+        () => timeoutCtrl.abort(),
+      );
+
+      const raw = extractCompletionText(chunk.choices?.[0]?.message);
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        return { summaryBody: fallback, usedLlm: false };
+      }
+
+      const maxChars = Math.max(128, budgetTokens * 4);
+      const bodyText =
+        trimmed.length > maxChars ? `${trimmed.slice(0, maxChars)}\n…` : trimmed;
+      return { summaryBody: bodyText, usedLlm: true };
+    } finally {
+      params.signal?.removeEventListener('abort', onParentAbort);
+    }
   } catch {
     return { summaryBody: fallback, usedLlm: false };
   }
