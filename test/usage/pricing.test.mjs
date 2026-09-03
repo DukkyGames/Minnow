@@ -7,6 +7,7 @@ import { describe, test } from 'node:test';
 import {
   computeCostUsd,
   hasMeasurableUsage,
+  normalizeUsageTotals,
   resolveModelPricing,
   usageTokenCounts,
 } from '../../src/usage/pricing.ts';
@@ -73,5 +74,28 @@ describe('hasMeasurableUsage', () => {
 
   test('true when total_tokens present', () => {
     assert.equal(hasMeasurableUsage({ total_tokens: 12 }), true);
+  });
+});
+
+describe('normalizeUsageTotals', () => {
+  test('fills total_tokens from prompt + completion when omitted', () => {
+    const out = normalizeUsageTotals({ prompt_tokens: 100, completion_tokens: 50 });
+    assert.equal(out.total_tokens, 150);
+    assert.equal(out.prompt_tokens, 100);
+    assert.equal(out.completion_tokens, 50);
+  });
+
+  test('keeps an existing finite total_tokens', () => {
+    const out = normalizeUsageTotals({
+      prompt_tokens: 100,
+      completion_tokens: 50,
+      total_tokens: 15522,
+    });
+    assert.equal(out.total_tokens, 15522);
+  });
+
+  test('leaves empty usage unchanged', () => {
+    const out = normalizeUsageTotals({});
+    assert.equal(out.total_tokens, undefined);
   });
 });

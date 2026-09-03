@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   buildClientStats,
+  fillUsageFromLlamaTimings,
   finalizeResponseMeta,
   mergeStreamMeta,
   reconcileCompletionStats,
@@ -85,6 +86,99 @@ describe('reconcileCompletionStats', () => {
     assert.equal(stats.time_to_first_token, 0.5);
     assert.ok(Math.abs(stats.tokens_per_second - 100) < 0.01);
   });
+
+  test('preserves prompt_tokens_per_second and draft_acceptance through full trust', () => {
+    const client = buildClientStats(0, 100, 5_100, { completion_tokens: 500 }, 'stop');
+    const server = {
+      tokens_per_second: 100,
+      time_to_first_token: 0.1,
+      generation_time: 5,
+      prompt_tokens_per_second: 5389.91,
+      draft_acceptance: 130 / 206,
+    };
+
+    const stats = reconcileCompletionStats(client, server, { completion_tokens: 500 });
+
+    assert.equal(stats.tokens_per_second, 100);
+    assert.equal(stats.prompt_tokens_per_second, 5389.91);
+    assert.ok(Math.abs((stats.draft_acceptance ?? 0) - 130 / 206) < 1e-9);
+  });
+
+  test('finalizeResponseMeta fills total_tokens from prompt + completion', () => {
+    const meta = finalizeResponseMeta(
+      {
+        stats: {
+          tokens_per_second: 100,
+          time_to_first_token: 0.1,
+          generation_time: 5,
+        },
+        // completion matches server tps × gen so full trust keeps server timing.
+        usage: { prompt_tokens: 1000, completion_tokens: 500 },
+        finish_reason: 'stop',
+      },
+      0,
+      100,
+      5_100,
+    );
+
+    assert.equal(meta.usage.total_tokens, 1500);
+    assert.equal(meta.stats.tokens_per_second, 100);
+  });
+
+  test('finalizeResponseMeta derives client timing when server stats are empty', () => {
+    const meta = finalizeResponseMeta(
+      {
+        usage: { total_tokens: 15522, completion_tokens: 200 },
+        finish_reason: 'stop',
+      },
+      0,
+      100,
+      5_100,
+    );
+
+    assert.equal(meta.usage.total_tokens, 15522);
+    assert.ok(meta.stats.time_to_first_token != null);
+    assert.ok(meta.stats.generation_time != null);
+    assert.ok(meta.stats.tokens_per_second != null);
+  });
+
+  test('finalizeResponseMeta fills usage from llama timings when usage is missing', () => {
+    const meta = finalizeResponseMeta(
+      {
+        stats: {
+          tokens_per_second: 146.55,
+          time_to_first_token: 1.45,
+          generation_time: 1.36,
+        },
+        timings: {
+          prompt_n: 7797,
+          predicted_n: 200,
+          predicted_ms: 1364,
+          predicted_per_second: 146.55,
+        },
+        finish_reason: 'stop',
+      },
+      0,
+      1450,
+      2814,
+    );
+
+    assert.equal(meta.usage.prompt_tokens, 7797);
+    assert.equal(meta.usage.completion_tokens, 200);
+    assert.equal(meta.usage.total_tokens, 7997);
+  });
+});
+
+describe('fillUsageFromLlamaTimings', () => {
+  test('does not overwrite an existing usage block', () => {
+    const out = fillUsageFromLlamaTimings(
+      { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      { prompt_n: 100, predicted_n: 50 },
+    );
+    assert.equal(out.prompt_tokens, 10);
+    assert.equal(out.completion_tokens, 5);
+    assert.equal(out.total_tokens, 15);
+  });
 });
 
 describe('llama.cpp timings', () => {
@@ -129,6 +223,21 @@ describe('llama.cpp timings', () => {
     assert.equal(meta.stats.tokens_per_second, 100);
     assert.equal(meta.stats.generation_time, 2);
     assert.equal(meta.timings.predicted_n, 200);
+  });
+
+  test('mergeStreamMeta derives usage from prompt_n and predicted_n', () => {
+    const meta = mergeStreamMeta(null, {
+      timings: {
+        prompt_n: 7797,
+        prompt_ms: 1446,
+        predicted_n: 200,
+        predicted_ms: 1364,
+        predicted_per_second: 146.55,
+      },
+    });
+    assert.equal(meta.usage.prompt_tokens, 7797);
+    assert.equal(meta.usage.completion_tokens, 200);
+    assert.equal(meta.usage.total_tokens, 7997);
   });
 
   test('mergeStreamMeta keeps the latest prompt_progress for the live status row', () => {

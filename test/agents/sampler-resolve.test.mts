@@ -139,6 +139,15 @@ describe('sampler preset merge', () => {
     assert.equal(body.max_tokens, 1024);
   });
 
+  test('applySamplerToBody requests include_usage on streamed bodies', () => {
+    const body = applySamplerToBody(
+      { model: 'test-model', messages: [], stream: true },
+      { temperature: 0.7 },
+      2048,
+    );
+    assert.equal(body.stream_options?.include_usage, true);
+  });
+
   test('mergeSamplerLayers is field-level', () => {
     const merged = mergeSamplerLayers(
       { temperature: 0.5, topP: 0.8 },

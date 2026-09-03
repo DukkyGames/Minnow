@@ -42,6 +42,7 @@ import { formatGenerationErrorMessage } from './generations';
 import { normalizeModeId } from '../chat/modes/types.ts';
 import { markMessageStopped } from '../ui/stopped-affordance';
 import { recordMainChatTurnUsage } from '../usage/record-chat-usage';
+import { normalizeUsageTotals } from '../usage/pricing';
 import { getActiveProvider } from '../providers/store';
 import { scrollChatIfPinned } from '../ui/chat-scroll';
 import {
@@ -312,6 +313,27 @@ export function statsFromLlamaTimings(timings: LlamaTimings | undefined): Stats 
   return out;
 }
 
+/**
+ * Fill OpenAI-style usage gaps from llama.cpp `prompt_n` / `predicted_n`.
+ * Hosted llama often emits timings without a `usage` block.
+ */
+export function fillUsageFromLlamaTimings(
+  usage: Usage | undefined,
+  timings: LlamaTimings | undefined,
+): Usage {
+  const out: Usage = { ...(usage || {}) };
+  if (!timings) return normalizeUsageTotals(out);
+  const promptN = Number(timings.prompt_n);
+  const predictedN = Number(timings.predicted_n);
+  if (out.prompt_tokens == null && Number.isFinite(promptN) && promptN >= 0) {
+    out.prompt_tokens = promptN;
+  }
+  if (out.completion_tokens == null && Number.isFinite(predictedN) && predictedN >= 0) {
+    out.completion_tokens = predictedN;
+  }
+  return normalizeUsageTotals(out);
+}
+
 /** Merge stats, usage, model_info, and finish_reason from successive chunks. */
 export function mergeStreamMeta(
   acc: StreamMetaAccumulator | null | undefined,
@@ -335,6 +357,19 @@ export function mergeStreamMeta(
   if (finish) next.finish_reason = finish;
   const streamError = extractStreamErrorMessage(chunk);
   if (streamError) next.error = streamError;
+  // Prefer real usage fields; fill gaps from llama timings when the provider omitted them.
+  if (next.timings) {
+    const filled = fillUsageFromLlamaTimings(next.usage, next.timings);
+    if (
+      filled.prompt_tokens != null ||
+      filled.completion_tokens != null ||
+      filled.total_tokens != null
+    ) {
+      next.usage = filled;
+    }
+  } else if (next.usage) {
+    next.usage = normalizeUsageTotals(next.usage);
+  }
   return next;
 }
 
@@ -443,6 +478,16 @@ function applyServerTimingFields(out: Stats, serverStats: Stats): void {
   if (serverStats.tokens_per_second != null) out.tokens_per_second = serverStats.tokens_per_second;
 }
 
+/** Keep llama-only chips (pp / draft %) that timing reconcile does not overwrite. */
+function applyLlamaOnlyServerFields(out: Stats, serverStats: Stats): void {
+  if (serverStats.prompt_tokens_per_second != null) {
+    out.prompt_tokens_per_second = serverStats.prompt_tokens_per_second;
+  }
+  if (serverStats.draft_acceptance != null) {
+    out.draft_acceptance = serverStats.draft_acceptance;
+  }
+}
+
 function recomputeTokensPerSecond(out: Stats, usage: Usage | undefined): void {
   const completion = usage?.completion_tokens;
   const gen = out.generation_time;
@@ -458,6 +503,8 @@ export function reconcileCompletionStats(
 ): Stats {
   const out: Stats = { ...clientStats };
   if (serverStats.stop_reason) out.stop_reason = serverStats.stop_reason;
+  // Preserve speculative-decoding / prompt-processing chips on every reconcile path.
+  applyLlamaOnlyServerFields(out, serverStats);
 
   const hasServerTiming =
     serverStats.tokens_per_second != null ||
@@ -494,7 +541,8 @@ export function finalizeResponseMeta(
   tFirst: number | null,
   tEnd: number
 ): { stats: Stats; usage: Usage; model_info: ModelInfo } {
-  const usage = streamMeta.usage || {};
+  // Hosted llama often has timings.prompt_n / predicted_n but no usage block.
+  const usage = fillUsageFromLlamaTimings(streamMeta.usage, streamMeta.timings);
   const serverStats = streamMeta.stats || {};
   const clientStats = buildClientStats(t0, tFirst, tEnd, usage, streamMeta.finish_reason);
   const stats = reconcileCompletionStats(clientStats, serverStats, usage);

@@ -38,6 +38,11 @@ export function extractAssistantCompletionText(
     | undefined,
 ): string;
 export function statsFromLlamaTimings(timings: LlamaTimings | undefined): Stats | null;
+/** Fill missing usage fields from llama.cpp `prompt_n` / `predicted_n`. */
+export function fillUsageFromLlamaTimings(
+  usage: import('../../src/types').Usage | undefined,
+  timings: LlamaTimings | undefined,
+): import('../../src/types').Usage;
 export function mergeStreamMeta(
   acc: StreamMetaAccumulator | null | undefined,
   chunk: ChatCompletionChunk,

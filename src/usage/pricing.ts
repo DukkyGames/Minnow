@@ -82,6 +82,23 @@ export function usageTokenCounts(usage: Usage): {
   };
 }
 
+/**
+ * Fill `total_tokens` from prompt + completion when the provider omitted it.
+ * Keeps an existing finite `total_tokens` unchanged.
+ */
+export function normalizeUsageTotals(usage: Usage): Usage {
+  const out: Usage = { ...usage };
+  if (out.total_tokens != null && Number.isFinite(out.total_tokens)) {
+    return out;
+  }
+  const hasPrompt = out.prompt_tokens != null && Number.isFinite(out.prompt_tokens);
+  const hasCompletion =
+    out.completion_tokens != null && Number.isFinite(out.completion_tokens);
+  if (!hasPrompt && !hasCompletion) return out;
+  out.total_tokens = (out.prompt_tokens ?? 0) + (out.completion_tokens ?? 0);
+  return out;
+}
+
 /** True when at least one token field is present and positive. */
 export function hasMeasurableUsage(usage: Usage | undefined | null): boolean {
   if (!usage) return false;

@@ -94,6 +94,7 @@ import { setStatus } from './status';
 import { refreshMetricsStripForChat } from './stats';
 import { refreshContextUsageRing } from './context-usage-ring';
 import { resetCodeChangeTotals, recomputeWorkspaceCodeChangeTotals } from '../usage/code-change-ledger';
+import { normalizeUsageTotals } from '../usage/pricing';
 import { sessionState } from '../state/sessions';
 import { updateWorkspaceCodeChangeDisplay } from './workspace-code-change';
 import { resetTokenLedger } from '../usage/token-ledger';
@@ -1177,7 +1178,8 @@ export function appendStats(
   usage: Usage | undefined
 ): void {
   const s = stats || {};
-  const u = usage || {};
+  // Derive total from prompt+completion for legacy rows that omitted total_tokens.
+  const u = normalizeUsageTotals(usage || {});
 
   const chips = document.createElement('div');
   chips.className = 'msg-stats';

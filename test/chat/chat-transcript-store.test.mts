@@ -153,7 +153,9 @@ describe('P10-D chat transcript decorator (MIN-769)', () => {
 
     assert.ok(assistant);
     assert.deepEqual(assistant.thinking, ['I should call get_datetime']);
-    assert.deepEqual(assistant.stats, ROUND_STATS);
+    // round_end reconciles via finalizeResponseMeta — server timing fields survive.
+    assert.equal(assistant.stats?.tokens_per_second, ROUND_STATS.tokens_per_second);
+    assert.equal(assistant.stats?.time_to_first_token, ROUND_STATS.time_to_first_token);
     assert.deepEqual(assistant.usage, ROUND_USAGE);
     assert.equal('reasoning' in assistant, false);
     assert.equal('reasoning_content' in assistant, false);
@@ -361,5 +363,122 @@ describe('P10-D chat transcript decorator (MIN-769)', () => {
 
     assert.equal(decorated.load(CHAT_ID)?.messages.length, bare.load(CHAT_ID)?.messages.length);
     assert.equal(decorated.load(CHAT_ID)?.messages.length, overlay.length);
+  });
+
+  test('round_end without server stats persists client-derived timing chips', () => {
+    const chat = makeChat();
+    install(chat);
+    const store = createChatTranscriptStore();
+
+    store.observe({ type: 'round_start', index: 0 });
+    store.append(CHAT_ID, {
+      role: 'assistant',
+      content: 'Done.',
+    });
+    store.observe({
+      type: 'round_end',
+      index: 0,
+      text: 'Done.',
+      reasoning: '',
+      toolCallCount: 0,
+      usage: { total_tokens: 15522, completion_tokens: 200 },
+      finishReason: 'stop',
+      t0: 0,
+      tFirst: 100,
+      tEnd: 5_100,
+    });
+
+    const assistant = chat.history[1] as Extract<Message, { role: 'assistant' }>;
+    assert.equal(assistant.usage?.total_tokens, 15522);
+    assert.ok(assistant.stats?.time_to_first_token != null);
+    assert.ok(assistant.stats?.generation_time != null);
+    assert.ok(assistant.stats?.tokens_per_second != null);
+  });
+
+  test('round_end fills total_tokens from prompt + completion', () => {
+    const chat = makeChat();
+    install(chat);
+    const store = createChatTranscriptStore();
+
+    store.observe({ type: 'round_start', index: 0 });
+    store.append(CHAT_ID, {
+      role: 'assistant',
+      content: 'Hello.',
+    });
+    store.observe({
+      type: 'round_end',
+      index: 0,
+      text: 'Hello.',
+      reasoning: '',
+      toolCallCount: 0,
+      usage: { prompt_tokens: 100, completion_tokens: 50 },
+      stats: {
+        tokens_per_second: 40,
+        time_to_first_token: 0.2,
+        generation_time: 1.25,
+        prompt_tokens_per_second: 5000,
+        draft_acceptance: 0.6,
+      },
+      finishReason: 'stop',
+      t0: 0,
+      tFirst: 200,
+      tEnd: 1_450,
+    });
+
+    const assistant = chat.history[1] as Extract<Message, { role: 'assistant' }>;
+    assert.equal(assistant.usage?.total_tokens, 150);
+    assert.equal(assistant.stats?.tokens_per_second, 40);
+    assert.equal(assistant.stats?.prompt_tokens_per_second, 5000);
+    assert.equal(assistant.stats?.draft_acceptance, 0.6);
+  });
+
+  test('round_end derives usage from stream_meta llama timings when usage is omitted', () => {
+    const chat = makeChat();
+    install(chat);
+    const store = createChatTranscriptStore();
+
+    store.observe({ type: 'round_start', index: 0 });
+    store.observe({
+      type: 'stream_meta',
+      stats: {
+        tokens_per_second: 146.55,
+        time_to_first_token: 1.45,
+        generation_time: 1.36,
+      },
+      runtime: {
+        timings: {
+          prompt_n: 7797,
+          predicted_n: 200,
+          predicted_ms: 1364,
+          predicted_per_second: 146.55,
+        },
+      },
+    });
+    store.append(CHAT_ID, {
+      role: 'assistant',
+      content: 'Hello.',
+    });
+    store.observe({
+      type: 'round_end',
+      index: 0,
+      text: 'Hello.',
+      reasoning: '',
+      toolCallCount: 0,
+      stats: {
+        tokens_per_second: 146.55,
+        time_to_first_token: 1.45,
+        generation_time: 1.36,
+      },
+      finishReason: 'stop',
+      t0: 0,
+      tFirst: 1450,
+      tEnd: 2814,
+    });
+
+    const assistant = chat.history[1] as Extract<Message, { role: 'assistant' }>;
+    assert.equal(assistant.usage?.prompt_tokens, 7797);
+    assert.equal(assistant.usage?.completion_tokens, 200);
+    assert.equal(assistant.usage?.total_tokens, 7997);
+    assert.equal(assistant.stats?.tokens_per_second, 146.55);
   });
 });

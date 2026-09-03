@@ -142,6 +142,36 @@ export function statsFromLlamaTimings(timings) {
   return out;
 }
 
+/**
+ * Fill OpenAI-style usage gaps from llama.cpp `prompt_n` / `predicted_n`.
+ * Hosted llama often emits timings without a `usage` block.
+ */
+export function fillUsageFromLlamaTimings(usage, timings) {
+  const out = { ...(usage || {}) };
+  if (!timings) return normalizeUsageFields(out);
+  const promptN = Number(timings.prompt_n);
+  const predictedN = Number(timings.predicted_n);
+  if (out.prompt_tokens == null && Number.isFinite(promptN) && promptN >= 0) {
+    out.prompt_tokens = promptN;
+  }
+  if (out.completion_tokens == null && Number.isFinite(predictedN) && predictedN >= 0) {
+    out.completion_tokens = predictedN;
+  }
+  return normalizeUsageFields(out);
+}
+
+/** Derive total_tokens when only prompt/completion counts are present. */
+function normalizeUsageFields(usage) {
+  const out = { ...usage };
+  if (out.total_tokens != null && Number.isFinite(out.total_tokens)) return out;
+  const hasPrompt = out.prompt_tokens != null && Number.isFinite(out.prompt_tokens);
+  const hasCompletion =
+    out.completion_tokens != null && Number.isFinite(out.completion_tokens);
+  if (!hasPrompt && !hasCompletion) return out;
+  out.total_tokens = (out.prompt_tokens ?? 0) + (out.completion_tokens ?? 0);
+  return out;
+}
+
 /** Merge stats, usage, model_info, and finish_reason from successive chunks. */
 export function mergeStreamMeta(acc, chunk) {
   const next = { ...(acc || {}) };
@@ -159,5 +189,18 @@ export function mergeStreamMeta(acc, chunk) {
   if (finish) next.finish_reason = finish;
   const streamError = extractStreamErrorMessage(chunk);
   if (streamError) next.error = streamError;
+  // Prefer real usage fields; fill gaps from llama timings when the provider omitted them.
+  if (next.timings) {
+    const filled = fillUsageFromLlamaTimings(next.usage, next.timings);
+    if (
+      filled.prompt_tokens != null ||
+      filled.completion_tokens != null ||
+      filled.total_tokens != null
+    ) {
+      next.usage = filled;
+    }
+  } else if (next.usage) {
+    next.usage = normalizeUsageFields(next.usage);
+  }
   return next;
 }

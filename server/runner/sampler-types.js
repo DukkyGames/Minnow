@@ -136,7 +136,17 @@ function samplerToCompletionFields(preset, maxTokens) {
 }
 function applySamplerToBody(body, preset, maxTokens) {
   const mapped = samplerToCompletionFields(preset, maxTokens);
-  return { ...body, ...mapped };
+  const out = { ...body, ...mapped };
+  // Ask OpenAI-compatible servers for a final usage block on streamed turns.
+  if (out.stream === true) {
+    const existing =
+      out.stream_options && typeof out.stream_options === 'object' ? out.stream_options : {};
+    out.stream_options = {
+      ...existing,
+      include_usage: existing.include_usage ?? true,
+    };
+  }
+  return out;
 }
 export {
   DEFAULT_AGENT_MAX_TOKENS,

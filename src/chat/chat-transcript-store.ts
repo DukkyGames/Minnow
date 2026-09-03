@@ -1,4 +1,5 @@
 import { createSessionTranscriptStore } from '../agents/session-transcript-store';
+import { finalizeResponseMeta } from '../api/chat';
 import { splitThinkingSegments } from '../api/reasoning';
 import { applyClassifiedStreamEnd, classifyStreamEnd } from '../api/stream-end';
 import { findChatById, recordChatMessage, scheduleSaveSessions, touchChat } from '../state/sessions';
@@ -13,17 +14,20 @@ import {
 } from '../tools/turn-continuation';
 import { ThinkingDurationTracker } from '../ui/thinking-duration';
 import type { ThoughtBubbleController } from '../ui/thought-bubbles';
+import { normalizeUsageTotals } from '../usage/pricing';
 import type { TurnEvent } from '../../server/runner/run-turn';
 import type { TranscriptMessage, TranscriptStore } from '../../server/runner/transcript-store';
 import type {
   AssistantMessage,
   AssistantToolCallMessage,
   CodeChangeStats,
+  LlamaTimings,
   Stats,
   ToolImageAttachment,
   TurnRunId,
   Usage,
 } from '../types';
+import { llamaRuntimeFromStreamMetaRuntime } from './turn-stream-meta';
 
 /** Inner-loop user rows. Visible bubbles if they land in `chat.history`. */
 const INNER_LOOP_CONTROL_USER_CONTENT = new Set<string>([
@@ -59,6 +63,8 @@ interface RoundDecorState {
   reasoning: string;
   stats?: Stats;
   usage?: Usage;
+  /** llama.cpp timings from stream_meta.runtime — used to derive usage when omitted. */
+  timings?: LlamaTimings;
   finishReason?: string;
   streamError?: string;
   toolCallCount: number;
@@ -149,6 +155,49 @@ export function createChatTranscriptStore(
     if (round.usage && Object.keys(round.usage).length > 0) {
       row.usage = round.usage;
     }
+  }
+
+  /**
+   * Persist the same reconciled stats/usage the live bubble uses.
+   * Falls back to raw event fields (+ total_tokens fill) when timings are missing.
+   */
+  function applyRoundEndMeta(
+    event: Extract<TurnEvent, { type: 'round_end' }>,
+  ): void {
+    const rawStats = asStats(event.stats);
+    const rawUsage = asUsage(event.usage);
+    const t0 =
+      typeof event.t0 === 'number' && Number.isFinite(event.t0) ? event.t0 : null;
+    const tEnd =
+      typeof event.tEnd === 'number' && Number.isFinite(event.tEnd) ? event.tEnd : null;
+    const tFirst =
+      event.tFirst == null
+        ? null
+        : typeof event.tFirst === 'number' && Number.isFinite(event.tFirst)
+          ? event.tFirst
+          : null;
+
+    if (t0 != null && tEnd != null) {
+      const finalized = finalizeResponseMeta(
+        {
+          usage: rawUsage ?? round.usage,
+          stats: rawStats ?? round.stats,
+          timings: round.timings,
+          finish_reason: event.finishReason ?? round.finishReason,
+        },
+        t0,
+        tFirst,
+        tEnd,
+      );
+      if (Object.keys(finalized.stats).length > 0) round.stats = finalized.stats;
+      else if (rawStats) round.stats = rawStats;
+      if (Object.keys(finalized.usage).length > 0) round.usage = finalized.usage;
+      else if (rawUsage) round.usage = normalizeUsageTotals(rawUsage);
+      return;
+    }
+
+    if (rawStats) round.stats = rawStats;
+    if (rawUsage) round.usage = normalizeUsageTotals(rawUsage);
   }
 
   function applyStreamEndToRow(row: Record<string, unknown>): void {
@@ -276,6 +325,10 @@ export function createChatTranscriptStore(
         const usage = asUsage(event.usage);
         if (stats) round.stats = stats;
         if (usage) round.usage = usage;
+        const runtime = llamaRuntimeFromStreamMetaRuntime(event.runtime);
+        if (runtime?.timings) {
+          round.timings = { ...round.timings, ...runtime.timings };
+        }
         if (event.finishReason) round.finishReason = event.finishReason;
         return;
       }
@@ -295,10 +348,8 @@ export function createChatTranscriptStore(
         round.index = event.index;
         round.reasoning = event.reasoning;
         round.toolCallCount = event.toolCallCount;
-        const stats = asStats(event.stats);
-        const usage = asUsage(event.usage);
-        if (stats) round.stats = stats;
-        if (usage) round.usage = usage;
+        // Prefer the same finalize path as live chips so history rebuild matches.
+        applyRoundEndMeta(event);
         if (event.finishReason) round.finishReason = event.finishReason;
         if (lastChatId) patchPersistedAssistant(lastChatId);
       }
