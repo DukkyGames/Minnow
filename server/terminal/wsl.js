@@ -2,8 +2,11 @@
  * WSL distro discovery and Windows ↔ Linux path mapping for terminal shells.
  */
 
-import { execSync } from 'child_process';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import path from 'path';
+
+const execFileAsync = promisify(execFile);
 
 /** Profile id prefix for per-distro WSL shells (`wsl:Ubuntu`). */
 export const WSL_PROFILE_PREFIX = 'wsl:';
@@ -65,38 +68,90 @@ export function parseDefaultWslDistro(output) {
 
 /**
  * List installed WSL distro names (Windows only).
+ * Live probes are async-warmed so the first shell tool does not block the server (MIN-584).
+ * Fixture output stays synchronous for tests.
  * @param {{ listOutput?: string; defaultOutput?: string }} [fixtures] test hooks
  * @returns {{ distros: string[]; defaultDistro: string | null }}
  */
-export function listWslDistros(fixtures = {}) {
-  const hasFixtures = fixtures.listOutput != null || fixtures.defaultOutput != null;
-  if (process.platform !== 'win32' && !hasFixtures) {
-    return { distros: [], defaultDistro: null };
-  }
+let wslDistroCache = null;
+/** @type {Promise<{ distros: string[]; defaultDistro: string | null }> | null} */
+let wslDistroWarmup = null;
 
+function catalogFromFixtures(fixtures) {
   try {
-    const listRaw =
-      fixtures.listOutput ??
-      execSync('wsl.exe -l -q', { encoding: 'utf8', timeout: 5000 });
+    const listRaw = fixtures.listOutput ?? '';
     const distros = parseWslDistroList(listRaw);
     if (distros.length === 0) {
       return { distros: [], defaultDistro: null };
     }
-
     let defaultDistro = distros[0] ?? null;
     try {
-      const verboseRaw =
-        fixtures.defaultOutput ??
-        execSync('wsl.exe -l -v', { encoding: 'utf8', timeout: 5000 });
+      const verboseRaw = fixtures.defaultOutput ?? '';
       defaultDistro = parseDefaultWslDistro(verboseRaw) ?? defaultDistro;
     } catch {
       /* fall back to first listed distro */
     }
-
     return { distros, defaultDistro };
   } catch {
     return { distros: [], defaultDistro: null };
   }
+}
+
+export function listWslDistros(fixtures = {}) {
+  const hasFixtures = fixtures.listOutput != null || fixtures.defaultOutput != null;
+  if (hasFixtures) {
+    return catalogFromFixtures(fixtures);
+  }
+  if (process.platform !== 'win32') {
+    return { distros: [], defaultDistro: null };
+  }
+  if (wslDistroCache) return wslDistroCache;
+  void warmupWslDistros();
+  return { distros: [], defaultDistro: null };
+}
+
+/** Async WSL `-l` probes; fills {@link wslDistroCache}. */
+export async function warmupWslDistros() {
+  if (process.platform !== 'win32') {
+    wslDistroCache = { distros: [], defaultDistro: null };
+    return wslDistroCache;
+  }
+  if (wslDistroWarmup) return wslDistroWarmup;
+  wslDistroWarmup = (async () => {
+    try {
+      const { stdout: listRaw } = await execFileAsync('wsl.exe', ['-l', '-q'], {
+        encoding: 'utf8',
+        timeout: 5000,
+        windowsHide: true,
+      });
+      const distros = parseWslDistroList(listRaw);
+      if (distros.length === 0) {
+        wslDistroCache = { distros: [], defaultDistro: null };
+        return wslDistroCache;
+      }
+      let defaultDistro = distros[0] ?? null;
+      try {
+        const { stdout: verboseRaw } = await execFileAsync('wsl.exe', ['-l', '-v'], {
+          encoding: 'utf8',
+          timeout: 5000,
+          windowsHide: true,
+        });
+        defaultDistro = parseDefaultWslDistro(verboseRaw) ?? defaultDistro;
+      } catch {
+        /* fall back to first listed distro */
+      }
+      wslDistroCache = { distros, defaultDistro };
+    } catch {
+      wslDistroCache = { distros: [], defaultDistro: null };
+    }
+    return wslDistroCache;
+  })();
+  return wslDistroWarmup;
+}
+
+export function resetWslDistroCacheForTests() {
+  wslDistroCache = null;
+  wslDistroWarmup = null;
 }
 
 /**

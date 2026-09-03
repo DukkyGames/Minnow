@@ -423,11 +423,14 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
       clearToolStartIndicator();
       toolCallCount += 1;
       const parsed = parsePaintToolArguments(event.arguments);
+      const key = event.id ?? `${event.name}:${toolCallCount}`;
+      argsById.set(key, parsed.args);
+      if (event.id) argsById.set(event.id, parsed.args);
+      // Background chats rebuild tool cards from history on switch (MIN-584).
+      if (!originStreamVisible()) return;
       const wrap = renderToolCall(event.name, parsed.args);
       if (event.id) wrap.dataset.toolCallId = event.id;
-      const key = event.id ?? `${event.name}:${toolCallCount}`;
       toolWraps.set(key, wrap);
-      argsById.set(key, parsed.args);
       if (event.id) {
         attachShellKillUi(
           wrap,
@@ -438,7 +441,7 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
           host.chatId,
         );
       }
-      if (originStreamVisible()) host.mount.appendChild(wrap);
+      host.mount.appendChild(wrap);
       return;
     }
     if (event.type === 'tool_result') {
@@ -448,7 +451,13 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
         : [...toolWraps.keys()].find((k) => k.startsWith(`${event.name}:`));
       const captured =
         (event.id && toolWraps.get(event.id)) || (key ? toolWraps.get(key) : undefined);
-      if (!captured) return;
+      const args =
+        (event.id && argsById.get(event.id)) || (key ? argsById.get(key) : undefined);
+      const content = displayToolResultContent(event);
+      if (!captured) {
+        notifyMemorySavedFromTool(event.name, args, content);
+        return;
+      }
       const wrap =
         originStreamVisible() && event.id
           ? resolveLiveToolWrap(event.id, captured)
@@ -456,9 +465,6 @@ export function createChatTurnEventPainter(host: ChatTurnPaintHost): ChatTurnEve
       if (wrap !== captured && event.id) {
         toolWraps.set(event.id, wrap);
       }
-      const args =
-        (event.id && argsById.get(event.id)) || (key ? argsById.get(key) : undefined);
-      const content = displayToolResultContent(event);
       renderToolResult(
         wrap,
         content,

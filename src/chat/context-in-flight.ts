@@ -8,14 +8,24 @@ export interface ContextInFlightOverlay {
   pendingToolCallsJson?: string;
 }
 
-let activeOverlay: ContextInFlightOverlay | null = null;
+/** Per-chat overlays so concurrent streams cannot clobber each other (MIN-584). */
+const overlays = new Map<string, ContextInFlightOverlay>();
 
 let overlayWriteCount = 0;
 
-/** Replace or clear the overlay for the active turn (P10-I: coalesced paint + tool_call). */
+/** Replace or clear overlays. `null` clears every chat (tests / full reset). */
 export function setContextInFlightOverlay(overlay: ContextInFlightOverlay | null): void {
   overlayWriteCount += 1;
-  activeOverlay = overlay;
+  if (!overlay) {
+    overlays.clear();
+    return;
+  }
+  overlays.set(overlay.chatId, overlay);
+}
+
+/** Drop the overlay for one chat without touching siblings still streaming. */
+export function clearContextInFlightOverlay(chatId: string): void {
+  overlays.delete(chatId);
 }
 
 export function syncTurnContextUsage(overlay: ContextInFlightOverlay): void {
@@ -30,18 +40,19 @@ export function getContextOverlayWriteCountForTests(): number {
 /** Test hook: reset overlay + write counter between cases. */
 export function resetContextOverlayWriteCountForTests(): void {
   overlayWriteCount = 0;
-  activeOverlay = null;
+  overlays.clear();
 }
 
 /** Overlay fields for a chat when the ring should count in-progress tokens. */
 export function getContextInFlightOverlay(
   chatId: string,
 ): Omit<ContextInFlightOverlay, 'chatId'> | undefined {
-  if (!activeOverlay || activeOverlay.chatId !== chatId) return undefined;
+  const overlay = overlays.get(chatId);
+  if (!overlay) return undefined;
   return {
-    partialAssistantText: activeOverlay.partialAssistantText,
-    thinkingText: activeOverlay.thinkingText,
-    pendingToolCallsJson: activeOverlay.pendingToolCallsJson,
+    partialAssistantText: overlay.partialAssistantText,
+    thinkingText: overlay.thinkingText,
+    pendingToolCallsJson: overlay.pendingToolCallsJson,
   };
 }
 

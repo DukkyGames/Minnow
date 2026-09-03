@@ -329,6 +329,11 @@ export function createSubAgentRunClient(
       source.addEventListener('event', onEvent);
       source.addEventListener('live', onLive);
       source.addEventListener('error', onError);
+      // Server sends `done` then ends the response. Close so EventSource does not reconnect.
+      source.addEventListener('done', () => {
+        source?.close();
+        source = null;
+      });
       source.addEventListener('deliver', (event: { data: string }) => {
         try {
           const payload = JSON.parse(event.data) as DeliverFrame;

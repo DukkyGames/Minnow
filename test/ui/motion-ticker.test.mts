@@ -225,7 +225,10 @@ describe('ticked motion', () => {
 
     const late = new FakeAnimation();
     const spinner = mounted.win.document.createElement('div');
-    installGetAnimations(spinner as unknown as { getAnimations?: GetAnimationsFn }, () => [late]);
+    installGetAnimations(
+      mounted.win.document.documentElement as unknown as { getAnimations?: GetAnimationsFn },
+      (opts) => (opts?.subtree ? [late] : []),
+    );
     mounted.win.document.body.appendChild(spinner);
 
     const started = Date.now();

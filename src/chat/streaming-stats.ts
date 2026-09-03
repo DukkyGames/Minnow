@@ -9,7 +9,7 @@ import {
   averageStatsSegments,
 } from '../chat/plans/stats-math';
 import { estimateTokensFromText } from './prompts/token-estimate-core';
-import { getActiveChat } from '../state/sessions';
+import { getActiveChat, touchChat } from '../state/sessions';
 import { buildLastStatsSnapshot, updateStrip } from '../ui/stats';
 import type { Chat, ModelInfo, Stats, Usage } from '../types';
 
@@ -139,6 +139,8 @@ export function createStreamingStatsPublisher(chat: Chat): StreamingStatsPublish
   function apply(input: StreamingStatsSnapshot): void {
     const meta = buildLiveStreamMeta(input);
     chat.lastStats = buildLastStatsSnapshot(meta.stats, meta.usage);
+    // lastStats is persisted session state; mark dirty so PATCH tracking sees it (MIN-584).
+    touchChat(chat);
 
     if (getActiveChat().id !== chat.id) return;
 

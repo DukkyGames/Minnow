@@ -17,6 +17,7 @@ import {
   cancelAllForParentTurn,
   cancelSubAgent,
   getSubAgentRun,
+  countOpenSubAgentStreams,
   hydrateSubAgentRunsForParentChat,
   hydrateSubAgentTranscript,
   listActiveSubAgentRuns,
@@ -575,6 +576,7 @@ describe('transcript hydrate fills Activity without the empty placeholder', () =
     });
 
     await hydrateSubAgentRunsForParentChat(CHAT_ID);
+    assert.equal(countOpenSubAgentStreams(), 0, 'terminal hydrate must not open EventSource');
     await hydrateSubAgentTranscript(FIXED_RUN_ID);
     const run = getSubAgentRun(FIXED_RUN_ID);
     assert.ok(run);

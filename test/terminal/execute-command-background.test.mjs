@@ -33,8 +33,8 @@ function longRunningCommand() {
 function wslLiveReady() {
   if (process.platform !== 'win32') return false;
   try {
-    const { distros } = listWslDistros();
-    if (!distros.length) return false;
+    const probeList = spawnSync('wsl.exe', ['-l', '-q'], { timeout: 10_000, encoding: 'utf8' });
+    if (probeList.status !== 0) return false;
     const probe = spawnSync('wsl.exe', ['-e', 'true'], { timeout: 10_000 });
     return probe.status === 0;
   } catch {

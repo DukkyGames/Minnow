@@ -108,6 +108,14 @@ describe('P10-I syncTurnContextUsage overlay (MIN-774)', () => {
     assert.equal(getContextOverlayWriteCountForTests(), 2);
   });
 
+  test('concurrent chats keep separate overlays (MIN-584)', () => {
+    resetContextOverlayWriteCountForTests();
+    syncTurnContextUsage({ chatId: 'chat-a', partialAssistantText: 'A' });
+    syncTurnContextUsage({ chatId: 'chat-b', partialAssistantText: 'B' });
+    assert.equal(getContextInFlightOverlay('chat-a')?.partialAssistantText, 'A');
+    assert.equal(getContextInFlightOverlay('chat-b')?.partialAssistantText, 'B');
+  });
+
   test('token burst through one paint-tick helper is one write', () => {
     resetContextOverlayWriteCountForTests();
     // Mimic coalesced paint: many deltas, one overlay write.

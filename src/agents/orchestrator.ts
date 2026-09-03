@@ -235,6 +235,9 @@ function mergeClientView(runId: string): void {
         : prev?.liveNestedToolCalls,
   });
   publish(next);
+  // Terminal runs do not need a live SSE socket; holding one exhausts HTTP/1.1's
+  // 6-connection pool (MIN-584). Close after publish so waiters already saw the fold.
+  if (terminal) releaseClient(runId);
 }
 
 // ── Streams ──────────────────────────────────────────────────────────────────
@@ -243,8 +246,22 @@ function openAuthenticatedStream(url: string): EventStream {
   return new EventSource(withSessionToken(url)) as EventStream;
 }
 
+function releaseClient(runId: string): void {
+  const client = clients.get(runId);
+  if (!client) return;
+  client.close();
+  clients.delete(runId);
+}
+
+/** Open EventSource count — one per live run. Tests assert this does not grow with history. */
+export function countOpenSubAgentStreams(): number {
+  return clients.size;
+}
+
 function ensureClient(runId: string): void {
   if (clients.has(runId)) return;
+  const existing = runs.get(runId);
+  if (existing && isSubAgentRunTerminal(existing.status)) return;
   const client = createSubAgentRunClient(runId, {
     openStream: openStream ?? openAuthenticatedStream,
   });
@@ -274,14 +291,19 @@ export function subscribeSubAgentDeliver(
 }
 
 function adoptRaw(raw: Record<string, unknown>): void {
-  const prev = runs.get(String(raw.runId ?? ''));
-  publish(subAgentRunFromFold(raw, prev ?? {}));
-  ensureClient(String(raw.runId));
   const runId = String(raw.runId ?? '');
+  const prev = runs.get(runId);
+  publish(subAgentRunFromFold(raw, prev ?? {}));
   const next = runs.get(runId);
-  if (next && isSubAgentRunTerminal(next.status) && (next.messages?.length ?? 0) === 0) {
-    void hydrateSubAgentTranscript(runId);
+  if (next && isSubAgentRunTerminal(next.status)) {
+    // Journal snapshot is enough for finished runs; do not occupy an HTTP/1.1 socket.
+    releaseClient(runId);
+    if ((next.messages?.length ?? 0) === 0) {
+      void hydrateSubAgentTranscript(runId);
+    }
+    return;
   }
+  ensureClient(runId);
 }
 
 // ── Hydrate ──────────────────────────────────────────────────────────────────

@@ -361,9 +361,10 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   if (codeMount) {
     teardownHub();
   }
-  area.innerHTML = '';
+  // Paint off-DOM and swap so the previous transcript stays until the new one is ready (MIN-584).
+  const transcriptHost = document.createElement('div');
   if (suspendedPlanChat) {
-    showOrchestratePlanScreenSuspendedBanner(area, chat);
+    showOrchestratePlanScreenSuspendedBanner(transcriptHost, chat);
   }
   const toolResultMap = new Map<
     string,
@@ -383,18 +384,19 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     });
   }
 
+  runWithChatMount(transcriptHost, () => {
   for (let i = 0; i < chat.history.length; i += 1) {
     const msg = chat.history[i];
     if (!msg || !msg.role) continue;
     if (msg.role === 'tool') continue;
 
     if (msg.role === 'context') {
-      appendContextNotice(area, msg as ContextNoticeMessage, i);
+      appendContextNotice(transcriptHost, msg as ContextNoticeMessage, i);
       continue;
     }
 
     if (msg.role === 'injection') {
-      appendInjectionNotice(area, msg as InjectionNoticeMessage, i);
+      appendInjectionNotice(transcriptHost, msg as InjectionNoticeMessage, i);
       continue;
     }
 
@@ -462,7 +464,7 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
         toolWrap.dataset.toolCallId = tc.id;
         toolWrap.dataset.historyIndex = String(i);
         toolWrap.dataset.turnKind = 'assistant-tools';
-        area.appendChild(toolWrap);
+        transcriptHost.appendChild(toolWrap);
         if (!firstToolEl) firstToolEl = toolWrap;
         const stored = toolResultMap.get(tc.id);
         if (stored !== undefined) {
@@ -486,7 +488,7 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
 
       for (const pair of getBeforeAfterPairs(chat.id)) {
         if (pair.turnId !== String(i)) continue;
-        area.appendChild(renderBeforeAfterCard(pair));
+        transcriptHost.appendChild(renderBeforeAfterCard(pair));
       }
       continue;
     }
@@ -547,6 +549,8 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     });
     attachVoicePlayButton(wrap, trimmed);
   }
+  });
+  area.replaceChildren(...transcriptHost.childNodes);
   renderPersistedSubAgentCardsForChat(chat);
   syncThoughtsCaretPulse(area);
   syncComposerMessageQueue();

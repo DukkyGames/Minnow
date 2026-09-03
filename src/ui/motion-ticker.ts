@@ -27,6 +27,8 @@ let timer: ReturnType<typeof setInterval> | null = null;
 let lastStepAt = 0;
 let observer: MutationObserver | null = null;
 const parked = new Set<SteppableAnimation>();
+/** Coalesce mutation-driven getAnimations into one rAF (MIN-584). */
+let discoveryRaf: number | null = null;
 
 /** Only looping animations are worth parking; a finite one ends on its own. */
 function isInfinite(anim: SteppableAnimation): boolean {
@@ -108,13 +110,30 @@ function mutationObserverCtor(): typeof MutationObserver | null {
 
 /** A newly inserted element (thinking caret, tool spinner) may already be running at vsync. */
 function onMutations(records: MutationRecord[]): void {
+  let added = false;
   for (const rec of records) {
     if (rec.type !== 'childList') continue;
     for (const node of rec.addedNodes) {
-      if (node.nodeType !== 1) continue;
-      parkTarget(node as unknown as AnimationsHost, true);
+      if (node.nodeType === 1) {
+        added = true;
+        break;
+      }
     }
+    if (added) break;
   }
+  if (!added) return;
+  const host =
+    (document.documentElement as unknown as AnimationsHost) ??
+    (document as unknown as AnimationsHost);
+  if (typeof requestAnimationFrame !== 'function') {
+    parkTarget(host, true);
+    return;
+  }
+  if (discoveryRaf != null) return;
+  discoveryRaf = requestAnimationFrame(() => {
+    discoveryRaf = null;
+    parkTarget(host, true);
+  });
 }
 
 /** Class-toggled loops on already-mounted chrome (sidebar dots) never appear as childList mutations. */
@@ -135,6 +154,10 @@ function startDiscovery(): void {
 }
 
 function stopDiscovery(): void {
+  if (discoveryRaf != null && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(discoveryRaf);
+  }
+  discoveryRaf = null;
   observer?.disconnect();
   observer = null;
   if (typeof document !== 'undefined') {

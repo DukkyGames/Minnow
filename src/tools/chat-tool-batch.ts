@@ -25,7 +25,7 @@ import { parallelToolsActivityLabel } from './parallel-tool-policy.ts';
 import { parseToolArguments } from './parse-tool-arguments.ts';
 import { setSubAgentExecutorContext } from './sub-agent-executor.ts';
 import { findToolWrapInDom } from './tool-wrap-dom.ts';
-import { renderSidebar } from '../ui/sidebar.ts';
+import { scheduleRenderSidebar } from '../ui/sidebar.ts';
 import { notifyMemorySavedFromTool } from '../ui/memory-saved-toast.ts';
 
 export interface RunChatToolBatchOptions {
@@ -266,7 +266,7 @@ export async function runChatToolBatch(
 
   recordChatMessage(chat);
   scheduleSaveSessions();
-  renderSidebar();
+  scheduleRenderSidebar();
 
   if (signal.aborted) {
     throw new DOMException('Aborted', 'AbortError');

@@ -10,7 +10,7 @@ import {
   touchChat,
 } from '../../state/sessions';
 import type { Chat } from '../../types';
-import { renderSidebar } from '../../ui/sidebar';
+import { scheduleRenderSidebar } from '../../ui/sidebar';
 import { generateChatTitle } from './generate';
 import { fallbackTitleFromSeed } from './sanitize';
 import {
@@ -157,5 +157,5 @@ async function runTitleJob(chatId: string, seed: string, signal: AbortSignal): P
   const chat = findChatById(chatId);
   if (chat) touchChat(chat);
   scheduleSaveSessions();
-  renderSidebar();
+  scheduleRenderSidebar();
 }

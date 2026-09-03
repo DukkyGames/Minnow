@@ -25,13 +25,15 @@ import {
 } from './context-usage-surface';
 
 const COMPOSER_REFRESH_DEBOUNCE_MS = 450;
-const STREAMING_CONTEXT_REFRESH_DEBOUNCE_MS = 1000;
+const STREAMING_CONTEXT_REFRESH_MS = 1000;
 /** Skip history re-tokenizing while the composer is being edited (macOS glyph lag). */
 const COMPOSER_TYPING_QUIET_MS = 2000;
 
 let lastComposerInputAt = 0;
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let streamThrottleLastFire = 0;
+let streamThrottleTrailingTimer: ReturnType<typeof setTimeout> | null = null;
 let inFlight: Promise<void> | null = null;
 let lastBudget: ContextBudget | null = null;
 /** Bumps on each refresh so slower async estimates cannot paint a prior chat. */
@@ -147,18 +149,37 @@ function composerTypingIsHot(): boolean {
   return lastComposerInputAt > 0 && Date.now() - lastComposerInputAt < COMPOSER_TYPING_QUIET_MS;
 }
 
-/** Debounced refresh (tool toggles, stream ticks). Composer typing must not start this. */
+/** Debounced refresh (tool toggles). Streaming uses a leading+trailing throttle so the ring updates while tokens flow (MIN-584). */
 export function scheduleContextUsageRefresh(options?: { duringStream?: boolean }): void {
   if (composerTypingIsHot()) return;
+  if (options?.duringStream) {
+    const now = Date.now();
+    const elapsed = streamThrottleLastFire === 0 ? STREAMING_CONTEXT_REFRESH_MS : now - streamThrottleLastFire;
+    if (elapsed >= STREAMING_CONTEXT_REFRESH_MS) {
+      streamThrottleLastFire = now;
+      if (streamThrottleTrailingTimer) {
+        clearTimeout(streamThrottleTrailingTimer);
+        streamThrottleTrailingTimer = null;
+      }
+      refreshContextUsageRing();
+      return;
+    }
+    if (streamThrottleTrailingTimer) return;
+    const remaining = STREAMING_CONTEXT_REFRESH_MS - elapsed;
+    streamThrottleTrailingTimer = setTimeout(() => {
+      streamThrottleTrailingTimer = null;
+      streamThrottleLastFire = Date.now();
+      if (composerTypingIsHot()) return;
+      refreshContextUsageRing();
+    }, remaining);
+    return;
+  }
   if (debounceTimer) clearTimeout(debounceTimer);
-  const delay = options?.duringStream
-    ? STREAMING_CONTEXT_REFRESH_DEBOUNCE_MS
-    : COMPOSER_REFRESH_DEBOUNCE_MS;
   debounceTimer = setTimeout(() => {
     debounceTimer = null;
     if (composerTypingIsHot()) return;
     refreshContextUsageRing();
-  }, delay);
+  }, COMPOSER_REFRESH_DEBOUNCE_MS);
 }
 
 function bindRingButton(surface: ContextUsageSurface): void {
@@ -247,6 +268,11 @@ export function resetContextUsageRingForTests(): void {
     clearTimeout(debounceTimer);
     debounceTimer = null;
   }
+  if (streamThrottleTrailingTimer) {
+    clearTimeout(streamThrottleTrailingTimer);
+    streamThrottleTrailingTimer = null;
+  }
+  streamThrottleLastFire = 0;
   inFlight = null;
   lastBudget = null;
   refreshGeneration = 0;

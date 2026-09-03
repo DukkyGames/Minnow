@@ -14,6 +14,7 @@ import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
 
 import { resetMinnowHomeCache } from '../../server/config/home.js';
 import { emitLive } from '../../server/orchestrator/live-events.js';
+import { createScriptedEffector } from '../../server/orchestrator/effector-scripted.js';
 import {
   createAgentsMiddleware,
   matchRoute,
@@ -194,6 +195,51 @@ function readSse(pathname, enough, headers = {}) {
   });
 }
 
+/**
+ * Read until the server ends the SSE (MIN-584). Do not destroy() on the first
+ * frames — a leaked stream never emits `end`.
+ *
+ * @param {string} pathname
+ */
+function readSseUntilEnd(pathname) {
+  return new Promise((resolve, reject) => {
+    /** @type {Array<{ id?: string, event: string, data: any }>} */
+    const frames = [];
+    const request = http.get(`${base}${pathname}`, (response) => {
+      if (response.statusCode !== 200) {
+        reject(new Error(`SSE returned ${response.statusCode}`));
+        return;
+      }
+      let buffer = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk) => {
+        buffer += chunk;
+        let split;
+        while ((split = buffer.indexOf('\n\n')) !== -1) {
+          const raw = buffer.slice(0, split);
+          buffer = buffer.slice(split + 2);
+          if (raw.startsWith(':')) continue;
+          /** @type {any} */
+          const frame = {};
+          for (const line of raw.split('\n')) {
+            if (line.startsWith('id: ')) frame.id = line.slice(4);
+            else if (line.startsWith('event: ')) frame.event = line.slice(7);
+            else if (line.startsWith('data: ')) frame.data = JSON.parse(line.slice(6));
+          }
+          frames.push(frame);
+        }
+      });
+      response.on('end', () => resolve({ frames, ended: true }));
+      response.on('error', (err) => reject(err));
+    });
+    request.on('error', reject);
+    setTimeout(() => {
+      request.destroy();
+      reject(new Error('SSE did not end within 8s'));
+    }, 8_000).unref?.();
+  });
+}
+
 // ── POST /api/agents spawn ───────────────────────────────────────────────────
 
 describe('POST /api/agents spawn 400 without model', () => {
@@ -329,6 +375,34 @@ describe('GET /api/agents/:runId/events SSE live vs journal', () => {
       lives.every((f) => f.data?.taskId === first.runId),
       true,
       'a live frame on this stream carried another run id',
+    );
+  });
+
+  it('ends the HTTP response after snapshot+done for a terminal run (MIN-584)', async () => {
+    setAgentsEffectorFactory(() =>
+      createScriptedEffector({ script: [{ emit: { outcome: 'pass', delayMs: 1 } }] }),
+    );
+    const spawned = await spawnOk();
+    let terminal = false;
+    for (let i = 0; i < 80; i += 1) {
+      const got = await call('GET', `/api/agents/${spawned.runId}`);
+      if (got.body?.status === 'completed' || got.body?.run?.phase === 'passed') {
+        terminal = true;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    assert.equal(terminal, true, 'scripted pass did not reach a terminal fold');
+
+    const result = await readSseUntilEnd(`/api/agents/${spawned.runId}/events`);
+    assert.equal(result.ended, true, 'server must res.end() so the socket is released');
+    assert.ok(
+      result.frames.some((f) => f.event === 'snapshot'),
+      'missing snapshot',
+    );
+    assert.ok(
+      result.frames.some((f) => f.event === 'done'),
+      'missing done frame',
     );
   });
 });

@@ -9,6 +9,7 @@ import { setStorageModeForTests } from '../../src/config/storage-mode.ts';
 import { defaultSessionState } from '../../src/config/defaults.ts';
 import {
   captureDirtyTrackingShadowForTests,
+  getDirtyTrackingShadowJsonForTests,
   getSessionDirtyTrackingForTests,
   removeChatById,
   resetSessionPersistenceForTests,
@@ -172,8 +173,8 @@ describe('session dirty tracking (B.1/B.2)', () => {
   test('verifier warns when a chat mutates without touchChat', () => {
     const state = baseState();
     setSessionStateForTests(state);
-    captureDirtyTrackingShadowForTests();
     setDirtyTrackingVerifierForcedForTests(true);
+    captureDirtyTrackingShadowForTests();
 
     const warnings: string[] = [];
     const originalWarn = console.warn;
@@ -198,8 +199,8 @@ describe('session dirty tracking (B.1/B.2)', () => {
     setStorageModeForTests('server');
     const state = baseState();
     setSessionStateForTests(state);
-    captureDirtyTrackingShadowForTests();
     setDirtyTrackingVerifierForcedForTests(true);
+    captureDirtyTrackingShadowForTests();
 
     globalThis.fetch = async () =>
       new Response(JSON.stringify({ ok: true }), { status: 200 });
@@ -220,5 +221,18 @@ describe('session dirty tracking (B.1/B.2)', () => {
     }
 
     assert.equal(warnings.length, 0);
+  });
+
+  test('captureDirtyTrackingShadow is a no-op unless the verifier is on (MIN-584)', () => {
+    const state = baseState();
+    (state.chats[0] as Chat).history = [{ role: 'user', content: 'hello-shadow' }];
+    setDirtyTrackingVerifierForcedForTests(false);
+    setSessionStateForTests(state);
+    captureDirtyTrackingShadowForTests();
+    assert.equal(getDirtyTrackingShadowJsonForTests(), null);
+
+    setDirtyTrackingVerifierForcedForTests(true);
+    captureDirtyTrackingShadowForTests();
+    assert.ok(getDirtyTrackingShadowJsonForTests()?.includes('hello-shadow'));
   });
 });

@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -936,6 +936,65 @@ function logKillDebug(entry) {
 
 /** @type {Set<number> | null} */
 let cachedAncestorPids = null;
+/** @type {Promise<void> | null} */
+let ancestorWarmupPromise = null;
+
+/**
+ * Parse PowerShell CIM CSV into pid→ppid and walk from process.pid.
+ * @param {string} stdout
+ * @param {Set<number>} ancestors
+ */
+function fillAncestorsFromCsv(stdout, ancestors) {
+  /** @type {Map<number, number>} */
+  const parentOf = new Map();
+  for (const line of stdout.split(/\r?\n/).slice(1)) {
+    const m = line.match(/^"?(\d+)"?,"?(\d+)"?/);
+    if (m) parentOf.set(Number(m[1]), Number(m[2]));
+  }
+  let cur = process.pid;
+  for (let i = 0; i < 64; i++) {
+    const parent = parentOf.get(cur);
+    if (parent == null || parent === 0 || ancestors.has(parent)) break;
+    ancestors.add(parent);
+    cur = parent;
+  }
+}
+
+/**
+ * Fill the rest of the Windows ancestor set without blocking the event loop.
+ * Mutates {@link cachedAncestorPids} in place so callers already holding the Set see new pids.
+ */
+function warmupWindowsAncestorPids() {
+  if (process.platform !== 'win32') return Promise.resolve();
+  if (ancestorWarmupPromise) return ancestorWarmupPromise;
+  ancestorWarmupPromise = new Promise((resolve) => {
+    const child = execFile(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-Command',
+        'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId | ConvertTo-Csv -NoTypeInformation',
+      ],
+      { encoding: 'utf8', windowsHide: true, timeout: 4000 },
+      (err, stdout) => {
+        const ancestors = cachedAncestorPids ?? new Set([process.pid]);
+        cachedAncestorPids = ancestors;
+        if (!err && stdout) {
+          try {
+            fillAncestorsFromCsv(stdout, ancestors);
+          } catch {
+            if (typeof process.ppid === 'number') ancestors.add(process.ppid);
+          }
+        } else if (typeof process.ppid === 'number') {
+          ancestors.add(process.ppid);
+        }
+        resolve();
+      },
+    );
+    child.on('error', () => resolve());
+  });
+  return ancestorWarmupPromise;
+}
 
 /**
  * @returns {Set<number>}
@@ -944,41 +1003,20 @@ function selfAncestorPids() {
   if (cachedAncestorPids) return cachedAncestorPids;
   const ancestors = new Set([process.pid]);
   cachedAncestorPids = ancestors;
-  if (process.platform !== 'win32') {
-    if (typeof process.ppid === 'number') ancestors.add(process.ppid);
-    return ancestors;
-  }
-  try {
-    const out = spawnSync(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-Command',
-        'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId | ConvertTo-Csv -NoTypeInformation',
-      ],
-      { encoding: 'utf8', windowsHide: true, timeout: 4000 },
-    );
-    if (out.status !== 0 || !out.stdout) {
-      if (typeof process.ppid === 'number') ancestors.add(process.ppid);
-      return ancestors;
-    }
-    /** @type {Map<number, number>} */
-    const parentOf = new Map();
-    for (const line of out.stdout.split(/\r?\n/).slice(1)) {
-      const m = line.match(/^"?(\d+)"?,"?(\d+)"?/);
-      if (m) parentOf.set(Number(m[1]), Number(m[2]));
-    }
-    let cur = process.pid;
-    for (let i = 0; i < 64; i++) {
-      const parent = parentOf.get(cur);
-      if (parent == null || parent === 0 || ancestors.has(parent)) break;
-      ancestors.add(parent);
-      cur = parent;
-    }
-  } catch {
-    if (typeof process.ppid === 'number') ancestors.add(process.ppid);
+  if (typeof process.ppid === 'number') ancestors.add(process.ppid);
+  if (process.platform === 'win32') {
+    void warmupWindowsAncestorPids();
   }
   return ancestors;
+}
+
+/** Idle warmup so the first shell tool does not stall the server event loop (MIN-584). */
+export function warmupTerminalPlatformCaches() {
+  if (process.platform !== 'win32') return Promise.resolve();
+  return Promise.all([
+    warmupWindowsAncestorPids(),
+    import('./terminal/shell-profiles.js').then((m) => m.warmupWslShellProfiles()),
+  ]);
 }
 
 // ── Kill tree ────────────────────────────────────────────────────────────────

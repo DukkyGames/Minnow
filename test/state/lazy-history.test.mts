@@ -16,6 +16,7 @@ import {
   isSessionsLazyHistoryEnabled,
   requireHistory,
   resetSessionPersistenceForTests,
+  setDirtyTrackingVerifierForcedForTests,
   setHistoryTrapForcedForTests,
   setSessionStateForTests,
   setSessionsLazyHistoryEnabledForTests,
@@ -220,6 +221,7 @@ describe('lazy history (C.2)', () => {
     try {
       setSessionsLazyHistoryEnabledForTests(true);
       setHistoryTrapForcedForTests(true);
+      setDirtyTrackingVerifierForcedForTests(true);
       const chat = makeChat(CHAT_A, { historyLoaded: false, history: [] });
       attachUnloadedHistoryTrapForTests(chat);
       setSessionStateForTests(makeState([chat]));

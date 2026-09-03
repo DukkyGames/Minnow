@@ -100,6 +100,7 @@ export function subscribeChatStreamActivity(
 /** Notify subscribers that a chat received stream/progress activity. */
 export function notifyChatStreamActivity(chatId: string): void {
   if (!chatId) return;
+  if (streamActivityListeners.size === 0) return;
   pendingStreamActivityChatIds.add(chatId);
   scheduleStreamActivityFlush();
 }

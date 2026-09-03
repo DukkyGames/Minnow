@@ -558,6 +558,48 @@ async function streamEvents(req, res, runId) {
     return rec.runId === runId;
   };
 
+  let heartbeat = null;
+  let closed = false;
+  /** @type {(() => void) | null} */
+  let unsubscribe = null;
+  /** @type {(() => void) | null} */
+  let unsubscribeLive = null;
+  /** @type {(() => void) | null} */
+  let unsubscribeErrors = null;
+  /** @type {(() => void) | null} */
+  let unsubscribeDeliver = null;
+
+  function cleanup() {
+    if (closed) return;
+    closed = true;
+    if (heartbeat !== null) clearInterval(heartbeat);
+    unsubscribe?.();
+    unsubscribeLive?.();
+    unsubscribeErrors?.();
+    unsubscribeDeliver?.();
+    try {
+      res.end();
+    } catch {
+    }
+  }
+
+  /**
+   * Finished runs must not hold an HTTP/1.1 socket (MIN-584). Send `done` so
+   * the EventSource client closes instead of auto-reconnecting, then end.
+   */
+  function endIfRunTerminal() {
+    if (closed) return;
+    const state = /** @type {import('./types').AgentsState} */ (engine.getState());
+    const current = state.runs.get(runId);
+    if (!current || !isTerminal(current)) return;
+    send('done', {
+      runId,
+      phase: current.phase,
+      status: statusFromPhase(current),
+    });
+    cleanup();
+  }
+
   const deliver = (event) => {
     if (!forThisRun(event)) return;
     const seq = Number(event.seq) || 0;
@@ -567,18 +609,22 @@ async function streamEvents(req, res, runId) {
     }
     if (seq <= sentThrough) return;
     sentThrough = seq;
-    if (!send('event', event, seq)) cleanup();
+    if (!send('event', event, seq)) {
+      cleanup();
+      return;
+    }
+    endIfRunTerminal();
   };
-  const unsubscribe = engine.subscribe(deliver);
-  const unsubscribeLive = subscribeLive(parentChatId, (payload) => {
+  unsubscribe = engine.subscribe(deliver);
+  unsubscribeLive = subscribeLive(parentChatId, (payload) => {
     if (payload.taskId !== runId) return;
     if (!send('live', payload)) cleanup();
   });
-  const unsubscribeErrors = subscribeErrors(parentChatId, (payload) => {
+  unsubscribeErrors = subscribeErrors(parentChatId, (payload) => {
     if (payload.taskId !== runId) return;
     if (!send('error', payload)) cleanup();
   });
-  const unsubscribeDeliver = subscribeDeliver(parentChatId, (payload) => {
+  unsubscribeDeliver = subscribeDeliver(parentChatId, (payload) => {
     if (!Array.isArray(payload.runIds) || !payload.runIds.includes(runId)) return;
     if (!send('deliver', payload)) cleanup();
   });
@@ -629,28 +675,16 @@ async function streamEvents(req, res, runId) {
 
   void getProductionDelivery().tick(parentChatId);
 
-  const heartbeat = setInterval(() => {
+  endIfRunTerminal();
+  if (closed) return;
+
+  heartbeat = setInterval(() => {
     try {
       res.write(': ping\n\n');
     } catch {
       cleanup();
     }
   }, HEARTBEAT_MS);
-
-  let closed = false;
-  function cleanup() {
-    if (closed) return;
-    closed = true;
-    clearInterval(heartbeat);
-    unsubscribe();
-    unsubscribeLive();
-    unsubscribeErrors();
-    unsubscribeDeliver();
-    try {
-      res.end();
-    } catch {
-    }
-  }
 
   req.on('close', cleanup);
   req.on('error', cleanup);

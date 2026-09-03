@@ -2,14 +2,19 @@
  * OS-gated shell profile catalog for interactive PTY tabs and execute_command.
  */
 
-import { execSync } from 'child_process';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import fs from 'fs';
 import {
   buildWslInteractiveArgs,
   listWslDistros,
+  resetWslDistroCacheForTests,
   resolveWslDistroFromProfileId,
+  warmupWslDistros,
   WSL_PROFILE_PREFIX,
 } from './wsl.js';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * @typedef {object} ShellProfile
@@ -33,13 +38,34 @@ let wslCatalog = null;
 export function detectWsl(platform = process.platform) {
   if (platform !== 'win32') return false;
   if (wslDetected !== null) return wslDetected;
+  void warmupWslShellProfiles();
+  return false;
+}
+
+/**
+ * Probe `wsl.exe --status` and distro list off the event loop (MIN-584).
+ */
+export async function warmupWslShellProfiles() {
+  if (process.platform !== 'win32') {
+    wslDetected = false;
+    wslCatalog = { distros: [], defaultDistro: null };
+    return;
+  }
+  if (wslDetected === true && wslCatalog !== null) return;
   try {
-    execSync('wsl.exe --status', { stdio: 'ignore', timeout: 3000 });
+    await execFileAsync('wsl.exe', ['--status'], {
+      timeout: 3000,
+      windowsHide: true,
+    });
     wslDetected = true;
   } catch {
     wslDetected = false;
   }
-  return wslDetected;
+  if (wslDetected) {
+    wslCatalog = await warmupWslDistros();
+  } else {
+    wslCatalog = { distros: [], defaultDistro: null };
+  }
 }
 
 /**
@@ -47,23 +73,29 @@ export function detectWsl(platform = process.platform) {
  * @param {{ wsl?: boolean }} [options]
  */
 function getWslCatalog(options = {}) {
-  if (wslCatalog !== null) return wslCatalog;
   if (options.wsl === false) {
     wslCatalog = { distros: [], defaultDistro: null };
     return wslCatalog;
   }
-  if (options.wsl !== true && !detectWsl()) {
-    wslCatalog = { distros: [], defaultDistro: null };
+  if (wslCatalog !== null) return wslCatalog;
+  if (options.wsl === true) {
+    const listed = listWslDistros();
+    if (listed.distros.length > 0) wslCatalog = listed;
+    return listed;
+  }
+  if (wslDetected === true) {
+    wslCatalog = listWslDistros();
     return wslCatalog;
   }
-  wslCatalog = listWslDistros();
-  return wslCatalog;
+  void warmupWslShellProfiles();
+  return { distros: [], defaultDistro: null };
 }
 
 /** Reset cached WSL detection (tests). */
 export function resetWslShellProfileCache() {
   wslDetected = null;
   wslCatalog = null;
+  resetWslDistroCacheForTests();
 }
 
 /**

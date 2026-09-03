@@ -32,6 +32,8 @@ export const EMPTY_STATE_HTML =
 /** @deprecated Use config API / ~/.minnow — kept for migration and Vite-only fallback. */
 export const STORAGE_KEY = 'minnow-sessions-v1';
 export const SAVE_DEBOUNCE_MS = 300;
+/** Cap how long a reset-debounce save can be postponed under continuous activity (MIN-584). */
+export const SAVE_MAX_WAIT_MS = 2000;
 export const PLACEHOLDER_CHAT_NAME = 'New chat';
 export const AUTO_TITLE_MAX_LEN = 40;
 /** @deprecated Use config API / ~/.minnow — kept for migration and Vite-only fallback. */

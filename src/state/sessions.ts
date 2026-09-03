@@ -1,4 +1,4 @@
-import { PLACEHOLDER_CHAT_NAME, SAVE_DEBOUNCE_MS, STORAGE_KEY } from '../constants';
+import { PLACEHOLDER_CHAT_NAME, SAVE_DEBOUNCE_MS, SAVE_MAX_WAIT_MS, STORAGE_KEY } from '../constants';
 import { abortChatTitleGeneration } from '../chat/titles/inflight';
 import { cleanupChatWorktreeOnDelete } from './chat-worktree';
 import { isPlaceholderChatName } from '../chat/titles/placeholder';
@@ -168,6 +168,8 @@ let sessionScalarsDirty = false;
 let sessionDirtyEpoch = 0;
 /** When true, run another {@link saveSessionsNow} after the in-flight flush settles. */
 let sessionSaveQueued = false;
+/** Wall clock when the current save debounce window opened (max-wait throttle). */
+let saveFirstScheduledAt = 0;
 /**
  * Shadow JSON of chats after last load/flush — used by the B.1/B.2 DEV verifier to
  * catch mutations that bypassed {@link touchChat}.
@@ -231,6 +233,8 @@ function chatForDirtyTrackingShadow(chat: Chat): Record<string, unknown> {
 }
 
 function captureDirtyTrackingShadow(state: SessionState | null): void {
+  // Production flushes must not JSON.stringify every hydrated transcript (MIN-584).
+  if (!isDirtyTrackingVerifierEnabled()) return;
   dirtyTrackingShadowChatsJson = state
     ? JSON.stringify(state.chats.map(chatForDirtyTrackingShadow))
     : null;
@@ -455,6 +459,11 @@ export function captureDirtyTrackingShadowForTests(): void {
   captureDirtyTrackingShadow(sessionState);
 }
 
+/** Test helper: serialized dirty-tracking shadow (null when the verifier is off). */
+export function getDirtyTrackingShadowJsonForTests(): string | null {
+  return dirtyTrackingShadowChatsJson;
+}
+
 // ── Session ready ────────────────────────────────────────────────────────────
 
 let sessionPersistenceShutdownRegistered = false;
@@ -511,6 +520,7 @@ export function resetSessionPersistenceForTests(): void {
     clearTimeout(saveTimer);
     setSaveTimer(null);
   }
+  saveFirstScheduledAt = 0;
 }
 
 /** Await the in-flight server PATCH/PUT started by {@link saveSessionsNow} (tests). */
@@ -1963,12 +1973,17 @@ export function scheduleSaveSessions(hint?: { chatId?: string; groupId?: string 
     bumpSessionDirtyEpoch();
   }
   if (hint?.groupId?.trim()) markGroupDirty(hint.groupId.trim());
+  const now = Date.now();
+  if (!saveTimer) saveFirstScheduledAt = now;
+  const elapsed = now - saveFirstScheduledAt;
+  const delay = Math.min(SAVE_DEBOUNCE_MS, Math.max(0, SAVE_MAX_WAIT_MS - elapsed));
   if (saveTimer) clearTimeout(saveTimer);
   setSaveTimer(
     setTimeout(() => {
       setSaveTimer(null);
+      saveFirstScheduledAt = 0;
       saveSessionsNow();
-    }, SAVE_DEBOUNCE_MS)
+    }, delay)
   );
 }
 
@@ -1977,6 +1992,7 @@ export function flushScheduledSessionSaveForTests(): void {
   if (!saveTimer) return;
   clearTimeout(saveTimer);
   setSaveTimer(null);
+  saveFirstScheduledAt = 0;
   saveSessionsNow();
 }
 
@@ -1986,6 +2002,7 @@ export function flushPendingSessionSaveOnShutdown(): void {
     clearTimeout(saveTimer);
     setSaveTimer(null);
   }
+  saveFirstScheduledAt = 0;
   saveSessionsNow({ keepalive: true });
 }
 

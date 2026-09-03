@@ -43,6 +43,9 @@ export async function bootstrapMinnowRuntime() {
   await initPluginsApi();
   await recomputeAllNextRuns();
   sweepCheckpoints();
+  setImmediate(() => {
+    void import('../terminal-runner.js').then((m) => m.warmupTerminalPlatformCaches());
+  });
   const homePath = getMinnowHome();
   return {
     workspacePath,

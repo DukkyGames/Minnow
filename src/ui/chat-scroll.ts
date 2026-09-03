@@ -3,7 +3,6 @@ import {
   isEmailAssistantForeground,
 } from './chat-mount';
 import { OB_CHAT_SCROLL_SELECTOR } from './orchestrate-board-chat-state';
-import { getForegroundAppId } from '../os/instances';
 
 /** Distance from bottom that still counts as "pinned" (larger than terminal — more padding in .chat-area). */
 export const CHAT_PIN_THRESHOLD_PX = 80;
@@ -20,14 +19,26 @@ let chatAppJumpChipEl: HTMLButtonElement | null = null;
 const BOARD_INIT_SPLIT_CHAT_TESTID = 'boardInitSplitChat';
 const DESKTOP_CHAT_TRANSCRIPT_SELECTOR = '.mn-os-chat-transcript';
 
+/** Cached scroll root for the current animation frame (MIN-584 layout thrash). */
+let frameCachedScrollRoot: HTMLElement | null | undefined;
+let frameCacheHandle = 0;
+
 /** Saved scroll position before a transcript rebuild (distance from bottom + pin state). */
 export interface ChatScrollAnchor {
   pinned: boolean;
   distanceFromBottom: number;
 }
 
-/** Scroll container for messages: Orchestrate chat pane, split bottom pane, else #chatArea. */
-export function getChatScrollRoot(): HTMLElement | null {
+/** Drop the per-frame scroll-root cache (chat switch, board/chat chrome). */
+export function invalidateChatScrollRootCache(): void {
+  frameCachedScrollRoot = undefined;
+  if (frameCacheHandle && typeof cancelAnimationFrame === 'function') {
+    cancelAnimationFrame(frameCacheHandle);
+  }
+  frameCacheHandle = 0;
+}
+
+function resolveChatScrollRoot(): HTMLElement | null {
   const boardChatPane = document.querySelector<HTMLElement>(OB_CHAT_SCROLL_SELECTOR);
   if (boardChatPane) return boardChatPane;
   const splitPane = document.querySelector(
@@ -37,13 +48,25 @@ export function getChatScrollRoot(): HTMLElement | null {
   if (isEmailAssistantForeground()) {
     return document.querySelector<HTMLElement>('.email-assistant-scroll');
   }
-  if (false && getForegroundAppId() !== 'code') {
-    return document.querySelector('.mn-os-chat-transcript') ?? chatAreaEl;
-  }
   if (isChatAppForeground()) {
     return document.getElementById('chatAppArea') ?? chatAreaEl;
   }
   return chatAreaEl;
+}
+
+/** Scroll container for messages: Orchestrate chat pane, split bottom pane, else #chatArea. */
+export function getChatScrollRoot(): HTMLElement | null {
+  if (typeof requestAnimationFrame !== 'function') {
+    return resolveChatScrollRoot();
+  }
+  if (frameCachedScrollRoot !== undefined) return frameCachedScrollRoot;
+  const root = resolveChatScrollRoot();
+  frameCachedScrollRoot = root;
+  frameCacheHandle = requestAnimationFrame(() => {
+    frameCacheHandle = 0;
+    frameCachedScrollRoot = undefined;
+  });
+  return root;
 }
 
 function onChatScrollTargetScroll(boundEl: HTMLElement): void {
@@ -116,8 +139,12 @@ function applyInstantScroll(area: HTMLElement, scrollTop: number): void {
 
 /** Scroll to tail only when the user is pinned near the bottom. */
 export function scrollChatIfPinned(): void {
+  if (!stickToBottom) {
+    updateJumpChipVisibility();
+    return;
+  }
   const root = getChatScrollRoot();
-  if (!root || !stickToBottom) {
+  if (!root) {
     updateJumpChipVisibility();
     return;
   }
@@ -195,11 +222,13 @@ export function bindDesktopChatTranscriptScroll(): void {
 
 /** Bind scroll listener on the embedded Orchestrate board chat (idempotent; call after mount). */
 export function bindOrchestrateBoardChatScroll(): void {
+  invalidateChatScrollRootCache();
   bindScrollTarget(document.querySelector<HTMLElement>(OB_CHAT_SCROLL_SELECTOR));
 }
 
 /** Bind scroll listener on the board-init split chat pane (idempotent). */
 export function bindBoardInitSplitChatScroll(): void {
+  invalidateChatScrollRootCache();
   bindScrollTarget(
     document.querySelector(
       `[data-testid="${BOARD_INIT_SPLIT_CHAT_TESTID}"]`,
@@ -215,6 +244,7 @@ function bindJumpChip(chip: HTMLButtonElement | null): void {
 }
 
 export function initChatScroll(): void {
+  invalidateChatScrollRootCache();
   chatAreaEl = document.getElementById('chatArea');
   jumpChipEl = document.getElementById(CHAT_JUMP_CHIP_ID) as HTMLButtonElement | null;
   chatAppJumpChipEl = document.getElementById(CHAT_APP_JUMP_CHIP_ID) as HTMLButtonElement | null;

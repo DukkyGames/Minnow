@@ -104,7 +104,7 @@ import { flushPendingMessageQueue } from './message-queue';
 import { syncComposerMessageQueue } from '../ui/composer-message-queue';
 import { syncComposerFromStreamingState } from '../ui/composer-send';
 import {
-  setContextInFlightOverlay,
+  clearContextInFlightOverlay,
   syncTurnContextUsage,
 } from './context-in-flight';
 import { scheduleContextUsageRefresh } from '../ui/context-usage-ring';
@@ -164,7 +164,6 @@ import {
   restorePendingAttachments,
 } from '../attachments/store';
 import { getActiveProvider } from '../providers/store';
-import { isLocalProvider } from '../providers/provider-host';
 import { canSendImagesToModel } from '../providers/vision-model.ts';
 import { acquireTickedMotion } from '../ui/motion-ticker';
 import { executeTool, getEnabledToolDefinitionsForChat } from '../tools/client';
@@ -236,7 +235,7 @@ import {
   setSidebarStreamPhase,
   syncChatItemDotsInDom,
 } from '../ui/chat-item-dot';
-import { renderSidebar } from '../ui/sidebar';
+import { scheduleRenderSidebar } from '../ui/sidebar';
 import { setStatus } from '../ui/status';
 import { scrollChatIfPinned } from '../ui/chat-scroll';
 import { completeStreamAnnouncer } from '../ui/a11y/stream-announcer';
@@ -717,7 +716,8 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         void linkSentAttachmentsToTurn(chat.id, String(pushedUserIdx), validAttachments);
       }
       if (!hideUserEcho) {
-        renderSidebar();
+        // Coalesce with other turn-start sidebar work; click/switch still render immediately.
+        scheduleRenderSidebar();
         if (isStreamDomVisible(chat.id)) {
           const { wrap: userWrap } = appendBubble(
             'user',
@@ -1080,7 +1080,9 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
             ? JSON.stringify(pendingToolCallsForContext)
             : undefined,
       });
-      scheduleContextUsageRefresh({ duringStream: true });
+      if (getActiveChat().id === chat.id) {
+        scheduleContextUsageRefresh({ duringStream: true });
+      }
     };
 
     painter = createChatTurnEventPainter({
@@ -1120,9 +1122,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
       },
     });
 
-    if (isLocalProvider(provider)) {
-      releaseTickedMotion = acquireTickedMotion();
-    }
+    releaseTickedMotion = acquireTickedMotion();
 
     let systemPrompt = 'You are a helpful assistant.';
     let injectionBlocks: Awaited<ReturnType<typeof composeRunTurnChatSystemPrompt>>['injectionBlocks'] = {
@@ -1371,7 +1371,10 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         id: sendModelId,
         // Wrapped `{ preset, maxTokens }` — same shape the sub-agent effector
         // uses. A flat sampler row would crash `applySamplerToBody`.
-        sampler: resolvedSampler,
+        sampler: {
+          preset: resolvedSampler.preset as Record<string, unknown>,
+          maxTokens: resolvedSampler.maxTokens,
+        },
         thinking:
           chat.thinkingMode === 'off' || chat.thinkingMode === 'on'
             ? { mode: chat.thinkingMode }
@@ -1657,7 +1660,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
         setStatus('ok', 'Ready');
         scrollChatIfPinned();
       }
-      renderSidebar();
+      scheduleRenderSidebar();
 
       if (
         (firstUserSendForInjections || deferTitleUntilTurnEnd || shouldScheduleTitle) &&
@@ -1730,7 +1733,7 @@ export async function runChatTurn(options: RunChatTurnOptions): Promise<void> {
     thoughtController?.abort();
     thinkingTracker?.abort();
     store?.abortThinking();
-    setContextInFlightOverlay(null);
+    clearContextInFlightOverlay(chat.id);
     scheduleContextUsageRefresh();
     registerStreamDomRemount(chat.id, null);
     if (turnStopReason !== 'system' && chat.currentGenerationId) {
