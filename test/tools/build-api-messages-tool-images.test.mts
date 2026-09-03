@@ -99,6 +99,26 @@ describe('buildApiMessages tool screenshots', () => {
     );
   });
 
+  test('persisted screenshot follow-ups are not sent twice', () => {
+    const chat = chatWithScreenshot();
+    chat.history.push({
+      role: 'user',
+      content: [
+        { type: 'text', text: TOOL_IMAGE_FOLLOW_UP_TEXT },
+        { type: 'image_url', image_url: { url: PNG_DATA_URL, detail: 'auto' } },
+      ],
+      toolImageFollowUp: true,
+    } as never);
+    const messages = buildApiMessages(chat, 'sys', {
+      composedSystemPrompt: 'sys',
+      vision: true,
+    });
+    const followUps = messages.filter(
+      (m) => m.role === 'user' && Array.isArray(m.content) && m.toolImageFollowUp === true,
+    );
+    assert.equal(followUps.length, 1);
+  });
+
   test('non-vision models get a hint and no image_url follow-up', () => {
     const messages = buildApiMessages(chatWithScreenshot(), 'sys', {
       composedSystemPrompt: 'sys',

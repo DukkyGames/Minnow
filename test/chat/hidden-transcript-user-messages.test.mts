@@ -65,4 +65,27 @@ describe('hidden transcript user messages', () => {
       true,
     );
   });
+
+  test('leaked multimodal user content does not throw on load', () => {
+    const partsRow = {
+      role: 'user' as const,
+      content: [{ type: 'text' as const, text: 'Check the UI' }],
+    };
+    assert.equal(isSubAgentResumeUserMessage(partsRow as never), false);
+    assert.equal(isHiddenTranscriptUserMessage(partsRow as never), false);
+  });
+
+  test('leaked tool screenshot follow-ups stay hidden from the transcript', () => {
+    assert.equal(
+      isHiddenTranscriptUserMessage({
+        role: 'user',
+        content: [
+          { type: 'text', text: '[tool screenshot] Visual result of the preceding tool call.' },
+          { type: 'image_url', image_url: { url: 'data:image/png;base64,aaa' } },
+        ],
+        toolImageFollowUp: true,
+      } as never),
+      true,
+    );
+  });
 });

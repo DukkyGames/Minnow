@@ -22,6 +22,7 @@ import {
   teardownOrchestratePlanScreenDom,
 } from './orchestrate-plan-screen';
 import { extractInlineThinkingFromContent } from '../api/inline-thinking';
+import { apiMessageContentToText } from '../api/message-content';
 import { normalizeModeId } from '../chat/modes/types';
 import { isHiddenTranscriptUserMessage } from '../chat/hidden-transcript-user-messages';
 import {
@@ -306,7 +307,7 @@ function appendHistoryMessageAt(host: HTMLElement, ctx: HistoryRenderContext, i:
     if (isHiddenTranscriptUserMessage(userMsg)) {
       return;
     }
-    const { wrap } = appendBubble('user', userMsg.content, {
+    const { wrap } = appendBubble('user', apiMessageContentToText(userMsg.content), {
       historyIndex: i,
       turnKind: 'user',
       chatId: chat.id,
@@ -394,7 +395,7 @@ function appendHistoryMessageAt(host: HTMLElement, ctx: HistoryRenderContext, i:
     return;
   }
 
-  const text = msg.content ?? '';
+  const text = apiMessageContentToText(msg.content);
   let trimmed = text.trim();
   const withThinking = msg as AssistantMessage;
   let thinkingSegments =

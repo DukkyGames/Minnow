@@ -5,7 +5,7 @@ import type { ApiMessageContent, ContentPart } from '../../src/types.js';
 /** Join text parts; non-text parts become short placeholders for estimates / logs. */
 export declare function contentPartsToText(parts: ContentPart[]): string;
 /** User/assistant API `content` field → display or token-estimate string. */
-export declare function apiMessageContentToText(content: ApiMessageContent): string;
+export declare function apiMessageContentToText(content: ApiMessageContent | unknown): string;
 /**
  * Streaming `delta.content` may be a string or structured parts (provider-specific).
  * Always returns a string fragment to append to the completion buffer.

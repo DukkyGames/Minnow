@@ -11,12 +11,14 @@ import {
   foldLeadingAssistantPreamble,
   repairUnpairedToolCalls,
 } from '../api/provider-message-normalize';
+import { apiMessageContentToText } from '../api/message-content';
 import { outboundReasoningReplayFields } from '../api/reasoning';
 import { tagApiMessageHistoryIndex } from './api-message-origin';
 import { isUiOnlyTranscriptMessage } from './context/injection-notice';
 import { copyHistoryForOutboundApi } from './history';
 import { indexOfLastUserMessage } from './history-truncate-core';
 import {
+  isToolImageFollowUpMessage,
   TOOL_IMAGE_NO_VISION_HINT,
   toolImageFollowUpUserMessage,
   toolMessageHasImageAttachment,
@@ -288,15 +290,16 @@ function historyImageReplayIndices(
 
 /** Persisted user row → multimodal content so the model can re-read the pixels. */
 function replayUserImageContent(message: UserMessage): ApiMessageContent {
+  const text = apiMessageContentToText(message.content);
   const parts: ContentPart[] = [];
-  if (message.content.trim()) {
-    parts.push({ type: 'text', text: message.content });
+  if (text.trim()) {
+    parts.push({ type: 'text', text });
   }
   for (const image of message.images ?? []) {
     if (!image.dataUrl?.startsWith('data:image/')) continue;
     parts.push({ type: 'image_url', image_url: { url: image.dataUrl, detail: 'auto' } });
   }
-  if (parts.length === 0) return message.content;
+  if (parts.length === 0) return text;
   return parts;
 }
 
@@ -338,10 +341,12 @@ export function buildApiMessages(
   for (let i = 0; i < outboundHistory.length; i += 1) {
     const m = outboundHistory[i];
     if (isUiOnlyTranscriptMessage(m)) continue;
+    // Screenshot follow-ups are rebuilt from tool attachments below — skip leaked persist.
+    if (m.role === 'user' && isToolImageFollowUpMessage(m as ApiMessage)) continue;
     if (m.role === 'user') {
       const isMultimodalUser = i === multimodalUserIdx;
       if (isMultimodalUser && pending.length > 0) {
-        const userText = options?.pendingUserText ?? m.content;
+        const userText = options?.pendingUserText ?? apiMessageContentToText(m.content);
         const content: ApiMessageContent = sendUserImages
           ? buildVlmUserApiContent(userText, pending)
           : buildStringUserApiContent(userText, pending);
@@ -439,7 +444,7 @@ export function overlayMultimodalHistoryForRunTurn(
     const m = history[i];
     if (m.role !== 'user') continue;
     if (i === multimodalUserIdx && pending.length > 0) {
-      const userText = options?.pendingUserText ?? m.content;
+      const userText = options?.pendingUserText ?? apiMessageContentToText(m.content);
       const content: ApiMessageContent = sendUserImages
         ? buildVlmUserApiContent(userText, pending)
         : buildStringUserApiContent(userText, pending);

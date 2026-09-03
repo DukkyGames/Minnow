@@ -38,6 +38,16 @@ describe('super plan hidden user messages', () => {
     );
   });
 
+  test('leaked multimodal content does not throw trimStart', () => {
+    assert.equal(
+      isSuperPlanPipelineUserMessage({
+        role: 'user',
+        content: [{ type: 'text', text: 'lets make a three.js website' }],
+      } as never),
+      false,
+    );
+  });
+
   test('appendSuperPlanStageFailureNotice adds a visible assistant row', () => {
     const chat = createEmptyChatObject('sp-fail-notice');
     appendSuperPlanStageFailureNotice(

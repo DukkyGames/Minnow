@@ -1,3 +1,4 @@
+import { apiMessageContentToText } from '../../api/message-content';
 import type { Chat, UserMessage } from '../../types';
 import { isSuperPlanStageId, SUPER_PLAN_STAGE_LABELS, type SuperPlanStageId } from './types.ts';
 
@@ -8,7 +9,8 @@ export function isSuperPlanPipelineUserMessage(msg: UserMessage): boolean {
   if (msg.superPlanStage && isSuperPlanStageId(msg.superPlanStage)) {
     return true;
   }
-  return msg.content.trimStart().startsWith(PIPELINE_USER_PREFIX);
+  // Coerce leaked ContentPart[] so reload cannot throw `content.trimStart is not a function`.
+  return apiMessageContentToText(msg.content).trimStart().startsWith(PIPELINE_USER_PREFIX);
 }
 
 /** Stamp a pushed user row as a hidden Super Plan stage instruction. */
