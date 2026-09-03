@@ -62,6 +62,24 @@ async function branchExists(branch) {
   return r.code === 0;
 }
 
+/**
+ * Drop a leftover attempt branch so the next `createWorktree` can `-b` from integration.
+ * `git worktree remove` leaves the ref; a task-keyed slot would otherwise re-attach it.
+ * @param {string} branch
+ * @returns {Promise<{ ok: boolean, output: string }>}
+ */
+export async function deleteLocalBranch(branch) {
+  const name = String(branch || '').trim();
+  if (!name || name.includes('..') || name.includes('\0')) {
+    return { ok: false, output: 'invalid branch name' };
+  }
+  const r = await git(['branch', '-D', name]);
+  const text = out(r);
+  // Missing refs are success: first allocate never created the branch.
+  if (ok(r) || /not found/i.test(text)) return { ok: true, output: text };
+  return { ok: false, output: text };
+}
+
 async function resolveRef(ref, cwd = getWorkspaceRoot()) {
   const r = await git(['rev-parse', '--verify', ref], cwd);
   if (!ok(r)) return null;

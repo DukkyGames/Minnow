@@ -53,7 +53,7 @@ export function getChatWorktreePath(chatId, workspaceRoot = getWorkspaceRoot()) 
   return path.join(getChatWorktreesDir(workspaceRoot), seg(chatId));
 }
 
-/** Absolute path for a single worktree slot (e.g. `task-T1`, `wave-W1`, `integration`). */
+/** Absolute path for a single worktree slot (`{boardSlug}-wave{n}-{taskId}` or `integration`). */
 export function getWorktreeSlotPath(boardId, slotId, workspaceRoot = getWorkspaceRoot()) {
   return path.join(getBoardWorktreesDir(boardId, workspaceRoot), seg(slotId));
 }

@@ -452,6 +452,7 @@ describe('P3-C merge-queue (real git)', { concurrency: false }, () => {
     const state = stateFor(h.boardId, [{ id: 'A', worktree: a.wt }]);
     assert.equal(previousWorktreeForTask(state, 'A'), a.wt);
     assert.equal(slotIdFromWorktreePath(h.boardId, a.wt), 'slot-a');
+    assert.equal(attemptBranch(h.boardId, slotIdFromWorktreePath(h.boardId, a.wt)), a.branch);
   });
 });
 

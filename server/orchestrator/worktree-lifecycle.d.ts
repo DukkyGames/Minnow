@@ -9,7 +9,7 @@ export function setOrphanBulkThresholdForTests(value?: number | null): void;
 
 export function integrationBranch(boardId: string): string;
 export function attemptBranch(boardId: string, slotId: string): string;
-export function slotIdForAttempt(attemptId: string): string;
+export function slotIdForTask(state: BoardState | null | undefined, taskId: string): string;
 export function parseWorktreePorcelain(porcelain: string): string[];
 export function pathsEqual(a: string, b: string): boolean;
 export function liveWorktreePaths(state: BoardState | null | undefined): Set<string>;

@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import { attemptCount } from './core/derive.js';
 import { decide, wantsSameWorktree } from './core/policy.js';
+import { sanitizePathSegment } from '../../src/lib/sanitize-path-segment.mjs';
 import { getBoardWorktreesDir, getWorktreeSlotPath } from '../worktree/paths.js';
 import { ensureDependencyDirs } from '../worktree/dep-symlinks.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
@@ -13,6 +14,7 @@ import {
   checkWorktreeDirty,
   commitWorktree,
   createWorktree,
+  deleteLocalBranch,
   ensureIntegration,
   listWorktrees,
   refreshIntegrationDeps,
@@ -79,12 +81,22 @@ export function attemptBranch(boardId, slotId) {
 }
 
 /**
- * Slot directory for a new attempt.
- * @param {string} attemptId
+ * Folder leaf (and branch tail) for a task checkout.
+ * Board display name so two boards can share task ids like `W1-A` without colliding
+ * in git pickers; wave number without the subtitle (64-char path cap).
+ * @param {import('./core/types').BoardState | null | undefined} state
+ * @param {string} taskId
  * @returns {string}
  */
-export function slotIdForAttempt(attemptId) {
-  return String(attemptId);
+export function slotIdForTask(state, taskId) {
+  const boardId = typeof state?.boardId === 'string' && state.boardId ? state.boardId : 'board';
+  const rawName = typeof state?.name === 'string' && state.name.trim() ? state.name : boardId;
+  const boardSlug = sanitizePathSegment(rawName);
+  const waveRaw = Number(state?.tasks?.get(taskId)?.wave);
+  const wave = Number.isInteger(waveRaw) && waveRaw > 0 ? waveRaw : 1;
+  const taskSeg = sanitizePathSegment(taskId || 'task');
+  // One directory per attempt — never put slashes in the slot.
+  return sanitizePathSegment(`${boardSlug}-wave${wave}-${taskSeg}`);
 }
 
 /**
@@ -324,7 +336,7 @@ export async function ensureBoardIntegration(boardId) {
  * }>}
  */
 export async function allocateAttemptWorktree(input) {
-  const { boardId, taskId, attemptId, desired, state } = input;
+  const { boardId, taskId, desired, state } = input;
   /** @type {Record<string, unknown>[]} */
   const discarded = [];
 
@@ -342,7 +354,8 @@ export async function allocateAttemptWorktree(input) {
   const previous = previousWorktreeForTask(state, taskId);
 
   if (reuse && previous) {
-    const slotId = slotIdFromWorktreePath(boardId, previous) ?? slotIdForAttempt(attemptId);
+    // Keep live UUID (or other) paths; only name a slot when the journal path is gone.
+    const slotId = slotIdFromWorktreePath(boardId, previous) ?? slotIdForTask(state, taskId);
     try {
       await fs.access(previous);
       return {
@@ -391,7 +404,10 @@ export async function allocateAttemptWorktree(input) {
     }
   }
 
-  const slotId = slotIdForAttempt(attemptId);
+  const slotId = slotIdForTask(state, taskId);
+  // Fresh retry reuses this slot path. Removing the worktree leaves the old
+  // attempt branch; delete it so createWorktree checks out integration again.
+  await deleteLocalBranch(attemptBranch(boardId, slotId));
   const created = await createWorktree({
     boardId,
     slotId,

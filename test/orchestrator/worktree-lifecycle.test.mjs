@@ -22,6 +22,7 @@ import { createRunnerEffector } from '../../server/orchestrator/effector-runner.
 import { createMemoryJournal } from '../../server/orchestrator/testing/memory-journal.js';
 import {
   allocateAttemptWorktree,
+  attemptBranch,
   INTEGRATION_SLOT,
   liveWorktreePaths,
   previousWorktreeForTask,
@@ -29,6 +30,7 @@ import {
   releaseWorktree,
   resetEnsuredBoards,
   setOrphanBulkThresholdForTests,
+  slotIdForTask,
   slotIdFromWorktreePath,
   WORKTREE_DISCARDED_TYPE,
   wantsReuse,
@@ -209,7 +211,7 @@ describe('P3-A worktree lifecycle', { concurrency: false }, () => {
     }
   });
 
-  test('blocked, continue, and rebase reuse the same path; failure-aware gets a new one', async () => {
+  test('blocked, continue, and rebase reuse the same path; failure-aware is a fresh checkout', async () => {
     resetEnsuredBoards();
     const state = boardState(['C']);
     const first = await allocateAttemptWorktree({
@@ -278,8 +280,43 @@ describe('P3-A worktree lifecycle', { concurrency: false }, () => {
       state,
     });
     assert.equal(fresh.ok, true, fresh.error);
-    assert.notEqual(path.resolve(fresh.path), path.resolve(first.path));
-    assert.equal(await exists(first.path), false, 'previous tree released for a fresh retry');
+    // Task-keyed slots keep the same path; the tree is a new checkout off integration.
+    assert.equal(path.resolve(fresh.path), path.resolve(first.path));
+    assert.equal(await exists(path.join(fresh.path, 'in-progress.txt')), false);
+    assert.equal(
+      (await fs.readFile(path.join(fresh.path, 'README.md'), 'utf8')).replace(/\r\n/g, '\n'),
+      '# p3a\n',
+    );
+  });
+
+  test('new attempt slots use board name, wave, and task id', async () => {
+    resetEnsuredBoards();
+    const events = [
+      makeEvent('board.created', {
+        boardId: BOARD_ID,
+        name: 'Auth Rewrite',
+        planPath: 'plan.md',
+        tasks: [{ ...taskSpec('W1-A'), wave: 1 }],
+        waves: [],
+      }),
+      makeEvent('board.started', { concurrency: 1 }),
+    ].map((event, i) => ({ ...event, seq: i + 1, ts: i + 1 }));
+    const state = derive(events);
+    const expectedSlot = 'Auth-Rewrite-wave1-W1-A';
+    assert.equal(slotIdForTask(state, 'W1-A'), expectedSlot);
+
+    const allocated = await allocateAttemptWorktree({
+      boardId: BOARD_ID,
+      taskId: 'W1-A',
+      attemptId: 'r-named-slot',
+      desired: { taskId: 'W1-A', role: 'builder', seedKind: 'initial', sameWorktree: false },
+      state,
+    });
+    assert.equal(allocated.ok, true, allocated.error);
+    assert.equal(allocated.slotId, expectedSlot);
+    assert.equal(slotIdFromWorktreePath(BOARD_ID, allocated.path), expectedSlot);
+    assert.equal(attemptBranch(BOARD_ID, expectedSlot), `minnow/board/${BOARD_ID}/${expectedSlot}`);
+    assert.equal(path.basename(path.resolve(allocated.path)), expectedSlot);
   });
 
   test('restart with two live attempts keeps both worktrees', async () => {
@@ -550,6 +587,12 @@ describe('P3-A worktree lifecycle', { concurrency: false }, () => {
     const slot = 'r-slot-roundtrip';
     const wt = getWorktreeSlotPath(BOARD_ID, slot);
     assert.equal(slotIdFromWorktreePath(BOARD_ID, wt), slot);
+  });
+
+  test('slotIdForTask uses board id when the board has no display name', () => {
+    const state = boardState(['T1']);
+    assert.equal(slotIdForTask(state, 'T1'), 'p3a-lifecycle-wave1-T1');
+    assert.equal(slotIdForTask(state, 'gone'), 'p3a-lifecycle-wave1-gone');
   });
 
   test('wantsSameWorktree is the reuse mapping, not an effector slot map', () => {
