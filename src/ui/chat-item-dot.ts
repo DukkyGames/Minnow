@@ -162,10 +162,20 @@ export function syncChatItemDotsInDom(): void {
   const ctx = getChatItemDotContext(state.activeId);
   const list = document.getElementById('chatList');
   if (!list) return;
+  // One pass over chats instead of a find/filter per row and per group header (MIN-793).
+  const chatById = new Map(state.chats.map((c) => [c.id, c]));
+  const chatsByGroupId = new Map<string, typeof state.chats>();
+  for (const chat of state.chats) {
+    const groupId = chat.groupId;
+    if (!groupId) continue;
+    const bucket = chatsByGroupId.get(groupId);
+    if (bucket) bucket.push(chat);
+    else chatsByGroupId.set(groupId, [chat]);
+  }
   for (const row of list.querySelectorAll<HTMLElement>('.chat-item-row[data-chat-id]')) {
     const id = row.dataset.chatId;
     if (!id) continue;
-    const chat = state.chats.find((c) => c.id === id);
+    const chat = chatById.get(id);
     if (!chat) continue;
     const dotState = resolveChatItemDotState(chat, ctx);
     const inGroup = row.classList.contains('chat-item-row--in-group');
@@ -191,7 +201,7 @@ export function syncChatItemDotsInDom(): void {
   for (const head of list.querySelectorAll<HTMLElement>('.chat-group-header[data-group-id]')) {
     const groupId = head.dataset.groupId;
     if (!groupId) continue;
-    const members = state.chats.filter((c) => c.groupId === groupId);
+    const members = chatsByGroupId.get(groupId) ?? [];
     applyGroupHeaderDotClasses(head, resolveGroupHeaderDotState(members, ctx));
   }
 }

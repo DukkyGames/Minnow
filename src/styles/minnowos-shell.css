@@ -821,6 +821,13 @@ html.is-electron-shell[data-platform='darwin'] .mn-os-mb-window-controls {
   opacity: 0;
   pointer-events: none;
   visibility: hidden;
+  /*
+   * visibility:hidden still lays the subtree out on every reflow — the Code layer alone is
+   * ~1,090 nodes at full size, for a panel that never paints. content-visibility skips the
+   * whole subtree instead, and unlike display:none it keeps the layer's rendering state
+   * so reactivating it does not rebuild from scratch (MIN-794).
+   */
+  content-visibility: hidden;
 }
 
 .mn-os-apps-layer .mn-os-app-layer.is-active {

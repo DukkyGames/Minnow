@@ -1,4 +1,8 @@
 import {
+  readConfigFile,
+  writeConfigFile,
+} from '../../config/config-file-cache';
+import {
   backupMemory,
   clearMemory,
   createMemoryEntry,
@@ -40,23 +44,14 @@ const setStatus: StatusFn = (kind, message) => {
 };
 
 async function saveFeatureToggle(key: string, enabled: boolean): Promise<void> {
-  try {
-    const res = await fetch('/api/config/file?key=config.json');
-    if (!res.ok) return;
-    const config = (await res.json()) as Record<string, unknown>;
-    const features =
-      config.features && typeof config.features === 'object'
-        ? { ...(config.features as Record<string, boolean>) }
-        : {};
-    features[key] = enabled;
-    config.features = features;
-    await fetch('/api/config/file?key=config.json', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
-    });
-  } catch {
-  }
+  const config = await readConfigFile({ fresh: true });
+  if (!config) return;
+  const prev = config.features;
+  const features =
+    prev && typeof prev === 'object' ? { ...(prev as Record<string, unknown>) } : {};
+  features[key] = enabled;
+  config.features = features;
+  await writeConfigFile(config);
 }
 
 // ── Compose panes ────────────────────────────────────────────────────────────
@@ -441,19 +436,14 @@ async function hydrateToggles(): Promise<void> {
     enableEl.checked = await fetchMemoryEnabled();
   }
 
-  try {
-    const res = await fetch('/api/config/file?key=config.json');
-    if (!res.ok) return;
-    const config = (await res.json()) as {
-      features?: { memoryInjection?: boolean };
-    };
-    const injectionEl = document.getElementById(
-      'brainFeatureMemoryInjection',
-    ) as HTMLInputElement | null;
-    if (injectionEl && typeof config.features?.memoryInjection === 'boolean') {
-      injectionEl.checked = config.features.memoryInjection;
-    }
-  } catch {
+  const config = await readConfigFile();
+  if (!config) return;
+  const features = config.features as { memoryInjection?: boolean } | undefined;
+  const injectionEl = document.getElementById(
+    'brainFeatureMemoryInjection',
+  ) as HTMLInputElement | null;
+  if (injectionEl && typeof features?.memoryInjection === 'boolean') {
+    injectionEl.checked = features.memoryInjection;
   }
 }
 
@@ -468,21 +458,19 @@ function bindMemoriesSection(): void {
 
   const enableEl = document.getElementById('brainMemoryEnabled') as HTMLInputElement | null;
   enableEl?.addEventListener('change', async () => {
-    try {
-      const res = await fetch('/api/config/file?key=config.json');
-      if (!res.ok) return;
-      const config = await res.json();
-      config.memory = {
-        ...(config.memory ?? {}),
-        enabled: enableEl.checked,
-      };
-      await fetch('/api/config/file?key=config.json', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
+    const config = await readConfigFile({ fresh: true });
+    if (!config) {
+      setStatus('err', 'Memory settings require Minnow running locally');
+      return;
+    }
+    const memory = config.memory;
+    config.memory = {
+      ...(memory && typeof memory === 'object' ? (memory as Record<string, unknown>) : {}),
+      enabled: enableEl.checked,
+    };
+    if (await writeConfigFile(config)) {
       setStatus('ok', enableEl.checked ? 'Memory enabled' : 'Memory disabled');
-    } catch {
+    } else {
       setStatus('err', 'Memory settings require Minnow running locally');
     }
   });

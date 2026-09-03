@@ -152,6 +152,20 @@ let sessionRevision: number | null = null;
 
 /** Dirty chat ids since last successful flush (B.2 PATCH payload). */
 const dirtyChatIds = new Set<string>();
+/**
+ * Ids the whole-state PATCH fallback marked dirty purely to describe the session, not because
+ * anything in them changed. Their `history` is omitted so a 60 MB "incremental" PATCH cannot
+ * happen (MIN-794); the server reads a missing `history` as "preserve".
+ */
+const patchHistoryOmittedChatIds = new Set<string>();
+
+/** Mark a chat id dirty for the next PATCH; any real edit cancels the history-omit shortcut. */
+function addDirtyChatId(chatId: string): void {
+  dirtyChatIds.add(chatId);
+  patchHistoryOmittedChatIds.delete(chatId);
+  // This chat no longer claims to be clean, so it is not the verifier's business.
+  dirtyTrackingShadow.delete(chatId);
+}
 /** Explicit chat deletes since last successful flush. */
 const deletedChatIds = new Set<string>();
 /** Dirty sidebar/board group ids since last successful flush. */
@@ -171,10 +185,20 @@ let sessionSaveQueued = false;
 /** Wall clock when the current save debounce window opened (max-wait throttle). */
 let saveFirstScheduledAt = 0;
 /**
- * Shadow JSON of chats after last load/flush — used by the B.1/B.2 DEV verifier to
- * catch mutations that bypassed {@link touchChat}.
+ * Per-chat hash after the last baseline pass — used by the B.1/B.2 DEV verifier to catch
+ * mutations that bypassed {@link touchChat}. A hash rather than a retained 60 MB JSON blob,
+ * and only a rolling window of chats per save: the old whole-list form cost ~1.2 s per chat
+ * switch at 556 chats and grew with history forever (MIN-794).
  */
-let dirtyTrackingShadowChatsJson: string | null = null;
+const dirtyTrackingShadow = new Map<string, string>();
+/** Round-robin position in `state.chats` so successive saves sweep the whole list. */
+let dirtyTrackingCursor = 0;
+/**
+ * Chats baselined (and therefore checked) per save. Production runs a small sample too: an
+ * unmarked mutation there is silently never persisted, and the check repairs it (MIN-794).
+ */
+const DIRTY_TRACKING_SAMPLE_DEV = 64;
+const DIRTY_TRACKING_SAMPLE_PROD = 8;
 /** When true, flush runs the unmarked-mutation verifier (tests / Vite DEV). */
 let dirtyTrackingVerifierForced = false;
 /**
@@ -210,9 +234,11 @@ function shouldInstallHistoryTrap(): boolean {
   return sessionsLazyHistoryEnabled && (historyTrapForcedForTests || isViteDevBuild());
 }
 
-function isDirtyTrackingVerifierEnabled(): boolean {
-  if (dirtyTrackingVerifierForced) return true;
-  return isViteDevBuild();
+/** Dev sweeps the list fast enough to be a diagnostic; production only needs the repair. */
+function dirtyTrackingSampleSize(): number {
+  return dirtyTrackingVerifierForced || isViteDevBuild()
+    ? DIRTY_TRACKING_SAMPLE_DEV
+    : DIRTY_TRACKING_SAMPLE_PROD;
 }
 
 /** Copy chat fields for wire/shadow serialization without tripping lazy-history traps. */
@@ -232,16 +258,46 @@ function chatForDirtyTrackingShadow(chat: Chat): Record<string, unknown> {
   return copyChatFieldsWithoutLazyHistory(chat, chat.historyLoaded !== false);
 }
 
+/** FNV-1a over the serialized chat — comparable without keeping the string alive. */
+function hashChatForDirtyTracking(chat: Chat): string {
+  const json = JSON.stringify(chatForDirtyTrackingShadow(chat));
+  let h = 0x811c9dc5;
+  for (let i = 0; i < json.length; i += 1) {
+    h ^= json.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return `${json.length}:${(h >>> 0).toString(36)}`;
+}
+
+/** Baseline the next window of chats so the following flush can check them. */
 function captureDirtyTrackingShadow(state: SessionState | null): void {
-  // Production flushes must not JSON.stringify every hydrated transcript (MIN-584).
-  if (!isDirtyTrackingVerifierEnabled()) return;
-  dirtyTrackingShadowChatsJson = state
-    ? JSON.stringify(state.chats.map(chatForDirtyTrackingShadow))
-    : null;
+  // Never every chat: that JSON.stringify'd every hydrated transcript on every flush (MIN-584).
+  if (!state) {
+    dirtyTrackingShadow.clear();
+    dirtyTrackingCursor = 0;
+    return;
+  }
+  const chats = state.chats;
+  if (chats.length === 0) {
+    dirtyTrackingShadow.clear();
+    dirtyTrackingCursor = 0;
+    return;
+  }
+  if (dirtyTrackingCursor >= chats.length) dirtyTrackingCursor = 0;
+  const count = Math.min(dirtyTrackingSampleSize(), chats.length);
+  for (let n = 0; n < count; n += 1) {
+    const chat = chats[(dirtyTrackingCursor + n) % chats.length];
+    if (!chat) continue;
+    // A chat already marked dirty proves nothing about tracking; skip the serialization.
+    if (dirtyChatIds.has(chat.id)) continue;
+    dirtyTrackingShadow.set(chat.id, hashChatForDirtyTracking(chat));
+  }
+  dirtyTrackingCursor = (dirtyTrackingCursor + count) % chats.length;
 }
 
 function clearSessionDirtySets(): void {
   dirtyChatIds.clear();
+  patchHistoryOmittedChatIds.clear();
   deletedChatIds.clear();
   dirtyGroupIds.clear();
   deletedGroupIds.clear();
@@ -293,30 +349,24 @@ export function markGroupDeleted(groupId: string): void {
  * @returns true when an unmarked mutation was detected (dirty sets untrusted → full PUT).
  */
 function verifyDirtyChatTracking(state: SessionState): boolean {
-  if (!isDirtyTrackingVerifierEnabled()) return false;
-  if (dirtyTrackingShadowChatsJson == null) return false;
-  let shadow: unknown;
-  try {
-    shadow = JSON.parse(dirtyTrackingShadowChatsJson);
-  } catch {
-    return false;
-  }
-  if (!Array.isArray(shadow)) return false;
-  const shadowById = new Map(
-    shadow
-      .filter((c) => c && typeof c === 'object' && typeof (c as Chat).id === 'string')
-      .map((c) => [(c as Chat).id, JSON.stringify(c)]),
-  );
+  if (dirtyTrackingShadow.size === 0) return false;
   let missed = false;
   for (const chat of state.chats) {
-    const prev = shadowById.get(chat.id);
+    const prev = dirtyTrackingShadow.get(chat.id);
     if (prev === undefined) continue;
-    const next = JSON.stringify(chatForDirtyTrackingShadow(chat));
-    if (prev !== next && !dirtyChatIds.has(chat.id)) {
+    // Marking it dirty already cleared the entry, so anything left here claims to be clean.
+    dirtyTrackingShadow.delete(chat.id);
+    if (dirtyChatIds.has(chat.id)) continue;
+    if (prev !== hashChatForDirtyTracking(chat)) {
       missed = true;
-      console.warn(
-        `[sessions dirty-tracking] chat ${chat.id} changed without touchChat()`,
-      );
+      // Repair rather than only report: production trusts the dirty set, so an unmarked
+      // mutation is otherwise never sent to the server at all — a silent lost edit.
+      addDirtyChatId(chat.id);
+      if (dirtyTrackingVerifierForced || isViteDevBuild()) {
+        console.warn(
+          `[sessions dirty-tracking] chat ${chat.id} changed without touchChat()`,
+        );
+      }
     }
   }
   return missed;
@@ -350,7 +400,12 @@ export function buildSessionsPatchDelta(state: SessionState): SessionsPatchDelta
     for (const id of dirtyChatIds) {
       if (deletedChatIds.has(id)) continue;
       const chat = byId.get(id);
-      if (chat) chats.push(chatForSessionsWire(chat));
+      if (!chat) continue;
+      chats.push(
+        patchHistoryOmittedChatIds.has(id)
+          ? (copyChatFieldsWithoutLazyHistory(chat, false) as unknown as Chat)
+          : chatForSessionsWire(chat),
+      );
     }
     if (chats.length) delta.chats = chats;
   }
@@ -459,9 +514,9 @@ export function captureDirtyTrackingShadowForTests(): void {
   captureDirtyTrackingShadow(sessionState);
 }
 
-/** Test helper: serialized dirty-tracking shadow (null when the verifier is off). */
-export function getDirtyTrackingShadowJsonForTests(): string | null {
-  return dirtyTrackingShadowChatsJson;
+/** Test helper: number of chats currently baselined (0 when the verifier is off). */
+export function getDirtyTrackingShadowSizeForTests(): number {
+  return dirtyTrackingShadow.size;
 }
 
 // ── Session ready ────────────────────────────────────────────────────────────
@@ -506,7 +561,8 @@ export function resetSessionPersistenceForTests(): void {
   sessionsHydratedFromServer = false;
   sessionPersistenceShutdownRegistered = false;
   clearSessionDirtySets();
-  dirtyTrackingShadowChatsJson = null;
+  dirtyTrackingShadow.clear();
+  dirtyTrackingCursor = 0;
   dirtyTrackingVerifierForced = false;
   sessionsClientPatchEnabled = true;
   sessionsLazyHistoryEnabled = true;
@@ -1602,7 +1658,16 @@ export function getActiveChat(): Chat {
 
 export function touchChat(chat: Chat): void {
   chat.updatedAt = Date.now();
-  dirtyChatIds.add(chat.id);
+  addDirtyChatId(chat.id);
+  bumpSessionDirtyEpoch();
+}
+
+/**
+ * Mark a chat dirty without restamping `updatedAt`. For machine-written fields (live stats)
+ * that must persist but are not a user edit — restamping churns sidebar order (MIN-793).
+ */
+export function markChatDirty(chat: Chat): void {
+  addDirtyChatId(chat.id);
   bumpSessionDirtyEpoch();
 }
 
@@ -1804,7 +1869,10 @@ function hasUnloadedChatHistories(state: SessionState): boolean {
  */
 function markEveryChatDirty(state: SessionState): void {
   for (const chat of state.chats) {
+    // Nothing marked this one — it is only here to describe the session, so skip its transcript.
+    if (!dirtyChatIds.has(chat.id)) patchHistoryOmittedChatIds.add(chat.id);
     dirtyChatIds.add(chat.id);
+    dirtyTrackingShadow.delete(chat.id);
   }
   for (const group of state.groups ?? []) {
     dirtyGroupIds.add(group.id);
@@ -1826,17 +1894,19 @@ function markEveryChatDirty(state: SessionState): void {
 export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResult {
   if (!sessionState) return 'ok';
 
-  const verifierMiss = verifyDirtyChatTracking(sessionState);
-  if (verifierMiss) {
-    sessionPatchDirtySetsReady = false;
-  }
+  /*
+   * A miss now marks the offending chat dirty, so the next PATCH carries it. Untrusting the
+   * whole baseline on top of that only bought a full-session write — in dev that was a loop:
+   * miss → baseline untrusted → whole-state PATCH → miss again next switch (MIN-794).
+   */
+  verifyDirtyChatTracking(sessionState);
 
   if (isServerStorageMode()) {
     if (!sessionsHydratedFromServer) {
       return 'ok';
     }
 
-    let usePatch = sessionsClientPatchEnabled && sessionPatchDirtySetsReady && !verifierMiss;
+    let usePatch = sessionsClientPatchEnabled && sessionPatchDirtySetsReady;
     /*
      * A whole-blob PUT describes the entire session, so it must only be sent by a
      * client that can actually describe it. After a lazy boot most chats hold an
@@ -1969,7 +2039,7 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
 
 export function scheduleSaveSessions(hint?: { chatId?: string; groupId?: string }): void {
   if (hint?.chatId?.trim()) {
-    dirtyChatIds.add(hint.chatId.trim());
+    addDirtyChatId(hint.chatId.trim());
     bumpSessionDirtyEpoch();
   }
   if (hint?.groupId?.trim()) markGroupDirty(hint.groupId.trim());

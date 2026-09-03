@@ -591,3 +591,85 @@ describe('transcript hydrate fills Activity without the empty placeholder', () =
   });
 });
 
+// ── hydrate caching (MIN-793 #3b/#3c) ────────────────────────────────────────
+
+describe('hydrate does not refetch on every chat switch', () => {
+  beforeEach(() => {
+    resetSubAgentOrchestrator();
+    setSubAgentOpenStreamForTests(() => ({ addEventListener() {}, close() {} }));
+  });
+
+  afterEach(() => {
+    setSubAgentOpenStreamForTests(null);
+    resetSubAgentOrchestrator();
+  });
+
+  /** Journal listing for CHAT_ID with one terminal run whose transcript is empty. */
+  function installFetch(urls: string[]): void {
+    setSubAgentApiFetchForTests(async (input) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes('/transcript')) {
+        return new Response(JSON.stringify({ ok: true, events: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          state: {
+            runs: [
+              {
+                runId: FIXED_RUN_ID,
+                type: 'explore',
+                task: 'scan',
+                parentChatId: CHAT_ID,
+                phase: 'passed',
+                attempts: [{ ended: true, summary: '', outcome: 'pass' }],
+                delivered: true,
+              },
+            ],
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    });
+  }
+
+  test('repeat parent hydrates inside the TTL do not refetch the run list', async () => {
+    const urls: string[] = [];
+    installFetch(urls);
+
+    await hydrateSubAgentRunsForParentChat(CHAT_ID);
+    await hydrateSubAgentRunsForParentChat(CHAT_ID);
+    await hydrateSubAgentRunsForParentChat(CHAT_ID);
+
+    const lists = urls.filter((u) => u.includes('parentChatId='));
+    assert.equal(lists.length, 1, 'switching back into a chat must reuse the hydrate');
+  });
+
+  test('force bypasses the TTL', async () => {
+    const urls: string[] = [];
+    installFetch(urls);
+
+    await hydrateSubAgentRunsForParentChat(CHAT_ID);
+    await hydrateSubAgentRunsForParentChat(CHAT_ID, { force: true });
+
+    assert.equal(urls.filter((u) => u.includes('parentChatId=')).length, 2);
+  });
+
+  test('an empty transcript is not refetched on the next switch', async () => {
+    const urls: string[] = [];
+    installFetch(urls);
+
+    await hydrateSubAgentRunsForParentChat(CHAT_ID);
+    await hydrateSubAgentTranscript(FIXED_RUN_ID);
+    await hydrateSubAgentTranscript(FIXED_RUN_ID);
+
+    // The run has no mappable events, so `messages` stays empty; without the attempted
+    // marker every switch would issue the request again, forever.
+    assert.equal(urls.filter((u) => u.includes('/transcript')).length, 1);
+  });
+});
+

@@ -23,6 +23,24 @@ import {
 const cards = new Map<string, HTMLElement>();
 
 let liveSubscriptionBound = false;
+/** Pending coalesced tail scroll — one per frame, not one per card (MIN-793). */
+let scrollBottomRaf: number | null = null;
+
+/**
+ * `scrollBottom` forces two layouts (scrollHeight read, scrollTop write, then the jump-chip
+ * read). Re-mounting a chat upserts every run three times over, so it must not run per card.
+ */
+function scheduleScrollBottom(): void {
+  if (typeof requestAnimationFrame !== 'function') {
+    scrollBottom();
+    return;
+  }
+  if (scrollBottomRaf != null) return;
+  scrollBottomRaf = requestAnimationFrame(() => {
+    scrollBottomRaf = null;
+    scrollBottom();
+  });
+}
 
 // ── Landing ──────────────────────────────────────────────────────────────────
 
@@ -231,7 +249,7 @@ export function upsertSubAgentCardForRun(
     `Sub-agent ${displayRun.type}, ${displayRun.status}. ${taskPreview(displayRun.task)}`,
   );
   fillCard(el, displayRun, isLive);
-  scrollBottom();
+  scheduleScrollBottom();
   return el;
 }
 

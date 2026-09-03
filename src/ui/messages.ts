@@ -71,6 +71,7 @@ import type {
 } from '../types';
 import {
   captureChatScrollAnchor,
+  getChatScrollRoot,
   restoreChatScrollAnchor,
   scrollChatIfPinned,
   scrollChatToBottom,
@@ -210,6 +211,7 @@ export function paintChatTranscriptHistoryPending(mount?: string | HTMLElement):
     return;
   }
 
+  cancelChatHistoryBackfill();
   runWithChatMount(area, () => {
     clearSubAgentCardDomRegistry();
     clearTranscriptEmptyState(area);
@@ -264,6 +266,287 @@ function buildBoardChatEmptyState(): HTMLElement {
   return wrap;
 }
 
+type ToolResultLookup = Map<
+  string,
+  {
+    content: string;
+    attachments?: ToolResultMessage['attachments'];
+    codeChange?: ToolResultMessage['codeChange'];
+  }
+>;
+
+interface HistoryRenderContext {
+  chat: Chat;
+  toolResultMap: ToolResultLookup;
+}
+
+/**
+ * Render one history entry into `host`. Split out of `renderChatFromHistory` so the transcript
+ * can be built in chunks across frames instead of one unbroken task (MIN-793).
+ * Caller must already be inside `runWithChatMount(host, …)`.
+ */
+function appendHistoryMessageAt(host: HTMLElement, ctx: HistoryRenderContext, i: number): void {
+  const { chat, toolResultMap } = ctx;
+  const msg = chat.history[i];
+  if (!msg || !msg.role) return;
+  if (msg.role === 'tool') return;
+
+  if (msg.role === 'context') {
+    appendContextNotice(host, msg as ContextNoticeMessage, i);
+    return;
+  }
+
+  if (msg.role === 'injection') {
+    appendInjectionNotice(host, msg as InjectionNoticeMessage, i);
+    return;
+  }
+
+  if (msg.role === 'user') {
+    const userMsg = msg;
+    if (isHiddenTranscriptUserMessage(userMsg)) {
+      return;
+    }
+    const { wrap } = appendBubble('user', userMsg.content, {
+      historyIndex: i,
+      turnKind: 'user',
+      chatId: chat.id,
+      modeId: chat.modeId,
+    }, { renderFromHistory: true, persistedImages: userMsg.images });
+    if (userMsg.steer) {
+      markMessageSteered(wrap);
+    }
+    if (userMsg.goalAchieved) {
+      restoreGoalAchievedAffordance(wrap, userMsg);
+    }
+    attachMessageActions(wrap, {
+      chatId: chat.id,
+      historyIndex: i,
+      turnKind: 'user',
+    });
+    attachBranchPicker(wrap, chat.id, i);
+    return;
+  }
+
+  if (isAssistantToolCallMessage(msg)) {
+    const prose = msg.content != null ? String(msg.content).trim() : '';
+    const toolThinking =
+      msg.thinking != null && msg.thinking.length > 0 ? msg.thinking : undefined;
+    const hasToolThinking = toolThinking != null && toolThinking.length > 0;
+    if (prose || hasToolThinking) {
+      const { wrap, bubble } = appendBubble('assistant', prose, {
+        historyIndex: i,
+        turnKind: 'assistant-tools',
+        chatId: chat.id,
+        modeId: chat.modeId,
+      });
+      if (!prose && hasToolThinking) {
+        bubble.remove();
+      }
+      if (hasToolThinking) {
+        const durationMs = msg.thinkingDurationMs;
+        renderThoughtsToggle(wrap, toolThinking!, {
+          durationMs: durationMs != null && durationMs > 0 ? durationMs : undefined,
+        });
+      }
+      if (msg.stats || msg.usage) {
+        appendStats(wrap, msg.stats || {}, msg.usage || {});
+      }
+      attachMessageActions(wrap, {
+        chatId: chat.id,
+        historyIndex: i,
+        turnKind: 'assistant-tools',
+      });
+    }
+
+    let firstToolEl: HTMLElement | null = null;
+    for (const tc of msg.tool_calls) {
+      const argsObj = parseToolArgsForDisplay(tc.function.arguments);
+      const toolWrap = renderToolCall(tc.function.name, argsObj);
+      toolWrap.dataset.toolCallId = tc.id;
+      toolWrap.dataset.historyIndex = String(i);
+      toolWrap.dataset.turnKind = 'assistant-tools';
+      host.appendChild(toolWrap);
+      if (!firstToolEl) firstToolEl = toolWrap;
+      const stored = toolResultMap.get(tc.id);
+      if (stored !== undefined) {
+        renderToolResult(
+          toolWrap,
+          stored.content,
+          stored.attachments,
+          argsObj,
+          stored.codeChange,
+        );
+      }
+      attachShellKillUi(toolWrap, tc.function.name, tc.id, argsObj, undefined, chat.id);
+    }
+    if (!prose && !hasToolThinking && firstToolEl) {
+      attachMessageActions(firstToolEl, {
+        chatId: chat.id,
+        historyIndex: i,
+        turnKind: 'assistant-tools',
+      });
+    }
+
+    for (const pair of getBeforeAfterPairs(chat.id)) {
+      if (pair.turnId !== String(i)) continue;
+      host.appendChild(renderBeforeAfterCard(pair));
+    }
+    return;
+  }
+
+  const text = msg.content ?? '';
+  let trimmed = text.trim();
+  const withThinking = msg as AssistantMessage;
+  let thinkingSegments =
+    withThinking.thinking != null && withThinking.thinking.length > 0
+      ? withThinking.thinking
+      : undefined;
+  if (!thinkingSegments?.length && trimmed) {
+    const split = extractInlineThinkingFromContent(text);
+    if (split.thinking.length > 0 && split.reply.trim()) {
+      trimmed = split.reply.trim();
+      thinkingSegments = split.thinking;
+    }
+  }
+  const hasThinking = thinkingSegments != null && thinkingSegments.length > 0;
+  if (!trimmed && !hasThinking) {
+    return;
+  }
+  const { wrap } = appendBubble('assistant', trimmed, {
+    historyIndex: i,
+    turnKind: 'assistant',
+    chatId: chat.id,
+    modeId: chat.modeId,
+  });
+  if (hasThinking) {
+    const durationMs = withThinking.thinkingDurationMs;
+    renderThoughtsToggle(wrap, thinkingSegments!, {
+      durationMs: durationMs != null && durationMs > 0 ? durationMs : undefined,
+    });
+  }
+  if (withThinking.stopped) {
+    markMessageStopped(wrap);
+  }
+  if (withThinking.failed) {
+    const tailFailed = indexOfLastFailedAssistantAtTail(chat.history);
+    const fork = indexOfUserBeforeBlock(chat.history, i);
+    markMessageFailed(
+      wrap,
+      tailFailed === i && fork >= 0
+        ? { chatId: chat.id, forkHistoryIndex: fork }
+        : undefined,
+    );
+  }
+  if (withThinking.truncated) {
+    markMessageTruncated(wrap, chat);
+  }
+  if (msg.stats || msg.usage) {
+    appendStats(wrap, msg.stats || {}, msg.usage || {});
+  }
+  attachMessageActions(wrap, {
+    chatId: chat.id,
+    historyIndex: i,
+    turnKind: 'assistant',
+  });
+  attachVoicePlayButton(wrap, trimmed);
+}
+
+/** Newest messages rendered in the switch's own task — what the user actually looks at. */
+const HISTORY_SYNC_TAIL = 30;
+/** Older messages backfilled this many per idle callback. */
+const HISTORY_BACKFILL_CHUNK = 15;
+
+/** Bumped by every transcript paint so a switch abandons the previous chat's backfill. */
+let historyBackfillEpoch = 0;
+let cancelPendingBackfill: (() => void) | null = null;
+
+/** Abort any in-flight chunked backfill (a newer paint owns the transcript now). */
+export function cancelChatHistoryBackfill(): void {
+  historyBackfillEpoch += 1;
+  cancelPendingBackfill?.();
+  cancelPendingBackfill = null;
+}
+
+/** requestIdleCallback where available, rAF otherwise — chunks must not fight paint. */
+function scheduleBackfillStep(step: () => void): () => void {
+  const w = typeof window !== 'undefined' ? (window as Window & {
+    requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+    cancelIdleCallback?: (handle: number) => void;
+  }) : undefined;
+  if (w?.requestIdleCallback) {
+    const handle = w.requestIdleCallback(step, { timeout: 200 });
+    return () => w.cancelIdleCallback?.(handle);
+  }
+  if (typeof requestAnimationFrame === 'function') {
+    const handle = requestAnimationFrame(step);
+    return () => {
+      if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(handle);
+    };
+  }
+  const handle = setTimeout(step, 0);
+  return () => clearTimeout(handle);
+}
+
+/**
+ * Insert older rows above without moving the transcript under the reader: the scroll root's
+ * height grows by exactly what we prepended, so scrollTop must grow by the same amount.
+ */
+function prependPreservingScroll(area: HTMLElement, nodes: Node[]): void {
+  if (nodes.length === 0) return;
+  const root = getChatScrollRoot();
+  const prevTop = root?.scrollTop ?? 0;
+  const prevHeight = root?.scrollHeight ?? 0;
+  area.prepend(...nodes);
+  if (!root) return;
+  const delta = root.scrollHeight - prevHeight;
+  if (delta !== 0) root.scrollTop = prevTop + delta;
+}
+
+/**
+ * Render `[0, from)` backwards in idle-time chunks, prepending each into the live transcript.
+ * The synchronous pass covers only the tail, so a long history no longer lands as one
+ * multi-hundred-millisecond task on every chat switch (MIN-793).
+ */
+function backfillChatHistory(
+  area: HTMLElement,
+  ctx: HistoryRenderContext,
+  from: number,
+  onDone: () => void,
+): void {
+  if (from <= 0) {
+    onDone();
+    return;
+  }
+  const epoch = historyBackfillEpoch;
+  let end = from;
+  const step = (): void => {
+    cancelPendingBackfill = null;
+    if (epoch !== historyBackfillEpoch) return;
+    if (!area.isConnected) return;
+    const start = Math.max(0, end - HISTORY_BACKFILL_CHUNK);
+    const chunk = document.createElement('div');
+    const wasSuppressed = suppressBubbleScroll;
+    suppressBubbleScroll = true;
+    try {
+      runWithChatMount(chunk, () => {
+        for (let i = start; i < end; i += 1) {
+          appendHistoryMessageAt(chunk, ctx, i);
+        }
+      });
+    } finally {
+      suppressBubbleScroll = wasSuppressed;
+    }
+    prependPreservingScroll(area, [...chunk.childNodes]);
+    end = start;
+    if (end <= 0) {
+      onDone();
+      return;
+    }
+    cancelPendingBackfill = scheduleBackfillStep(step);
+  };
+  cancelPendingBackfill = scheduleBackfillStep(step);
+}
+
 export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement): void {
   const boardChatHost =
     mount == null && isBoardChatEmbedOpenForChat(chat.id)
@@ -272,6 +555,8 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   const area = boardChatHost ?? resolveChatMount(mount);
   const codeMount = boardChatHost != null || isCodeChatMount(mount);
   const scrollAnchor = captureChatScrollAnchor();
+  // A newer paint owns the transcript; the previous chat's chunks must not land in it.
+  cancelChatHistoryBackfill();
 
   if (codeMount && isSuperPlanScreenMountedForOtherChat(chat.id)) {
     teardownOrchestratePlanScreen();
@@ -363,9 +648,6 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   }
   // Paint off-DOM and swap so the previous transcript stays until the new one is ready (MIN-584).
   const transcriptHost = document.createElement('div');
-  if (suspendedPlanChat) {
-    showOrchestratePlanScreenSuspendedBanner(transcriptHost, chat);
-  }
   const toolResultMap = new Map<
     string,
     {
@@ -384,173 +666,24 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
     });
   }
 
+  const renderCtx: HistoryRenderContext = { chat, toolResultMap };
+  const total = chat.history.length;
+  const tailStart = Math.max(0, total - HISTORY_SYNC_TAIL);
   runWithChatMount(transcriptHost, () => {
-  for (let i = 0; i < chat.history.length; i += 1) {
-    const msg = chat.history[i];
-    if (!msg || !msg.role) continue;
-    if (msg.role === 'tool') continue;
-
-    if (msg.role === 'context') {
-      appendContextNotice(transcriptHost, msg as ContextNoticeMessage, i);
-      continue;
+    for (let i = tailStart; i < total; i += 1) {
+      appendHistoryMessageAt(transcriptHost, renderCtx, i);
     }
-
-    if (msg.role === 'injection') {
-      appendInjectionNotice(transcriptHost, msg as InjectionNoticeMessage, i);
-      continue;
-    }
-
-    if (msg.role === 'user') {
-      const userMsg = msg;
-      if (isHiddenTranscriptUserMessage(userMsg)) {
-        continue;
-      }
-      const { wrap } = appendBubble('user', userMsg.content, {
-        historyIndex: i,
-        turnKind: 'user',
-        chatId: chat.id,
-        modeId: chat.modeId,
-      }, { renderFromHistory: true, persistedImages: userMsg.images });
-      if (userMsg.steer) {
-        markMessageSteered(wrap);
-      }
-      if (userMsg.goalAchieved) {
-        restoreGoalAchievedAffordance(wrap, userMsg);
-      }
-      attachMessageActions(wrap, {
-        chatId: chat.id,
-        historyIndex: i,
-        turnKind: 'user',
-      });
-      attachBranchPicker(wrap, chat.id, i);
-      continue;
-    }
-
-    if (isAssistantToolCallMessage(msg)) {
-      const prose = msg.content != null ? String(msg.content).trim() : '';
-      const toolThinking =
-        msg.thinking != null && msg.thinking.length > 0 ? msg.thinking : undefined;
-      const hasToolThinking = toolThinking != null && toolThinking.length > 0;
-      if (prose || hasToolThinking) {
-        const { wrap, bubble } = appendBubble('assistant', prose, {
-          historyIndex: i,
-          turnKind: 'assistant-tools',
-          chatId: chat.id,
-          modeId: chat.modeId,
-        });
-        if (!prose && hasToolThinking) {
-          bubble.remove();
-        }
-        if (hasToolThinking) {
-          const durationMs = msg.thinkingDurationMs;
-          renderThoughtsToggle(wrap, toolThinking!, {
-            durationMs: durationMs != null && durationMs > 0 ? durationMs : undefined,
-          });
-        }
-        if (msg.stats || msg.usage) {
-          appendStats(wrap, msg.stats || {}, msg.usage || {});
-        }
-        attachMessageActions(wrap, {
-          chatId: chat.id,
-          historyIndex: i,
-          turnKind: 'assistant-tools',
-        });
-      }
-
-      let firstToolEl: HTMLElement | null = null;
-      for (const tc of msg.tool_calls) {
-        const argsObj = parseToolArgsForDisplay(tc.function.arguments);
-        const toolWrap = renderToolCall(tc.function.name, argsObj);
-        toolWrap.dataset.toolCallId = tc.id;
-        toolWrap.dataset.historyIndex = String(i);
-        toolWrap.dataset.turnKind = 'assistant-tools';
-        transcriptHost.appendChild(toolWrap);
-        if (!firstToolEl) firstToolEl = toolWrap;
-        const stored = toolResultMap.get(tc.id);
-        if (stored !== undefined) {
-          renderToolResult(
-            toolWrap,
-            stored.content,
-            stored.attachments,
-            argsObj,
-            stored.codeChange,
-          );
-        }
-        attachShellKillUi(toolWrap, tc.function.name, tc.id, argsObj, undefined, chat.id);
-      }
-      if (!prose && !hasToolThinking && firstToolEl) {
-        attachMessageActions(firstToolEl, {
-          chatId: chat.id,
-          historyIndex: i,
-          turnKind: 'assistant-tools',
-        });
-      }
-
-      for (const pair of getBeforeAfterPairs(chat.id)) {
-        if (pair.turnId !== String(i)) continue;
-        transcriptHost.appendChild(renderBeforeAfterCard(pair));
-      }
-      continue;
-    }
-
-    const text = msg.content ?? '';
-    let trimmed = text.trim();
-    const withThinking = msg as AssistantMessage;
-    let thinkingSegments =
-      withThinking.thinking != null && withThinking.thinking.length > 0
-        ? withThinking.thinking
-        : undefined;
-    if (!thinkingSegments?.length && trimmed) {
-      const split = extractInlineThinkingFromContent(text);
-      if (split.thinking.length > 0 && split.reply.trim()) {
-        trimmed = split.reply.trim();
-        thinkingSegments = split.thinking;
-      }
-    }
-    const hasThinking = thinkingSegments != null && thinkingSegments.length > 0;
-    if (!trimmed && !hasThinking) {
-      continue;
-    }
-    const { wrap } = appendBubble('assistant', trimmed, {
-      historyIndex: i,
-      turnKind: 'assistant',
-      chatId: chat.id,
-      modeId: chat.modeId,
-    });
-    if (hasThinking) {
-      const durationMs = withThinking.thinkingDurationMs;
-      renderThoughtsToggle(wrap, thinkingSegments!, {
-        durationMs: durationMs != null && durationMs > 0 ? durationMs : undefined,
-      });
-    }
-    if (withThinking.stopped) {
-      markMessageStopped(wrap);
-    }
-    if (withThinking.failed) {
-      const tailFailed = indexOfLastFailedAssistantAtTail(chat.history);
-      const fork = indexOfUserBeforeBlock(chat.history, i);
-      markMessageFailed(
-        wrap,
-        tailFailed === i && fork >= 0
-          ? { chatId: chat.id, forkHistoryIndex: fork }
-          : undefined,
-      );
-    }
-    if (withThinking.truncated) {
-      markMessageTruncated(wrap, chat);
-    }
-    if (msg.stats || msg.usage) {
-      appendStats(wrap, msg.stats || {}, msg.usage || {});
-    }
-    attachMessageActions(wrap, {
-      chatId: chat.id,
-      historyIndex: i,
-      turnKind: 'assistant',
-    });
-    attachVoicePlayButton(wrap, trimmed);
-  }
   });
   area.replaceChildren(...transcriptHost.childNodes);
+  if (suspendedPlanChat) {
+    // Floats over the viewport rather than living in the transcript, so it is order-independent.
+    showOrchestratePlanScreenSuspendedBanner(area, chat);
+  }
+  backfillChatHistory(area, renderCtx, tailStart, () => {
+    // Cards anchor to their spawn tool row; re-place now that the older rows exist.
+    runWithChatMount(area, () => renderPersistedSubAgentCardsForChat(chat));
+    syncThoughtsCaretPulse(area);
+  });
   renderPersistedSubAgentCardsForChat(chat);
   syncThoughtsCaretPulse(area);
   syncComposerMessageQueue();

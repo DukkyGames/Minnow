@@ -9,12 +9,13 @@ import { setStorageModeForTests } from '../../src/config/storage-mode.ts';
 import { defaultSessionState } from '../../src/config/defaults.ts';
 import {
   captureDirtyTrackingShadowForTests,
-  getDirtyTrackingShadowJsonForTests,
+  getDirtyTrackingShadowSizeForTests,
   getSessionDirtyTrackingForTests,
   removeChatById,
   resetSessionPersistenceForTests,
   saveSessionsNow,
   setDirtyTrackingVerifierForcedForTests,
+  setSessionPatchDirtySetsReadyForTests,
   setSessionStateForTests,
   setSidebarCollapsed,
   touchChat,
@@ -122,6 +123,45 @@ describe('session dirty tracking (B.1/B.2)', () => {
     });
   });
 
+  test('the whole-state PATCH fallback omits history for chats nothing touched (MIN-794)', async () => {
+    setStorageModeForTests('server');
+    const state = baseState();
+    (state.chats[0] as Chat).history = [{ role: 'user', content: 'edited' }];
+    (state.chats[1] as Chat).history = [{ role: 'user', content: 'x'.repeat(1000) }];
+    // A chat still on its lazy placeholder is what forces the fallback.
+    state.chats.push({
+      ...(state.chats[1] as Chat),
+      id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+      history: [],
+      historyLoaded: false,
+    } as Chat);
+    setSessionStateForTests(state);
+    // First save after load: the baseline is untrusted, so a PUT would be unsafe.
+    setSessionPatchDirtySetsReadyForTests(false);
+
+    const patchBodies: Array<{ chats?: Chat[] }> = [];
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      if (url.includes('/api/config/sessions') && init?.method === 'PATCH') {
+        patchBodies.push(JSON.parse(String(init.body)));
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    touchChat(state.chats[0] as Chat);
+    saveSessionsNow();
+    await waitForSessionSaveForTests();
+
+    assert.equal(patchBodies.length, 1);
+    const chats = patchBodies[0]?.chats ?? [];
+    assert.equal(chats.length, 3, 'the fallback still describes the whole session');
+    const edited = chats.find((c) => c.id === CHAT_A);
+    const untouched = chats.find((c) => c.id === CHAT_B);
+    assert.deepEqual(edited?.history, [{ role: 'user', content: 'edited' }]);
+    // Omitted history means "preserve" server-side — this is the 60.4 MB PATCH.
+    assert.equal('history' in (untouched as object), false);
+  });
+
   test('removeChatById records deletedChatIds', () => {
     const state = baseState();
     setSessionStateForTests(state);
@@ -223,16 +263,48 @@ describe('session dirty tracking (B.1/B.2)', () => {
     assert.equal(warnings.length, 0);
   });
 
-  test('captureDirtyTrackingShadow is a no-op unless the verifier is on (MIN-584)', () => {
+  test('an unmarked mutation is repaired so it still reaches the server (MIN-794)', async () => {
+    setStorageModeForTests('server');
     const state = baseState();
-    (state.chats[0] as Chat).history = [{ role: 'user', content: 'hello-shadow' }];
-    setDirtyTrackingVerifierForcedForTests(false);
     setSessionStateForTests(state);
     captureDirtyTrackingShadowForTests();
-    assert.equal(getDirtyTrackingShadowJsonForTests(), null);
 
+    const patchBodies: Array<{ chats?: Chat[] }> = [];
+    globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      if (url.includes('/api/config/sessions') && init?.method === 'PATCH') {
+        patchBodies.push(JSON.parse(String(init.body)));
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    };
+
+    // Bypasses touchChat on purpose. Production trusts the dirty set, so without the
+    // repair this edit is simply never written.
+    (state.chats[0] as Chat).name = 'mutated without touch';
+    saveSessionsNow();
+    await waitForSessionSaveForTests();
+
+    assert.equal(patchBodies.length, 1);
+    const sent = patchBodies[0]?.chats ?? [];
+    assert.deepEqual(sent.map((c) => c.id), [CHAT_A]);
+    assert.equal(sent[0]?.name, 'mutated without touch');
+  });
+
+  test('the verifier samples a window instead of every chat ever created (MIN-794)', () => {
+    const state = baseState();
+    // 556 chats is the real store this was profiled against; serializing all of them on
+    // every save is what blocked the main thread for ~1.2 s per switch.
+    state.chats = Array.from({ length: 300 }, (_, i) => {
+      const chat = { ...(state.chats[0] as Chat) } as Chat;
+      chat.id = `chat-${i}`;
+      chat.history = [{ role: 'user', content: `body ${i}` }];
+      return chat;
+    });
     setDirtyTrackingVerifierForcedForTests(true);
+    setSessionStateForTests(state);
     captureDirtyTrackingShadowForTests();
-    assert.ok(getDirtyTrackingShadowJsonForTests()?.includes('hello-shadow'));
+
+    const baselined = getDirtyTrackingShadowSizeForTests();
+    assert.ok(baselined > 0 && baselined < state.chats.length, `sampled ${baselined}`);
   });
 });

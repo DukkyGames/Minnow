@@ -439,7 +439,8 @@ export function closeSubAgentDrawer(): void {
 /** Opens the overlay for one sub-agent run (live or persisted on the given chat). */
 export async function openSubAgentDrawer(runId: string, chatId: string): Promise<void> {
   bindSubscription();
-  await hydrateSubAgentRunsForParentChat(chatId);
+  // Opening the drawer is an explicit request for the current state, so bypass the hydrate TTL.
+  await hydrateSubAgentRunsForParentChat(chatId, { force: true });
   await hydrateSubAgentTranscript(runId);
   mountSubAgentDrawer(runId, chatId);
 }

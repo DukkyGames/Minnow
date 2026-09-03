@@ -7,6 +7,11 @@ import {
   normalizeThinkingTriState,
   type ThinkingTriState,
 } from '../agents/thinking-types';
+import {
+  readConfigFile,
+  readConfigFlag,
+  writeConfigFile,
+} from '../config/config-file-cache';
 import { fetchMemoryEnabled } from './client';
 import type { Chat } from '../types';
 
@@ -43,22 +48,7 @@ export function isMemoryEnabledForChat(
  * Defaults to true when unset.
  */
 export async function fetchMemoryInjectionEnabled(): Promise<boolean> {
-  try {
-    const res = await fetch('/api/config/file?key=config.json', {
-      cache: 'no-store',
-    });
-    if (!res.ok) return true;
-    const config = (await res.json()) as {
-      features?: { memoryInjection?: boolean };
-    };
-    const features = config.features;
-    if (features && typeof features.memoryInjection === 'boolean') {
-      return features.memoryInjection;
-    }
-    return true;
-  } catch {
-    return true;
-  }
+  return readConfigFlag(['features', 'memoryInjection'], true);
 }
 
 /** Persist memory store + injection toggles (Settings / onboarding). */
@@ -66,35 +56,25 @@ export async function saveMemorySettings(options: {
   storeEnabled?: boolean;
   injectionEnabled?: boolean;
 }): Promise<boolean> {
-  try {
-    const res = await fetch('/api/config/file?key=config.json');
-    if (!res.ok) return false;
-    const config = (await res.json()) as {
-      memory?: { enabled?: boolean };
-      features?: Record<string, boolean>;
+  const config = await readConfigFile({ fresh: true });
+  if (!config) return false;
+
+  if (typeof options.storeEnabled === 'boolean') {
+    const memory = config.memory;
+    config.memory = {
+      ...(memory && typeof memory === 'object' ? (memory as Record<string, unknown>) : {}),
+      enabled: options.storeEnabled,
     };
-
-    if (typeof options.storeEnabled === 'boolean') {
-      config.memory = { ...(config.memory ?? {}), enabled: options.storeEnabled };
-    }
-    if (typeof options.injectionEnabled === 'boolean') {
-      const features =
-        config.features && typeof config.features === 'object'
-          ? { ...config.features }
-          : {};
-      features.memoryInjection = options.injectionEnabled;
-      config.features = features;
-    }
-
-    const put = await fetch('/api/config/file?key=config.json', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
-    });
-    return put.ok;
-  } catch {
-    return false;
   }
+  if (typeof options.injectionEnabled === 'boolean') {
+    const prev = config.features;
+    const features =
+      prev && typeof prev === 'object' ? { ...(prev as Record<string, unknown>) } : {};
+    features.memoryInjection = options.injectionEnabled;
+    config.features = features;
+  }
+
+  return writeConfigFile(config);
 }
 
 /** Resolve whether memory retrieval should run for this send. */

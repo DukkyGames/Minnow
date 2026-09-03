@@ -13,6 +13,7 @@ import {
   saveCodeMapInjectionDefault,
   shouldInjectCodeMap,
 } from '../../../src/brain/code-injection-config.ts';
+import { resetConfigFileCacheForTests } from '../../../src/config/config-file-cache.ts';
 import { resetDesktopWorkspacePathCache } from '../../../src/lib/desktop-workspace.ts';
 import { setLocalServerAvailableForTests } from '../../../src/tools/config.ts';
 import type { Chat } from '../../../src/types.ts';
@@ -35,6 +36,8 @@ const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  // config.json is read through a shared cache now; it must not leak across cases.
+  resetConfigFileCacheForTests();
 });
 
 describe('resolveCodeMapInjectionEnabled', () => {
@@ -95,7 +98,7 @@ describe('saveCodeMapInjectionDefault', () => {
     let putBody = '';
     globalThis.fetch = async (input, init) => {
       const url = String(input);
-      if (url.includes('config.json') && (!init || init.method === 'GET')) {
+      if (url.includes('config.json') && (!init?.method || init.method === 'GET')) {
         return {
           ok: true,
           json: async () => ({ features: { memoryInjection: true } }),

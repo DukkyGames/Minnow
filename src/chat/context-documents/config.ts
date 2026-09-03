@@ -3,6 +3,10 @@ import {
   normalizeThinkingTriState,
   type ThinkingTriState,
 } from '../../agents/thinking-types';
+import {
+  readConfigFile,
+  writeConfigFile,
+} from '../../config/config-file-cache';
 import { getWorkspacePath } from '../../state/workspace';
 import { sessionState } from '../../state/sessions';
 import { resolveChatToolWorkspaceRoot } from '../../state/chat-worktree';
@@ -56,26 +60,16 @@ export async function loadContextDocumentsSettings(): Promise<{
   injectionDefault: boolean;
   documents: ContextDocumentsConfig;
 }> {
-  try {
-    const res = await fetch('/api/config/file?key=config.json', { cache: 'no-store' });
-    if (!res.ok) {
-      return { injectionDefault: true, documents: normalizeConfigSlice(null) };
-    }
-    const config = (await res.json()) as {
-      features?: { contextDocumentsInjectionDefault?: boolean };
-      contextDocuments?: unknown;
-    };
-    const injectionDefault =
-      typeof config.features?.contextDocumentsInjectionDefault === 'boolean'
-        ? config.features.contextDocumentsInjectionDefault
-        : true;
-    return {
-      injectionDefault,
-      documents: normalizeConfigSlice(config.contextDocuments),
-    };
-  } catch {
-    return { injectionDefault: true, documents: normalizeConfigSlice(null) };
-  }
+  const config = await readConfigFile();
+  if (!config) return { injectionDefault: true, documents: normalizeConfigSlice(null) };
+  const features = config.features as { contextDocumentsInjectionDefault?: boolean } | undefined;
+  return {
+    injectionDefault:
+      typeof features?.contextDocumentsInjectionDefault === 'boolean'
+        ? features.contextDocumentsInjectionDefault
+        : true,
+    documents: normalizeConfigSlice(config.contextDocuments),
+  };
 }
 
 export async function fetchContextDocumentsInjectionDefault(): Promise<boolean> {
@@ -84,28 +78,14 @@ export async function fetchContextDocumentsInjectionDefault(): Promise<boolean> 
 }
 
 export async function saveContextDocumentsInjectionDefault(enabled: boolean): Promise<boolean> {
-  try {
-    const res = await fetch('/api/config/file?key=config.json');
-    if (!res.ok) return false;
-    const config = (await res.json()) as {
-      features?: Record<string, boolean>;
-      contextDocuments?: ContextDocumentsConfig;
-    };
-    const features =
-      config.features && typeof config.features === 'object'
-        ? { ...config.features }
-        : {};
-    features.contextDocumentsInjectionDefault = enabled;
-    config.features = features;
-    const put = await fetch('/api/config/file?key=config.json', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
-    });
-    return put.ok;
-  } catch {
-    return false;
-  }
+  const config = await readConfigFile({ fresh: true });
+  if (!config) return false;
+  const prev = config.features;
+  const features =
+    prev && typeof prev === 'object' ? { ...(prev as Record<string, unknown>) } : {};
+  features.contextDocumentsInjectionDefault = enabled;
+  config.features = features;
+  return writeConfigFile(config);
 }
 
 // ── Save ─────────────────────────────────────────────────────────────────────
@@ -113,24 +93,14 @@ export async function saveContextDocumentsInjectionDefault(enabled: boolean): Pr
 export async function saveContextDocumentsConfig(
   documents: ContextDocumentsConfig,
 ): Promise<boolean> {
-  try {
-    const res = await fetch('/api/config/file?key=config.json');
-    if (!res.ok) return false;
-    const config = (await res.json()) as { contextDocuments?: ContextDocumentsConfig };
-    config.contextDocuments = {
-      maxTotalChars: documents.maxTotalChars,
-      enabledPresets: [...documents.enabledPresets],
-      customPaths: [...documents.customPaths],
-    };
-    const put = await fetch('/api/config/file?key=config.json', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
-    });
-    return put.ok;
-  } catch {
-    return false;
-  }
+  const config = await readConfigFile({ fresh: true });
+  if (!config) return false;
+  config.contextDocuments = {
+    maxTotalChars: documents.maxTotalChars,
+    enabledPresets: [...documents.enabledPresets],
+    customPaths: [...documents.customPaths],
+  };
+  return writeConfigFile(config);
 }
 
 /** Reject absolute paths and `..` segments (workspace-relative only). */

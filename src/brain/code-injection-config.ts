@@ -12,6 +12,11 @@ import {
   getDesktopWorkspacePath,
   isDesktopWorkspacePath,
 } from '../lib/desktop-workspace';
+import {
+  readConfigFile,
+  readConfigFlag,
+  writeConfigFile,
+} from '../config/config-file-cache';
 import { fetchBrainCodeConfig } from './client';
 import { getWorkspacePath } from '../state/workspace';
 import { sessionState } from '../state/sessions';
@@ -23,47 +28,19 @@ export type CodeMapInjectionTriState = ThinkingTriState;
 
 /** Global default in config.json features.codeMapInjectionDefault (boolean, default false). */
 export async function fetchCodeMapInjectionDefault(): Promise<boolean> {
-  try {
-    const res = await fetch('/api/config/file?key=config.json', {
-      cache: 'no-store',
-    });
-    if (!res.ok) return false;
-    const config = (await res.json()) as {
-      features?: { codeMapInjectionDefault?: boolean };
-    };
-    const features = config.features;
-    if (features && typeof features.codeMapInjectionDefault === 'boolean') {
-      return features.codeMapInjectionDefault;
-    }
-    return false;
-  } catch {
-    return false;
-  }
+  return readConfigFlag(['features', 'codeMapInjectionDefault'], false);
 }
 
 /** Persist global code-map injection default (Settings / Brain Code). */
 export async function saveCodeMapInjectionDefault(enabled: boolean): Promise<boolean> {
-  try {
-    const res = await fetch('/api/config/file?key=config.json');
-    if (!res.ok) return false;
-    const config = (await res.json()) as {
-      features?: Record<string, boolean>;
-    };
-    const features =
-      config.features && typeof config.features === 'object'
-        ? { ...config.features }
-        : {};
-    features.codeMapInjectionDefault = enabled;
-    config.features = features;
-    const put = await fetch('/api/config/file?key=config.json', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
-    });
-    return put.ok;
-  } catch {
-    return false;
-  }
+  const config = await readConfigFile({ fresh: true });
+  if (!config) return false;
+  const prev = config.features;
+  const features =
+    prev && typeof prev === 'object' ? { ...(prev as Record<string, unknown>) } : {};
+  features.codeMapInjectionDefault = enabled;
+  config.features = features;
+  return writeConfigFile(config);
 }
 
 export function resolveCodeMapInjectionTriState(chat: Chat): CodeMapInjectionTriState {

@@ -39,6 +39,17 @@ const clients = new Map<string, ReturnType<typeof createSubAgentRunClient>>();
 const parentIndex = new Map<string, Set<string>>();
 const turnIndex = new Map<string, Set<string>>();
 const hydrating = new Map<string, Promise<void>>();
+/** Last successful parent-chat hydrate, for the TTL below. */
+const hydratedAt = new Map<string, number>();
+/** In-flight transcript hydrates, keyed by run id. */
+const transcriptHydrating = new Map<string, Promise<void>>();
+/** Runs whose transcript fetch already returned nothing — never worth refetching. */
+const transcriptHydrateAttempted = new Set<string>();
+/**
+ * A chat switch re-runs the parent hydrate; without this the whole run list is refetched and
+ * every run re-published on each switch, fanning out to the card and activity-panel listeners.
+ */
+const PARENT_HYDRATE_TTL_MS = 15_000;
 const deliverListeners = new Set<(frame: DeliverFrame & { runId: string }) => void>();
 
 type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
@@ -308,10 +319,23 @@ function adoptRaw(raw: Record<string, unknown>): void {
 
 // ── Hydrate ──────────────────────────────────────────────────────────────────
 
-export async function hydrateSubAgentRunsForParentChat(parentChatId: string): Promise<void> {
+/** Force the next `hydrateSubAgentRunsForParentChat` past the TTL (spawn, delete, refresh). */
+export function invalidateSubAgentParentHydrate(parentChatId?: string): void {
+  if (parentChatId) hydratedAt.delete(parentChatId);
+  else hydratedAt.clear();
+}
+
+export async function hydrateSubAgentRunsForParentChat(
+  parentChatId: string,
+  options: { force?: boolean } = {},
+): Promise<void> {
   if (!parentChatId) return;
   const existing = hydrating.get(parentChatId);
   if (existing) return existing;
+  if (!options.force) {
+    const last = hydratedAt.get(parentChatId);
+    if (last !== undefined && Date.now() - last < PARENT_HYDRATE_TTL_MS) return;
+  }
   const work = (async () => {
     try {
       const body = await request(`?parentChatId=${encodeURIComponent(parentChatId)}`);
@@ -321,6 +345,7 @@ export async function hydrateSubAgentRunsForParentChat(parentChatId: string): Pr
           adoptRaw(raw);
         }
       }
+      hydratedAt.set(parentChatId, Date.now());
     } catch (err) {
       console.error('[agents] could not hydrate parent chat runs', err);
     } finally {
@@ -333,10 +358,23 @@ export async function hydrateSubAgentRunsForParentChat(parentChatId: string): Pr
 
 export async function hydrateSubAgentTranscript(runId: string): Promise<void> {
   if (!runId) return;
+  const inflight = transcriptHydrating.get(runId);
+  if (inflight) return inflight;
+  // An empty result is final for a terminal run; without this marker every switch refetches it.
+  if (transcriptHydrateAttempted.has(runId)) return;
+  const work = hydrateSubAgentTranscriptNow(runId).finally(() => {
+    transcriptHydrating.delete(runId);
+  });
+  transcriptHydrating.set(runId, work);
+  return work;
+}
+
+async function hydrateSubAgentTranscriptNow(runId: string): Promise<void> {
   try {
     const body = await request(`/${encodeURIComponent(runId)}/transcript`);
     const events = Array.isArray(body?.events) ? body.events : [];
     const mapped = turnEventsToMessages(events);
+    transcriptHydrateAttempted.add(runId);
     if (mapped.length === 0) return;
     const client = clients.get(runId);
     if (client) {
@@ -374,7 +412,7 @@ export async function rehydrateLiveParentSubAgents(parentChatId: string): Promis
   if (!parentChatId) return;
   const live = listSubAgentRunsForParentChat(parentChatId).filter(isListedActiveSubAgentRun);
   if (live.length === 0) return;
-  await hydrateSubAgentRunsForParentChat(parentChatId);
+  await hydrateSubAgentRunsForParentChat(parentChatId, { force: true });
 }
 
 export function listSubAgentRunsForParentChat(parentChatId: string | null | undefined): SubAgentRun[] {
@@ -564,6 +602,9 @@ export function resetSubAgentOrchestrator(): void {
   parentIndex.clear();
   turnIndex.clear();
   hydrating.clear();
+  hydratedAt.clear();
+  transcriptHydrating.clear();
+  transcriptHydrateAttempted.clear();
   deliverListeners.clear();
   clearSubAgentRunListeners();
 }
