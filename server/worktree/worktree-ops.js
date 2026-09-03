@@ -568,7 +568,7 @@ export async function removeWorktree({ boardId, slotId }) {
     return { ok: false, error: 'refusing to remove path outside the worktrees root' };
   }
   const r = await git(['worktree', 'remove', '--force', wtPath]);
-  await git(['worktree', 'prune']);
+  await git(['worktree', 'prune', '--expire', 'now']);
   try {
     await fs.rm(wtPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   } catch {
@@ -585,6 +585,45 @@ export async function removeWorktree({ boardId, slotId }) {
 }
 
 /**
+ * Drop many slots with one prune instead of `git worktree remove` + prune per slot.
+ *
+ * Per-slot remove is O(n²) against git's worktree list: each prune re-reads every
+ * remaining registration. A board that leaked hundreds of attempt slots then
+ * blocked engine load (and the SSE snapshot) for minutes — EventSource stayed
+ * on "reconnecting" and later fetches failed.
+ *
+ * `rm` + `prune --expire now` is the documented recovery for missing worktree
+ * directories; `--expire now` is required because prune's default grace is 3 months.
+ *
+ * @param {{ boardId: string, slotIds: string[] }} input
+ * @returns {Promise<{ ok: boolean, removed: string[], failedSlots: string[] }>}
+ */
+export async function removeWorktreeSlotsBulk({ boardId, slotIds }) {
+  /** @type {string[]} */
+  const removed = [];
+  /** @type {string[]} */
+  const failedSlots = [];
+  for (const slotId of slotIds) {
+    const wtPath = getWorktreeSlotPath(boardId, slotId);
+    if (!isPathUnderWorktreesRoot(wtPath)) {
+      failedSlots.push(slotId);
+      continue;
+    }
+    try {
+      await fs.rm(wtPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    } catch {
+    }
+    if (await pathExists(wtPath)) {
+      failedSlots.push(slotId);
+      continue;
+    }
+    removed.push(wtPath);
+  }
+  await git(['worktree', 'prune', '--expire', 'now']);
+  return { ok: failedSlots.length === 0, removed, failedSlots };
+}
+
+/**
  * @param {{ boardId: string, includeIntegration?: boolean }} input
  */
 export async function cleanupBoardWorktrees({ boardId, includeIntegration = false }) {
@@ -598,32 +637,32 @@ export async function cleanupBoardWorktrees({ boardId, includeIntegration = fals
   } catch {
     return { ok: true, removed: 0 };
   }
-  let removed = 0;
   let keptIntegration = false;
-  const failedSlots = [];
+  /** @type {string[]} */
+  const toRemove = [];
   for (const slot of slots) {
     if (!includeIntegration && slot === 'integration') {
       keptIntegration = true;
       continue;
     }
-    const r = await removeWorktree({ boardId, slotId: slot });
-    if (r.ok) {
-      removed += 1;
-    } else {
-      failedSlots.push(slot);
-      console.warn(
-        `[worktree] ${boardId}/${slot} survived cleanup: ${r.error || r.output || 'unknown'}`,
-      );
-    }
+    toRemove.push(slot);
   }
-  await git(['worktree', 'prune']);
+  const bulk = await removeWorktreeSlotsBulk({ boardId, slotIds: toRemove });
+  for (const slot of bulk.failedSlots) {
+    console.warn(`[worktree] ${boardId}/${slot} survived cleanup`);
+  }
   if (!keptIntegration) {
     try {
       await fs.rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     } catch {
     }
   }
-  return { ok: true, removed, keptIntegration, failedSlots };
+  return {
+    ok: true,
+    removed: bulk.removed.length,
+    keptIntegration,
+    failedSlots: bulk.failedSlots,
+  };
 }
 
 /**

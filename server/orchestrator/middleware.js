@@ -23,6 +23,7 @@ import { readReport } from './report.js';
 import { subscribeErrors, subscribeLive } from './live-events.js';
 import { readTranscript } from './transcripts.js';
 import { readCommitFileDiff, readCommitFileStats } from './task-files.js';
+import { cleanupBoardWorktrees } from '../worktree/worktree-ops.js';
 import { resolveSafePath } from '../runtime/path-access.js';
 import { getWorkspaceRoot } from '../workspace/root.js';
 import { attachTouchesExpansion, listRepoFiles } from './touches.js';
@@ -386,6 +387,16 @@ async function dispatch(route, req, res) {
     case 'delete': {
       if (!(await boardExists(boardId))) return json(res, 404, { ok: false, error: 'no such board' });
       disposeEngines(boardId);
+      // Journal delete used to leave ~/.minnow/worktrees/<repo>/<boardId>/ behind.
+      // Recreating the same board id then hung engine load on orphan reconcile.
+      try {
+        await cleanupBoardWorktrees({ boardId, includeIntegration: true });
+      } catch (err) {
+        console.warn(
+          `[orchestrator] ${boardId}: worktree cleanup failed:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
       const removed = await deleteBoard(boardId);
       return json(res, removed ? 200 : 404, {
         ok: removed,
@@ -624,6 +635,11 @@ async function streamEvents(req, res, boardId) {
     Connection: 'keep-alive',
     'X-Accel-Buffering': 'no',
   });
+  // Flush before getEngine(): load() can wait on orphan worktree reclaim.
+  // Without a first byte, EventSource stays CONNECTING ("reconnecting") and
+  // Chromium's HTTP/1.1 pool fills until later POSTs fail with Failed to fetch.
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+  res.write(': connected\n\n');
 
   const lastEventId = Number(req.headers['last-event-id']);
   const resumeFrom = Number.isSafeInteger(lastEventId) && lastEventId > 0 ? lastEventId : 0;

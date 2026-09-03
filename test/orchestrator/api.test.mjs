@@ -384,6 +384,32 @@ describe('SSE', () => {
     assert.deepEqual([...state.tasks.keys()], ['W1-A', 'W1-B']);
   });
 
+  it('flushes an SSE comment before the snapshot so the client is not stuck connecting', async () => {
+    const boardId = await createBoard();
+    const firstChunk = await new Promise((resolve, reject) => {
+      const request = http.get(`${base}/api/boards/${boardId}/events`, (response) => {
+        if (response.statusCode !== 200) {
+          reject(new Error(`SSE returned ${response.statusCode}`));
+          return;
+        }
+        response.setEncoding('utf8');
+        response.once('data', (chunk) => {
+          request.destroy();
+          resolve(chunk);
+        });
+      });
+      request.on('error', (err) => {
+        if (/** @type {NodeJS.ErrnoException} */ (err).code === 'ECONNRESET') return;
+        reject(err);
+      });
+      setTimeout(() => {
+        request.destroy();
+        reject(new Error('timed out waiting for SSE comment'));
+      }, 3_000);
+    });
+    assert.match(String(firstChunk), /^: connected\n\n/);
+  });
+
   it('streams each subsequent event with its seq as the frame id', async () => {
     const boardId = await createBoard();
     const streamed = readSse(`/api/boards/${boardId}/events`, (f) => f.length >= 3);
