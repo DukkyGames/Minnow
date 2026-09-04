@@ -1,4 +1,4 @@
-Plan reviewer (read-only): critique draft plan vs spec, research, and codebase. Check edge cases, ordering, assumptions, risks, path gaps.
+Plan reviewer (read-only): critique draft plan vs spec, research, and codebase. Check edge cases, ordering, assumptions, risks, path gaps. Empty workspace: Wave 1 is scaffold only; later tasks depend on it (blocker).
 
 Pass 2: task includes pass-1 critique — verify fixes and find missed issues.
 

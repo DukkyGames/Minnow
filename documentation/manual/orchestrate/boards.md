@@ -7,7 +7,7 @@ This is the most powerful thing in Minnow and the one that most rewards understa
 ## The shape of it
 
 1. You write a plan (or have [Super Plan](super-plan.md) write it) into `documentation/plans/`.
-2. An **orchestrator** reads it and creates a board of tasks, grouped into **waves** by dependency.
+2. An **orchestrator** reads it and creates a board of tasks. **Waves group cards**; start order is each task's **Depends on** list — later waves do not wait automatically.
 3. Each task gets its own chat and its own agent: a **builder** implements it, a **tester** verifies it, a **fixer** repairs failures.
 4. Completed work merges into an integration branch.
 5. A **final integration test** runs across the whole board.
@@ -22,6 +22,8 @@ Open the **Orchestrate** button in the Code sidebar rail. The hub shows your rec
 Choose a plan file and Minnow creates an Orchestrate planner chat, checks the workspace is a git repository (offering to set one up if not), and asks the orchestrator to build the board. While that is happening the folder shows **Setting up**; if you navigate away there is a banner to return.
 
 Plans must live under `documentation/plans/`. Plan mode can write there even though it cannot touch the rest of your repository — that is deliberate, and it is how a planning session hands off to a delivery board.
+
+On a **fresh project**, put scaffold in **Wave 1 alone**. Every later task lists that id under **Depends on**. Boards do not wait for earlier waves.
 
 If the plan does not parse, Boards lists the errors and offers **Repair**. Repair rewrites that file to the required schema (same waves and tasks) and then opens the board.
 

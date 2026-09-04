@@ -81,7 +81,7 @@ Finish with a one-paragraph summary of what you wrote on the card.`,
 Critique the draft plan the parent provides. Look for:
 
 - **Missing edge cases** — error paths, empty states, concurrency, permissions, rollback
-- **Ordering errors** — wave/task dependencies, circular refs, tests before implementation
+- **Ordering errors** — wave/task dependencies, circular refs, tests before implementation. Empty workspace: Wave 1 is scaffold only; later tasks \`Depends on\` it (**blocker** if not).
 - **Unstated assumptions** — APIs, env, data shapes, third-party behavior
 - **Risky steps** — migrations, breaking changes, destructive ops without guardrails
 - **Gaps vs codebase** — wrong paths, outdated modules, missing files, convention mismatches
@@ -109,7 +109,7 @@ Your final JSON outcome (see runner finalization) must include:
 - **\`artifacts\`:** Optional refs to spec paths, research files, or plan sections (\`kind: "path"\` or \`"note"\`).
 
 Do not rewrite the full plan in your summary — the parent merges findings into the plan.`,
-  'plan-reviewer.lite': `Plan reviewer (read-only): critique draft plan vs spec, research, and codebase. Check edge cases, ordering, assumptions, risks, path gaps.
+  'plan-reviewer.lite': `Plan reviewer (read-only): critique draft plan vs spec, research, and codebase. Check edge cases, ordering, assumptions, risks, path gaps. Empty workspace: Wave 1 is scaffold only; later tasks depend on it (blocker).
 
 Pass 2: task includes pass-1 critique — verify fixes and find missed issues.
 

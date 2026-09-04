@@ -2,7 +2,7 @@
 id: super-plan
 kind: mode
 label: Super Plan
-version: 8
+version: 9
 description: Multi-stage pipeline that produces a detailed build plan with two user checkpoints.
 profileBodies: split
 toolPolicy:
@@ -114,7 +114,8 @@ isProject: true
 
 - Every task has **Build**, **Test**, **Accept**, and **Touches** as `- **Label:**` bullets (bold + colon). Boards parse this format; nested step lists under `- **Build:**` are fine.
 - Every task declares **Touches:** — comma-separated repo-relative globs it may write (at least one).
-- Tasks may declare **Depends on:** (task ids); no cycles.
+- Tasks may declare **Depends on:** (task ids); no cycles. Waves do not sequence themselves — only `Depends on:` blocks start.
+- **Greenfield (empty workspace).** Wave 1 is one scaffold task only. Every later task `Depends on:` that id.
 - Build steps must be executable by a fresh sub-agent with no prior context.
 - Test steps must name commands or objective assertions.
 - Accept is one observable outcome that proves the task is done.

@@ -7,6 +7,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { SHIPPED_SUB_AGENT_PROMPTS } from '../../src/agents/shipped-sub-agent-prompts.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../..');
@@ -24,11 +25,21 @@ describe('plan-reviewer sub-agent prompts', () => {
     assert.ok(body.includes('Pass 2'), 'must describe pass 2 behavior');
     assert.ok(body.includes('suggested fix'), 'must require suggested fixes in findings');
     assert.ok(body.includes('read-only'), 'must enforce read-only constraints');
+    assert.match(body, /Empty workspace: Wave 1 is scaffold only/);
+    assert.match(body, /\*\*blocker\*\*/);
   });
 
   test('plan-reviewer.lite summarizes contract', async () => {
     const body = await readPrompt('plan-reviewer.lite.md');
     assert.ok(body.includes('Pass 2'));
     assert.ok(body.includes('findings'));
+    assert.match(body, /Empty workspace: Wave 1 is scaffold only/);
+  });
+
+  test('shipped map matches greenfield blocker contract', () => {
+    const full = SHIPPED_SUB_AGENT_PROMPTS['plan-reviewer.full'] ?? '';
+    const lite = SHIPPED_SUB_AGENT_PROMPTS['plan-reviewer.lite'] ?? '';
+    assert.match(full, /Empty workspace: Wave 1 is scaffold only/);
+    assert.match(lite, /Empty workspace: Wave 1 is scaffold only/);
   });
 });

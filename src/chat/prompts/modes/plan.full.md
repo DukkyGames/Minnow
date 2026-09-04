@@ -2,7 +2,7 @@
 id: plan
 kind: mode
 label: Plan
-version: 8
+version: 9
 description: Produces a detailed build-plan document. Read-only except for the plan file itself.
 profileBodies: split
 toolPolicy:
@@ -84,7 +84,7 @@ Why this work is needed, what prompted it, the intended outcome, and any constra
 ## Wave Breakdown
 
 ### Wave 1 — <Wave name>
-Tasks in this wave can run concurrently.
+Tasks here run concurrently unless they declare `Depends on:`.
 
 #### Task W1-A: <Title>
 - **Build:** <exact steps, file paths, function names, expected diff scope>
@@ -116,7 +116,8 @@ Tasks in this wave can run concurrently.
 
 - **Every task has Build + Test + Accept + Touches sub-tasks** as `- **Label:**` bullets (bold + colon). Boards parse this format; a missing field is rejected with a line number. Nested step lists under `- **Build:**` are fine.
 - **Every task declares `Touches:`** — the repo-relative globs it may write, at least one. The scheduler runs two tasks concurrently only when their `Touches` sets do not intersect.
-- **Tasks within a wave may declare explicit dependencies** via `Depends on:` (task ids). Tasks without a `Depends on:` line are independent and may run concurrently. Cross-wave sequencing still goes between waves; within-wave `Depends on:` is for fine-grained ordering only. No cycles allowed; only reference task ids earlier in the plan.
+- **Tasks within a wave may declare explicit dependencies** via `Depends on:` (task ids). Tasks without a `Depends on:` line are independent and may run concurrently. Waves do not sequence themselves — only `Depends on:` blocks start. No cycles; only reference task ids earlier in the plan.
+- **Greenfield (empty workspace).** Wave 1 is one scaffold task only. Every later task `Depends on:` that id.
 - **Each Build sub-task must be specific enough that a fresh sub-agent could execute it with no prior context** — include file paths, function signatures, and expected outcomes.
 - **Each Test sub-task must be objective** — name the command to run or the exact assertion to check.
 - **Granularity must match the active setting** (`{{plan_granularity}}`) unless the user specified otherwise. If `small`, every function is its own task.

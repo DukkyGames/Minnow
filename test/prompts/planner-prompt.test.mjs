@@ -35,4 +35,17 @@ describe('planner work-agent prompts', () => {
     assert.match(body, /Want me to ask a few clarifying questions first to sharpen scope\?/);
     assert.match(body, /lightweight grill/i);
   });
+
+  test('agent.full.md teaches greenfield solo Wave 1 and scheduler-only Depends on', async () => {
+    const body = await fs.readFile(path.join(PLANNER_DIR, 'agent.full.md'), 'utf8');
+    assert.match(body, /Greenfield \(empty workspace\)/);
+    assert.match(body, /Wave 1 is one scaffold task only/);
+    assert.match(body, /Waves do not sequence themselves/);
+  });
+
+  test('agent.lite.md teaches greenfield solo Wave 1 and scheduler-only Depends on', async () => {
+    const body = await fs.readFile(path.join(PLANNER_DIR, 'agent.lite.md'), 'utf8');
+    assert.match(body, /empty workspace: Wave 1 is scaffold only/);
+    assert.match(body, /waves do not wait/);
+  });
 });

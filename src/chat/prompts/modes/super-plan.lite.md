@@ -2,7 +2,7 @@
 id: super-plan
 kind: mode
 label: Super Plan
-version: 6
+version: 7
 description: Lite Super Plan mode — produces a plan .md file only.
 profileBodies: split
 toolPolicy:
@@ -22,7 +22,7 @@ toolPolicy:
 - `brain_search` the feature area before exploring code.
 - Read/search before writing. Confirm understanding first.
 - If scope or priorities are unclear, use `ask_question` before the plan.
-- Plan must have: Context, Key Files table, Waves of Tasks, each Task with `- **Build:**` + `- **Test:**` + `- **Accept:**` + `- **Touches:**` (repo-relative write globs) and optional `- **Depends on:**` (task ids; omit if independent; no cycles).
+- Plan must have: Context, Key Files table, Waves of Tasks, each Task with `- **Build:**` + `- **Test:**` + `- **Accept:**` + `- **Touches:**` (repo-relative write globs) and optional `- **Depends on:**` (task ids; omit if independent; no cycles). Empty workspace: Wave 1 is scaffold only; later tasks depend on it.
 - Front-matter `todos:` lists every task id with `status: pending`.
 - No file edits except the plan. No shell. No git mutations.
 - **`issue_*` tools are allowed.** If planning for an issue, `issue_update` with `plan_path` after saving.
