@@ -137,6 +137,11 @@ let unsubscribeLive: (() => void) | null = null;
 let unsubscribeList: (() => void) | null = null;
 
 let selectedBoardId: string | null = null;
+/**
+ * Survives teardown so leaving Boards and coming back reconnects the last
+ * journal instead of painting a selected rail row over a skeleton (no client).
+ */
+let lastOpenedBoardId: string | null = null;
 let selectedTaskId: string | null = null;
 let showTimeline = false;
 let journalView: {
@@ -166,7 +171,14 @@ export function isBoardsViewOpen(): boolean {
   return Boolean(document.getElementById(BOARDS_ROOT_ID));
 }
 
+/** Drop last-opened memory when the Code workspace changes. */
+export function forgetLastOpenedBoard(): void {
+  lastOpenedBoardId = null;
+  persistLastOpenedBoardId(null);
+}
+
 export function deselectBoardForWorkspaceSwitch(): void {
+  forgetLastOpenedBoard();
   if (!isBoardsViewOpen()) return;
   selectBoard(null);
 }
@@ -178,6 +190,9 @@ export function refreshBoardsViewAfterWorkspaceSwitch(): void {
 
 export async function openBoardsView(): Promise<void> {
   if (isBoardsViewOpen()) {
+    // Hash / rail re-entry while already mounted: reconnect if teardown-equivalent
+    // left a selected id with no live client (skeleton forever until another click).
+    if (selectedBoardId && !client) reconnectBoard(selectedBoardId);
     void list?.refresh();
     return;
   }
@@ -205,7 +220,9 @@ export async function openBoardsView(): Promise<void> {
 
   list = createBoardListClient();
   unsubscribeList = list.subscribe(() => {
-    if (selectedBoardId && !list?.getBoards().some((b) => b.boardId === selectedBoardId)) {
+    const boards = list?.getBoards() ?? [];
+    if (selectedBoardId && !boards.some((b) => b.boardId === selectedBoardId)) {
+      if (lastOpenedBoardId === selectedBoardId) forgetLastOpenedBoard();
       selectBoard(null);
     }
     paintList();
@@ -213,7 +230,7 @@ export async function openBoardsView(): Promise<void> {
   list.start();
 
   paintList();
-  paintBoard();
+  resumeLastOpenedBoard();
   syncRailButton();
   notifyCodeStageViewChanged();
 }
@@ -243,6 +260,10 @@ export function teardownBoardsView(): void {
   area?.classList.remove(CHAT_AREA_CLASS);
   document.getElementById('mainColumn')?.classList.remove(MAIN_COLUMN_CLASS);
   surface = null;
+  // Keep lastOpenedBoardId; drop selectedBoardId so paint cannot show a live
+  // selection without a client if anything renders during unmount.
+  if (selectedBoardId) rememberOpenedBoard(selectedBoardId);
+  selectedBoardId = null;
   selectedTaskId = null;
   pendingTasks.clear();
   confirmingDelete.clear();
@@ -333,8 +354,60 @@ function syncRailButton(): void {
 
 // ── Selection ────────────────────────────────────────────────────────────────
 
+function lastOpenedStorageKey(): string | null {
+  const workspace = getWorkspacePath().trim();
+  if (!workspace) return null;
+  return `minnow.v2.lastOpenedBoardId:${workspace}`;
+}
+
+/** sessionStorage so a SPA reload still lands on the last journal for this workspace. */
+function persistLastOpenedBoardId(boardId: string | null): void {
+  try {
+    const key = lastOpenedStorageKey();
+    if (!key || typeof sessionStorage === 'undefined') return;
+    if (boardId) sessionStorage.setItem(key, boardId);
+    else sessionStorage.removeItem(key);
+  } catch {
+    // Private mode / missing storage — in-memory lastOpenedBoardId still works.
+  }
+}
+
+function readPersistedLastOpenedBoardId(): string | null {
+  try {
+    const key = lastOpenedStorageKey();
+    if (!key || typeof sessionStorage === 'undefined') return null;
+    const stored = sessionStorage.getItem(key)?.trim();
+    return stored || null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberOpenedBoard(boardId: string): void {
+  lastOpenedBoardId = boardId;
+  persistLastOpenedBoardId(boardId);
+}
+
+function resumeLastOpenedBoard(): void {
+  const resumeId = lastOpenedBoardId ?? selectedBoardId ?? readPersistedLastOpenedBoardId();
+  if (!resumeId) {
+    paintBoard();
+    return;
+  }
+  reconnectBoard(resumeId);
+}
+
+/** Open (or reopen) a journal: always attach a client, even if the id is unchanged. */
+function reconnectBoard(boardId: string): void {
+  // selectBoard no-ops when the id matches *and* a client exists. After teardown
+  // the id can still be set with client === null — that is the skeleton bug.
+  if (selectedBoardId === boardId) selectedBoardId = null;
+  selectBoard(boardId);
+}
+
 function selectBoard(boardId: string | null): void {
-  if (boardId === selectedBoardId) return;
+  // Same id with a live client is a no-op. Same id with no client must reconnect.
+  if (boardId === selectedBoardId && (boardId === null || client)) return;
   unsubscribeBoard?.();
   unsubscribeBoard = null;
   unsubscribeLive?.();
@@ -343,6 +416,7 @@ function selectBoard(boardId: string | null): void {
   client = null;
 
   selectedBoardId = boardId;
+  if (boardId) rememberOpenedBoard(boardId);
   selectedTaskId = null;
   showTimeline = false;
   journalView = null;
@@ -456,6 +530,7 @@ function renderListItem(board: BoardSummary): HTMLElement {
 async function commandDeleteBoard(boardId: string): Promise<void> {
   try {
     await deleteBoard(boardId);
+    if (lastOpenedBoardId === boardId) forgetLastOpenedBoard();
     if (selectedBoardId === boardId) selectBoard(null);
     await list?.refresh();
     paintList();
@@ -1793,4 +1868,11 @@ async function commandRerun(taskIds?: string[]): Promise<void> {
     reportDismissed.delete(selectedBoardId!);
     void list?.refresh();
   });
+}
+
+/** Clear mount + last-opened memory between tests. */
+export function resetBoardsViewForTests(): void {
+  teardownBoardsView();
+  forgetLastOpenedBoard();
+  selectedBoardId = null;
 }

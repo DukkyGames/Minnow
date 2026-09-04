@@ -100,12 +100,9 @@ export async function dismissBoardViewOutsideWorkspace(workspacePath: string): P
     exitBoardViewForNavigation();
   }
 
-  const { isBoardsViewOpen, deselectBoardForWorkspaceSwitch } = await import(
-    '../orchestrator/boards-view'
-  );
-  if (isBoardsViewOpen()) {
-    deselectBoardForWorkspaceSwitch();
-  }
+  const { deselectBoardForWorkspaceSwitch } = await import('../orchestrator/boards-view');
+  // Always forget last-opened V2 journal so a different workspace cannot resume it.
+  deselectBoardForWorkspaceSwitch();
 }
 
 type NamedBoard = { name?: string };
