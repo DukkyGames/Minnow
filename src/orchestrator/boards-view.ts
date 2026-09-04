@@ -226,6 +226,9 @@ export async function openBoardsView(): Promise<void> {
       selectBoard(null);
     }
     paintList();
+    void import('../ui/code-views-orchestrate-button').then((m) =>
+      m.updateV2BoardActivityFromSummaries(boards),
+    );
   });
   list.start();
 
@@ -344,12 +347,9 @@ export async function closeBoardsView(options?: {
 }
 
 function syncRailButton(): void {
-  const btn = document.getElementById('btnOrchestrate');
-  if (!btn) return;
-  const open = isBoardsViewOpen();
-  btn.setAttribute('aria-pressed', open ? 'true' : 'false');
-  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-  btn.classList.toggle('icon-btn--active', open);
+  void import('../ui/code-views-orchestrate-button').then((m) =>
+    m.syncCodeViewsOrchestrateButton(),
+  );
 }
 
 // ── Selection ────────────────────────────────────────────────────────────────

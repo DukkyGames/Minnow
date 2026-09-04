@@ -26,6 +26,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0;
+  position: relative;
   min-height: 30px;
   padding: 5px 8px;
   border: 1px solid transparent;
@@ -63,6 +64,35 @@
   --mn-icon-size: 15px;
   flex: none;
   opacity: 0.85;
+}
+
+/* Running-board cue on Orchestrate when the boards surface is closed. */
+.code-views__activity-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mn-warning);
+  box-shadow: 0 0 0 1px var(--mn-surface-1);
+  pointer-events: none;
+}
+
+.code-views__activity-dot.is-live {
+  animation: code-views-activity-pulse 1.4s var(--ease-out) infinite;
+}
+
+@keyframes code-views-activity-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.88);
+  }
 }
 
 .code-views__btn:focus-visible {
@@ -315,8 +345,10 @@ html.mn-narrow .code-status-bar__btn {
   .code-views__btn,
   .code-views__label-track,
   .code-views__label,
-  .code-status-bar__btn {
+  .code-status-bar__btn,
+  .code-views__activity-dot.is-live {
     transition: none;
+    animation: none;
   }
 
   @media (hover: hover) and (pointer: fine) {

@@ -102,14 +102,9 @@ export function isOrchestrateHubMounted(): boolean {
 }
 
 function syncTopBarOrchestrateButton(): void {
-  if (typeof document === 'undefined') return;
-  const btn = document.getElementById('btnOrchestrate');
-  if (!btn) return;
-  const open =
-    isOrchestrateHubMounted() || Boolean(document.getElementById('orchestratorBoardsRoot'));
-  btn.setAttribute('aria-pressed', open ? 'true' : 'false');
-  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-  btn.classList.toggle('icon-btn--active', open);
+  void import('./code-views-orchestrate-button').then((m) =>
+    m.syncCodeViewsOrchestrateButton(),
+  );
 }
 
 /** Remove orchestrate hub chrome and restore the prior chat view. */
@@ -517,7 +512,9 @@ export function toggleOrchestrateHubFromTopbar(): void {
 
 /** Wire top-bar button (idempotent). */
 export function initOrchestrateHub(): void {
-  syncTopBarOrchestrateButton();
+  void import('./code-views-orchestrate-button').then((m) =>
+    m.initCodeViewsOrchestrateButton(),
+  );
 }
 
 /** Clear hub state between tests. */
