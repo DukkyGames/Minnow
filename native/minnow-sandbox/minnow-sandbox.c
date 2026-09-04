@@ -103,7 +103,8 @@ struct landlock_path_beneath_attr {
 #define EXIT_LANDLOCK_APPLY 76
 #define EXIT_EXEC 127
 
-#define MAX_PATHS 256
+/* Keep in sync with LANDLOCK_HELPER_MAX_PATHS in server/terminal/sandbox/landlock.js */
+#define MAX_PATHS 1024
 
 static const __u64 FS_READ_EXEC =
 	LANDLOCK_ACCESS_FS_EXECUTE | LANDLOCK_ACCESS_FS_READ_FILE |

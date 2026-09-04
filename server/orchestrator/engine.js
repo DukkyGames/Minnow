@@ -191,6 +191,14 @@ export function createEngine(options) {
   async function runOnce() {
     if (disposed || !state) return;
 
+    // A finished run is quiescent: extra ticks must not journal more events
+    // (conformance: "extra ticks appended"). Retry a missing report only.
+    if (state.finished) {
+      const extra = await collectEndOfRunReport();
+      if (extra.length > 0) await append(extra);
+      return;
+    }
+
     if (state.status === 'running') await journalImpliedDecisions();
 
     if (await reapVanished(effector.inspect())) {
@@ -214,17 +222,37 @@ export function createEngine(options) {
 
     if (state.status === 'running' && graph.isRunComplete?.(state)) {
       const finish = graph.eventsForRunComplete?.(state) ?? [];
-      if (finish.length > 0) await append(finish);
       stopTimer();
-      await maybeWriteEndOfRunReport();
+      // Persist the report before publishing run.finished so observers never
+      // see finished=true with a still-in-flight report write (that late
+      // event is "extra ticks appended 1 events" in the scheduler suite).
+      const reportEvents = await collectEndOfRunReport(finish);
+      await append([...finish, ...reportEvents]);
     }
   }
 
-  /** @returns {Promise<void>} */
-  async function maybeWriteEndOfRunReport() {
-    if (disposed || !state || !graph.writeReport) return;
-    const events = await journal.readEvents(boardId);
-    if (graph.hasReport?.(events)) return;
+  /**
+   * Build the end-of-run report event without journaling it.
+   * `pendingFinish` is folded into the writer input so the markdown can
+   * describe a complete run before `run.finished` is published.
+   *
+   * @param {Record<string, unknown>[]} [pendingFinish]
+   * @returns {Promise<Record<string, unknown>[]>}
+   */
+  async function collectEndOfRunReport(pendingFinish = []) {
+    if (disposed || !state || !graph.writeReport) return [];
+    const events = [...await journal.readEvents(boardId), ...pendingFinish];
+    if (graph.hasReport?.(events)) return [];
+
+    // writeReport refuses unless the board looks finished or user-stopped.
+    const prevFinished = state.finished;
+    const prevStatus = state.status;
+    const prevReason = state.stopReason;
+    if (!prevFinished && prevStatus !== 'stopped') {
+      state.finished = true;
+      state.status = 'stopped';
+      state.stopReason = prevReason ?? 'complete';
+    }
     try {
       const result = await graph.writeReport({
         id: boardId,
@@ -232,20 +260,31 @@ export function createEngine(options) {
         state,
         complete,
       });
-      if (!result) return;
+      if (!result) return [];
       const type = graph.reportEventType ?? 'run.report.written';
-      await append([
+      return [
         makeEvent(type, {
           path: result.relativePath,
           usedFallback: result.usedFallback,
         }),
-      ]);
+      ];
     } catch (err) {
       console.warn(
         `[orchestrator] ${boardId}: end-of-run report failed:`,
         /** @type {Error} */ (err)?.message ?? err,
       );
+      return [];
+    } finally {
+      state.finished = prevFinished;
+      state.status = prevStatus;
+      state.stopReason = prevReason;
     }
+  }
+
+  /** @returns {Promise<void>} */
+  async function maybeWriteEndOfRunReport() {
+    const extra = await collectEndOfRunReport();
+    if (extra.length > 0) await append(extra);
   }
 
   /**

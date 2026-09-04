@@ -3,12 +3,16 @@
  */
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import {
   buildLandlockArgv,
   buildLandlockPathLists,
   buildScopedWriteRootGrants,
+  LANDLOCK_HELPER_MAX_PATHS,
+  LANDLOCK_MAX_SCOPED_WRITE_GRANTS,
   landlockDeviceWriteAllowlist,
 } from '../../../server/terminal/sandbox/landlock.js';
 import { buildWorkspacePolicy } from '../../../server/terminal/sandbox/index.js';
@@ -60,6 +64,53 @@ describe('landlock device write allowlist', () => {
     const sep = argv.indexOf('--');
     assert.ok(sep > 0);
     assert.equal(argv[sep + 1], '/bin/sh');
+  });
+
+  it('caps scoped tmp grants and argv so the helper never exceeds MAX_PATHS', async () => {
+    const fakeTmp = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-landlock-tmp-'));
+    const minnowHome = path.join(fakeTmp, '.minnow');
+    await fs.mkdir(minnowHome, { recursive: true });
+    try {
+      for (let i = 0; i < LANDLOCK_MAX_SCOPED_WRITE_GRANTS + 20; i += 1) {
+        await fs.mkdir(path.join(fakeTmp, `sib-${i}`));
+      }
+      const policy = buildWorkspacePolicy({
+        home: FAKE_HOME,
+        minnowHome,
+        workspaceRoot: FAKE_WORKSPACE,
+        cwd: FAKE_WORKSPACE,
+        platform: 'linux',
+      });
+      const grants = buildScopedWriteRootGrants(fakeTmp, {
+        ...policy,
+        denyReadRoots: [minnowHome],
+        writeRoots: [fakeTmp, FAKE_WORKSPACE],
+      });
+      assert.ok(grants.length <= LANDLOCK_MAX_SCOPED_WRITE_GRANTS);
+      assert.ok(!grants.includes(minnowHome));
+
+      const argv = buildLandlockArgv(
+        { command: '/bin/sh', args: ['-c', 'true'] },
+        {
+          ...policy,
+          minnowHome,
+          denyReadRoots: [minnowHome],
+          writeRoots: [fakeTmp, path.resolve(FAKE_WORKSPACE)],
+        },
+        { seccomp: false },
+      );
+      let reads = 0;
+      let writes = 0;
+      for (let i = 0; i < argv.length; i += 1) {
+        if (argv[i] === '--read') reads += 1;
+        if (argv[i] === '--write') writes += 1;
+      }
+      assert.ok(reads <= LANDLOCK_HELPER_MAX_PATHS, `too many --read: ${reads}`);
+      assert.ok(writes <= LANDLOCK_HELPER_MAX_PATHS, `too many --write: ${writes}`);
+      assert.ok(argv.includes('--'));
+    } finally {
+      await fs.rm(fakeTmp, { recursive: true, force: true });
+    }
   });
 
   it('does not grant blanket read on /tmp when MINNOW_HOME lives under tmp', () => {

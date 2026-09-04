@@ -377,7 +377,11 @@ describe('engine — one report per run', () => {
     const engine = fs.readFileSync(path.join(ORCH_DIR, 'engine.js'), 'utf8');
     const graph = fs.readFileSync(path.join(ORCH_DIR, 'board-graph.js'), 'utf8');
     assert.match(engine, /graph\.writeReport/);
-    assert.equal([...engine.matchAll(/\bmaybeWriteEndOfRunReport\s*\(/g)].length, 3);
+    // collectEndOfRunReport is the only graph.writeReport caller; the user-stop
+    // path goes through maybeWriteEndOfRunReport which delegates to it.
+    assert.equal([...engine.matchAll(/\bgraph\.writeReport\b/g)].length, 2);
+    assert.match(engine, /\bcollectEndOfRunReport\s*\(/);
+    assert.match(engine, /\bmaybeWriteEndOfRunReport\s*\(/);
     assert.match(graph, /from '\.\/report\.js'/);
     assert.equal([...graph.matchAll(/\bwriteEndOfRunReport\s*\(/g)].length, 1);
   });

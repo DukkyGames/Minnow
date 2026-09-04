@@ -8,6 +8,18 @@ import { SANDBOX_UNAVAILABLE_REASON, describeSandboxUnavailable } from './unavai
 export const LANDLOCK_EXIT_ABI_UNAVAILABLE = 75;
 export const LANDLOCK_EXIT_APPLY_FAILED = 76;
 
+/**
+ * Must stay in sync with `MAX_PATHS` in native/minnow-sandbox/minnow-sandbox.c.
+ * The helper exits 64 (usage) when `--read` or `--write` exceeds this.
+ */
+export const LANDLOCK_HELPER_MAX_PATHS = 1024;
+
+/**
+ * Sibling grants when a write root contains a deny (tests put MINNOW_HOME under
+ * os.tmpdir()). Unbounded readdir of /tmp or %TEMP% blows the helper's argv cap.
+ */
+export const LANDLOCK_MAX_SCOPED_WRITE_GRANTS = 64;
+
 const HELPER_NAME = 'minnow-sandbox';
 
 function sandboxModuleDir() {
@@ -264,6 +276,7 @@ export function buildScopedWriteRootGrants(writeRoot, policy) {
     );
     if (touchesDeny) continue;
     grants.push(abs);
+    if (grants.length >= LANDLOCK_MAX_SCOPED_WRITE_GRANTS) break;
   }
   return grants;
 }
@@ -316,7 +329,18 @@ export function buildLandlockArgv(
   { seccomp = true, mapPath, compactHomeRead = false } = {},
 ) {
   const map = typeof mapPath === 'function' ? mapPath : (p) => p;
-  const { writePaths, readPaths } = buildLandlockPathLists(policy, { compactHomeRead });
+  let compact = compactHomeRead === true;
+  let { writePaths, readPaths } = buildLandlockPathLists(policy, { compactHomeRead: compact });
+  // GitHub runners (and some developer homes) have hundreds of top-level
+  // entries; the C helper exits 64 if --read/--write exceeds MAX_PATHS.
+  if (
+    !compact &&
+    (writePaths.length > LANDLOCK_HELPER_MAX_PATHS || readPaths.length > LANDLOCK_HELPER_MAX_PATHS)
+  ) {
+    compact = true;
+    ({ writePaths, readPaths } = buildLandlockPathLists(policy, { compactHomeRead: true }));
+  }
+  ({ writePaths, readPaths } = capLandlockPathLists(writePaths, readPaths, policy));
   /** @type {string[]} */
   const args = [];
   if (!seccomp) args.push('--no-seccomp');
@@ -335,6 +359,47 @@ export function buildLandlockArgv(
   const innerArgs = Array.isArray(spawnTarget.args) ? spawnTarget.args : [];
   args.push('--', spawnTarget.command, ...innerArgs);
   return args;
+}
+
+/**
+ * Keep argv inside the C helper's --read/--write cap. Prefer devices and the
+ * workspace so a huge temp directory cannot push the helper into usage exit 64.
+ *
+ * @param {string[]} writePaths
+ * @param {string[]} readPaths
+ * @param {import('./policy.js').SandboxPolicy} policy
+ * @returns {{ writePaths: string[], readPaths: string[] }}
+ */
+function capLandlockPathLists(writePaths, readPaths, policy) {
+  const prefer = [
+    ...landlockDeviceWriteAllowlist(),
+    policy.workspaceRoot,
+    policy.worktreeRoot,
+  ].filter((p) => typeof p === 'string' && p.length > 0);
+
+  return {
+    writePaths: takePreferredPaths(writePaths, prefer, LANDLOCK_HELPER_MAX_PATHS),
+    readPaths: takePreferredPaths(readPaths, prefer, LANDLOCK_HELPER_MAX_PATHS),
+  };
+}
+
+/**
+ * @param {string[]} paths
+ * @param {string[]} prefer
+ * @param {number} max
+ * @returns {string[]}
+ */
+function takePreferredPaths(paths, prefer, max) {
+  /** @type {string[]} */
+  const out = [];
+  const seen = new Set();
+  for (const p of [...prefer, ...paths]) {
+    if (out.length >= max) break;
+    if (!p || seen.has(p)) continue;
+    seen.add(p);
+    out.push(p);
+  }
+  return out;
 }
 
 /**

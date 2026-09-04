@@ -128,6 +128,12 @@ function normalizePath(value) {
 function realpathIfExists(value) {
   const resolved = path.resolve(String(value));
   try {
+    // Windows 8.3 short names (C:\Users\RUNNER~1\...) only expand via the
+    // native realpath; libuv's realpath leaves them as-is and orphan reclaim
+    // then misses slots that git listed under the long path.
+    if (process.platform === 'win32' && typeof realpathSync.native === 'function') {
+      return realpathSync.native(resolved);
+    }
     return realpathSync(resolved);
   } catch {
     return resolved;

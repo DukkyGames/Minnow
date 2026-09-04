@@ -113,14 +113,26 @@ function fakeClock() {
     clearTimer(handle) {
       timers.delete(/** @type {number} */ (handle));
     },
-    advance(ms) {
+    /**
+     * Advance wall time and await any timer callbacks that return a Promise
+     * (the engine tick is async). Callers must `await clock.advance(...)`.
+     * @param {number} ms
+     * @returns {Promise<void>}
+     */
+    async advance(ms) {
       now += ms;
+      /** @type {Promise<unknown>[]} */
+      const pending = [];
       for (const [handle, timer] of [...timers.entries()]) {
         if (timer.at <= now) {
           timers.delete(handle);
-          timer.fn();
+          const result = timer.fn();
+          if (result && typeof /** @type {{ then?: unknown }} */ (result).then === 'function') {
+            pending.push(/** @type {Promise<unknown>} */ (result));
+          }
         }
       }
+      if (pending.length > 0) await Promise.all(pending);
     },
     get pending() {
       return timers.size;
@@ -316,7 +328,7 @@ async function runCase(seed, cap, options = {}) {
       if (failure) return { failure, engine, boardId, events: journal.readEventsSync(boardId) };
 
       if (clock.pending > 0) {
-        clock.advance(200);
+        await clock.advance(200);
         await settle();
         failure = check(`timers ${i}`);
         if (failure) return { failure, engine, boardId, events: journal.readEventsSync(boardId) };

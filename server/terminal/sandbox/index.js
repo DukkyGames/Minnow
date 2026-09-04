@@ -341,6 +341,8 @@ export {
   wrapWithLandlock,
   LANDLOCK_EXIT_ABI_UNAVAILABLE,
   LANDLOCK_EXIT_APPLY_FAILED,
+  LANDLOCK_HELPER_MAX_PATHS,
+  LANDLOCK_MAX_SCOPED_WRITE_GRANTS,
 } from './landlock.js';
 export {
   composeWslLandlockWrap,
