@@ -53,7 +53,8 @@ async function exists(target) {
   }
 }
 
-describe('MLX download cleanup', () => {
+// Shared MINNOW_HOME + process-global jobsCache; do not overlap seed/reset.
+describe('MLX download cleanup', { concurrency: false }, () => {
   before(async () => {
     prevHome = process.env.MINNOW_HOME;
     homeDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'minnow-mlx-cleanup-'));

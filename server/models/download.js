@@ -65,6 +65,16 @@ let jobsCache = [];
 
 let loaded = false;
 
+/**
+ * Bumped by `resetDownloadsForTests` so an in-flight `saveJobs()` cannot write
+ * a stale (often empty) index over a later test's seeded `downloads.json`.
+ * @type {number}
+ */
+let persistGeneration = 0;
+
+/** In-flight `runDownloadJob` promises; tests drain these before reseeding. */
+const inFlightDownloads = new Set();
+
 // ── Job state ────────────────────────────────────────────────────────────────
 
 function emit(jobId, event) {
@@ -175,10 +185,15 @@ function isCancelledError(err, signal) {
 }
 
 async function saveJobs() {
-  await fsp.mkdir(path.dirname(getDownloadsIndexPath()), { recursive: true });
+  const generation = persistGeneration;
+  const snapshot = jobsCache.slice();
+  const indexPath = getDownloadsIndexPath();
+  await fsp.mkdir(path.dirname(indexPath), { recursive: true });
+  // Reset ran while we were in mkdir; skip so we do not clobber a fresh seed.
+  if (generation !== persistGeneration) return;
   await fsp.writeFile(
-    getDownloadsIndexPath(),
-    `${JSON.stringify({ version: 1, jobs: jobsCache }, null, 2)}\n`,
+    indexPath,
+    `${JSON.stringify({ version: 1, jobs: snapshot }, null, 2)}\n`,
     'utf8',
   );
 }
@@ -222,7 +237,11 @@ function pumpDownloadQueue() {
     if (running.some((row) => row.repoId === job.repoId)) continue;
     job.status = 'running';
     running.push(job);
-    void runDownloadJob(job);
+    const pending = runDownloadJob(job);
+    inFlightDownloads.add(pending);
+    void pending.finally(() => {
+      inFlightDownloads.delete(pending);
+    });
   }
 }
 
@@ -547,16 +566,35 @@ export function subscribeDownload(jobId, listener) {
 }
 
 export async function resetDownloadsForTests() {
+  persistGeneration += 1;
   for (const controller of abortByJob.values()) {
     try {
       controller.abort();
     } catch {
     }
   }
+  // Empty the cache first so a finishing job's `pumpDownloadQueue()` cannot
+  // start another run while we drain.
   jobsCache = [];
   loaded = false;
-  abortByJob.clear();
   listenersByJob.clear();
+  // Bound the wait so a fetch that ignores abort cannot stall the suite
+  // (download.test.mjs keeps a never-settling body until abort).
+  const drainDeadline = Date.now() + 5_000;
+  while (inFlightDownloads.size > 0 && Date.now() < drainDeadline) {
+    for (const controller of abortByJob.values()) {
+      try {
+        controller.abort();
+      } catch {
+      }
+    }
+    await Promise.race([
+      Promise.allSettled([...inFlightDownloads]),
+      new Promise((resolve) => setTimeout(resolve, 250)),
+    ]);
+  }
+  abortByJob.clear();
+  persistGeneration += 1;
   if (!process.env.MINNOW_HOME) return;
   try {
     const indexPath = getDownloadsIndexPath();

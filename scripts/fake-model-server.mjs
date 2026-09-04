@@ -412,9 +412,50 @@ export function createFakeModelServer(opts = {}) {
     res.end('not found');
   });
 
-  // One request per TCP socket so keep-alive cannot outlive close() on Windows
-  // (libuv UV_HANDLE_CLOSING while tearing down report-wiring / memory-store-turn).
+  // One request per TCP socket so keep-alive cannot outlive close() on Windows.
   server.maxRequestsPerSocket = 1;
+  server.keepAliveTimeout = 1;
+
+  /** @type {Set<import('node:net').Socket>} */
+  const sockets = new Set();
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => {
+      sockets.delete(socket);
+    });
+  });
+
+  /**
+   * Destroy leftover sockets and wait until libuv has actually closed them.
+   * `closeAllConnections()` + `server.close()` double-closes handles on
+   * Windows (`UV_HANDLE_CLOSING` in async.c) while `--test-force-exit` runs.
+   * @param {number} [ms]
+   */
+  function destroyTrackedSockets(ms = 1_000) {
+    const pending = [...sockets];
+    if (pending.length === 0) return Promise.resolve();
+    return Promise.all(
+      pending.map(
+        (socket) =>
+          new Promise((resolve) => {
+            if (socket.destroyed) {
+              sockets.delete(socket);
+              resolve();
+              return;
+            }
+            const timer = setTimeout(() => {
+              sockets.delete(socket);
+              resolve();
+            }, ms);
+            socket.once('close', () => {
+              clearTimeout(timer);
+              resolve();
+            });
+            socket.destroy();
+          }),
+      ),
+    );
+  }
 
   /** @type {Promise<void> | null} */
   let closing = null;
@@ -437,19 +478,24 @@ export function createFakeModelServer(opts = {}) {
     },
     close() {
       if (closing) return closing;
-      closing = new Promise((resolve, reject) => {
-        if (typeof server.closeAllConnections === 'function') {
-          server.closeAllConnections();
-        }
-        server.close((err) => {
-          const code = /** @type {NodeJS.ErrnoException} */ (err)?.code;
-          if (!err || code === 'ERR_SERVER_NOT_RUNNING') {
-            resolve();
-            return;
-          }
-          reject(err);
+      closing = (async () => {
+        await destroyTrackedSockets();
+        await new Promise((resolve, reject) => {
+          server.close((err) => {
+            const code = /** @type {NodeJS.ErrnoException} */ (err)?.code;
+            if (!err || code === 'ERR_SERVER_NOT_RUNNING') {
+              resolve();
+              return;
+            }
+            reject(err);
+          });
         });
-      });
+        if (process.platform === 'win32') {
+          // undici/fetch leaves uv_async handles that --test-force-exit closes
+          // twice (UV_HANDLE_CLOSING in src/win/async.c) if we return immediately.
+          await new Promise((resolve) => setTimeout(resolve, 75));
+        }
+      })();
       return closing;
     },
     reset() {
