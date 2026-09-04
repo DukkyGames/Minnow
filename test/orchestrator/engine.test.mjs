@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { after, afterEach, before, beforeEach, describe, it } from 'node:test';
 
 import { resetMinnowHomeCache } from '../../server/config/home.js';
+import { boardGraph } from '../../server/orchestrator/board-graph.js';
 import { makeEvent } from '../../server/orchestrator/core/events.js';
 import { abandonmentEvidenceIsComplete } from '../../server/orchestrator/core/evidence.js';
 import {
@@ -111,7 +112,7 @@ const task = (id, extra = {}) => ({
 });
 
 /**
- * @param {{ boardId?: string, tasks?: object[], script?: object[], effector?: object }} [setup]
+ * @param {{ boardId?: string, tasks?: object[], script?: object[], effector?: object, graph?: object }} [setup]
  */
 async function harness(setup = {}) {
   const boardId = setup.boardId ?? 'b1';
@@ -129,7 +130,13 @@ async function harness(setup = {}) {
   );
 
   const effector = setup.effector ?? createScriptedEffector({ script: setup.script ?? [], clock });
-  const engine = createEngine({ boardId, effector, clock, tickMs: 5000 });
+  const engine = createEngine({
+    boardId,
+    effector,
+    clock,
+    tickMs: 5000,
+    ...(setup.graph ? { graph: setup.graph } : {}),
+  });
   liveEngines.push(engine);
   await engine.load();
   return { boardId, engine, effector, clock };
@@ -190,6 +197,34 @@ describe('engine — the tick', () => {
       'board.stopped',
       'run.report.written',
     ]);
+  });
+
+  it('does not mark live state finished while the report writer runs', async () => {
+    /** @type {boolean | null} */
+    let liveFinishedDuringWrite = null;
+    /** @type {boolean | null} */
+    let journalHadFinishedDuringWrite = null;
+    const { engine, clock, boardId } = await harness({
+      boardId: 'live-finished-race',
+      graph: {
+        ...boardGraph,
+        async writeReport() {
+          liveFinishedDuringWrite = engine.getState().finished === true;
+          journalHadFinishedDuringWrite = (await readEvents(boardId)).some(
+            (event) => event.type === 'run.finished',
+          );
+          return { relativePath: 'report.md', usedFallback: true };
+        },
+      },
+    });
+    await runToCompletion(engine, clock);
+    assert.equal(liveFinishedDuringWrite, false, 'live GET/peek must stay unfinished during writeReport');
+    assert.equal(journalHadFinishedDuringWrite, false, 'run.finished must land in the same append as the report');
+    assert.equal(engine.getState().finished, true);
+    assert.ok(
+      (await engine.getEvents()).some((event) => event.type === 'run.finished'),
+      'journal must contain run.finished after the tick that wrote the report',
+    );
   });
 
   it('is idempotent — a second tick on identical state starts nothing', async () => {

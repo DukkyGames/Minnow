@@ -36,6 +36,24 @@ function sameWork(a, b) {
   return a.role === b.role && (a.taskId ?? null) === (b.taskId ?? null);
 }
 
+/**
+ * Snapshot for the report writer. writeReport refuses unless the board looks
+ * finished or user-stopped; mutating the live engine leaked that flag to
+ * GET /api/boards before run.finished was journaled.
+ *
+ * @param {import('./core/types').BoardState} live
+ * @returns {import('./core/types').BoardState}
+ */
+function reportWriterState(live) {
+  if (live.finished || live.status === 'stopped') return { ...live };
+  return {
+    ...live,
+    finished: true,
+    status: 'stopped',
+    stopReason: live.stopReason ?? 'complete',
+  };
+}
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 /**
@@ -223,10 +241,11 @@ export function createEngine(options) {
     if (state.status === 'running' && graph.isRunComplete?.(state)) {
       const finish = graph.eventsForRunComplete?.(state) ?? [];
       stopTimer();
-      // Persist the report before publishing run.finished so observers never
-      // see finished=true with a still-in-flight report write (that late
-      // event is "extra ticks appended 1 events" in the scheduler suite).
+      // Persist the report before publishing run.finished so a later tick
+      // cannot append a late report line ("extra ticks appended 1 events").
       const reportEvents = await collectEndOfRunReport(finish);
+      // Teardown may dispose mid-write; do not journal into a removed home.
+      if (disposed) return;
       await append([...finish, ...reportEvents]);
     }
   }
@@ -245,22 +264,18 @@ export function createEngine(options) {
     if (graph.hasReport?.(events)) return [];
 
     // writeReport refuses unless the board looks finished or user-stopped.
-    const prevFinished = state.finished;
-    const prevStatus = state.status;
-    const prevReason = state.stopReason;
-    if (!prevFinished && prevStatus !== 'stopped') {
-      state.finished = true;
-      state.status = 'stopped';
-      state.stopReason = prevReason ?? 'complete';
-    }
+    // Pass a snapshot so GET /api/boards never sees finished=true before
+    // run.finished hits the journal (P2-G waitUntilFinished raced on the
+    // live flag and Windows tests wrote journal.jsonl after rm of MINNOW_HOME).
+    const writerState = reportWriterState(state);
     try {
       const result = await graph.writeReport({
         id: boardId,
         events,
-        state,
+        state: writerState,
         complete,
       });
-      if (!result) return [];
+      if (disposed || !result) return [];
       const type = graph.reportEventType ?? 'run.report.written';
       return [
         makeEvent(type, {
@@ -274,10 +289,6 @@ export function createEngine(options) {
         /** @type {Error} */ (err)?.message ?? err,
       );
       return [];
-    } finally {
-      state.finished = prevFinished;
-      state.status = prevStatus;
-      state.stopReason = prevReason;
     }
   }
 

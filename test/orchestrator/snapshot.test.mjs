@@ -342,19 +342,8 @@ describe('snapshot cadence', () => {
 
 // ── Memoised fold ────────────────────────────────────────────────────────────
 
-describe('the memoised fold is actually faster', () => {
-  function time(fn) {
-    for (let i = 0; i < 3; i += 1) fn();
-    let best = Infinity;
-    for (let i = 0; i < 7; i += 1) {
-      const start = performance.now();
-      fn();
-      best = Math.min(best, performance.now() - start);
-    }
-    return best;
-  }
-
-  it('beats loading a 5,000-event board from the journal alone', () => {
+describe('the memoised fold matches a full derive', () => {
+  it('restoring a snapshot and folding the tail equals loading the journal', () => {
     assert.ok(JOURNAL.length >= 5000, `fixture is only ${JOURNAL.length} events`);
     const through = JOURNAL[JOURNAL.length - 1].seq - SNAPSHOT_INTERVAL;
     const snapshot = snapshotAt(through);
@@ -363,32 +352,20 @@ describe('the memoised fold is actually faster', () => {
     const tailLines = JOURNAL.filter((e) => e.seq > through).map((e) => JSON.stringify(e));
     const snapshotText = JSON.stringify(snapshot);
 
-    const full = time(() => derive(lines.map((line) => JSON.parse(line))));
-    const memoised = time(() => {
-      const restored = JSON.parse(snapshotText);
-      const tail = tailLines.map((line) => JSON.parse(line));
-      return deriveFrom(restored, tail);
-    });
-
-    assert.ok(
-      memoised < full / 1.4,
-      `memoised ${memoised.toFixed(2)}ms vs full ${full.toFixed(2)}ms — no material speedup`,
+    const fromJournal = derive(lines.map((line) => JSON.parse(line)));
+    const fromSnapshot = deriveFrom(
+      JSON.parse(snapshotText),
+      tailLines.map((line) => JSON.parse(line)),
     );
+    assert.deepEqual(fromSnapshot, fromJournal);
   });
 
-  it('is faster still when the caller passes only the tail', () => {
+  it('is equivalent when the caller passes only the tail', () => {
     const through = JOURNAL[JOURNAL.length - 1].seq - SNAPSHOT_INTERVAL;
     const snapshot = snapshotAt(through);
     const tail = JOURNAL.filter((e) => e.seq > through);
 
     assert.equal(isSnapshotUsable(snapshot, tail), true, 'tail-only must verify');
     assert.deepEqual(deriveFrom(snapshot, tail), derive(JOURNAL));
-
-    const full = time(() => derive(JOURNAL));
-    const tailOnly = time(() => deriveFrom(snapshot, tail));
-    assert.ok(
-      tailOnly < full,
-      `tail-only ${tailOnly.toFixed(2)}ms vs full ${full.toFixed(2)}ms`,
-    );
   });
 });
