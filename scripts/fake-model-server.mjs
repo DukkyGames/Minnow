@@ -385,10 +385,13 @@ export function createFakeModelServer(opts = {}) {
         );
 
         const chunks = pickScenarioEmit(scenario, context, body);
+        // Completions are a finite SSE dump, not a long-lived stream.
+        // keep-alive left sockets around and Windows libuv aborted on close
+        // (UV_HANDLE_CLOSING in report-wiring / memory-store-turn).
         res.writeHead(200, {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
-          Connection: 'keep-alive',
+          Connection: 'close',
         });
         res.end(chunks.join(''));
       });
@@ -409,6 +412,13 @@ export function createFakeModelServer(opts = {}) {
     res.end('not found');
   });
 
+  // One request per TCP socket so keep-alive cannot outlive close() on Windows
+  // (libuv UV_HANDLE_CLOSING while tearing down report-wiring / memory-store-turn).
+  server.maxRequestsPerSocket = 1;
+
+  /** @type {Promise<void> | null} */
+  let closing = null;
+
   return {
     server,
     host,
@@ -426,9 +436,21 @@ export function createFakeModelServer(opts = {}) {
       });
     },
     close() {
-      return new Promise((resolve, reject) => {
-        server.close((err) => (err ? reject(err) : resolve()));
+      if (closing) return closing;
+      closing = new Promise((resolve, reject) => {
+        if (typeof server.closeAllConnections === 'function') {
+          server.closeAllConnections();
+        }
+        server.close((err) => {
+          const code = /** @type {NodeJS.ErrnoException} */ (err)?.code;
+          if (!err || code === 'ERR_SERVER_NOT_RUNNING') {
+            resolve();
+            return;
+          }
+          reject(err);
+        });
       });
+      return closing;
     },
     reset() {
       requests.length = 0;

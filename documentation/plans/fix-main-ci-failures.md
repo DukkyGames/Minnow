@@ -1,6 +1,6 @@
 # Fix failing CI on main
 
-Latest `ci` run on `main` (`1b85c85e`, [run 33893458326](https://github.com/HenriGrimm/Minnow/actions/runs/33893458326)) is red on the Test suite across Ubuntu, Windows, and macOS. Typecheck, product wiki, performance budgets, and board scenario contract are green.
+Latest `ci` run on `main` (`d75d0c02`, [run 33914512539](https://github.com/HenriGrimm/Minnow/actions/runs/33914512539)) is green on Ubuntu and macOS. Windows `typecheck + tests` still fails: libuv `UV_HANDLE_CLOSING` while tearing down fake-model HTTP servers in `report-wiring.test.mjs` and `memory-store-turn.test.mjs`.
 
 ## Todos
 
@@ -10,6 +10,7 @@ Latest `ci` run on `main` (`1b85c85e`, [run 33893458326](https://github.com/Henr
 - [x] Windows worktree lifecycle / related flakes: orphan removal and opaque `'test failed'` files
 - [x] End-of-run report: clone writer state instead of mutating live `finished` (P2-G `run.finished` race)
 - [x] Snapshot memoisation: keep correctness on CI; skip wall-clock ratios (`macos-latest` flake)
+- [x] Windows fake-model teardown: `UV_HANDLE_CLOSING` in report-wiring / memory-store-turn
 - [x] Re-run the failing suites locally and update `documentation/context.md` if architecture/behavior changes
 
 ## What landed (landlock commit)
@@ -24,3 +25,4 @@ Latest `ci` run on `main` (`1b85c85e`, [run 33893458326](https://github.com/Henr
 
 6. **Live `finished` leak** — `collectEndOfRunReport` mutated live `state.finished = true` so `writeReport` would run, then restored it and appended `run.finished`. `GET /api/boards/:id` reads that live flag, so P2-G `waitUntilFinished` returned while the journal still lacked `run.finished`. Windows tests broke the tick loop on the same flag and wrote `journal.jsonl` after `MINNOW_HOME` was deleted. Fix: pass `reportWriterState(live)` (a shallow clone) into the writer; keep live state unfinished until the combined append.
 7. **Snapshot memoisation** — drop wall-clock speedup assertions (`1.4x` / tail-only vs full). They flake at ~3ms on CI and locally. Keep `deriveFrom` === `derive`.
+8. **Windows fake-model close** — `createFakeModelServer().close()` now drops keep-alive sockets (`closeAllConnections`, `maxRequestsPerSocket = 1`, `Connection: close` on the SSE dump) so Node on windows-latest does not abort `report-wiring` / `memory-store-turn` with `UV_HANDLE_CLOSING`.

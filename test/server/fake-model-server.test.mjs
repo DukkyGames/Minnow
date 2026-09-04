@@ -10,6 +10,7 @@ import {
   extractRequestContext,
   isMissingBoardReportNudge,
   pickScenarioEmit,
+  proseSseChunks,
 } from '../../scripts/fake-model-server.mjs';
 
 const BUILD_SEED =
@@ -96,5 +97,21 @@ describe('fake-model-server', () => {
 
     fake.reset();
     assert.equal(emitHasBoardReport(pickScenarioEmit([], ctx, body)), true);
+  });
+
+  test('close drops HTTP sockets and is safe to call twice', async () => {
+    const fake = createFakeModelServer({
+      scenario: [{ emit: proseSseChunks('Done.') }],
+    });
+    const port = await fake.listen(0);
+    const res = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    assert.equal(res.status, 200);
+    await res.text();
+    await fake.close();
+    await fake.close();
   });
 });
