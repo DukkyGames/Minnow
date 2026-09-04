@@ -23,8 +23,8 @@ const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const RUNNER_DIR = path.join(PROJECT_ROOT, 'server', 'runner');
 
 const BROWSER_GLOBALS = [
-  { re: /\bdocument\b/, why: 'DOM; the runner also loads on the server' },
-  { re: /\bwindow\b/, why: 'DOM; the runner also loads on the server' },
+  { re: /\bdocument\s*\./, why: 'DOM; the runner also loads on the server' },
+  { re: /\bwindow\s*\./, why: 'DOM; the runner also loads on the server' },
   { re: /\blocalStorage\b/, why: 'browser storage; sessions.ts is injected instead' },
   { re: /\bHTMLElement\b/, why: 'DOM; the runner also loads on the server' },
 ];

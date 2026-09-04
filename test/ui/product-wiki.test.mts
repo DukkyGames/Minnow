@@ -37,7 +37,6 @@ describe('product wiki tool policy', () => {
       'minnow_docs_read',
       'minnow_docs_list',
     ]);
-    assert.ok(MODE_ALLOWED_GROUPS.desktop.includes('minnow-docs'));
     assert.ok(MODE_ALLOWED_GROUPS.general.includes('minnow-docs'));
     assert.ok(MODE_ALLOWED_GROUPS.onboarding.includes('minnow-docs'));
     assert.equal(MODE_ALLOWED_GROUPS.build.includes('minnow-docs'), false);

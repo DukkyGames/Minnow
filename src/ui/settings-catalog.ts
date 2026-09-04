@@ -526,7 +526,7 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   field('advanced.boardTesting', 'Board testing', 'advanced', 'board-testing', {
     keywords: ['orchestrate', 'fake model', 'seed board', 'board log', 'kanban', 'test board'],
     description:
-      'Manual orchestrate board workflow: in-process fake model, seed test board, validate diagnostic logs.',
+      'Manual orchestrate board workflow: in-process fake model, seed test board, catalog scenarios.',
   }),
   field('advanced.boardTesting.fakeModel', 'Fake model', 'advanced', 'board-testing', {
     keywords: ['fake-board', 'openai stub', 'deterministic model'],
@@ -534,8 +534,9 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   field('advanced.boardTesting.seed', 'Seed test board', 'advanced', 'board-testing', {
     keywords: ['quick preset', 'smoke preset', 'planner'],
   }),
-  field('advanced.boardTesting.log', 'Validate board log', 'advanced', 'board-testing', {
-    keywords: ['jsonl', 'invariants', 'check-board-log', 'orchestrate log'],
+  field('advanced.boardTesting.log', 'Board log validation', 'advanced', 'board-testing', {
+    keywords: ['jsonl', 'invariants', 'check-board-log', 'orchestrate log', 'retired'],
+    description: 'V1 JSONL invariant checking is retired. Use the journal under ~/.minnow/boards/.',
   }),
 
   field('about.info', 'Build info', 'general', 'about', {

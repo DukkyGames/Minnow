@@ -217,7 +217,11 @@ function corePackagesFor(cudaAvailable) {
 const QWEN_TTS_STREAMING_SPEC =
   'git+https://github.com/xxddccaa/Qwen3-TTS-streaming.git';
 
-
+/**
+ * Worker env `MINNOW_TTS_USE_COMPILE` (default true): set to `false` when the voice
+ * worker serves concurrent TTS streams — disables torch.compile to avoid CUDA graph
+ * conflicts across threads. Applied in `server/voice/python/worker.py` on TTS load.
+ */
 const OPTIONAL_PACKAGES = [
   { label: 'qwen-tts (streaming fork)', args: [QWEN_TTS_STREAMING_SPEC] },
   { label: 'imageio-ffmpeg', args: ['imageio-ffmpeg'] },

@@ -126,7 +126,7 @@ Most TS/UI suites run under `tsx` with `--import ./test/test-loader.mjs` (stubs 
 | `npm run test:orchestrator` / `test:board` | V2 journal suite (`test/orchestrator/` + scenario catalog). See [orchestrate-board-testing.md](orchestrate-board-testing.md). |
 | `npm run board:scenario-contract` | Validate the Settings board-testing catalog (PR gate). |
 | `npm run fake-model` | Local OpenAI-v1 stub for manual board runs. `npm run fake-model -- --register` adds provider `fake-board`. |
-| `npm run check:board-log -- <path>` | Validate leftover V1 JSONL logs. V2 history is the journal under `~/.minnow/boards/`. |
+| `npm run check:board-log` | Retired (exit 1). V1 JSONL invariants were deleted in MIN-713. V2 history is the journal under `~/.minnow/boards/`. |
 
 ## Smoke scripts
 

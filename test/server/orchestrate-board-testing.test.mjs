@@ -167,27 +167,12 @@ describe('orchestrate board-testing API', () => {
     assert.match(String(seed.json?.error ?? ''), /POST \/api\/boards/);
   });
 
-  test('check-log validates fixture JSONL', async () => {
-    const logDir = path.join(homeDir, 'logs', 'orchestrate');
-    await fs.mkdir(logDir, { recursive: true });
-    const event = {
-      id: '1710000001000-0',
-      ts: 1710000001000,
-      type: 'board_init',
-      level: 'info',
-      message: 'board initialized',
-      detail: { summary: '1 task' },
-    };
-    const logPath = path.join(logDir, `${GROUP_ID}.jsonl`);
-    await fs.writeFile(logPath, `${JSON.stringify(event)}\n`, 'utf8');
-
+  test('V1 JSONL check-log is retired', async () => {
     const res = await httpRequest(baseUrl, 'POST', '/api/orchestrate/board-testing/check-log', {
       groupId: GROUP_ID,
     });
-    assert.equal(res.status, 200);
-    assert.equal(typeof res.json?.ok, 'boolean');
-    assert.equal(res.json?.eventsCount, 1);
-    assert.ok(Array.isArray(res.json?.skippedInvariants));
+    assert.equal(res.status, 410);
+    assert.match(String(res.json?.error ?? ''), /journal under ~\/\.minnow\/boards/);
   });
 
   test('tails bounded board logs and rejects paths and escaping symlinks', async () => {

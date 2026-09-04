@@ -88,15 +88,6 @@ export type BoardLogViolation = {
   message: string;
 };
 
-export type CheckBoardLogResponse = {
-  ok: boolean;
-  logPath?: string;
-  eventsCount?: number;
-  skippedInvariants?: string[];
-  violations?: BoardLogViolation[];
-  error?: string;
-};
-
 export type BoardScenarioCatalogEntry = {
   id: string;
   family: string;
@@ -268,14 +259,6 @@ export async function seedTestBoard(
   signal?: AbortSignal,
 ): Promise<SeedBoardResponse> {
   return postJson<SeedBoardResponse>('/seed', body, signal);
-}
-
-/** Validate a board diagnostic JSONL log against structural invariants. */
-export async function checkBoardLog(body: {
-  groupId: string;
-  plan?: unknown;
-}, signal?: AbortSignal): Promise<CheckBoardLogResponse> {
-  return postJson<CheckBoardLogResponse>('/check-log', body, signal);
 }
 
 /** Replace the fake model's ordered match/emit scenario and reset request counters. */

@@ -1,24 +1,19 @@
 import '../styles/settings-general.css';
 import '../styles/settings-about.css';
-import { PLACEHOLDER_CHAT_NAME } from '../constants';
 import { detectConfigServer } from '../config/storage-mode';
 import { fetchWorkspace } from '../config/workspace-api';
-import { TEST_BOARD_GROUP_ID } from '../../server/orchestrate/board-testing/constants.js';
 import {
   ensureResearchWorkspaceOption,
   populateResearchWorkspaceSelect,
 } from '../research/workspace-scope-ui';
 import {
-  checkBoardLog,
   fetchBoardTestingStatus,
   seedTestBoard,
   startFakeModel,
   stopFakeModel,
   type BoardTestingStatus,
-  type CheckBoardLogResponse,
 } from '../api/board-testing';
 import { loadSessionsFromStorage } from '../state/sessions';
-import type { ChatGroup } from '../types';
 import {
   appendSettingsGroup,
   linkToSettingsSection,
@@ -26,17 +21,12 @@ import {
 import {
   appendSettingsOfflineHint,
   createSettingsActionsRow,
-  createSettingsInputRow,
   createSettingsSelectRow,
-  createSettingsTextareaRow,
 } from './settings-controls';
 import { createSettingsToggleRow } from './settings-switch';
 import { renderBoardScenarioRunner } from './board-scenario-runner';
-import { listWorkspaceOrchestrateBoardGroups } from './orchestrate-hub';
-import { shortPlanLabel } from './orchestrate-plan-picker';
 import { setStatus } from './status';
 
-const BOARD_GROUP_CUSTOM_VALUE = '__custom__';
 let disposeBoardScenarioRunner: (() => void) | null = null;
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -105,100 +95,6 @@ function renderStatusChips(host: HTMLElement, status: BoardTestingStatus | null)
   host.appendChild(list);
 }
 
-/** Human-readable label for a board group row in settings selects. */
-function boardGroupOptionLabel(group: ChatGroup): string {
-  const plan = group.orchestratePlanPath?.trim();
-  if (plan) return shortPlanLabel(plan);
-  if (group.name?.trim()) return group.name.trim();
-  return PLACEHOLDER_CHAT_NAME;
-}
-
-/** Fill the board picker from orchestrate groups in the chosen workspace. */
-function populateBoardGroupSelect(
-  select: HTMLSelectElement,
-  workspacePath: string,
-  preferredGroupId?: string,
-): void {
-  const boards = listWorkspaceOrchestrateBoardGroups(workspacePath);
-  const previous = preferredGroupId ?? select.value;
-  select.replaceChildren();
-
-  const placeholder = document.createElement('option');
-  placeholder.value = '';
-  placeholder.textContent = boards.length ? 'Select a board…' : 'No boards in this workspace';
-  placeholder.disabled = true;
-  select.appendChild(placeholder);
-
-  for (const group of boards) {
-    const option = document.createElement('option');
-    option.value = group.id;
-    const taskCount = group.orchestrateBoard?.tasks.length;
-    const suffix =
-      typeof taskCount === 'number' && taskCount > 0
-        ? ` (${taskCount} task${taskCount === 1 ? '' : 's'})`
-        : '';
-    option.textContent = `${boardGroupOptionLabel(group)}${suffix}`;
-    select.appendChild(option);
-  }
-
-  const custom = document.createElement('option');
-  custom.value = BOARD_GROUP_CUSTOM_VALUE;
-  custom.textContent = 'Custom group id or log path…';
-  select.appendChild(custom);
-
-  const known = boards.some((group) => group.id === previous);
-  if (known) {
-    select.value = previous;
-    return;
-  }
-  if (previous === BOARD_GROUP_CUSTOM_VALUE) {
-    select.value = BOARD_GROUP_CUSTOM_VALUE;
-    return;
-  }
-  if (boards.length === 1) {
-    select.value = boards[0].id;
-    return;
-  }
-  if (previous && !known) {
-    select.value = BOARD_GROUP_CUSTOM_VALUE;
-    return;
-  }
-  select.value = '';
-}
-
-function renderValidationResult(host: HTMLElement, result: CheckBoardLogResponse): void {
-  host.replaceChildren();
-  host.className = 'diagnostics-subsection';
-
-  const title = el(
-    'h4',
-    'diagnostics-subsection__title',
-    result.ok ? 'Validation passed' : 'Validation failed',
-  );
-  host.appendChild(title);
-
-  const lines: string[] = [
-    `Log: ${result.logPath ?? '—'}`,
-    `Events: ${result.eventsCount ?? 0}`,
-  ];
-  if (result.skippedInvariants?.length) {
-    lines.push(`Skipped: ${result.skippedInvariants.join(', ')}`);
-  }
-
-  if (result.violations?.length) {
-    lines.push('', 'Violations:');
-    for (const v of result.violations) {
-      lines.push(`  [${v.id}] ${v.taskId ? `${v.taskId}: ` : ''}${v.message}`);
-    }
-  } else if (result.ok) {
-    lines.push('', 'All checked invariants passed.');
-  }
-
-  const pre = el('pre', 'diagnostics-log-tail');
-  pre.textContent = lines.join('\n');
-  host.appendChild(pre);
-}
-
 /** Populate Settings → Advanced → Board testing. */
 export async function renderBoardTestingSettingsSection(): Promise<void> {
   disposeBoardScenarioRunner?.();
@@ -211,7 +107,7 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
 
   const lead = el('p', 'settings-section-lead');
   lead.append(
-    'Manual orchestrate board workflow: fake model, seed a test board, validate diagnostic logs. For the full automated suite, see ',
+    'Manual orchestrate board workflow: fake model, seed a test board, run catalog scenarios. For the full automated suite, see ',
   );
   const guideLink = el('a', 'settings-inline-link');
   guideLink.href = 'documentation/contributor/orchestrate-board-testing.md';
@@ -249,7 +145,6 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
     try {
       currentStatus = await fetchBoardTestingStatus();
       renderStatusChips(statusHost, currentStatus);
-      refreshBoardGroupSelect(workspacePath);
     } catch {
       renderStatusChips(statusHost, null);
     }
@@ -377,8 +272,6 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
     description: 'Folder for the seeded planner and board group.',
     onChange: (value) => {
       workspacePath = value;
-      refreshBoardGroupSelect(workspacePath);
-      syncGroupIdCustomRow();
     },
   });
   workspaceSelect.id = 'boardTestingWorkspace';
@@ -392,38 +285,6 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
   const seedResultHost = el('pre', 'diagnostics-log-tail');
   seedResultHost.setAttribute('aria-live', 'polite');
   seedGroup.appendChild(seedResultHost);
-
-  let groupIdSelect: HTMLSelectElement | null = null;
-  let groupIdCustomInput: HTMLInputElement | null = null;
-  let groupIdCustomRow: HTMLDivElement | null = null;
-
-  function syncGroupIdCustomRow(): void {
-    if (!groupIdCustomRow || !groupIdSelect) return;
-    groupIdCustomRow.hidden = groupIdSelect.value !== BOARD_GROUP_CUSTOM_VALUE;
-  }
-
-  function resolveGroupIdForValidation(): string {
-    if (!groupIdSelect) return '';
-    if (groupIdSelect.value === BOARD_GROUP_CUSTOM_VALUE) {
-      return groupIdCustomInput?.value.trim() ?? '';
-    }
-    return groupIdSelect.value.trim();
-  }
-
-  function refreshBoardGroupSelect(nextWorkspacePath?: string, preferredGroupId?: string): void {
-    if (!groupIdSelect) return;
-    const path = (nextWorkspacePath ?? workspacePath).trim();
-    populateBoardGroupSelect(groupIdSelect, path, preferredGroupId ?? groupIdSelect.value);
-    syncGroupIdCustomRow();
-  }
-
-  function selectSeededBoard(groupId: string | undefined): void {
-    if (!groupId?.trim() || !groupIdSelect) return;
-    refreshBoardGroupSelect(workspacePath, groupId);
-    if (groupIdSelect.value === BOARD_GROUP_CUSTOM_VALUE && groupIdCustomInput) {
-      groupIdCustomInput.value = groupId;
-    }
-  }
 
   const seedActions = createSettingsActionsRow(
     [
@@ -450,7 +311,6 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
                 ensureResearchWorkspaceOption(workspaceSelect, workspacePath);
                 workspaceSelect.value = workspacePath;
               }
-              selectSeededBoard(result.groupId);
               seedResultHost.textContent = [
                 `group:    ${result.groupId}`,
                 `planner:  ${result.plannerId}`,
@@ -475,99 +335,17 @@ export async function renderBoardTestingSettingsSection(): Promise<void> {
 
   const logGroup = appendSettingsGroup(
     content,
-    'Validate board log',
-    'Check ~/.minnow/logs/orchestrate/<groupId>.jsonl against structural invariants.',
+    'Board log validation',
+    'V1 JSONL invariant checking is retired. Live board history is the journal under ~/.minnow/boards/.',
     'advanced.boardTesting.log',
     { emphasis: true },
   );
-
-  const { row: groupIdRow, select: groupIdField } = createSettingsSelectRow('Board', {
-    searchKey: 'advanced.boardTesting.log.groupId',
-    description: 'Pick a board from the workspace above, or enter a custom group id / log path.',
-    onChange: () => {
-      syncGroupIdCustomRow();
-    },
-  });
-  groupIdField.id = 'boardTestingGroupId';
-  groupIdSelect = groupIdField;
-  logGroup.appendChild(groupIdRow);
-
-  const { row: groupIdCustomRowEl, input: groupIdCustomField } = createSettingsInputRow(
-    'Custom group id or log path',
-    {
-      value: TEST_BOARD_GROUP_ID,
-      searchKey: 'advanced.boardTesting.log.groupIdCustom',
-      description: 'Used when Board is set to custom.',
-      onChange: () => {},
-    },
+  const retiredNote = el(
+    'p',
+    'settings-section-lead',
+    'POST /api/orchestrate/board-testing/check-log and npm run check:board-log return 410. Tail leftover JSONL with the existing log-tail API if you still have V1 files on disk.',
   );
-  groupIdCustomField.id = 'boardTestingGroupIdCustom';
-  groupIdCustomInput = groupIdCustomField;
-  groupIdCustomRow = groupIdCustomRowEl;
-  groupIdCustomRow.hidden = true;
-  logGroup.appendChild(groupIdCustomRow);
-
-  refreshBoardGroupSelect(workspacePath, TEST_BOARD_GROUP_ID);
-
-  const { row: planRow, textarea: planTextarea } = createSettingsTextareaRow('Plan JSON (optional)', {
-    value: '',
-    rows: 5,
-    searchKey: 'advanced.boardTesting.log.plan',
-    description:
-      'Optional task graph: { "tasks": [{ "id", "wave?", "dependsOn?" }], "waveOrder?", "caps?" }. Without it, wave-order and dependency-order are skipped.',
-    onChange: () => {},
-  });
-  planTextarea.id = 'boardTestingPlanJson';
-  planTextarea.spellcheck = false;
-  logGroup.appendChild(planRow);
-
-  const validationHost = el('div', 'board-testing-validation-host');
-  logGroup.appendChild(validationHost);
-
-  const logActions = createSettingsActionsRow(
-    [
-      {
-        label: 'Validate',
-        variant: 'primary',
-        onClick: () => {
-          void (async () => {
-            if (!serverUp) {
-              setStatus('err', 'Tool server offline');
-              return;
-            }
-            const groupId = resolveGroupIdForValidation();
-            if (!groupId) {
-              setStatus('err', 'Board group id is required');
-              return;
-            }
-
-            let plan: unknown;
-            const planRaw = planTextarea.value.trim();
-            if (planRaw) {
-              try {
-                plan = JSON.parse(planRaw);
-              } catch {
-                setStatus('err', 'Plan JSON is invalid');
-                return;
-              }
-            }
-
-            try {
-              setStatus('spin', 'Validating board log…');
-              const result = await checkBoardLog({ groupId, plan });
-              renderValidationResult(validationHost, result);
-              setStatus(result.ok ? 'ok' : 'err', result.ok ? 'Log validation passed' : 'Log validation failed');
-            } catch (err) {
-              validationHost.replaceChildren();
-              setStatus('err', err instanceof Error ? err.message : 'Validation failed');
-            }
-          })();
-        },
-      },
-    ],
-    { searchKey: 'advanced.boardTesting.log.actions' },
-  );
-  logGroup.appendChild(logActions);
+  logGroup.appendChild(retiredNote);
 
   disposeBoardScenarioRunner = renderBoardScenarioRunner(content, {
     serverUp,

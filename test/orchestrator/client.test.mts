@@ -737,7 +737,7 @@ describe('the renderer writes nothing', () => {
       'orchestrate-board-chat',
       'orchestrate-board-kickoff',
       'orchestrate-self-heal',
-      'orchestrate-hub',
+      'ui/orchestrate-hub',
       'board-display-wake',
       'board-boot-resume',
       'oom-recovery',

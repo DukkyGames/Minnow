@@ -405,6 +405,31 @@ describe('GET /api/agents/:runId/events SSE live vs journal', () => {
       'missing done frame',
     );
   });
+
+  it('emits deliver before done when connecting SSE to a completed run', async () => {
+    setAgentsEffectorFactory(() =>
+      createScriptedEffector({ script: [{ emit: { outcome: 'pass', delayMs: 1 } }] }),
+    );
+    const spawned = await spawnOk();
+    let terminal = false;
+    for (let i = 0; i < 80; i += 1) {
+      const got = await call('GET', `/api/agents/${spawned.runId}`);
+      if (got.body?.status === 'completed' || got.body?.run?.phase === 'passed') {
+        terminal = true;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    assert.equal(terminal, true, 'scripted pass did not reach a terminal fold');
+
+    const result = await readSseUntilEnd(`/api/agents/${spawned.runId}/events`);
+    const events = result.frames.map((f) => f.event);
+    const deliverIdx = events.indexOf('deliver');
+    const doneIdx = events.indexOf('done');
+    assert.ok(deliverIdx >= 0, 'missing deliver frame for a pending completion');
+    assert.ok(doneIdx >= 0, 'missing done frame');
+    assert.ok(deliverIdx < doneIdx, 'deliver must land before the socket is closed');
+  });
 });
 
 // ── GET /api/agents/:runId/events ────────────────────────────────────────────

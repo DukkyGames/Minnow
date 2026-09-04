@@ -1,5 +1,5 @@
 /**
- * /api/orchestrate/board-testing/* — fake model host, scenario runner, log validation.
+ * /api/orchestrate/board-testing/* — fake model host, scenario runner, log tail.
  */
 import { FAKE_PROVIDER_ID } from '../board-testing/fake-model-ids.js';
 import { listProviders } from '../../providers/store.js';
@@ -13,11 +13,14 @@ import {
   startFakeModel,
   stopFakeModel,
 } from './fake-model-host.js';
-import { validateBoardLog } from './board-log-validate.js';
 import { tailBoardLog } from './board-log-tail.js';
 import { defaultScenarioRunManager } from './scenario-runner.js';
 import { importTsModule } from './ts-import.js';
-import { TEST_BOARD_GROUP_ID, TEST_BOARD_PLANNER_ID } from './constants.js';
+import {
+  CHECK_LOG_RETIRED_ERROR,
+  TEST_BOARD_GROUP_ID,
+  TEST_BOARD_PLANNER_ID,
+} from './constants.js';
 import { isBoardTestingApiEnabled } from '../../config/dev-surfaces.js';
 
 const API_PREFIX = '/api/orchestrate/board-testing';
@@ -215,29 +218,10 @@ export async function handleBoardTestingRequest(req, res, pathname, options = {}
   }
 
   if (pathname === `${API_PREFIX}/check-log` && req.method === 'POST') {
-    try {
-      const body = await readJsonBody(req);
-      const groupId = typeof body.groupId === 'string' ? body.groupId.trim() : '';
-      if (!groupId) {
-        sendJson(res, 400, { ok: false, error: 'groupId is required' });
-        return true;
-      }
-
-      let plan;
-      if (body.plan != null) {
-        if (typeof body.plan === 'string') {
-          plan = JSON.parse(body.plan);
-        } else {
-          plan = body.plan;
-        }
-      }
-
-      const result = await validateBoardLog({ groupId, plan });
-      sendJson(res, 200, result);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      sendJson(res, 400, { ok: false, error: message });
-    }
+    sendJson(res, 410, {
+      ok: false,
+      error: CHECK_LOG_RETIRED_ERROR,
+    });
     return true;
   }
 

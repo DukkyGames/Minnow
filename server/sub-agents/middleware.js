@@ -673,7 +673,10 @@ async function streamEvents(req, res, runId) {
     });
   }
 
-  void getProductionDelivery().tick(parentChatId);
+  // Await tick while the deliver listener is still registered. `void tick`
+  // plus immediate endIfRunTerminal() unsubscribed before emitDeliver ran
+  // (MIN-584 + MIN-639), so a reload SSE never received `event: deliver`.
+  await getProductionDelivery().tick(parentChatId);
 
   endIfRunTerminal();
   if (closed) return;

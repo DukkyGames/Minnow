@@ -10,6 +10,7 @@ import {
   DEFAULT_RUNG_TIMEOUT_MS as BROWSER_RUNG_TIMEOUT_MS,
   runBrowserRung,
 } from './browser-rung.js';
+import { resolveOrchestratorCwd } from './resolve-cwd.js';
 
 const execAsync = promisify(exec);
 
@@ -333,7 +334,7 @@ export async function execLadderCommand(command, opts) {
  * @returns {Promise<import('./browser-rung.js').BrowserRungResult>}
  */
 async function runBrowserRungGuarded(input) {
-  const cwd = path.resolve(input.cwd);
+  const cwd = resolveOrchestratorCwd(input.cwd);
   const rung = input.browserRung ?? runBrowserRung;
   const ceiling = input.browserTimeoutMs ?? BROWSER_RUNG_TIMEOUT_MS;
   /** @type {NodeJS.Timeout | undefined} */
@@ -394,7 +395,7 @@ async function runBrowserRungGuarded(input) {
  * @returns {Promise<LadderResult>}
  */
 export async function runFinalLadder(input) {
-  const cwd = path.resolve(input.cwd);
+  const cwd = resolveOrchestratorCwd(input.cwd);
   const planMarkdown =
     input.planMarkdown != null
       ? String(input.planMarkdown)

@@ -4,6 +4,7 @@ import net from 'node:net';
 import path from 'node:path';
 
 import { isParseErrors, parsePlan } from './core/parse-plan.js';
+import { resolveOrchestratorCwd } from './resolve-cwd.js';
 
 /**
  * exports these same two strings.
@@ -570,7 +571,7 @@ async function defaultAppControl() {
  */
 async function defaultCloseBrowser(cwd) {
   const { closeBrowserToolSession } = await import('../tools/browser-driver-tools.js');
-  await closeBrowserToolSession(path.resolve(cwd));
+  await closeBrowserToolSession(resolveOrchestratorCwd(cwd));
 }
 
 /**
@@ -704,7 +705,7 @@ function assertionResult(assertion, url, outcome, detail) {
  * @returns {Promise<BrowserRungResult>}
  */
 export async function runBrowserRung(input) {
-  const cwd = path.resolve(input.cwd);
+  const cwd = resolveOrchestratorCwd(input.cwd);
   const derived = deriveBrowserAssertions(input.planMarkdown ?? '');
   const settleMs = input.settleMs ?? DEFAULT_SETTLE_MS;
   const assertTimeoutMs = input.assertTimeoutMs ?? DEFAULT_ASSERT_TIMEOUT_MS;

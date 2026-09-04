@@ -510,7 +510,7 @@ describe('P5-C teardown', () => {
       },
       closeBrowser: async (cwd) => closed.push(cwd),
     });
-    assert.deepEqual(closed, [path.resolve('C:\\repo')]);
+    assert.deepEqual(closed, ['C:\\repo']);
     assert.deepEqual(app.log, ['start', 'stop']);
   });
 
