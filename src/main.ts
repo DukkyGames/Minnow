@@ -1,5 +1,3 @@
-import './styles/fonts.css';
-import './styles/font-presets.css';
 import './styles/tokens.css';
 import './styles/theme-transitions.css';
 import './styles/global.css';

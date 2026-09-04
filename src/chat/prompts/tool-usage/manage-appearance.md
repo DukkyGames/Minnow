@@ -43,3 +43,4 @@ Appearance is **browser-local** (not server settings). Do **not** use `update_se
 1. Summarize intended visual changes in chat before calling `update_appearance`.
 2. **`update_appearance`** and **`upload_appearance_asset`** require user approval.
 3. Offer **`launch_minnow_app`** → `settings` when the user may want to tweak in the UI.
+4. Font preset ids are kebab-case Google family names (`inter`, `fira-code`) plus `system`. Retired `geist` / `geist-mono` ids are invalid.

@@ -45,13 +45,14 @@ export const APPEARANCE_STORAGE_KEYS = {
   fonts: 'minnow.appearance.fonts',
 } as const;
 
-/** Built-in UI font preset ids. */
-export const UI_FONT_PRESETS = ['system', 'inter', 'geist', 'ibm-plex-sans'] as const;
-export type UiFontPresetId = (typeof UI_FONT_PRESETS)[number];
+import type { MonoFontPresetId, UiFontPresetId } from './font-catalog';
 
-/** Built-in monospace font preset ids. */
-export const MONO_FONT_PRESETS = ['system', 'jetbrains-mono', 'geist-mono', 'ibm-plex-mono'] as const;
-export type MonoFontPresetId = (typeof MONO_FONT_PRESETS)[number];
+export {
+  MONO_FONT_PRESETS,
+  UI_FONT_PRESETS,
+  type MonoFontPresetId,
+  type UiFontPresetId,
+} from './font-catalog';
 
 export type FontPresetRef =
   | { kind: 'preset'; slot: 'ui'; id: UiFontPresetId }

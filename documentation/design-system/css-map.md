@@ -8,7 +8,7 @@
 |------|--------------|
 | `tokens.css` | Theme engine |
 | `global.css` | App-wide reset, icons, focus |
-| `fonts.css`, `font-presets.css` | Typography loading |
+| (none — Google Fonts inject at runtime) | [`src/appearance/fonts.ts`](../../src/appearance/fonts.ts) |
 | `motion.css` | Shared animations |
 | `theme-transitions.css` | Theme switch guard |
 | `responsive.css` | Breakpoint overrides |

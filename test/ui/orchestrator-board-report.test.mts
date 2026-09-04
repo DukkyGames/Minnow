@@ -12,6 +12,7 @@ import type { BoardState } from '../../server/orchestrator/core/types';
 
 /** Captures follow-up navigation so tests can assert close-then-create, no seed. */
 const followUpLog: Array<{ kind: string; payload?: unknown }> = [];
+let fileTreeRefreshCalls = 0;
 
 mock.module('../../src/ui/sidebar.ts', {
   namedExports: {
@@ -34,6 +35,14 @@ mock.module('../../src/state/git-api.ts', {
   namedExports: {
     gitCommit: async () => ({ ok: true }),
     gitPush: async () => ({ ok: true }),
+  },
+});
+
+mock.module('../../src/ui/file-tree-refresh-bridge.ts', {
+  namedExports: {
+    refreshFileTreeViaBridge: async () => {
+      fileTreeRefreshCalls += 1;
+    },
   },
 });
 
@@ -85,6 +94,7 @@ function setupDom(): void {
 
 afterEach(() => {
   followUpLog.length = 0;
+  fileTreeRefreshCalls = 0;
   if (activeWindow) {
     clearAttachments();
     document.body.innerHTML = '';
@@ -179,6 +189,22 @@ describe('renderBoardReport', () => {
     assert.match(node.textContent ?? '', /Back to board/);
     assert.match(node.textContent ?? '', /Start follow-up chat/);
     assert.match(node.textContent ?? '', /npx tsc --noEmit/);
+  });
+
+  test('Commit refreshes the file tree after landing changes', async () => {
+    setupDom();
+    const node = renderBoardReport(finishedBoard(), 'ok', false, {
+      dismiss: () => {},
+      reopen: () => {},
+      fixFinal: () => {},
+    });
+    const commit = node.querySelector<HTMLButtonElement>('.ov2-report-screen__commit-primary');
+    assert.ok(commit);
+    commit!.click();
+    for (let i = 0; i < 40 && fileTreeRefreshCalls === 0; i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.equal(fileTreeRefreshCalls, 1);
   });
 
   test('Back to board calls dismiss', () => {

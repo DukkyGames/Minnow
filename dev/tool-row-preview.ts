@@ -1,4 +1,3 @@
-import '../src/styles/fonts.css';
 import '../src/styles/tokens.css';
 import '../src/styles/global.css';
 import '../src/styles/motion.css';

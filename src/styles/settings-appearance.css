@@ -544,7 +544,7 @@
   width: auto;
   max-width: none;
   flex: 1 1 180px;
-  min-width: 180px;
+  min-width: 220px;
 }
 
 .settings-appearance-fit-select {

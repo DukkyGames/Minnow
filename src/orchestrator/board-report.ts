@@ -8,6 +8,7 @@ import {
   workspaceLandingStats,
 } from '../state/worktree-service.ts';
 import { attachBoardFollowUpChip } from '../attachments/board-ref.ts';
+import { refreshFileTreeViaBridge } from '../ui/file-tree-refresh-bridge.ts';
 import { createChatWithMode } from '../ui/sidebar.ts';
 import { countPhase, renderRunLedger } from './board-render';
 import { el } from './dom';
@@ -596,6 +597,7 @@ async function runCommitChain(
 function markLanded(state: BoardState, wrap: HTMLElement): void {
   landedByBoard.add(state.boardId);
   wrap.replaceWith(buildClearWorktrees(state));
+  void refreshFileTreeViaBridge();
 }
 
 function setGitStatus(

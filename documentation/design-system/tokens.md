@@ -80,8 +80,8 @@ Not theme-specific; shared across all palettes.
 
 Font stacks override via [`src/appearance/fonts.ts`](../../src/appearance/fonts.ts):
 
-- **UI:** `system`, `inter`, `geist`, `ibm-plex-sans` (+ upload)
-- **Mono:** `system`, `jetbrains-mono`, `geist-mono`, `ibm-plex-mono` (+ upload)
+- **UI:** `system` plus 30+ Google Sans families (lazy-loaded) and an upload slot. Catalog: [`src/appearance/font-catalog.ts`](../../src/appearance/font-catalog.ts).
+- **Mono:** `system` (JetBrains-led stack) plus 20+ Google Mono families including Fira Code, JetBrains Mono, and Cascadia Code (+ upload).
 
 Hierarchy (from DESIGN.md, implemented in CSS):
 

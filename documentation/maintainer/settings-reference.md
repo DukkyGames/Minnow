@@ -119,7 +119,7 @@ Stored primarily in browser `localStorage` (custom token overrides may sync via 
 | Theme mode | `dark`, `light` per family |
 | Follow system | Match OS dark/light |
 | Desktop wallpaper | Minnow wallpaper image |
-| Fonts | UI font + mono font stacks |
+| Fonts | UI + mono presets from a Google Fonts catalog (lazy-loaded) plus uploads |
 | Custom colors | Per-token `--mn-*` overrides |
 
 ---

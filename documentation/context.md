@@ -547,7 +547,7 @@ Router: [`src/os/router.ts`](../src/os/router.ts). Boot: `initOsPageBridge()` ? 
 
 16 themes: `<html data-theme="{family}-{mode}">` (8 families ? dark/light). **All hex/rgba only in** [`src/styles/tokens.css`](../src/styles/tokens.css); app code uses `--mn-*`.
 
-**Fonts:** `--font-ui` and `--font-mono` live on `:root` in `tokens.css`. Settings → Appearance → Fonts writes the chosen stacks onto `documentElement` via [`applyAppearanceFonts`](../src/appearance/fonts.ts). Stylesheets must consume those two names (not a `--mn-font-*` alias) so the preference reaches every mono surface.
+**Fonts:** `--font-ui` and `--font-mono` live on `:root` in `tokens.css`. Settings → Appearance → Fonts writes the chosen stacks onto `documentElement` via [`applyAppearanceFonts`](../src/appearance/fonts.ts). Presets live in [`font-catalog.ts`](../src/appearance/font-catalog.ts) (System + a large Google Fonts catalog for UI and mono; Geist was removed). Only the selected UI + mono pair is fetched, via a single `fonts.googleapis.com/css2` stylesheet injected at apply time — boot CSS does not `@import` webfonts. Unknown stored ids (including retired `geist` / `geist-mono`) fall back to System. Stylesheets must consume `--font-ui` / `--font-mono` (not a `--mn-font-*` alias) so the preference reaches every mono surface.
 
 Runtime: [`src/theme.ts`](../src/theme.ts), Settings ? Appearance. Catalog: **Underwater** (default, animated), **Minnow** (fish boids), **Aurora**, **Starfield**, **Gradient**, **Flat**, **Custom image**. Retired `mesh` / `grain` prefs migrate to `gradient` / `flat`.
 

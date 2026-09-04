@@ -88,7 +88,7 @@ Minnow is a long-session chat bench: conversation first, metrics as instrumentat
 - Off-black / off-white surfaces per family (never pure `#000` / `#fff` in palette blocks).
 - Family accent on send, selection, links, and user bubbles (`--mn-accent-soft`; text selection uses `--mn-selection-bg`, including CodeMirror `drawSelection` in dark mode).
 - Semantic success / warning / danger for stats and tool status only.
-- JetBrains Mono for stats, chips, and code; system UI at 14px elsewhere.
+- JetBrains Mono for stats, chips, and code by default; system UI at 14px elsewhere. Settings → Appearance can swap either stack from a Google Fonts catalog (lazy-loaded).
 - Flat elevation: shadows use `var(--mn-shadow)`; hover veils use `color-mix` on `--mn-fg`.
 
 ## Colors
@@ -128,7 +128,7 @@ Palette is **family-dependent** (hex in `tokens.css`). The YAML frontmatter abov
 
 **Body Font:** `system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif` (14px base, line-height 1.5).
 
-**Label/Mono Font:** JetBrains Mono (400–600 from Google Fonts) for stats strip, per-message chips, token counts, fenced code, and field hints that reference code.
+**Label/Mono Font:** JetBrains Mono (400–600) by default for stats strip, per-message chips, token counts, fenced code, and field hints that reference code. Appearance → Fonts can substitute another Google Mono family; only the selected pair is requested.
 
 **Character:** Calm technical sans for UI; mono carries numeric instrumentation. No display serif or geometric marketing face.
 

@@ -11,11 +11,15 @@ import { Window } from 'happy-dom';
 
 import {
   applyAppearanceFonts,
+  buildGoogleFontsCss2Url,
   getAppearanceFonts,
+  GOOGLE_FONTS_LINK_ID,
+  MONO_FONT_PRESETS,
   MONO_FONT_STACKS,
   resetAppearanceFontsForTests,
   setAppearanceFonts,
   subscribeAppearanceFonts,
+  UI_FONT_PRESETS,
   UI_FONT_STACKS,
 } from '../../src/appearance/fonts.ts';
 import { APPEARANCE_STORAGE_KEYS } from '../../src/appearance/types.ts';
@@ -85,6 +89,53 @@ describe('appearance fonts', () => {
   test('preset stacks include fallbacks', () => {
     assert.match(UI_FONT_STACKS.inter, /Inter/);
     assert.match(MONO_FONT_STACKS['jetbrains-mono'], /JetBrains Mono/);
+    assert.match(MONO_FONT_STACKS['fira-code'], /Fira Code/);
+  });
+
+  test('catalog is a large Google Fonts list without Geist', () => {
+    assert.ok(UI_FONT_PRESETS.length >= 31, `UI presets ${UI_FONT_PRESETS.length}`);
+    assert.ok(MONO_FONT_PRESETS.length >= 21, `mono presets ${MONO_FONT_PRESETS.length}`);
+    assert.ok(!UI_FONT_PRESETS.includes('geist'));
+    assert.ok(!MONO_FONT_PRESETS.includes('geist-mono'));
+    assert.ok(UI_FONT_PRESETS.includes('inter'));
+    assert.ok(MONO_FONT_PRESETS.includes('fira-code'));
+    assert.ok(MONO_FONT_PRESETS.includes('cascadia-code'));
+  });
+
+  test('retired geist ids fall back to system', () => {
+    mockLocalStorage();
+    storage.set(
+      APPEARANCE_STORAGE_KEYS.fonts,
+      JSON.stringify({
+        ui: { kind: 'preset', slot: 'ui', id: 'geist' },
+        mono: { kind: 'preset', slot: 'mono', id: 'geist-mono' },
+      }),
+    );
+    const fonts = getAppearanceFonts();
+    if (fonts.ui.kind === 'preset') assert.equal(fonts.ui.id, 'system');
+    if (fonts.mono.kind === 'preset') assert.equal(fonts.mono.id, 'system');
+  });
+
+  test('Google Fonts CSS2 URL encodes families and weights', () => {
+    const href = buildGoogleFontsCss2Url([
+      { family: 'Inter', weights: [400, 500, 600] },
+      { family: 'Fira Code', weights: [400, 500, 600] },
+    ]);
+    assert.equal(
+      href,
+      'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fira+Code:wght@400;500;600&display=swap',
+    );
+  });
+
+  test('duplicate Google families collapse to one CSS2 family param', () => {
+    const href = buildGoogleFontsCss2Url([
+      { family: 'JetBrains Mono', weights: [400, 500] },
+      { family: 'JetBrains Mono', weights: [400, 600] },
+    ]);
+    assert.equal(
+      href,
+      'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap',
+    );
   });
 
   // Regression: applying fonts must not notify font listeners. theme.ts
@@ -158,5 +209,42 @@ describe('appearance fonts', () => {
       );
     }
     win.close();
+  });
+
+  test('stylesheets do not @import Google Fonts or Fontsource at boot', () => {
+    const hits: string[] = [];
+    for (const file of walkCssFiles(STYLES_DIR)) {
+      const text = readFileSync(file, 'utf8');
+      if (text.includes('fonts.googleapis.com') || text.includes('fontsource/geist')) {
+        hits.push(path.relative(STYLES_DIR, file));
+      }
+    }
+    assert.deepEqual(hits, []);
+  });
+
+  test('applyAppearanceFonts injects one Google Fonts stylesheet for the selected pair', async () => {
+    mockLocalStorage();
+    const win = new Window();
+    const prevDocument = globalThis.document;
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: win.document,
+    });
+    setAppearanceFonts({
+      ui: { kind: 'preset', slot: 'ui', id: 'inter' },
+      mono: { kind: 'preset', slot: 'mono', id: 'fira-code' },
+    });
+    await applyAppearanceFonts();
+    const link = win.document.getElementById(GOOGLE_FONTS_LINK_ID);
+    assert.ok(link, 'expected #minnow-google-fonts stylesheet');
+    const href = link?.getAttribute('href') ?? '';
+    assert.match(href, /family=Inter:wght@400;500;600/);
+    assert.match(href, /family=Fira\+Code:wght@400;500;600/);
+    assert.match(href, /display=swap/);
+    win.close();
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: prevDocument,
+    });
   });
 });
