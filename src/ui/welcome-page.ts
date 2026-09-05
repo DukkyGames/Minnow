@@ -19,6 +19,7 @@ import {
 } from '../lib/open-workspace-windows';
 import { openWorkspaceFolderPicker } from './workspace-folder-picker';
 import { setStatus } from './status';
+import { MINNOW_GLYPH_HEADER_HTML } from './minnow-glyph';
 
 /** Session-only parent for the create-project wizard (Change location). */
 let wizardParentPath = '';
@@ -191,12 +192,12 @@ export function resetWorkspaceGateSwitchMode(): void {
 function showCreatePanel(show: boolean): void {
   createPanelOpen = show;
   const panel = document.getElementById('welcomeCreatePanel');
-  const tiles = document.querySelector('.welcome-page__tiles');
+  const actions = document.querySelector('.welcome-page__actions');
   if (panel) {
     panel.classList.toggle('hidden', !show);
   }
-  if (tiles instanceof HTMLElement) {
-    tiles.classList.toggle('hidden', show);
+  if (actions instanceof HTMLElement) {
+    actions.classList.toggle('hidden', show);
   }
   if (show) {
     const input = document.getElementById('welcomeProjectName') as HTMLInputElement | null;
@@ -236,25 +237,35 @@ async function loadWizardParentFromServer(): Promise<void> {
 
 // ── Recents ──────────────────────────────────────────────────────────────────
 
-function createRecentRow(item: WorkspaceRecentItem): HTMLLIElement {
-  const li = document.createElement('li');
-  li.setAttribute('role', 'listitem');
+const SANDBOX_HINT = "Minnow's folder when you don't have a project.";
 
-  if (!item.exists) {
-    // Same wrapper as a live entry so the divider comes from the same place.
-    li.className = 'welcome-page__recents-item';
-    const row = document.createElement('div');
-    row.className = 'welcome-page__recents-row welcome-page__recents-row--missing';
+interface RecentRowOptions {
+  pinned?: boolean;
+  hint?: string;
+  glyphHtml?: string;
+}
 
-    const label = document.createElement('span');
-    label.className = 'welcome-page__recents-label';
-    label.textContent = item.label;
+function appendTrailingActions(li: HTMLLIElement, item: WorkspaceRecentItem, pinned: boolean): HTMLDivElement {
+  const actions = document.createElement('div');
+  actions.className = 'welcome-page__recents-actions';
 
-    const pathLine = document.createElement('span');
-    pathLine.className = 'welcome-page__recents-path';
-    pathLine.textContent = item.path;
-    pathLine.title = item.path;
+  // Only Electron can hold more than one view; the browser has nothing to open.
+  if (item.exists && window.minnow?.window?.openWorkspace) {
+    const newWindowBtn = document.createElement('button');
+    newWindowBtn.type = 'button';
+    newWindowBtn.className = 'welcome-page__recents-new-window';
+    newWindowBtn.textContent = 'New window';
+    newWindowBtn.title = `Open ${item.label} in a new window`;
+    newWindowBtn.setAttribute('aria-label', `Open ${item.label} in a new window`);
+    newWindowBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void openRecentWorkspaceInNewWindow(item.path);
+    });
+    actions.appendChild(newWindowBtn);
+  }
 
+  // Sandbox is pinned; it cannot be removed from the list.
+  if (!pinned) {
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.className = 'welcome-page__recents-remove';
@@ -272,50 +283,76 @@ function createRecentRow(item: WorkspaceRecentItem): HTMLLIElement {
         }
       })();
     });
-
-    row.append(label, pathLine, removeBtn);
-    li.appendChild(row);
-    return li;
+    actions.appendChild(removeBtn);
   }
 
+  li.appendChild(actions);
+  return actions;
+}
+
+function createRecentRow(item: WorkspaceRecentItem, options: RecentRowOptions = {}): HTMLLIElement {
+  const li = document.createElement('li');
+  li.setAttribute('role', 'listitem');
   li.className = 'welcome-page__recents-item';
+  if (options.pinned) li.dataset.pinned = 'true';
+
+  const copy = document.createElement('span');
+  copy.className = 'welcome-page__recents-copy';
+
+  const label = document.createElement('span');
+  label.className = 'welcome-page__recents-label';
+  label.textContent = item.label;
+  copy.appendChild(label);
+
+  if (options.hint) {
+    const hint = document.createElement('span');
+    hint.className = 'welcome-page__recents-hint';
+    hint.textContent = options.hint;
+    copy.appendChild(hint);
+  } else {
+    const pathLine = document.createElement('span');
+    pathLine.className = 'welcome-page__recents-path';
+    pathLine.textContent = item.path;
+    pathLine.title = item.path;
+    copy.appendChild(pathLine);
+  }
+
+  if (!item.exists) {
+    const row = document.createElement('div');
+    row.className = 'welcome-page__recents-row welcome-page__recents-row--missing';
+    if (options.glyphHtml) {
+      const glyph = document.createElement('span');
+      glyph.className = 'welcome-page__recents-glyph';
+      glyph.setAttribute('aria-hidden', 'true');
+      glyph.innerHTML = options.glyphHtml;
+      row.appendChild(glyph);
+    }
+    row.appendChild(copy);
+    li.appendChild(row);
+    appendTrailingActions(li, item, Boolean(options.pinned));
+    return li;
+  }
 
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'welcome-page__recents-row';
   btn.title = item.path;
 
-  const label = document.createElement('span');
-  label.className = 'welcome-page__recents-label';
-  label.textContent = item.label;
+  if (options.glyphHtml) {
+    const glyph = document.createElement('span');
+    glyph.className = 'welcome-page__recents-glyph';
+    glyph.setAttribute('aria-hidden', 'true');
+    glyph.innerHTML = options.glyphHtml;
+    btn.appendChild(glyph);
+  }
 
-  const pathLine = document.createElement('span');
-  pathLine.className = 'welcome-page__recents-path';
-  pathLine.textContent = item.path;
-
-  btn.append(label, pathLine);
+  btn.appendChild(copy);
   btn.addEventListener('click', () => {
     void activateRecentWorkspace(item.path);
   });
 
   li.appendChild(btn);
-
-  // Only Electron can hold more than one view; the browser has a single global
-  // workspace and nothing to open a second window with.
-  if (window.minnow?.window?.openWorkspace) {
-    const newWindowBtn = document.createElement('button');
-    newWindowBtn.type = 'button';
-    newWindowBtn.className = 'welcome-page__recents-new-window';
-    newWindowBtn.textContent = 'New window';
-    newWindowBtn.title = `Open ${item.label} in a new window`;
-    newWindowBtn.setAttribute('aria-label', `Open ${item.label} in a new window`);
-    newWindowBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      void openRecentWorkspaceInNewWindow(item.path);
-    });
-    li.appendChild(newWindowBtn);
-  }
-
+  appendTrailingActions(li, item, Boolean(options.pinned));
   return li;
 }
 
@@ -390,6 +427,7 @@ function decorateOpenRecentRow(
   }
 
   if (!window.minnow?.window?.closeWorkspace) return;
+  const actions = row.querySelector('.welcome-page__recents-actions');
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.className = 'welcome-page__recents-close';
@@ -400,21 +438,43 @@ function decorateOpenRecentRow(
     e.stopPropagation();
     void closeRecentWorkspaceWindow(item);
   });
-  row.appendChild(closeBtn);
+  if (actions instanceof HTMLElement) {
+    const removeBtn = actions.querySelector('.welcome-page__recents-remove');
+    if (removeBtn) {
+      actions.insertBefore(closeBtn, removeBtn);
+    } else {
+      actions.appendChild(closeBtn);
+    }
+  } else {
+    row.appendChild(closeBtn);
+  }
 }
 
 async function renderRecentsList(): Promise<void> {
   const list = document.getElementById('welcomeRecentsList');
   const empty = document.getElementById('welcomeRecentsEmpty');
-  const countEl = document.getElementById('welcomeRecentsCount');
+  const pinnedList = document.getElementById('welcomePinnedList');
   if (!list) {
     return;
   }
 
   const info = await fetchWorkspace();
   const recent = info?.recent ?? [];
-  const nonCurrent = recent.filter((r) => !r.isCurrent);
+  const sandbox = info?.sandbox;
   const openElsewhere = await readOpenWorkspaceWindows();
+
+  if (pinnedList) {
+    pinnedList.innerHTML = '';
+    if (sandbox) {
+      const row = createRecentRow(sandbox, {
+        pinned: true,
+        hint: SANDBOX_HINT,
+        glyphHtml: MINNOW_GLYPH_HEADER_HTML,
+      });
+      decorateOpenRecentRow(row, sandbox, openElsewhere);
+      pinnedList.appendChild(row);
+    }
+  }
 
   list.innerHTML = '';
   for (const item of recent) {
@@ -425,16 +485,6 @@ async function renderRecentsList(): Promise<void> {
 
   if (empty) {
     empty.classList.toggle('hidden', recent.length > 0);
-  }
-  if (countEl) {
-    const n = nonCurrent.length;
-    if (n > 0) {
-      countEl.textContent = `View all (${n})`;
-      countEl.hidden = false;
-    } else {
-      countEl.textContent = '';
-      countEl.hidden = true;
-    }
   }
 }
 

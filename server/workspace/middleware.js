@@ -4,6 +4,7 @@
 
 import {
   buildRecentWorkspaceList,
+  buildSandboxWorkspaceItem,
   getWorkspaceInfo,
   removeRecentWorkspacePath,
   setDefaultWorkspaceRoot,
@@ -368,12 +369,15 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
     }
 
     if (pathname === '/api/workspace' && req.method === 'GET') {
-      const recent = await buildRecentWorkspaceList(getEffectiveWorkspaceRoot());
+      const viewRoot = getEffectiveWorkspaceRoot();
+      const recent = await buildRecentWorkspaceList(viewRoot);
+      const sandbox = await buildSandboxWorkspaceItem(viewRoot);
       const newProjectParent = await ensureDefaultProjectsParent();
       sendJson(res, 200, {
         ok: true,
-        ...getWorkspaceInfo(getEffectiveWorkspaceRoot()),
+        ...getWorkspaceInfo(viewRoot),
         recent,
+        sandbox,
         newProjectParent,
         open: listOpenWorkspaces().map((entry) => ({
           path: entry.path,
@@ -429,7 +433,8 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
       }
       await removeRecentWorkspacePath(userPath);
       const recent = await buildRecentWorkspaceList();
-      sendJson(res, 200, { ok: true, recent });
+      const sandbox = await buildSandboxWorkspaceItem();
+      sendJson(res, 200, { ok: true, recent, sandbox });
       return true;
     }
 

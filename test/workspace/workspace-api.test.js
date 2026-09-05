@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { ensureMinnowLayout } from '../../server/config/home.js';
@@ -11,12 +12,14 @@ import {
   getScratchWorkspacePath,
   getWorkspaceInfo,
   initWorkspaceRoot,
+  isEligibleRecentWorkspacePath,
   isPlaceholderWorkspacePath,
   isWorkspaceUserChosen,
   normalizeWorkspacePathKey,
   SCRATCH_WORKSPACE_LABEL,
   setAppRoot,
   setWorkspaceRoot,
+  touchRecentWorkspacePath,
   workspaceLabel,
 } from '../../server/workspace/root.js';
 import { rmTestHome, setTestHome } from '../config/test-helpers.js';
@@ -107,6 +110,8 @@ describe('workspace API', () => {
     assert.ok(typeof json.path === 'string' && json.path.length > 0);
     assert.ok(typeof json.label === 'string');
     assert.ok(Array.isArray(json.recent));
+    assert.ok(json.sandbox);
+    assert.equal(json.sandbox.label, SCRATCH_WORKSPACE_LABEL);
     assert.ok(typeof json.newProjectParent === 'string' && json.newProjectParent.length > 0);
     const stat = await fs.stat(json.newProjectParent);
     assert.ok(stat.isDirectory());
@@ -390,18 +395,83 @@ describe('workspace API', () => {
     assert.match(String(json.error ?? ''), /outside the workspace/i);
   });
 
-  test('Scratch workspace is registered on init with label Scratch', async () => {
+  test('Sandbox is registered on init and stays out of recents', async () => {
     const scratchPath = await ensureScratchWorkspaceRegistered();
     assert.equal(path.resolve(scratchPath), path.resolve(getScratchWorkspacePath()));
     assert.equal(workspaceLabel(scratchPath), SCRATCH_WORKSPACE_LABEL);
+    assert.equal(SCRATCH_WORKSPACE_LABEL, 'Sandbox');
     const info = getWorkspaceInfo();
     assert.equal(path.resolve(info.scratchPath), path.resolve(scratchPath));
     const configRaw = await fs.readFile(path.join(homeDir, 'config.json'), 'utf8');
     const config = JSON.parse(configRaw);
     assert.equal(path.resolve(config.workspace.scratchPath), path.resolve(scratchPath));
     assert.ok(
-      config.workspace.recentPaths.some(
+      !config.workspace.recentPaths?.some(
         (p) => normalizeWorkspacePathKey(p) === normalizeWorkspacePathKey(scratchPath),
+      ),
+    );
+
+    const { json } = await httpRequest(baseUrl, 'GET', '/api/workspace');
+    assert.ok(
+      !json.recent.some(
+        (r) => normalizeWorkspacePathKey(r.path) === normalizeWorkspacePathKey(scratchPath),
+      ),
+    );
+    assert.equal(
+      normalizeWorkspacePathKey(json.sandbox.path),
+      normalizeWorkspacePathKey(scratchPath),
+    );
+  });
+
+  test('temp dirs and worktrees are not eligible recents and prune from disk', async () => {
+    const junk = path.join(os.tmpdir(), `minnow-wt-allow-${process.pid}`);
+    await fs.mkdir(junk, { recursive: true });
+    assert.equal(isEligibleRecentWorkspacePath(junk), false);
+    assert.equal(isEligibleRecentWorkspacePath(workspaceDir), true);
+    assert.equal(isEligibleRecentWorkspacePath(getScratchWorkspacePath()), false);
+
+    await touchRecentWorkspacePath(junk);
+    await touchRecentWorkspacePath(workspaceDir);
+
+    const configRaw = await fs.readFile(path.join(homeDir, 'config.json'), 'utf8');
+    const config = JSON.parse(configRaw);
+    assert.ok(
+      !config.workspace.recentPaths.some(
+        (p) => normalizeWorkspacePathKey(p) === normalizeWorkspacePathKey(junk),
+      ),
+    );
+    assert.ok(
+      config.workspace.recentPaths.some(
+        (p) => normalizeWorkspacePathKey(p) === normalizeWorkspacePathKey(workspaceDir),
+      ),
+    );
+
+    const { json } = await httpRequest(baseUrl, 'GET', '/api/workspace');
+    assert.ok(
+      !json.recent.some(
+        (r) => normalizeWorkspacePathKey(r.path) === normalizeWorkspacePathKey(junk),
+      ),
+    );
+
+    await fs.rm(junk, { recursive: true, force: true });
+  });
+
+  test('GET recents do not prepend the current folder unless it is in the MRU', async () => {
+    await setWorkspaceRoot(workspaceDir);
+    const metaRaw = await fs.readFile(path.join(homeDir, 'config.json'), 'utf8');
+    const meta = JSON.parse(metaRaw);
+    meta.workspace.recentPaths = dedupeRecentPaths([workspaceDirB]);
+    await fs.writeFile(path.join(homeDir, 'config.json'), JSON.stringify(meta), 'utf8');
+
+    const { json } = await httpRequest(baseUrl, 'GET', '/api/workspace');
+    assert.ok(
+      !json.recent.some(
+        (r) => normalizeWorkspacePathKey(r.path) === normalizeWorkspacePathKey(workspaceDir),
+      ),
+    );
+    assert.ok(
+      json.recent.some(
+        (r) => normalizeWorkspacePathKey(r.path) === normalizeWorkspacePathKey(workspaceDirB),
       ),
     );
   });

@@ -4,20 +4,20 @@ Redesign `#/workspaces` / `#welcomeView` so recents are folders the user actuall
 
 ## Status
 
-Shape brief awaiting confirmation. Do not implement until the brief is approved.
+Implemented. Recents are explicit opens only; Sandbox is pinned; View all is gone.
 
 ## Todos
 
-- [ ] Stop recording recents except on explicit user open/create/picker/menubar activation (`touchRecentWorkspacePath` call sites)
-- [ ] Stop `ensureScratchWorkspaceRegistered` from inserting Scratch into MRU; pin it in the UI instead
-- [ ] Prune junk from `workspace.recentPaths` on load (temp dirs, `~/.minnow/worktrees/**`, placeholder install roots)
-- [ ] Apply the same filtered list to the welcome page and the workspace menubar
-- [ ] Rename user-facing Scratch label to **Sandbox**; reuse the existing Minnow glyph on the pinned row
-- [ ] Replace the two hero tiles with compact Open folder / Create project actions; drop View all
-- [ ] List-first layout: pinned Sandbox, then the full recents list (storage cap still 10)
-- [ ] Quiet row actions: hover/focus on fine pointer; always visible on touch; keep Open / background / missing / Close
-- [ ] Tests for membership, prune, Sandbox pin (no remove), View all gone, menubar parity
-- [ ] Update `documentation/context.md`, glossary, and other user-facing "Scratch" workspace copy
+- [x] Stop recording recents except on explicit user open/create/picker/menubar activation (`touchRecentWorkspacePath` call sites)
+- [x] Stop `ensureScratchWorkspaceRegistered` from inserting Scratch into MRU; pin it in the UI instead
+- [x] Prune junk from `workspace.recentPaths` on load (temp dirs, `~/.minnow/worktrees/**`, placeholder install roots)
+- [x] Apply the same filtered list to the welcome page and the workspace menubar
+- [x] Rename user-facing Scratch label to **Sandbox**; reuse the existing Minnow glyph on the pinned row
+- [x] Replace the two hero tiles with compact Open folder / Create project actions; drop View all
+- [x] List-first layout: pinned Sandbox, then the full recents list (storage cap still 10)
+- [x] Quiet row actions: hover/focus on fine pointer; always visible on touch; keep Open / background / missing / Close
+- [x] Tests for membership, prune, Sandbox pin (no remove), View all gone, menubar parity
+- [x] Update `documentation/context.md`, glossary, and other user-facing "Scratch" workspace copy
 
 ## Confirmed choices (discovery)
 

@@ -24,9 +24,9 @@ function setupWelcomeDom() {
     <p id="welcomeCreateError" class="hidden"></p>
     <button type="button" id="btnWelcomeCreateCancel"></button>
     <button type="button" id="btnWelcomeCreateSubmit"></button>
+    <ul id="welcomePinnedList"></ul>
     <ul id="welcomeRecentsList"></ul>
     <p id="welcomeRecentsEmpty" class="hidden"></p>
-    <span id="welcomeRecentsCount" hidden></span>
     <p id="welcomeServerBanner" class="hidden"></p>
     <div id="osWorkspaceGate" hidden></div>
   `;
@@ -64,6 +64,12 @@ function setupWelcomeDom() {
           label: 'app',
           isDefault: true,
           newProjectParent: '/home/user/Projects',
+          sandbox: {
+            path: '/home/user/.minnow/workspace',
+            label: 'Sandbox',
+            exists: true,
+            isCurrent: false,
+          },
           recent: [
             {
               path: '/projects/old',
@@ -161,6 +167,27 @@ describe('welcome-page recents open state', { concurrency: false }, () => {
 
     assert.equal(document.querySelector('[data-open-in-window="true"]'), null);
     assert.equal(document.querySelector('.welcome-page__recents-close'), null);
+
+    delete globalThis.window.minnow;
+  });
+
+  test('pins Sandbox above recents with the Minnow glyph and no Remove', async () => {
+    setupWelcomeDom();
+    resetWelcomeStateForTests();
+
+    await renderWelcomeRecentsForTest();
+
+    const pinned = document.querySelector('#welcomePinnedList [data-pinned="true"]');
+    assert.ok(pinned);
+    assert.equal(pinned.querySelector('.welcome-page__recents-label')?.textContent, 'Sandbox');
+    assert.match(
+      pinned.querySelector('.welcome-page__recents-hint')?.textContent ?? '',
+      /don't have a project/i,
+    );
+    assert.ok(pinned.querySelector('.welcome-page__recents-glyph .minnow-glyph'));
+    assert.equal(pinned.querySelector('.welcome-page__recents-remove'), null);
+    assert.equal(document.getElementById('welcomeRecentsCount'), null);
+    assert.equal(document.querySelector('#welcomeRecentsList .welcome-page__recents-label')?.textContent, 'old');
 
     delete globalThis.window.minnow;
   });

@@ -15,6 +15,8 @@ export interface WorkspaceInfo {
   label: string;
   isDefault: boolean;
   recent?: WorkspaceRecentItem[];
+  /** Pinned Sandbox home; not stored in the recents MRU. */
+  sandbox?: WorkspaceRecentItem;
   /** Parent directory for welcome "Create new project" (~/Projects). */
   newProjectParent?: string;
   /** Absolute path to the Minnow Scratch sandbox (~/.minnow/workspace). */

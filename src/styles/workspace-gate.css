@@ -49,7 +49,7 @@ html.os-workspace-gate-holding #osWorkspaceGate {
   pointer-events: none;
 }
 
-#osWorkspaceGate.workspace-gate--opening .welcome-page__tile,
+#osWorkspaceGate.workspace-gate--opening .welcome-page__action,
 #osWorkspaceGate.workspace-gate--opening .welcome-page__recents-row {
   opacity: 0.65;
 }

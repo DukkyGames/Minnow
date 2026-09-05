@@ -807,20 +807,24 @@
     <p id="welcomeServerBanner" class="welcome-page__banner hidden" role="status">
       Workspace requires <code>npm start</code> (local tool server), not <code>npm run dev</code> alone.
     </p>
-    <div class="welcome-page__tiles" role="group" aria-label="Workspace actions">
-      <button type="button" class="welcome-page__tile" id="btnWelcomeOpenProject">
-        <span class="welcome-page__tile-icon" aria-hidden="true">
+    <div class="welcome-page__actions" role="group" aria-label="Workspace actions">
+      <button type="button" class="welcome-page__action welcome-page__action--primary" id="btnWelcomeOpenProject">
+        <span class="welcome-page__action-icon" aria-hidden="true">
           <i class="fi fi-rr-folder-open icon-svg" aria-hidden="true"></i>
         </span>
-        <span class="welcome-page__tile-label">Open folder</span>
-        <span class="welcome-page__tile-desc">Browse to an existing folder on disk</span>
+        <span class="welcome-page__action-copy">
+          <span class="welcome-page__action-label">Open folder</span>
+          <span class="welcome-page__action-desc">Browse to an existing folder on disk</span>
+        </span>
       </button>
-      <button type="button" class="welcome-page__tile" id="btnWelcomeCreateProject">
-        <span class="welcome-page__tile-icon" aria-hidden="true">
+      <button type="button" class="welcome-page__action" id="btnWelcomeCreateProject">
+        <span class="welcome-page__action-icon" aria-hidden="true">
           <i class="fi fi-rr-plus-small icon-svg" aria-hidden="true"></i>
         </span>
-        <span class="welcome-page__tile-label">Create project</span>
-        <span class="welcome-page__tile-desc">New folder under Projects</span>
+        <span class="welcome-page__action-copy">
+          <span class="welcome-page__action-label">Create project</span>
+          <span class="welcome-page__action-desc">New folder under Projects</span>
+        </span>
       </button>
     </div>
     <section id="welcomeCreatePanel" class="welcome-page__create-panel hidden" aria-label="Create new project">
@@ -836,13 +840,11 @@
         <button type="button" class="welcome-page__btn welcome-page__btn--primary" id="btnWelcomeCreateSubmit">Create</button>
       </div>
     </section>
+    <ul id="welcomePinnedList" class="welcome-page__pinned-list" role="list" aria-label="Sandbox"></ul>
     <section class="welcome-page__recents" aria-labelledby="welcomeRecentsTitle">
-      <div class="welcome-page__recents-header">
-        <h2 id="welcomeRecentsTitle" class="welcome-page__recents-title">Recent workspaces</h2>
-        <span id="welcomeRecentsCount" class="welcome-page__recents-count" hidden></span>
-      </div>
+      <h2 id="welcomeRecentsTitle" class="welcome-page__recents-title">Recent workspaces</h2>
       <ul id="welcomeRecentsList" class="welcome-page__recents-list" role="list"></ul>
-      <p id="welcomeRecentsEmpty" class="welcome-page__recents-empty hidden">No workspaces yet — open a folder or create a project.</p>
+      <p id="welcomeRecentsEmpty" class="welcome-page__recents-empty hidden">Open a folder to see it here.</p>
     </section>
   </div>
 </main>

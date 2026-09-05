@@ -57,7 +57,7 @@ The simplest approach is to back up the whole `.minnow` folder and exclude `mode
 | `updater.json` | Your update channel |
 | `logs/` | `diagnostics.jsonl` and `crash.jsonl` |
 | `worktrees/` | Git worktrees created for isolated board tasks |
-| `workspace/` | **Scratch** workspace folder (`~/.minnow/workspace`) for chats without a project root |
+| `workspace/` | **Sandbox** workspace folder (`~/.minnow/workspace`) for chats without a project root |
 | `backups/` | Brain wiki backups (created when you export or restore the wiki) |
 
 Some folders in there are scaffolded ahead of the features that fill them and stay empty. That is normal, and nothing needs cleaning up.

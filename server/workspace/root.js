@@ -4,21 +4,26 @@
  */
 
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
 import { mergeConfigMeta } from '../config/validators.js';
 import { maybeAutoApplyWorkspaceProfile } from '../profiles/handlers.js';
 import { getMinnowHome } from '../config/home.js';
-import { realpathForBoundaryCheck } from './safe-path.js';
+import {
+  isResolvedPathUnderRoot,
+  normalizePathForComparison,
+  realpathForBoundaryCheck,
+} from './safe-path.js';
 
-/** UI label for the Minnow-owned scratch sandbox (~/.minnow/workspace). */
-export const SCRATCH_WORKSPACE_LABEL = 'Scratch';
+/** User-facing label for the Minnow-owned sandbox (~/.minnow/workspace). */
+export const SCRATCH_WORKSPACE_LABEL = 'Sandbox';
 
 const SCRATCH_DIR_NAME = 'workspace';
 
-const SCRATCH_README_BODY = `# Minnow Scratch Workspace
+const SCRATCH_README_BODY = `# Minnow Sandbox
 
-This directory is Minnow's Scratch sandbox — attachments, notes, and session artifacts when no project folder is open.
+This directory is Minnow's sandbox: attachments, notes, and session artifacts when no project folder is open.
 
 - Files here stay separate from your active Code project workspace unless tools are explicitly pointed elsewhere.
 - Do not store secrets here if you sync or share ~/.minnow.
@@ -111,7 +116,48 @@ export function isScratchWorkspacePath(absPath) {
   return normalizeWorkspacePathKey(resolved) === normalizeWorkspacePathKey(scratch);
 }
 
-/** Short label for UI (folder basename, or Scratch for the sandbox). */
+/**
+ * Prefix check that still works when the candidate path is already gone.
+ * @param {string} absPath
+ * @param {string} rootDir
+ */
+function isPathUnderDir(absPath, rootDir) {
+  const resolved = path.resolve(absPath);
+  const root = path.resolve(rootDir);
+  try {
+    return isResolvedPathUnderRoot(resolved, root);
+  } catch {
+    const target = normalizePathForComparison(resolved);
+    const prefix = normalizePathForComparison(root);
+    const a = process.platform === 'win32' ? target.toLowerCase() : target;
+    const b = process.platform === 'win32' ? prefix.toLowerCase() : prefix;
+    return a === b || a.startsWith(`${b}/`);
+  }
+}
+
+/**
+ * Recents are folders the user opened or created themselves. Scratch is pinned
+ * in the picker, not stored in the MRU. Temp dirs, board worktrees, and the
+ * install root are never projects.
+ * @param {string} absPath
+ */
+export function isEligibleRecentWorkspacePath(absPath) {
+  if (!absPath || typeof absPath !== 'string' || !absPath.trim()) return false;
+  const resolved = path.resolve(absPath.trim());
+  if (isScratchWorkspacePath(resolved)) return false;
+  if (isPlaceholderWorkspacePath(resolved)) return false;
+  if (isPathUnderDir(resolved, path.join(getMinnowHome(), 'worktrees'))) return false;
+  // OS temp is full of test fixtures and worktree slots. Minnow home itself may
+  // live under temp in tests, so only reject temp paths outside that home.
+  if (isPathUnderDir(resolved, os.tmpdir()) && !isPathUnderDir(resolved, getMinnowHome())) {
+    return false;
+  }
+  const parts = resolved.split(/[\\/]/);
+  if (parts.some((seg) => seg === '.worktrees')) return false;
+  return true;
+}
+
+/** Short label for UI (folder basename, or Sandbox for the pinned home). */
 export function workspaceLabel(absPath) {
   if (isScratchWorkspacePath(absPath)) {
     return SCRATCH_WORKSPACE_LABEL;
@@ -199,12 +245,29 @@ async function persistRecentPaths(recentPaths) {
 }
 
 /**
+ * Drop ineligible MRU rows from disk (temp, worktrees, Scratch, placeholders).
+ * @returns {Promise<string[]>}
+ */
+async function pruneRecentPathsOnDisk() {
+  const stored = await loadRecentPathsFromDisk();
+  const next = stored.filter((p) => isEligibleRecentWorkspacePath(p));
+  if (next.length !== stored.length) {
+    await persistRecentPaths(next);
+  }
+  return next;
+}
+
+/**
  * Prepend a workspace path to MRU list and persist.
+ * No-ops for Scratch, worktrees, temp dirs, and placeholder install roots.
  * @param {string} absPath
  * @returns {Promise<string[]>}
  */
 export async function touchRecentWorkspacePath(absPath) {
   const resolved = path.resolve(absPath);
+  if (!isEligibleRecentWorkspacePath(resolved)) {
+    return pruneRecentPathsOnDisk();
+  }
   const existing = await loadRecentPathsFromDisk();
   const next = dedupeRecentPaths([resolved, ...existing]);
   await persistRecentPaths(next);
@@ -238,22 +301,19 @@ async function pathExistsAsDirectory(absPath) {
 }
 
 /**
- * Build recent workspace rows for GET /api/workspace (includes current path).
- * @returns {Promise<Array<{ path: string, label: string, exists: boolean, isCurrent: boolean }>>}
- */
-/**
+ * Build recent workspace rows for GET /api/workspace.
+ * Only folders the user opened or created; never prepends the current root.
  * @param {string} [currentPath] The requesting view's workspace; defaults to the global.
  */
 export async function buildRecentWorkspaceList(currentPath) {
-  const stored = await loadRecentPathsFromDisk();
+  const stored = await pruneRecentPathsOnDisk();
   const current =
     currentPath && String(currentPath).trim()
       ? path.resolve(String(currentPath).trim())
       : getDefaultWorkspaceRoot();
   const currentKey = normalizeWorkspacePathKey(current);
-  const allPaths = dedupeRecentPaths([current, ...stored]);
   const recent = [];
-  for (const p of allPaths) {
+  for (const p of stored) {
     const exists = await pathExistsAsDirectory(p);
     recent.push({
       path: p,
@@ -263,6 +323,24 @@ export async function buildRecentWorkspaceList(currentPath) {
     });
   }
   return recent;
+}
+
+/**
+ * Pinned Sandbox row for the workspace picker (not part of the MRU).
+ * @param {string} [currentPath]
+ */
+export async function buildSandboxWorkspaceItem(currentPath) {
+  const sandboxPath = getScratchWorkspacePath();
+  const current =
+    currentPath && String(currentPath).trim()
+      ? path.resolve(String(currentPath).trim())
+      : getDefaultWorkspaceRoot();
+  return {
+    path: sandboxPath,
+    label: SCRATCH_WORKSPACE_LABEL,
+    exists: await pathExistsAsDirectory(sandboxPath),
+    isCurrent: normalizeWorkspacePathKey(sandboxPath) === normalizeWorkspacePathKey(current),
+  };
 }
 
 /**
@@ -329,7 +407,6 @@ export async function ensureScratchWorkspaceRegistered() {
     });
     await writeConfigJson('config.json', merged);
   }
-  await touchRecentWorkspacePath(scratchPath);
   return scratchPath;
 }
 
@@ -338,6 +415,7 @@ export async function ensureScratchWorkspaceRegistered() {
  */
 export async function initWorkspaceRoot() {
   await ensureScratchWorkspaceRegistered();
+  await pruneRecentPathsOnDisk();
   const meta = (await readConfigJson('config.json')) ?? {};
   const saved =
     meta.workspace &&

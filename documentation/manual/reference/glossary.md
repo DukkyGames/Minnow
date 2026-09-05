@@ -52,7 +52,7 @@ Terms Minnow uses, in the sense Minnow means them.
 
 **Work agent** — A role with its own prompt, sampler and optional model: builder, planner, reviewer, researcher and others.
 
-**Workspace root** — The folder file and git tools are confined to. Set by the project you open in Code, or **Scratch** (`~/.minnow/workspace`) when you have not picked a repo yet.
+**Workspace root** — The folder file and git tools are confined to. Set by the project you open in Code, or **Sandbox** (`~/.minnow/workspace`) when you have not picked a repo yet.
 
 **Legacy routes** — `#/workspaces` is the workspace gate (same as `#/`, `#`, and `#/desktop` after [`resolveLegacyHash`](../../../src/os/router.ts)). `#/app/chat` redirects to Code chat (`#/app/code/chat`). Legacy `#/bugs` opens Issues (`#/app/issues`).
 
