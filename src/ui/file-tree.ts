@@ -61,6 +61,16 @@ export {
 const listingCache = new Map<string, ParsedListing>();
 const loadingDirs = new Set<string>();
 
+/**
+ * Root refreshes currently in flight. `renderFileTree` paints "Loading project…"
+ * whenever the root listing is missing, so a render that lands after the last
+ * refresh finished used to leave that placeholder up for good — the tree looked
+ * permanently stuck while the sibling window rendered fine. Anything above zero
+ * means a refresh is still coming; zero means nobody is going to fill the cache
+ * unless this render asks for it.
+ */
+let rootRefreshesInFlight = 0;
+
 /** Git status letters keyed by repo-relative path (MIN-198 file tree badges). */
 let gitStatusMap = new Map<string, string>();
 let gitStatusPollTimer: ReturnType<typeof setTimeout> | undefined;
@@ -792,6 +802,10 @@ export function renderFileTree(): void {
     wait.textContent = 'Loading project…';
     host.appendChild(wait);
     restoreFileTreeScrollTop(scrollTop);
+    // No refresh is running, so the placeholder would stay up forever. Kick one.
+    if (rootRefreshesInFlight === 0 && !loadingDirs.has(root)) {
+      void refreshFileTree();
+    }
     return;
   }
 
@@ -809,6 +823,19 @@ export function renderFileTree(): void {
 }
 
 export async function refreshFileTree(): Promise<void> {
+  rootRefreshesInFlight += 1;
+  try {
+    await refreshFileTreeInner();
+  } catch (err) {
+    // Never leave the "Loading project…" placeholder standing on a throw.
+    const host = document.getElementById('fileTreeHost');
+    if (host) renderTreeError(host, err instanceof Error ? err.message : String(err));
+  } finally {
+    rootRefreshesInFlight -= 1;
+  }
+}
+
+async function refreshFileTreeInner(): Promise<void> {
   const scrollTop = captureFileTreeScrollTop();
   invalidateFileTreeCache();
   if (!isFileTreeServerAvailable()) {
@@ -820,8 +847,12 @@ export async function refreshFileTree(): Promise<void> {
   loadingDirs.add(root);
   renderFileTree();
 
-  const rootResult = await fetchListing(root);
-  loadingDirs.delete(root);
+  let rootResult: ParsedListing | { error: string };
+  try {
+    rootResult = await fetchListing(root);
+  } finally {
+    loadingDirs.delete(root);
+  }
 
   if ('error' in rootResult) {
     const host = document.getElementById('fileTreeHost');

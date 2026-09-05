@@ -44,7 +44,7 @@ export function bindPreviewInstanceToElement(instanceId: string, element: HTMLEl
     return () => {};
   }
 
-  void window.minnow?.preview.instances.create(instanceId);
+  void window.minnow?.preview?.instances?.create(instanceId);
 
   const bound: BoundInstance = { element, observer: null, visible: true };
   boundInstances.set(instanceId, bound);
@@ -76,7 +76,7 @@ export function unbindPreviewInstance(instanceId: string): void {
   if (!existing) return;
   existing.observer?.disconnect();
   boundInstances.delete(instanceId);
-  void window.minnow?.preview.hide(undefined, instanceId);
+  void window.minnow?.preview?.hide(undefined, instanceId);
 }
 
 /** Test helper — clear all bound instances between cases. */

@@ -67,7 +67,13 @@ export class ShellWindowRegistry {
     return this.byWindowId.get(windowId);
   }
 
-  /** Point an existing window at a different folder (the in-window switch). */
+  /**
+   * Point an existing window at a different folder.
+   *
+   * Not used by the folder switch: `additionalArguments` are fixed at window
+   * creation, so switching folders builds a replacement window and destroys the
+   * old one rather than re-pointing this record.
+   */
   retarget(windowId: number, workspacePath: string): ShellWindowRecord | undefined {
     const record = this.byWindowId.get(windowId);
     if (!record) return undefined;

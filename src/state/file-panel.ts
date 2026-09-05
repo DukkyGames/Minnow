@@ -4,6 +4,7 @@
 
 import { detectConfigServer } from '../config/storage-mode';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import { readWorkspaceMapRow } from '../lib/workspace-scoped-map';
 import { getWorkspacePath } from './workspace';
 
 /** Workspace file or arbitrary URL shown in the preview panel. */
@@ -581,9 +582,14 @@ function normalizeFilePanelBlock(raw: unknown): FilePanelState {
   };
 }
 
+/**
+ * Row key for this workspace, or `''` when no folder is bound yet (a window
+ * still at the workspace gate). It used to fall back to `'__default__'`, which
+ * the server ran through `path.resolve()` and stored as `<cwd>/__default__` —
+ * a junk row that no reader ever looks up again.
+ */
 function workspacePanelKey(workspacePath?: string): string {
-  const normalized = normalizeWorkspacePath(workspacePath ?? getWorkspacePath());
-  return normalized || '__default__';
+  return normalizeWorkspacePath(workspacePath ?? getWorkspacePath());
 }
 
 function resolveFilePanelRaw(
@@ -594,7 +600,9 @@ function resolveFilePanelRaw(
   if (workspace && typeof workspace === 'object') {
     const byPath = (workspace as Record<string, unknown>).filePanelByPath;
     if (byPath && typeof byPath === 'object') {
-      const row = (byPath as Record<string, unknown>)[workspaceKey];
+      // Loose match: the server rewrites the key with its own normalizer, so an
+      // exact lookup never finds the row this client just wrote.
+      const row = readWorkspaceMapRow(byPath as Record<string, unknown>, workspaceKey);
       if (row && typeof row === 'object') {
         return row;
       }
@@ -758,6 +766,8 @@ export async function saveFilePanelPrefs(): Promise<void> {
   if (!serverUp) return;
 
   const key = panelWorkspaceKey || workspacePanelKey();
+  // No folder bound yet (workspace gate): there is nothing to scope the row to.
+  if (!key) return;
   panelWorkspaceKey = key;
   await fetch('/api/config/meta', {
     method: 'PUT',
@@ -773,6 +783,7 @@ export async function persistFilePanelForWorkspace(workspacePath: string): Promi
   const serverUp = await detectConfigServer();
   if (!serverUp) return;
   const key = workspacePanelKey(workspacePath);
+  if (!key) return;
   await fetch('/api/config/meta', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

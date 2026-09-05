@@ -145,7 +145,7 @@ export function hideAllRightSplitPanesDom(): void {
   hidePreviewPaneDom();
   hideViewerPaneDom();
   hideRightPaneColumnDom();
-  void window.minnow?.preview.hide();
+  void window.minnow?.preview?.hide();
 }
 
 /** Unhide the pane matching persisted rightPaneMode when state and DOM diverge (e.g. reload applied viewer-open before preview restore, or Code foreground). */
@@ -177,7 +177,7 @@ export function reconcileRightSplitDomWithState(): void {
   if (mode === 'viewer' || mode === 'split') {
     hidePreviewPaneDom();
     document.getElementById('previewPaneSecondary')?.classList.add('hidden');
-    void window.minnow?.preview.hide();
+    void window.minnow?.preview?.hide();
     if (!isRightPaneDomVisible('viewer')) {
       document.getElementById('fileViewerPane')?.classList.remove('hidden');
     }
@@ -375,7 +375,7 @@ export function showViewerSplit(): void {
     return;
   }
   hidePreviewPaneDom();
-  void window.minnow?.preview.hide();
+  void window.minnow?.preview?.hide();
   showRightPaneColumnDom();
   const pane = document.getElementById('fileViewerPane');
   if (pane) pane.classList.remove('hidden');
@@ -441,7 +441,7 @@ export function hidePreviewSplit(): void {
     return;
   }
   hidePreviewPaneDom();
-  void window.minnow?.preview.hide();
+  void window.minnow?.preview?.hide();
   hideRightPaneColumnDom();
   clearChatColumnDragCollapsed();
   patchFilePanelState({ rightPaneMode: null, viewerOpen: false, previewSource: null });

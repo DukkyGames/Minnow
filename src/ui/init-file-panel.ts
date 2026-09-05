@@ -197,10 +197,17 @@ export async function initFilePanel(): Promise<void> {
 
   const state = getFilePanelState();
   if (shouldAutoRestoreViewerSplitOnBoot()) {
-    if (state.openViewerTabs.length > 0) {
-      await restoreViewerTabsFromPrefs(state.openViewerTabs, state.activeViewerTab);
-    } else if (state.viewerOpen && state.selectedPath) {
-      await openFileInViewer(state.selectedPath);
+    // Persisted tabs are the one step here that reopens *files*, so it is the
+    // one that can fail on paths this workspace does not have. Everything below
+    // (viewer controls, tree CRUD, git panel, status poll) must still wire.
+    try {
+      if (state.openViewerTabs.length > 0) {
+        await restoreViewerTabsFromPrefs(state.openViewerTabs, state.activeViewerTab);
+      } else if (state.viewerOpen && state.selectedPath) {
+        await openFileInViewer(state.selectedPath);
+      }
+    } catch (err) {
+      console.error('[file-panel] could not restore persisted editor tabs', err);
     }
   }
   if (getOpenViewerTabPaths().length === 0) {

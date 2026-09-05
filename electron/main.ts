@@ -743,7 +743,27 @@ async function callOpenWorkspaceApi(
   });
 }
 
+/**
+ * Wait for the runtime to pick a transport before deciding how to reach it.
+ *
+ * `inProcessServer` is only assigned once `resolveLoadUrl()` has started the
+ * packaged server, and `bootstrapInner` deliberately does not await that — so a
+ * claim fired from `createShellWindow` used to see `inProcessServer === null` in
+ * a packaged build and POST to the *dev* port, which nothing is listening on.
+ * The folder then never entered the open-workspace registry and every request
+ * from that window fell back to the persisted global.
+ */
+async function whenServerTransportKnown(): Promise<void> {
+  try {
+    await shellLoadUrl();
+  } catch {
+    // Load-URL failures surface when a window tries to load; the claim below
+    // still has the HTTP fallback to try.
+  }
+}
+
 async function claimWorkspaceOnServer(workspacePath: string): Promise<void> {
+  await whenServerTransportKnown();
   if (inProcessServer) {
     try {
       const mod = await importServerModule<{ openWorkspace: (p: string) => string }>(
@@ -763,6 +783,7 @@ async function claimWorkspaceOnServer(workspacePath: string): Promise<void> {
 }
 
 async function releaseWorkspaceOnServer(workspacePath: string): Promise<void> {
+  await whenServerTransportKnown();
   if (inProcessServer) {
     try {
       const mod = await importServerModule<{ closeWorkspace: (p: string) => boolean }>(
@@ -839,8 +860,12 @@ async function openOrFocusWorkspaceWindow(
     (win) => !shellWindows.get(win.id)?.workspacePath,
   );
   if (gateWindow) {
-    await retargetShellWindow(gateWindow, workspacePath);
-    focusWindow(gateWindow);
+    // The gate window is destroyed by the retarget, so focus whatever replaced
+    // it rather than a handle that is already gone.
+    const retargeted = await retargetShellWindow(gateWindow, workspacePath);
+    if (!retargeted.ok) return retargeted;
+    const adopted = shellWindows.findByWorkspace(workspacePath);
+    focusWindow(adopted ? BrowserWindow.fromId(adopted.windowId) : null);
     return { ok: true, focused: false };
   }
 
@@ -873,15 +898,23 @@ async function retargetShellWindow(
   }
 
   const previous = shellWindows.get(win.id)?.workspacePath ?? '';
-  shellWindows.retarget(win.id, workspacePath);
-  await claimWorkspaceOnServer(workspacePath);
-  if (previous && previous !== workspacePath) {
-    await releaseWorkspaceOnServer(previous);
-  }
 
   // additionalArguments are fixed at window creation, so a retarget needs a new
   // window rather than a reload of this one.
-  await openShellWindow({ workspacePath, replacing: win });
+  //
+  // The replacement claims the folder itself in `createShellWindow`, and
+  // `openShellWindow` unregisters the outgoing window before destroying it — so
+  // its `closed` handler releases nothing. Claiming here as well left the new
+  // folder on refcount 2 and pinned inside the filesystem allowlist forever;
+  // releasing the old folder is this function's only registry work.
+  try {
+    await openShellWindow({ workspacePath, replacing: win });
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+  if (previous && previous !== workspacePath) {
+    await releaseWorkspaceOnServer(previous);
+  }
   return { ok: true };
 }
 

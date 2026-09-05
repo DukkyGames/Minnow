@@ -4,6 +4,7 @@
 
 import { TERMINAL_PANEL_MIN_HEIGHT_PX } from '../ui/terminal-layout';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import { readWorkspaceMapRow } from '../lib/workspace-scoped-map';
 import { getWorkspacePath } from '../state/workspace';
 
 export interface TerminalTabMeta {
@@ -47,9 +48,27 @@ const DEFAULT_TERMINAL_META: TerminalMeta = {
 let cached: TerminalMeta | null = null;
 let terminalWorkspaceKey = '';
 
+/**
+ * Row key for this workspace, or `''` when no folder is bound yet. The old
+ * `'__default__'` fallback was resolved by the server into `<cwd>/__default__`,
+ * a junk row nothing reads back.
+ */
 function workspaceTerminalKey(workspacePath?: string): string {
-  const normalized = normalizeWorkspacePath(workspacePath ?? getWorkspacePath());
-  return normalized || '__default__';
+  return normalizeWorkspacePath(workspacePath ?? getWorkspacePath());
+}
+
+/**
+ * Meta body for a terminal save. The per-folder slice is omitted when no folder
+ * is bound, so a gate window never writes a bogus row.
+ */
+function terminalMetaBody(
+  key: string,
+  globalSlice: Record<string, unknown>,
+  workspaceSlice: Record<string, unknown>,
+): Record<string, unknown> {
+  return key
+    ? { terminal: globalSlice, workspace: { terminalByPath: { [key]: workspaceSlice } } }
+    : { terminal: globalSlice };
 }
 
 function normalizeTerminalWorkspaceSlice(raw: unknown): Partial<TerminalMeta> {
@@ -90,7 +109,9 @@ function mergeTerminalFromMeta(
   if (workspace && typeof workspace === 'object') {
     const byPath = (workspace as Record<string, unknown>).terminalByPath;
     if (byPath && typeof byPath === 'object') {
-      const row = (byPath as Record<string, unknown>)[workspaceKey];
+      // Loose match: the server rewrites the key with its own path normalizer,
+      // so an exact lookup never finds the row this client wrote.
+      const row = readWorkspaceMapRow(byPath as Record<string, unknown>, workspaceKey);
       slice = normalizeTerminalWorkspaceSlice(row);
     }
   }
@@ -223,10 +244,7 @@ export async function saveTerminalMeta(patch: Partial<TerminalMeta>): Promise<vo
   await fetch('/api/config/meta', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      terminal: globalSlice,
-      workspace: { terminalByPath: { [key]: workspaceSlice } },
-    }),
+    body: JSON.stringify(terminalMetaBody(key, globalSlice, workspaceSlice)),
   });
 }
 
@@ -255,10 +273,7 @@ export function saveTerminalMetaKeepalive(patch: Partial<TerminalMeta>): void {
     void fetch('/api/config/meta', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        terminal: globalSlice,
-        workspace: { terminalByPath: { [key]: workspaceSlice } },
-      }),
+      body: JSON.stringify(terminalMetaBody(key, globalSlice, workspaceSlice)),
       keepalive: true,
     });
   } catch {}
@@ -283,10 +298,7 @@ export async function persistTerminalForWorkspace(workspacePath: string): Promis
   await fetch('/api/config/meta', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      terminal: globalSlice,
-      workspace: { terminalByPath: { [key]: workspaceSlice } },
-    }),
+    body: JSON.stringify(terminalMetaBody(key, globalSlice, workspaceSlice)),
   });
 }
 

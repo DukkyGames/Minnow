@@ -156,6 +156,9 @@ const patchHistoryOmittedChatIds = new Set<string>();
 function addDirtyChatId(chatId: string): void {
   dirtyChatIds.add(chatId);
   patchHistoryOmittedChatIds.delete(chatId);
+  // A real edit landed on a row the describe only meant to restate, so it is no
+  // longer safe to drop on a conflict.
+  describeOnlyChatIds.delete(chatId);
   // This chat no longer claims to be clean, so it is not the verifier's business.
   dirtyTrackingShadow.delete(chatId);
 }
@@ -165,6 +168,13 @@ const deletedChatIds = new Set<string>();
 const dirtyGroupIds = new Set<string>();
 /** Explicit group deletes since last successful flush (PATCH deleteGroupIds). */
 const deletedGroupIds = new Set<string>();
+/**
+ * Rows the last whole-state describe added purely to describe the session — no
+ * local edit backs them, so they are exactly the rows another window may own.
+ * See {@link markEveryChatDirty} and {@link dropWholeStateDescribe}.
+ */
+const describeOnlyChatIds = new Set<string>();
+const describeOnlyGroupIds = new Set<string>();
 /** Session scalars (activeId, sidebar, maps, …) changed since last successful flush. */
 let sessionScalarsDirty = false;
 /**
@@ -294,6 +304,8 @@ function clearSessionDirtySets(): void {
   deletedChatIds.clear();
   dirtyGroupIds.clear();
   deletedGroupIds.clear();
+  describeOnlyChatIds.clear();
+  describeOnlyGroupIds.clear();
   sessionScalarsDirty = false;
 }
 
@@ -325,6 +337,7 @@ export function markGroupDirty(groupId: string): void {
   if (!id) return;
   deletedGroupIds.delete(id);
   dirtyGroupIds.add(id);
+  describeOnlyGroupIds.delete(id);
   bumpSessionDirtyEpoch();
 }
 
@@ -1754,17 +1767,41 @@ function hasUnloadedChatHistories(state: SessionState): boolean {
  * Used when the dirty sets are untrusted but a PUT would be unsafe.
  */
 function markEveryChatDirty(state: SessionState): void {
+  describeOnlyChatIds.clear();
+  describeOnlyGroupIds.clear();
   for (const chat of state.chats) {
     // Nothing marked this one — it is only here to describe the session, so skip its transcript.
-    if (!dirtyChatIds.has(chat.id)) patchHistoryOmittedChatIds.add(chat.id);
+    if (!dirtyChatIds.has(chat.id)) {
+      patchHistoryOmittedChatIds.add(chat.id);
+      describeOnlyChatIds.add(chat.id);
+    }
     dirtyChatIds.add(chat.id);
     dirtyTrackingShadow.delete(chat.id);
   }
   for (const group of state.groups ?? []) {
+    if (!dirtyGroupIds.has(group.id)) describeOnlyGroupIds.add(group.id);
     dirtyGroupIds.add(group.id);
   }
   sessionScalarsDirty = true;
   bumpSessionDirtyEpoch();
+}
+
+/**
+ * Another window advanced the store while this one was still describing its
+ * boot snapshot. Forget the describe-only rows — re-sending them would push this
+ * window's stale copies over the other window's edits and revive chats it
+ * deleted — and keep whatever this window genuinely changed.
+ */
+function dropWholeStateDescribe(): void {
+  for (const id of describeOnlyChatIds) {
+    dirtyChatIds.delete(id);
+    patchHistoryOmittedChatIds.delete(id);
+  }
+  for (const id of describeOnlyGroupIds) {
+    dirtyGroupIds.delete(id);
+  }
+  describeOnlyChatIds.clear();
+  describeOnlyGroupIds.clear();
 }
 
 // ── Save ─────────────────────────────────────────────────────────────────────
@@ -1852,6 +1889,18 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
          * the unsaved edits this flush exists to persist.
          */
         sessionRevision = err.revision ?? null;
+        if (patchCoversWholeState) {
+          /*
+           * ...except for the boot-time whole-state describe, which carries rows
+           * this window never edited (every other folder's chats, frozen at this
+           * window's boot). Re-sending it would overwrite the other window's
+           * edits and revive chats it deleted. Drop the describe, keep the real
+           * edits, and stop re-describing: the store is authoritative for
+           * everything this window has not touched.
+           */
+          dropWholeStateDescribe();
+          sessionPatchDirtySetsReady = true;
+        }
         if (typeof document !== 'undefined') {
           setStatus('spin', 'Sessions changed in another window — retrying save');
         }
@@ -1883,7 +1932,10 @@ export function saveSessionsNow(options?: SaveSessionsOptions): SaveSessionsResu
     if (usePatch) {
       const delta = buildSessionsPatchDelta(sessionState);
       if (sessionRevision != null) delta.baseRevision = sessionRevision;
-      inFlightSessionSave = patchSessions(delta)
+      inFlightSessionSave = patchSessions(delta, {
+        // A describe must not be re-based onto another window's newer revision.
+        rebaseOnConflict: !patchCoversWholeState,
+      })
         .then((revision) => finishSave(true, revision))
         .catch((err) => {
           reportSaveError(err);

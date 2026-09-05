@@ -301,11 +301,21 @@ const SESSIONS_CONFLICT_RETRIES = 2;
  * guard still stand behind this — do not relax either. They are what stopped the
  * 2026-08 history wipe, and a second concurrent writer is precisely the
  * condition they defend against.
+ *
+ * ⚠️ The "chats this client owns" premise fails for one body: the whole-state
+ * describe a lazy boot sends before its dirty sets are trusted. That one carries
+ * *every* chat, including rows belonging to another window's folder, frozen at
+ * this window's boot. Re-basing it onto a newer revision would push this
+ * window's stale copy over edits the other window just made — and would revive
+ * chats it deleted. Such a write passes `rebaseOnConflict: false` so the 409
+ * stands and the caller drops the describe instead.
  */
 async function sendSessionsWrite(
   method: 'PUT' | 'PATCH',
   body: Record<string, unknown>,
+  options: { rebaseOnConflict?: boolean } = {},
 ): Promise<number | undefined> {
+  const rebaseOnConflict = options.rebaseOnConflict !== false;
   let payload = body;
   for (let attempt = 0; ; attempt += 1) {
     const res = await fetch('/api/config/sessions', {
@@ -317,6 +327,7 @@ async function sendSessionsWrite(
       return await parseSessionsWriteResponse(res);
     } catch (err) {
       const rebased =
+        rebaseOnConflict &&
         err instanceof SessionsRevisionConflictError &&
         attempt < SESSIONS_CONFLICT_RETRIES &&
         typeof err.revision === 'number' &&
@@ -335,9 +346,18 @@ export async function putSessions(
   return sendSessionsWrite('PUT', { ...state, ...options });
 }
 
-/** PATCH /api/config/sessions — partial upsert / explicit deletes. */
-export async function patchSessions(delta: SessionsPatchDelta): Promise<number | undefined> {
-  return sendSessionsWrite('PATCH', delta as unknown as Record<string, unknown>);
+/**
+ * PATCH /api/config/sessions — partial upsert / explicit deletes.
+ *
+ * Pass `rebaseOnConflict: false` for a body that describes chats this client
+ * does not own (the lazy-boot whole-state describe); the caller then drops the
+ * describe on 409 rather than overwriting another window's edits.
+ */
+export async function patchSessions(
+  delta: SessionsPatchDelta,
+  options: { rebaseOnConflict?: boolean } = {},
+): Promise<number | undefined> {
+  return sendSessionsWrite('PATCH', delta as unknown as Record<string, unknown>, options);
 }
 
 /**

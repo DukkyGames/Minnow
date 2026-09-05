@@ -149,10 +149,15 @@ import {
   saveTerminalMeta,
 } from '../config/terminal-meta';
 import { fetchShellProfiles } from '../api/terminal-pty';
+import { findWorkspaceMapKey, readWorkspaceMapRow } from '../lib/workspace-scoped-map';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Normalize workspace path keys for shell profile overrides (matches server). */
+/**
+ * Key this client writes for a shell-profile override. The server rewrites it
+ * with `normalizeWorkspacePathKey` (resolve + realpath + lowercase), so reads
+ * and deletes match loosely instead of trusting this exact spelling.
+ */
 function workspaceShellProfileKey(absPath: string): string {
   const trimmed = absPath.trim();
   if (!trimmed) return '';
@@ -265,7 +270,10 @@ async function appendTerminalControls(mount: HTMLElement): Promise<void> {
           typeof workspaceBody.path === 'string' ? workspaceBody.path : '';
         if (workspacePath) {
           const workspaceKey = workspaceShellProfileKey(workspacePath);
-          const workspaceOverride = meta.workspaceShellProfiles?.[workspaceKey];
+          const workspaceOverride = readWorkspaceMapRow(
+            meta.workspaceShellProfiles,
+            workspacePath,
+          );
           const { row: workspaceShellRow, select: workspaceShellSelect } =
             createSettingsSelectRow('Shell for this workspace', {
               options: [
@@ -284,10 +292,12 @@ async function appendTerminalControls(mount: HTMLElement): Promise<void> {
               const current = await loadTerminalMeta();
               const nextMap = { ...(current.workspaceShellProfiles ?? {}) };
               const selected = workspaceShellSelect.value;
-              if (!selected) {
-                delete nextMap[workspaceKey];
-              } else {
-                nextMap[workspaceKey] = selected;
+              // Drop the row under the key the server actually stored, not this
+              // client's spelling of it — otherwise "Use global default" never took.
+              const storedKey = findWorkspaceMapKey(nextMap, workspacePath);
+              if (storedKey !== undefined) delete nextMap[storedKey];
+              if (selected) {
+                nextMap[storedKey ?? workspaceKey] = selected;
               }
               try {
                 await saveTerminalMeta({ workspaceShellProfiles: nextMap });
