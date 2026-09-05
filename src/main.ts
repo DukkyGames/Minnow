@@ -526,6 +526,8 @@ async function startApp(): Promise<void> {
   if (isOsShellEnabled()) {
     initOsRouter();
   }
+  const { initWindowClosePromptBridge } = await import('./ui/window-close-prompt');
+  initWindowClosePromptBridge();
   initElectronTrayBridge();
   void initApp();
 }

@@ -387,6 +387,21 @@ export type MinnowTrayCommand =
 /** Preference for closing one of several open windows. */
 export type MinnowWindowCloseAction = 'ask' | 'close' | 'background';
 
+/** Copy for the in-app close-workspace dialog (mirrors electron/window-close-prompt.ts). */
+export interface MinnowWindowClosePrompt {
+  requestId: string;
+  title: string;
+  heading: string;
+  folder: string;
+  detail: string;
+  checkboxLabel: string;
+}
+
+export interface MinnowWindowClosePromptReply {
+  action: 'close' | 'background' | 'cancel';
+  remember: boolean;
+}
+
 export interface MinnowLoginItemSnapshot {
   openAtLogin: boolean;
   supported: boolean;
@@ -407,6 +422,14 @@ export interface MinnowTrayApi {
   setLoginItem(enabled: boolean): Promise<MinnowLoginItemSnapshot>;
   onCommand(callback: (command: MinnowTrayCommand) => void): () => void;
   onCloseToTrayChanged(callback: (enabled: boolean) => void): () => void;
+  /** In-app close-workspace dialog. Absent on an older preload. */
+  onWindowClosePrompt?(
+    callback: (payload: MinnowWindowClosePrompt) => void,
+  ): () => void;
+  replyWindowClosePrompt?(
+    requestId: string,
+    result: MinnowWindowClosePromptReply,
+  ): void;
   getZoomPercent(): Promise<number>;
   setZoomPercent(percent: number): Promise<number>;
   onZoomPercentChanged(callback: (percent: number) => void): () => void;

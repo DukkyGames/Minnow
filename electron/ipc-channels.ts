@@ -92,6 +92,10 @@ export const TRAY_GET_LOGIN_ITEM = 'minnow:tray:get-login-item';
 export const TRAY_SET_LOGIN_ITEM = 'minnow:tray:set-login-item';
 export const TRAY_COMMAND = 'minnow:tray:command';
 export const TRAY_CLOSE_TO_TRAY_CHANGED = 'minnow:tray:close-to-tray-changed';
+/** Main asks the renderer to show the in-app close-workspace dialog. */
+export const WINDOW_CLOSE_PROMPT = 'minnow:window:close-prompt';
+/** Renderer answers that dialog. */
+export const WINDOW_CLOSE_PROMPT_RESULT = 'minnow:window:close-prompt-result';
 export const SHELL_GET_ZOOM_PERCENT = 'minnow:shell:get-zoom-percent';
 export const SHELL_SET_ZOOM_PERCENT = 'minnow:shell:set-zoom-percent';
 export const SHELL_ZOOM_PERCENT_CHANGED = 'minnow:shell:zoom-percent-changed';

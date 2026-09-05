@@ -280,9 +280,13 @@ html.mn-phone .app-dialog-panel__actions {
   align-items: stretch;
 }
 
-html.mn-phone .app-dialog-panel__btn {
-  width: 100%;
-  min-height: var(--touch-min);
+html.mn-phone .app-dialog-panel__footer {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+html.mn-phone .app-dialog-panel__footer .app-dialog-panel__actions {
+  margin-left: 0;
 }
 
 /* ---------- form controls ---------- */

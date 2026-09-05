@@ -56,6 +56,13 @@ import {
   type WindowCloseAction,
 } from './tray-close.js';
 import { workspaceMenuLabel, type TrayWorkspaceEntry } from './tray-workspaces.js';
+import {
+  buildWindowClosePromptCopy,
+  formatNativeWindowCloseDetail,
+  parseWindowClosePromptIpc,
+  type WindowClosePromptCopy,
+  type WindowClosePromptReply,
+} from './window-close-prompt.js';
 import { revealAbsolutePathInExplorer } from './shell-reveal.js';
 import { setAfkBoardPowerGuardActive } from './afk-power-guard.js';
 import {
@@ -142,6 +149,62 @@ function trayStateFor(windowId: number): { ready: boolean; queue: TrayRendererCo
     trayReadyByWindow.set(windowId, entry);
   }
   return entry;
+}
+
+let closePromptSeq = 0;
+const pendingClosePrompts = new Map<
+  number,
+  { requestId: string; resolve: (reply: WindowClosePromptReply | null) => void }
+>();
+
+function settleClosePrompt(
+  windowId: number,
+  requestId: string,
+  reply: WindowClosePromptReply | null,
+): void {
+  const pending = pendingClosePrompts.get(windowId);
+  if (!pending || pending.requestId !== requestId) return;
+  pendingClosePrompts.delete(windowId);
+  pending.resolve(reply);
+}
+
+/**
+ * Ask the SPA to show the Minnow close dialog. Resolves `null` if send fails
+ * so the native MessageBox can still run.
+ */
+function askRendererWindowClose(
+  win: BrowserWindow,
+  copy: WindowClosePromptCopy,
+): Promise<WindowClosePromptReply | null> {
+  return new Promise((resolve) => {
+    if (win.isDestroyed() || win.webContents.isDestroyed()) {
+      resolve(null);
+      return;
+    }
+    const requestId = `wcp-${win.id}-${++closePromptSeq}`;
+    const previous = pendingClosePrompts.get(win.id);
+    if (previous) {
+      previous.resolve({ action: 'cancel', remember: false });
+      pendingClosePrompts.delete(win.id);
+    }
+
+    const onClosed = () => {
+      settleClosePrompt(win.id, requestId, { action: 'cancel', remember: false });
+    };
+    pendingClosePrompts.set(win.id, {
+      requestId,
+      resolve: (reply) => {
+        win.removeListener('closed', onClosed);
+        resolve(reply);
+      },
+    });
+    win.once('closed', onClosed);
+    try {
+      win.webContents.send(channels.WINDOW_CLOSE_PROMPT, { requestId, ...copy });
+    } catch {
+      settleClosePrompt(win.id, requestId, null);
+    }
+  });
 }
 
 /** Every live shell window, most recently focused first. */
@@ -370,6 +433,13 @@ function registerIpcHandlers(): void {
     if (!win || win.isDestroyed()) return;
     trayStateFor(win.id).ready = true;
     flushQueuedTrayCommands(win);
+  });
+
+  ipcMain.on(channels.WINDOW_CLOSE_PROMPT_RESULT, (event, payload: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) return;
+    const parsed = parseWindowClosePromptIpc(payload);
+    settleClosePrompt(win.id, parsed.requestId, parsed);
   });
 
   ipcMain.handle(channels.TRAY_GET_CLOSE_TO_TRAY, () => closeToTrayEnabled);
@@ -610,42 +680,52 @@ function requestExplicitQuit(): void {
 
 // ── Tray ─────────────────────────────────────────────────────────────────────
 
+async function persistWindowCloseAnswer(
+  answer: WindowClosePromptReply,
+): Promise<WindowClosePromptReply> {
+  if (answer.remember && answer.action !== 'cancel') {
+    windowCloseAction = await writeWindowCloseAction(answer.action);
+  }
+  return answer;
+}
+
 /**
  * Ask what closing one of several windows should do.
  *
- * Modal to the window being closed, so the answer is unambiguous when several
- * are open. "Remember" writes the answer to `config.json`; the Desktop settings
- * section can set it back to asking.
+ * Prefers the in-app Minnow dialog in that window. Native MessageBox is only
+ * used when the renderer is not ready yet. "Remember" writes the answer to
+ * `config.json`; the Desktop settings section can set it back to asking.
  */
 async function promptWindowClose(
   win: BrowserWindow,
-): Promise<{ action: 'close' | 'background' | 'cancel'; remember: boolean }> {
+): Promise<WindowClosePromptReply> {
   const record = shellWindows.get(win.id);
   const folder = record?.workspacePath?.trim() ?? '';
   const name = folder ? workspaceMenuLabel(folder) : 'this window';
+  const copy = buildWindowClosePromptCopy(folder, name);
+
+  if (!win.isDestroyed() && trayStateFor(win.id).ready) {
+    restoreShellWindowFocus(win);
+    const inApp = await askRendererWindowClose(win, copy);
+    if (inApp) return persistWindowCloseAnswer(inApp);
+  }
 
   const { response, checkboxChecked } = await dialog.showMessageBox(win, {
     type: 'question',
     buttons: ['Close workspace', 'Keep in background', 'Cancel'],
-    defaultId: 0,
+    defaultId: 1,
     cancelId: 2,
-    title: 'Close workspace?',
-    message: `Close ${name}?`,
-    detail: folder
-      ? `${folder}
-
-Keeping it in the background leaves its chats and agents running and reachable from the tray. Closing it stops them and drops the folder from the next launch.`
-      : 'Keeping it in the background leaves it running and reachable from the tray.',
-    checkboxLabel: 'Do this every time',
+    title: copy.title,
+    message: copy.heading,
+    detail: formatNativeWindowCloseDetail(copy),
+    checkboxLabel: copy.checkboxLabel,
     checkboxChecked: false,
     noLink: true,
   });
 
-  const action = response === 0 ? 'close' : response === 1 ? 'background' : 'cancel';
-  if (checkboxChecked && action !== 'cancel') {
-    windowCloseAction = await writeWindowCloseAction(action);
-  }
-  return { action, remember: checkboxChecked };
+  const action: WindowClosePromptReply['action'] =
+    response === 0 ? 'close' : response === 1 ? 'background' : 'cancel';
+  return persistWindowCloseAnswer({ action, remember: checkboxChecked === true });
 }
 
 function ensureTrayManager(): TrayManager {

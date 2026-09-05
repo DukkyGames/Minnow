@@ -33,6 +33,8 @@ You will usually also get the **first-run setup wizard**: a short guided flow fo
 
 Closing the window does **not** quit Minnow. By default it hides to the system tray so chats, agents, scheduled jobs and the tool server keep running. That is deliberate: a long agent run should survive you closing the window.
 
+If several workspace windows are open, closing one asks whether to **close that workspace** (stop its chats and agents, and drop the folder from the next launch) or **keep it in the background**. The prompt is the same Minnow dialog used elsewhere in the app. Check **Do this every time** to skip the question until you change **Closing one of several windows** under Desktop app.
+
 The tray menu has Open, New chat, current agent/model status, unload local models, Settings, and launch-at-startup. **Quit Minnow** from the tray does a full shutdown.
 
 Change this under **Settings → General → Desktop app**:

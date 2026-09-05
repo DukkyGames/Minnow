@@ -29,12 +29,32 @@ export interface AppPromptOptions {
   placeholder?: string;
 }
 
-type DialogKind = 'alert' | 'confirm' | 'prompt';
+/** Multi-button dialog with an optional remember-style checkbox. */
+export interface AppChoiceOptions {
+  title?: string;
+  message: string;
+  body?: HTMLElement;
+  buttons: AppDialogButton[];
+  /** Escape and overlay-cancel map to this button id (default `cancel`). */
+  cancelId?: string;
+  /** Which action receives initial focus. */
+  defaultFocusId?: string;
+  checkboxLabel?: string;
+  checkboxChecked?: boolean;
+}
+
+export interface AppChoiceResult {
+  id: string;
+  checkboxChecked: boolean;
+}
+
+type DialogKind = 'alert' | 'confirm' | 'prompt' | 'choice';
 
 type PendingDialog =
   | { kind: 'alert'; resolve: () => void }
   | { kind: 'confirm'; resolve: (value: boolean) => void }
-  | { kind: 'prompt'; resolve: (value: string | null) => void };
+  | { kind: 'prompt'; resolve: (value: string | null) => void }
+  | { kind: 'choice'; resolve: (value: AppChoiceResult) => void; cancelId: string };
 
 const OVERLAY_ID = 'appDialogOverlay';
 const PANEL_ID = 'appDialogPanel';
@@ -47,6 +67,10 @@ let titleEl: HTMLHeadingElement | null = null;
 let messageEl: HTMLParagraphElement | null = null;
 let bodyEl: HTMLDivElement | null = null;
 let inputEl: HTMLInputElement | null = null;
+let footerEl: HTMLElement | null = null;
+let checkboxRowEl: HTMLLabelElement | null = null;
+let checkboxEl: HTMLInputElement | null = null;
+let checkboxTextEl: HTMLSpanElement | null = null;
 let actionsEl: HTMLElement | null = null;
 let open = false;
 let chromePopoverRegistered = false;
@@ -103,10 +127,26 @@ function ensureShell(): void {
   inputEl.className = 'app-dialog-panel__input';
   inputEl.hidden = true;
 
+  footerEl = document.createElement('div');
+  footerEl.className = 'app-dialog-panel__footer';
+
+  checkboxRowEl = document.createElement('label');
+  checkboxRowEl.className = 'app-dialog-panel__remember';
+  checkboxRowEl.hidden = true;
+
+  checkboxEl = document.createElement('input');
+  checkboxEl.type = 'checkbox';
+  checkboxEl.id = 'appDialogRemember';
+  checkboxRowEl.htmlFor = checkboxEl.id;
+
+  checkboxTextEl = document.createElement('span');
+  checkboxRowEl.append(checkboxEl, checkboxTextEl);
+
   actionsEl = document.createElement('div');
   actionsEl.className = 'app-dialog-panel__actions';
 
-  panelEl.append(titleEl, messageEl, bodyEl, inputEl, actionsEl);
+  footerEl.append(checkboxRowEl, actionsEl);
+  panelEl.append(titleEl, messageEl, bodyEl, inputEl, footerEl);
   overlayEl.appendChild(panelEl);
   document.body.appendChild(overlayEl);
 
@@ -162,6 +202,8 @@ function closeDialog(): void {
     inputEl.hidden = true;
     inputEl.value = '';
   }
+  if (checkboxRowEl) checkboxRowEl.hidden = true;
+  if (checkboxEl) checkboxEl.checked = false;
 }
 
 function settleDialog(): void {
@@ -216,6 +258,14 @@ function openDialogShell(
     }
     if (pending.kind === 'confirm') {
       pending.resolve(false);
+      settleDialog();
+      return;
+    }
+    if (pending.kind === 'choice') {
+      pending.resolve({
+        id: pending.cancelId,
+        checkboxChecked: checkboxEl?.checked === true,
+      });
       settleDialog();
       return;
     }
@@ -352,6 +402,54 @@ export function appPrompt(
   return showPromptDialog({ message, defaultValue, ...options });
 }
 
+/** Ask the user to pick one of several actions. */
+export function appChoice(options: AppChoiceOptions): Promise<AppChoiceResult> {
+  return showChoiceDialog(options);
+}
+
+function showChoiceDialog(options: AppChoiceOptions): Promise<AppChoiceResult> {
+  const title = options.title ?? 'Confirm';
+  const cancelId = options.cancelId ?? 'cancel';
+  const buttons = options.buttons.filter((button) => button.id.trim());
+  if (buttons.length === 0) {
+    return Promise.resolve({ id: cancelId, checkboxChecked: false });
+  }
+
+  return enqueueDialog(
+    () =>
+      new Promise((resolve) => {
+        pending = { kind: 'choice', resolve, cancelId };
+        openDialogShell('choice', title, options.message, options.body);
+        if (checkboxRowEl && checkboxEl && checkboxTextEl) {
+          const label = options.checkboxLabel?.trim() ?? '';
+          checkboxRowEl.hidden = !label;
+          checkboxTextEl.textContent = label;
+          checkboxEl.checked = options.checkboxChecked === true;
+        }
+        renderButtons(buttons, (id) => {
+          if (pending?.kind !== 'choice') return;
+          pending.resolve({
+            id,
+            checkboxChecked: checkboxEl?.checked === true,
+          });
+          settleDialog();
+        });
+        const focusId = options.defaultFocusId ?? buttons[0]?.id;
+        actionsEl
+          ?.querySelector<HTMLButtonElement>(`[data-dialog-action="${cssEscapeAttr(focusId)}"]`)
+          ?.focus();
+      }),
+  );
+}
+
+function cssEscapeAttr(value: string | undefined): string {
+  if (!value) return '';
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(value);
+  }
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
 /** Whether an app dialog is currently open. */
 export function isAppDialogOpen(): boolean {
   return open;
@@ -437,6 +535,11 @@ export function resetAppDialogForTests(): void {
   panelEl = null;
   titleEl = null;
   messageEl = null;
+  bodyEl = null;
   inputEl = null;
+  footerEl = null;
+  checkboxRowEl = null;
+  checkboxEl = null;
+  checkboxTextEl = null;
   actionsEl = null;
 }

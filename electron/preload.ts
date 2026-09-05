@@ -494,6 +494,36 @@ const minnowBridge = {
       ipcRenderer.on(channels.TRAY_CLOSE_TO_TRAY_CHANGED, handler);
       return () => ipcRenderer.removeListener(channels.TRAY_CLOSE_TO_TRAY_CHANGED, handler);
     },
+    onWindowClosePrompt: (
+      callback: (payload: {
+        requestId: string;
+        title: string;
+        heading: string;
+        folder: string;
+        detail: string;
+        checkboxLabel: string;
+      }) => void,
+    ): (() => void) => {
+      const handler = (
+        _event: IpcRendererEvent,
+        payload: {
+          requestId: string;
+          title: string;
+          heading: string;
+          folder: string;
+          detail: string;
+          checkboxLabel: string;
+        },
+      ) => callback(payload);
+      ipcRenderer.on(channels.WINDOW_CLOSE_PROMPT, handler);
+      return () => ipcRenderer.removeListener(channels.WINDOW_CLOSE_PROMPT, handler);
+    },
+    replyWindowClosePrompt: (
+      requestId: string,
+      result: { action: 'close' | 'background' | 'cancel'; remember: boolean },
+    ): void => {
+      ipcRenderer.send(channels.WINDOW_CLOSE_PROMPT_RESULT, { requestId, ...result });
+    },
     getZoomPercent: (): Promise<number> => ipcRenderer.invoke(channels.SHELL_GET_ZOOM_PERCENT),
     setZoomPercent: (percent: number): Promise<number> =>
       ipcRenderer.invoke(channels.SHELL_SET_ZOOM_PERCENT, percent),

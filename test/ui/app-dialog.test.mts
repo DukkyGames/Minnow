@@ -92,4 +92,58 @@ describe('app dialog', () => {
 
     assert.equal(await resultPromise, false);
   });
+
+  test('appChoice returns the clicked action and checkbox', async () => {
+    const { appChoice, isAppDialogOpen } = await import('../../src/ui/app-dialog.ts');
+    const resultPromise = appChoice({
+      title: 'Close workspace?',
+      message: 'Close minnow?',
+      checkboxLabel: 'Do this every time',
+      defaultFocusId: 'background',
+      buttons: [
+        { id: 'cancel', label: 'Cancel' },
+        { id: 'close', label: 'Close workspace', danger: true },
+        { id: 'background', label: 'Keep in background', primary: true },
+      ],
+    });
+    await Promise.resolve();
+
+    assert.equal(isAppDialogOpen(), true);
+    const checkbox = win.document.querySelector<HTMLInputElement>('#appDialogRemember');
+    assert.ok(checkbox);
+    checkbox.checked = true;
+    const keepBtn = win.document.querySelector<HTMLButtonElement>(
+      '[data-dialog-action="background"]',
+    );
+    assert.ok(keepBtn);
+    assert.equal(keepBtn.classList.contains('app-dialog-panel__btn--primary'), true);
+    const closeBtn = win.document.querySelector<HTMLButtonElement>(
+      '[data-dialog-action="close"]',
+    );
+    assert.ok(closeBtn);
+    assert.equal(closeBtn.classList.contains('app-dialog-panel__btn--danger'), true);
+    keepBtn.click();
+
+    assert.deepEqual(await resultPromise, { id: 'background', checkboxChecked: true });
+    assert.equal(isAppDialogOpen(), false);
+  });
+
+  test('appChoice Escape maps to cancelId', async () => {
+    const { appChoice } = await import('../../src/ui/app-dialog.ts');
+    const resultPromise = appChoice({
+      message: 'Close this window?',
+      cancelId: 'cancel',
+      buttons: [
+        { id: 'cancel', label: 'Cancel' },
+        { id: 'close', label: 'Close workspace', danger: true },
+      ],
+    });
+    await Promise.resolve();
+
+    win.document.dispatchEvent(
+      new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+
+    assert.deepEqual(await resultPromise, { id: 'cancel', checkboxChecked: false });
+  });
 });

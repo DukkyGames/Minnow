@@ -116,6 +116,59 @@
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.app-dialog-panel__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.app-dialog-panel__footer .app-dialog-panel__actions {
+  margin-top: 0;
+  margin-left: auto;
+}
+
+.app-dialog-panel__remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--touch-min, 44px);
+  font-size: 13px;
+  color: var(--mn-fg);
+  cursor: pointer;
+  user-select: none;
+}
+
+.app-dialog-panel__remember[hidden] {
+  display: none;
+}
+
+.app-dialog-panel__remember input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--mn-accent);
+  flex-shrink: 0;
+}
+
+.app-dialog-panel__path {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  color: var(--mn-fg);
+}
+
+.app-dialog-panel__detail {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--mn-fg-muted);
 }
 
 .app-dialog-panel__btn {
@@ -133,6 +186,14 @@
 @media (hover: hover) and (pointer: fine) {
   .app-dialog-panel__btn:hover:not(:disabled) {
     background: var(--mn-accent-soft);
+  }
+
+  .app-dialog-panel__btn--primary:hover:not(:disabled) {
+    filter: brightness(1.06);
+  }
+
+  .app-dialog-panel__btn--danger:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--mn-danger, #ef4444) 28%, var(--mn-bg));
   }
 }
 
