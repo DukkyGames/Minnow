@@ -61,6 +61,47 @@ describe('resolveInjectionReplay', () => {
     });
   });
 
+  test('prefers the untruncated snapshot over a transcript row cut at the storage cap', () => {
+    const full = 'm'.repeat(40_000);
+    const cut = `${full.slice(0, 24_000)}\n\n[… truncated for transcript storage]`;
+    const history: Message[] = [
+      { role: 'user', content: 'hi' },
+      { role: 'injection', kind: 'code-map', body: cut, truncated: true, createdAt: 1 },
+    ];
+    assert.deepEqual(resolveInjectionReplay(history, { 'code-map': full }), {
+      'code-map': full,
+    });
+  });
+
+  test('detects a cut row from the marker when the flag is missing (pre-fix chats)', () => {
+    const full = 'd'.repeat(30_000);
+    const cut = `${full.slice(0, 24_000)}\n\n[… truncated for transcript storage]`;
+    const history: Message[] = [injection('context-documents', cut)];
+    assert.deepEqual(resolveInjectionReplay(history, { 'context-documents': full }), {
+      'context-documents': full,
+    });
+  });
+
+  test('keeps the truncated row when no snapshot survived', () => {
+    const cut = `${'m'.repeat(24_000)}\n\n[… truncated for transcript storage]`;
+    const history: Message[] = [injection('code-map', cut)];
+    assert.deepEqual(resolveInjectionReplay(history, { 'brain-notes': 'notes' }), {
+      'brain-notes': 'notes',
+      'code-map': cut,
+    });
+  });
+
+  test('a later untruncated row for the same kind wins over the snapshot again', () => {
+    const cut = `${'m'.repeat(24_000)}\n\n[… truncated for transcript storage]`;
+    const history: Message[] = [
+      injection('code-map', cut),
+      injection('code-map', 'map v2'),
+    ];
+    assert.deepEqual(resolveInjectionReplay(history, { 'code-map': 'snapshot' }), {
+      'code-map': 'map v2',
+    });
+  });
+
   test('fills missing history kinds from the chat snapshot', () => {
     const history: Message[] = [
       { role: 'user', content: 'hi' },

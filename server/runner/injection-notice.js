@@ -1,4 +1,5 @@
 const INJECTION_BODY_MAX_CHARS = 24e3;
+const INJECTION_TRUNCATION_MARKER = "[… truncated for transcript storage]";
 function injectionNoticeLabel(kind) {
   switch (kind) {
     case "brain-notes":
@@ -43,7 +44,10 @@ function boundInjectionBody(raw) {
   if (trimmed.length <= INJECTION_BODY_MAX_CHARS) return trimmed;
   return `${trimmed.slice(0, INJECTION_BODY_MAX_CHARS)}
 
-[\u2026 truncated for transcript storage]`;
+${INJECTION_TRUNCATION_MARKER}`;
+}
+function isTruncatedInjectionBody(body) {
+  return typeof body === "string" && body.endsWith(INJECTION_TRUNCATION_MARKER);
 }
 function shouldAppendInjection(chat, kind, body) {
   const last = chat.history[chat.history.length - 1];
@@ -66,14 +70,17 @@ function appendInjectionNoticesForTurn(chat, blocks) {
     { kind: "context-documents", raw: blocks.contextDocuments }
   ];
   for (const { kind, raw } of candidates) {
-    if (!raw?.trim()) continue;
-    const body = boundInjectionBody(raw);
-    rememberInjectedContext(chat, kind, body);
+    const full = raw?.trim();
+    if (!full) continue;
+    const body = boundInjectionBody(full);
+    const truncated = body !== full;
+    rememberInjectedContext(chat, kind, full);
     if (!shouldAppendInjection(chat, kind, body)) continue;
     const notice = {
       role: "injection",
       kind,
       body,
+      ...(truncated ? { truncated: true } : {}),
       createdAt: Date.now()
     };
     chat.history.push(notice);
@@ -82,11 +89,13 @@ function appendInjectionNoticesForTurn(chat, blocks) {
   return added;
 }
 export {
+  INJECTION_TRUNCATION_MARKER,
   appendInjectionNoticesForTurn,
   injectionNoticeAction,
   injectionNoticeLabel,
   injectionNoticeOutcome,
   isInjectionNoticeMessage,
+  isTruncatedInjectionBody,
   isUiOnlyTranscriptMessage,
   isUiOnlyTranscriptRole
 };

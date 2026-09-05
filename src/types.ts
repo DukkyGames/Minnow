@@ -290,8 +290,10 @@ export type PromptInjectionKind = 'brain-notes' | 'code-map' | 'context-document
 export interface InjectionNoticeMessage {
   role: 'injection';
   kind: PromptInjectionKind;
-  /** Raw retrieved block interpolated into the prompt. */
+  /** Retrieved block as stored for the transcript (bounded; see `truncated`). */
   body: string;
+  /** True when `body` was cut at the storage cap — replay must use `Chat.injectedContext`. */
+  truncated?: boolean;
   createdAt: number;
 }
 
@@ -1085,8 +1087,9 @@ export interface Chat {
   /** Tri-state workspace context documents override (inherit uses features.contextDocumentsInjectionDefault). */
   contextDocumentsInjection?: ThinkingTriState;
   /**
-   * First-turn injection bodies kept for follow-up compose. History `role: 'injection'`
-   * rows can be omitted from the runner view; this snapshot still replays them.
+   * First-turn injection bodies kept for follow-up compose, stored **untruncated**.
+   * History `role: 'injection'` rows can be omitted from the runner view and are
+   * capped for transcript storage; this snapshot replays exactly what turn 1 sent.
    */
   injectedContext?: Partial<Record<PromptInjectionKind, string>>;
   /** Per-chat reasoning effort override; unset resolves from catalog default + inherit stack. */

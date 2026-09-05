@@ -183,6 +183,29 @@ describe('injection replay on later turns', () => {
     assert.ok(composed.includes(map));
   });
 
+  test('turn 2 sends the whole code map, not the transcript-capped copy', async () => {
+    const map = 'm'.repeat(40_000);
+    const chat = chatWithStoredInjection({
+      codeMapInjection: 'on',
+      history: [
+        { role: 'user', content: 'first question' },
+        { role: 'assistant', content: 'first answer' },
+      ],
+    });
+    // Turn 1: retrieve → transcript row (bounded) + snapshot (whole).
+    appendInjectionNoticesForTurn(chat, {
+      brainNotes: null,
+      codeMap: map,
+      contextDocuments: null,
+    });
+    chat.history.push({ role: 'user', content: 'second question' });
+
+    const ctx = await buildComposeContext(chat);
+    assert.equal(ctx.codeMapBlock, map);
+    assert.equal(ctx.injectionsReplayed, true);
+    assert.ok(composeSystemPrompt(ctx).includes(map));
+  });
+
   test('turn 2 replays from chat.injectedContext when history rows are missing', async () => {
     const map = 'src/missing-row.ts:1';
     const chat = chatWithStoredInjection({

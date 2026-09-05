@@ -9,6 +9,7 @@ import {
   injectionNoticeAction,
   injectionNoticeLabel,
   injectionNoticeOutcome,
+  isTruncatedInjectionBody,
 } from '../../src/chat/context/injection-notice.ts';
 import { historyToApiMessagesForEstimate } from '../../src/chat/prompts/token-estimate-core.ts';
 import type { Chat } from '../../src/types.ts';
@@ -79,6 +80,52 @@ describe('injection notice', () => {
     appendInjectionNoticesForTurn(chat, { brainNotes: 'same', codeMap: null, contextDocuments: null });
     appendInjectionNoticesForTurn(chat, { brainNotes: 'same', codeMap: null, contextDocuments: null });
     assert.equal(chat.history.length, 2);
+  });
+
+  test('a body over the storage cap is cut for the transcript but kept whole for replay', () => {
+    const map = 'm'.repeat(40_000);
+    const chat: Chat = {
+      id: 'c4',
+      name: 'Test',
+      history: [{ role: 'user', content: 'hello' }],
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    appendInjectionNoticesForTurn(chat, {
+      brainNotes: null,
+      codeMap: map,
+      contextDocuments: null,
+    });
+
+    const row = chat.history[1];
+    assert.equal(row.role, 'injection');
+    if (row.role === 'injection') {
+      assert.ok(row.body.length < map.length, 'transcript row stays bounded');
+      assert.equal(row.truncated, true);
+      assert.ok(isTruncatedInjectionBody(row.body));
+    }
+    // Replay reads the snapshot, so turn 2 must send the same bytes as turn 1.
+    assert.equal(chat.injectedContext?.['code-map'], map);
+  });
+
+  test('a body under the storage cap is not flagged truncated', () => {
+    const chat: Chat = {
+      id: 'c5',
+      name: 'Test',
+      history: [{ role: 'user', content: 'hello' }],
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    appendInjectionNoticesForTurn(chat, {
+      brainNotes: 'wiki hit',
+      codeMap: null,
+      contextDocuments: null,
+    });
+    const row = chat.history[1];
+    if (row.role === 'injection') {
+      assert.equal(row.truncated, undefined);
+    }
+    assert.equal(chat.injectedContext?.['brain-notes'], 'wiki hit');
   });
 
   test('historyToApiMessagesForEstimate skips injection notices', () => {
