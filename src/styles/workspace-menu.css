@@ -93,6 +93,51 @@
   white-space: nowrap;
 }
 
+/*
+ * Opens this folder in its own window (or focuses the one that already has it).
+ * Shares the grid slot with `__remove`; the two never appear on the same row —
+ * remove is for folders that are gone, this is for folders that are there.
+ */
+.workspace-menu__new-window {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  align-self: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.workspace-menu__item:hover .workspace-menu__new-window,
+.workspace-menu__new-window:focus-visible {
+  opacity: 1;
+}
+
+.workspace-menu__new-window:hover {
+  color: var(--mn-fg);
+  border-color: var(--mn-border);
+  background: var(--mn-bg);
+}
+
+.workspace-menu__new-window:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+/* Coarse pointers get no hover, so never hide the action behind one. */
+@media (hover: none) {
+  .workspace-menu__new-window {
+    opacity: 1;
+  }
+}
+
 .workspace-menu__remove {
   grid-column: 3;
   grid-row: 1 / span 2;

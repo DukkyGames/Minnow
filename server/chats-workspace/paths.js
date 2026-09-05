@@ -9,18 +9,15 @@ import { getBenchmarkWorkspacePath } from '../benchmark-workspace/paths.js';
 import { getSchedulerWorkspacePath } from '../scheduler-workspace/paths.js';
 import { getMinnowHome } from '../config/home.js';
 import { readConfigJson } from '../config/store.js';
-import {
-  getWorkspaceRoot,
-  getScratchWorkspacePath,
-  normalizeWorkspacePathKey,
-  readRecentPathsFromMeta,
-} from '../workspace/root.js';
+import { getScratchWorkspacePath, normalizeWorkspacePathKey, readRecentPathsFromMeta } from '../workspace/root.js';
+import { isOpenWorkspace } from '../workspace/open-workspaces.js';
 import { isResolvedPathUnderRoot } from '../workspace/safe-path.js';
 import {
   isRegisteredGitWorktreePath,
   isRepoLocalWorktreePath,
 } from '../worktree/allowlist.js';
 import { isPathUnderWorktreesRoot } from '../worktree/paths.js';
+import { getRequestWorkspaceRoot } from '../runtime/path-access.js';
 
 const CHATS_DIR_NAME = 'chats';
 
@@ -57,8 +54,9 @@ export async function ensureChatsWorkspace() {
 }
 
 /**
- * True when rootPath is the active Code workspace, chats sandbox, benchmark workspace,
- * scheduler workspace, a registered git worktree, or repo-local `.worktrees/`.
+ * True when rootPath is a folder some view currently has open, the requesting
+ * view's own workspace, the chats sandbox, benchmark workspace, scheduler
+ * workspace, a registered git worktree, or repo-local `.worktrees/`.
  * Recent MRU folders are checked in `isAllowedWorkspaceRootAsync`.
  * @param {string} rootPath
  */
@@ -67,6 +65,9 @@ export function isAllowedWorkspaceRoot(rootPath) {
     return false;
   }
   const resolved = path.resolve(rootPath.trim());
+  if (isOpenWorkspace(resolved)) {
+    return true;
+  }
   if (isPathUnderWorktreesRoot(resolved)) {
     return true;
   }
@@ -74,7 +75,9 @@ export function isAllowedWorkspaceRoot(rootPath) {
     return true;
   }
   const key = normalizeWorkspacePathKey(resolved);
-  const codeKey = normalizeWorkspacePathKey(getWorkspaceRoot());
+  // The *view's* workspace, never the per-call override — an override must never
+  // be able to authorise itself.
+  const codeKey = normalizeWorkspacePathKey(getRequestWorkspaceRoot());
   const chatsKey = normalizeWorkspacePathKey(getChatsWorkspacePath());
   const scratchKey = normalizeWorkspacePathKey(getScratchWorkspacePath());
   const benchmarkKey = normalizeWorkspacePathKey(getBenchmarkWorkspacePath());

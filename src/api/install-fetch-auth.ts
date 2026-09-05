@@ -1,6 +1,9 @@
 import { getDeviceToken, getSessionToken, hasHostSessionToken } from './session-token.ts';
+import { getViewWorkspacePath } from '../state/view-workspace.ts';
 
 const TOKEN_HEADER = 'X-Minnow-Token';
+/** Names the workspace this renderer is bound to; empty → the server's global. */
+const WORKSPACE_HEADER = 'X-Minnow-Workspace';
 
 let installed = false;
 
@@ -24,12 +27,16 @@ export function installFetchAuth(): void {
   const nativeFetch = globalThis.fetch.bind(globalThis);
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const token = getSessionToken();
-    if (!token || !isSameOriginApiRequest(input)) {
+    const workspace = getViewWorkspacePath();
+    // A workspace-bound view must name its folder even before it has a token,
+    // or an early request would silently resolve against the server's global.
+    if ((!token && !workspace) || !isSameOriginApiRequest(input)) {
       return nativeFetch(input, init);
     }
 
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
-    headers.set(TOKEN_HEADER, token);
+    if (token) headers.set(TOKEN_HEADER, token);
+    if (workspace) headers.set(WORKSPACE_HEADER, workspace);
 
     const request =
       input instanceof Request

@@ -11,7 +11,8 @@ import {
   type HeadlessRunCliOptions,
 } from './argv';
 import {
-  putWorkspace,
+  openWorkspace,
+  closeWorkspace,
   spawnMinnowServer,
   stopSpawnedServer,
   waitForServer,
@@ -91,11 +92,11 @@ async function runCommand(cli: HeadlessRunCliOptions): Promise<number> {
   }
 
   const base = normalizeBaseUrl(cli.baseUrl);
-  installHeadlessFetch(base, resolveHeadlessToken(cli.token));
+  installHeadlessFetch(base, resolveHeadlessToken(cli.token), workspaceResolved.path || '');
 
   if (workspaceResolved.path) {
     try {
-      await putWorkspace(base, workspaceResolved.path);
+      await openWorkspace(base, workspaceResolved.path);
     } catch (err) {
       log(err instanceof Error ? err.message : String(err));
       return 4;
@@ -139,6 +140,9 @@ async function runCommand(cli: HeadlessRunCliOptions): Promise<number> {
     process.stdout.write(`${result.assistantFinal}\n`);
   }
 
+  if (workspaceResolved.path) {
+    await closeWorkspace(base, workspaceResolved.path);
+  }
   stopSpawnedServer();
   return result.exitCode;
 }

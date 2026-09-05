@@ -54,6 +54,35 @@ export interface PreviewTabInfo {
   active: boolean;
 }
 
+// ── View context ─────────────────────────────────────────────────────────────
+
+/**
+ * Which workspace this renderer is bound to. Passed as
+ * `webPreferences.additionalArguments` by `createShellWindow`, so it is
+ * available synchronously at preload time — no IPC round-trip, and it works in
+ * dev and packaged alike.
+ */
+export interface MinnowViewContext {
+  /** Absolute workspace folder, or `''` when the window booted with no folder. */
+  workspacePath: string;
+  /** Stable id for this view, for main-process window/tab lookup. */
+  viewId: string;
+  /** True when the SPA runs inside a tab view under host chrome (Phase 4). */
+  hosted: boolean;
+}
+
+function readArgvFlag(name: string): string {
+  const prefix = `--${name}=`;
+  const hit = process.argv.find((arg) => arg.startsWith(prefix));
+  return hit ? hit.slice(prefix.length) : '';
+}
+
+const viewContext: MinnowViewContext = {
+  workspacePath: readArgvFlag('minnow-workspace'),
+  viewId: readArgvFlag('minnow-view-id'),
+  hosted: process.argv.includes('--minnow-hosted'),
+};
+
 // ── Preview API ──────────────────────────────────────────────────────────────
 
 const preview = {
@@ -310,6 +339,7 @@ const preview = {
 // ── Bridge ───────────────────────────────────────────────────────────────────
 
 const minnowBridge = {
+  viewContext,
   preview,
   shell: {
     revealInExplorer: (
@@ -335,6 +365,22 @@ const minnowBridge = {
     close: (): Promise<void> => ipcRenderer.invoke(channels.WINDOW_CLOSE),
     isMaximized: (): Promise<boolean> => ipcRenderer.invoke(channels.WINDOW_IS_MAXIMIZED),
     restoreFocus: (): Promise<void> => ipcRenderer.invoke(channels.WINDOW_RESTORE_FOCUS),
+    /** Open a fresh window at the folder gate. */
+    newWindow: (): Promise<{ ok: true } | { ok: false; error: string }> =>
+      ipcRenderer.invoke(channels.WINDOW_NEW),
+    /** Open a folder in a window, or focus the window already on it. */
+    openWorkspace: (
+      workspacePath: string,
+    ): Promise<{ ok: true; focused: boolean } | { ok: false; error: string }> =>
+      ipcRenderer.invoke(channels.WINDOW_OPEN_WORKSPACE, workspacePath),
+    /** Folders currently open in some window. */
+    listWorkspaces: (): Promise<string[]> =>
+      ipcRenderer.invoke(channels.WINDOW_LIST_WORKSPACES),
+    /** Point this window at a different folder (main replaces the view). */
+    switchWorkspace: (
+      workspacePath: string,
+    ): Promise<{ ok: true } | { ok: false; error: string }> =>
+      ipcRenderer.invoke(channels.WINDOW_SWITCH_WORKSPACE, workspacePath),
     onMaximizedChanged: (callback: (maximized: boolean) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, maximized: boolean) => callback(maximized);
       ipcRenderer.on(channels.WINDOW_MAXIMIZED_CHANGED, handler);

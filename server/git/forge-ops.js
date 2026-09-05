@@ -1,6 +1,6 @@
 import { runProcess } from '../process-runner.js';
 import { isGitRepository } from '../tools/git-change-stats.js';
-import { getWorkspaceRoot } from '../workspace/root.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 const GH_TIMEOUT_MS = 45_000;
 const GH_LOG_TIMEOUT_MS = 90_000;
@@ -10,7 +10,7 @@ const STATUS_TTL_MS = 60_000;
 const statusCache = new Map();
 
 function resolveCwd(cwd) {
-  return cwd && String(cwd).trim() ? String(cwd).trim() : getWorkspaceRoot();
+  return cwd && String(cwd).trim() ? String(cwd).trim() : getEffectiveWorkspaceRoot();
 }
 
 export async function gh(args, cwd, timeout = GH_TIMEOUT_MS) {

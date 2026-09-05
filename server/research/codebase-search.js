@@ -9,12 +9,12 @@ import { promisify } from 'node:util';
 import { getRipgrepPath } from '../lib/ripgrep-path.js';
 import { resolveSafePath } from '../runtime/path-access.js';
 import { wrapUntrusted } from '../security/untrusted.js';
-import { getWorkspaceRoot } from '../workspace/root.js';
 import { truncateAtParagraph } from './extractor.js';
 import { parseJsonObject } from './json-parse.js';
 import { llmCall as defaultLlmCall } from './llm.js';
 import { EXTRACTOR_PROMPT, formatPrompt } from './prompts.js';
 import { isLowQuality } from './strip-thinking.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -222,7 +222,7 @@ function parseRipgrepLine(line, root) {
  * @returns {Promise<CodebaseSearchResult[]>}
  */
 export async function searchCodebase(query, opts = {}) {
-  const root = path.resolve(opts.root ?? getWorkspaceRoot());
+  const root = path.resolve(opts.root ?? getEffectiveWorkspaceRoot());
   const maxFiles = Math.max(1, Math.min(30, Number(opts.maxFiles ?? DEFAULT_CODEBASE_MAX_FILES)));
   const terms = extractSearchTerms(query);
   const searchTerms = terms.length ? terms : [query.trim()].filter(Boolean);

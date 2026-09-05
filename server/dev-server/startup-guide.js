@@ -3,13 +3,13 @@
  */
 
 import fs from 'node:fs/promises';
-import { getWorkspaceRoot } from '../workspace/root.js';
 import { parseStartupMarkdown, startupFilePath } from './parse-startup.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 /**
  * @param {string} [workspaceRoot]
  */
-export async function readStartupGuide(workspaceRoot = getWorkspaceRoot()) {
+export async function readStartupGuide(workspaceRoot = getEffectiveWorkspaceRoot()) {
   const filePath = startupFilePath(workspaceRoot);
   try {
     const content = await fs.readFile(filePath, 'utf8');

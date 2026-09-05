@@ -60,6 +60,23 @@ import {
   issueState,
   issueView,
 } from './forge-issue-ops.js';
+import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
+
+/**
+ * Git ran in whatever `cwd` the caller supplied, unlike `/api/tools` and
+ * `/api/terminal` which both go through `validateAllowedWorkspaceRoot`. The auth
+ * gate was the only thing between a paired LAN companion and git in an arbitrary
+ * directory. The open-workspace registry makes the check a one-liner.
+ *
+ * An absent `cwd` still means "this request's workspace" and needs no check.
+ * @param {unknown} cwd
+ * @returns {Promise<void>}
+ */
+async function assertAllowedGitCwd(cwd) {
+  if (cwd === undefined || cwd === null) return;
+  if (typeof cwd !== 'string' || !cwd.trim()) return;
+  await validateAllowedWorkspaceRoot(cwd);
+}
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -162,6 +179,7 @@ export async function handleGitRequest(req, res, pathname) {
       sendJson(res, 400, { error: `Unknown git op: ${op || '(none)'}` });
       return true;
     }
+    await assertAllowedGitCwd(body?.cwd);
     const result = await handler(body ?? {});
     sendJson(res, 200, result);
     return true;

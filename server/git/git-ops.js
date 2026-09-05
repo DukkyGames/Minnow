@@ -5,16 +5,17 @@ import path from 'node:path';
 import { runProcess } from '../process-runner.js';
 import { isGitRepository } from '../tools/git-change-stats.js';
 import { invalidateRegisteredWorktreeCache } from '../worktree/allowlist.js';
-import { getWorkspaceRoot, normalizeWorkspacePathKey } from '../workspace/root.js';
+import { normalizeWorkspacePathKey } from '../workspace/root.js';
 import {
   gitRefFolderName,
   slugifyGitRefName,
 } from '../../src/lib/git-branch-slug.mjs';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 const GIT_TIMEOUT_MS = 120_000;
 
 function resolveCwd(cwd) {
-  return cwd && String(cwd).trim() ? String(cwd).trim() : getWorkspaceRoot();
+  return cwd && String(cwd).trim() ? String(cwd).trim() : getEffectiveWorkspaceRoot();
 }
 
 async function git(args, cwd, env) {

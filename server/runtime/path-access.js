@@ -6,25 +6,65 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import path from 'node:path';
 import { getFilesystemAccessFromConfig } from '../config/tool-security.js';
-import { getWorkspaceRoot } from '../workspace/root.js';
+import { getDefaultWorkspaceRoot } from '../workspace/root.js';
 import { isResolvedPathUnderRoot } from '../workspace/safe-path.js';
 
 /**
  * Per-request tool context:
  * - allowOutsideWorkspace: full filesystem access when true
- * - workspaceRootOverride: optional cwd/root for chat-scoped tool runs
+ * - workspaceRootOverride: explicit per-call root (a worktree, sandbox, or board
+ *   cwd). Highest precedence — set by callers that know exactly where the work runs.
+ * - viewWorkspaceRoot: the workspace the requesting view (window/tab) is bound to,
+ *   set by the workspace scope middleware from `X-Minnow-Workspace` / `?workspace=`.
+ *
+ * Precedence is override > view > persisted global. The global fallback is what
+ * keeps the LAN companion, the headless CLI, and any older client working unchanged.
  */
 export const pathAccessStore = new AsyncLocalStorage();
 
 const ALLOW_ALL_PATHS = process.env.TOOLS_ALLOW_ALL_PATHS === '1';
 
-/** Active workspace root for the current tool request (override or Code workspace). */
+/** Active workspace root for the current tool request (override, view, or global). */
 export function getEffectiveWorkspaceRoot() {
   const store = pathAccessStore.getStore();
   if (store?.workspaceRootOverride) {
     return store.workspaceRootOverride;
   }
-  return getWorkspaceRoot();
+  if (store?.viewWorkspaceRoot) {
+    return store.viewWorkspaceRoot;
+  }
+  return getDefaultWorkspaceRoot();
+}
+
+/**
+ * Workspace the requesting view is bound to, ignoring any explicit per-call
+ * override. Use this when a request-scoped decision must follow the window the
+ * request came from rather than a worktree/sandbox the current tool call targets.
+ */
+export function getRequestWorkspaceRoot() {
+  const store = pathAccessStore.getStore();
+  if (store?.viewWorkspaceRoot) {
+    return store.viewWorkspaceRoot;
+  }
+  return getDefaultWorkspaceRoot();
+}
+
+/** True when the current request carried an explicit view workspace. */
+export function hasRequestWorkspaceRoot() {
+  return Boolean(pathAccessStore.getStore()?.viewWorkspaceRoot);
+}
+
+/**
+ * Run `fn` with the requesting view's workspace bound, preserving anything the
+ * surrounding store already carries.
+ * @template T
+ * @param {string} viewWorkspaceRoot
+ * @param {() => T} fn
+ * @returns {T}
+ */
+export function runWithViewWorkspace(viewWorkspaceRoot, fn) {
+  const parent = pathAccessStore.getStore();
+  return pathAccessStore.run({ ...(parent ?? {}), viewWorkspaceRoot }, fn);
 }
 
 /**
@@ -68,7 +108,14 @@ export function resolveSafePath(userPath, options = {}) {
  */
 export async function runWithPathAccess(fn) {
   const fsAccess = await getFilesystemAccessFromConfig();
-  return pathAccessStore.run({ allowOutsideWorkspace: fsAccess === 'full' }, fn);
+  const parent = pathAccessStore.getStore();
+  return pathAccessStore.run(
+    {
+      ...(parent?.viewWorkspaceRoot ? { viewWorkspaceRoot: parent.viewWorkspaceRoot } : {}),
+      allowOutsideWorkspace: fsAccess === 'full',
+    },
+    fn,
+  );
 }
 
 /**
@@ -82,7 +129,9 @@ export async function runWithToolContext(fn, options = {}) {
   const fsAccess = await getFilesystemAccessFromConfig();
   const allowOutsideWorkspace =
     options.allowOutsideWorkspace ?? fsAccess === 'full';
+  const parent = pathAccessStore.getStore();
   const store = {
+    ...(parent?.viewWorkspaceRoot ? { viewWorkspaceRoot: parent.viewWorkspaceRoot } : {}),
     allowOutsideWorkspace,
     ...(options.workspaceRoot ? { workspaceRootOverride: options.workspaceRoot } : {}),
   };

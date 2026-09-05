@@ -215,6 +215,90 @@ describe('sessions history loss regressions', () => {
     assert.equal(after.chats.find((c) => c.id === BETA).name, 'Beta unversioned');
   });
 
+  test('two views on two workspaces never drop rows belonging to the other', async () => {
+    // A folder opens in exactly one view, so the two writers own disjoint chats.
+    // They still share one global revision counter, which is why a losing writer
+    // has to re-base and re-send rather than give up.
+    const seeded = readSessionRevision();
+
+    const windowOne = httpRequest(baseUrl, 'PATCH', '/api/config/sessions', {
+      baseVersion: 6,
+      baseRevision: seeded,
+      chats: [
+        makeChat(ALPHA, 'Alpha in workspace A', [
+          { role: 'user', content: 'hello' },
+          { role: 'assistant', content: 'hi' },
+          { role: 'user', content: 'from A' },
+        ]),
+      ],
+    });
+    const windowTwo = httpRequest(baseUrl, 'PATCH', '/api/config/sessions', {
+      baseVersion: 6,
+      baseRevision: seeded,
+      chats: [
+        makeChat(BETA, 'Beta in workspace B', [
+          { role: 'user', content: 'beta only' },
+          { role: 'user', content: 'from B' },
+        ]),
+      ],
+    });
+
+    const results = await Promise.all([windowOne, windowTwo]);
+    const conflicted = results.filter((r) => r.status === 409);
+    const applied = results.filter((r) => r.status === 200);
+    assert.equal(applied.length + conflicted.length, 2);
+    assert.ok(applied.length >= 1, 'at least one concurrent write must land');
+
+    // Whoever lost re-bases onto the reported revision and re-sends the identical
+    // body — which is exactly what the client's `sendSessionsWrite` does.
+    for (const loser of conflicted) {
+      const isAlpha = loser === results[0];
+      const retry = await httpRequest(baseUrl, 'PATCH', '/api/config/sessions', {
+        baseVersion: 6,
+        baseRevision: loser.json.revision,
+        chats: [
+          isAlpha
+            ? makeChat(ALPHA, 'Alpha in workspace A', [
+                { role: 'user', content: 'hello' },
+                { role: 'assistant', content: 'hi' },
+                { role: 'user', content: 'from A' },
+              ])
+            : makeChat(BETA, 'Beta in workspace B', [
+                { role: 'user', content: 'beta only' },
+                { role: 'user', content: 'from B' },
+              ]),
+        ],
+      });
+      assert.equal(retry.status, 200);
+    }
+
+    const after = (await httpRequest(baseUrl, 'GET', '/api/config/sessions')).json;
+    const alpha = after.chats.find((c) => c.id === ALPHA);
+    const beta = after.chats.find((c) => c.id === BETA);
+    assert.equal(alpha.name, 'Alpha in workspace A');
+    assert.equal(alpha.history.length, 3);
+    assert.equal(beta.name, 'Beta in workspace B');
+    assert.equal(beta.history.length, 2);
+    assert.equal(messageCount(ALPHA), 3);
+    assert.equal(messageCount(BETA), 2);
+  });
+
+  test('a concurrent writer cannot prune chats belonging to the other view', async () => {
+    // The upsert-only rule and the pruneMissingChats guard are what stopped the
+    // 2026-08 wipe; a second concurrent writer is precisely what they defend
+    // against. Window two writes only its own chat and must not touch Alpha.
+    const res = await httpRequest(baseUrl, 'PUT', '/api/config/sessions', {
+      ...makeState([makeChat(BETA, 'Beta alone', [{ role: 'user', content: 'beta only' }])]),
+    });
+    assert.equal(res.status, 200);
+
+    const after = (await httpRequest(baseUrl, 'GET', '/api/config/sessions')).json;
+    const alpha = after.chats.find((c) => c.id === ALPHA);
+    assert.ok(alpha, 'a chat owned by the other view must survive a write that omits it');
+    assert.equal(alpha.history.length, 2);
+    assert.equal(messageCount(ALPHA), 2);
+  });
+
   test('summaries expose the revision clients echo back', async () => {
     const res = await httpRequest(baseUrl, 'GET', '/api/config/sessions/summaries');
     assert.equal(res.status, 200);

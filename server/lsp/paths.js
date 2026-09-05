@@ -5,7 +5,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
-import { getAppRoot, getWorkspaceRoot } from '../workspace/root.js';
+import { getAppRoot } from '../workspace/root.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 /** User-managed LSP install root (~/.minnow/lsp-servers). */
 export function getManagedLspRoot() {
@@ -32,7 +33,7 @@ export function getManagedLspMetaPath(bundleId) {
  * @param {string} [workspaceRoot]
  * @returns {string[]}
  */
-export function getLspSearchPaths(workspaceRoot = getWorkspaceRoot()) {
+export function getLspSearchPaths(workspaceRoot = getEffectiveWorkspaceRoot()) {
   const appRoot = getAppRoot();
   const managed = getManagedLspRoot();
   return [
@@ -78,7 +79,7 @@ export function findExecutableInPaths(name, searchPaths) {
  * @param {string} [workspaceRoot]
  * @returns {NodeJS.ProcessEnv}
  */
-export function buildLspProcessEnv(baseEnv = process.env, workspaceRoot = getWorkspaceRoot()) {
+export function buildLspProcessEnv(baseEnv = process.env, workspaceRoot = getEffectiveWorkspaceRoot()) {
   const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
   const prefix = getLspSearchPaths(workspaceRoot).join(path.delimiter);
   const existing = baseEnv[pathKey] ?? process.env[pathKey] ?? '';

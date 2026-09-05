@@ -66,6 +66,8 @@ export interface TrayManagerDeps {
   trayIconPath: () => string;
   trayIconFallbackPath: () => string;
   focusMainWindow: () => void;
+  /** Open a fresh window at the folder gate. */
+  newWindow: () => void;
   requestQuit: () => void;
   sendTrayCommand: (command: TrayRendererCommand) => void;
   getCloseToTray: () => boolean;
@@ -135,6 +137,11 @@ export function createTrayManager(deps: TrayManagerDeps): TrayManager {
       {
         label: 'Open Minnow',
         click: () => deps.focusMainWindow(),
+      },
+      {
+        label: 'New window',
+        accelerator: isDarwin ? 'Cmd+Shift+N' : 'Ctrl+Shift+N',
+        click: () => deps.newWindow(),
       },
       {
         label: 'New chat',

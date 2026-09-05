@@ -3,7 +3,7 @@
  */
 
 import { getMinnowHome } from '../config/home.js';
-import { getWorkspaceRoot } from '../workspace/root.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 /**
  * @typedef {object} PluginContext
@@ -24,7 +24,7 @@ export function createPluginContext(options = {}) {
       : (message) => console.log(`[plugin] ${message}`);
 
   return Object.freeze({
-    workspaceRoot: getWorkspaceRoot(),
+    workspaceRoot: getEffectiveWorkspaceRoot(),
     minnowHome: getMinnowHome(),
     log,
     env: Object.freeze({

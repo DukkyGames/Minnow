@@ -6,11 +6,7 @@
 import { readConfigJson } from '../../config/store.js';
 import { brainWorkspaceKeyFromPath } from '../paths.js';
 import { getEffectiveWorkspaceRoot } from '../../runtime/path-access.js';
-import {
-  getWorkspaceRoot,
-  readRecentPathsFromMeta,
-  dedupeRecentPaths,
-} from '../../workspace/root.js';
+import { readRecentPathsFromMeta, dedupeRecentPaths } from '../../workspace/root.js';
 import { getCodeDb } from './schema.js';
 
 /** Max MRU workspace DB handles to warm on startup (excluding the active workspace). */
@@ -42,7 +38,7 @@ export function warmCodeIndexForPath(absPath) {
  */
 export async function warmRecentWorkspaceCodeIndexes() {
   const warmed = [];
-  const current = getWorkspaceRoot();
+  const current = getEffectiveWorkspaceRoot();
   warmCodeIndexForPath(current);
   warmed.push(brainWorkspaceKeyFromPath(current));
 

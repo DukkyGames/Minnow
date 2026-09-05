@@ -87,11 +87,50 @@ function lspWorkspaceRoot() {
   return getEffectiveWorkspaceRoot();
 }
 
+/**
+ * Language-server processes are keyed by workspace in **every** scope.
+ *
+ * Only the agent scope used to be; the editor and index scopes shared one bare
+ * `serverId`, which is exactly why switching folders had to call
+ * `shutdownAllLsp()` — a single tsserver could not be pointed at two roots. With
+ * the root in the key, two open workspaces each get their own process and no
+ * teardown is needed.
+ */
 function connectionProcessKey(scope, serverId) {
-  if (scope === LSP_SCOPE_AGENT) {
-    return `${serverId}::${path.resolve(lspWorkspaceRoot())}`;
+  return `${serverId}::${path.resolve(lspWorkspaceRoot())}`;
+}
+
+/**
+ * Live language-server processes per scope. Each open workspace adds one process
+ * per matched server, so cap the total and evict the least recently used
+ * process from a workspace other than the one being served.
+ */
+const MAX_LSP_PROCESSES_PER_SCOPE = 12;
+
+function touchLspProcess(store, processKey) {
+  const state = store.processes.get(processKey);
+  if (state) state.lastUsedAt = Date.now();
+  return state;
+}
+
+function evictLspProcessesLru(scope, store, keepProcessKey) {
+  while (store.processes.size > MAX_LSP_PROCESSES_PER_SCOPE) {
+    /** @type {string | null} */
+    let oldestKey = null;
+    let oldestAt = Infinity;
+    for (const [key, state] of store.processes) {
+      if (key === keepProcessKey) continue;
+      const at = typeof state.lastUsedAt === 'number' ? state.lastUsedAt : 0;
+      if (at < oldestAt) {
+        oldestAt = at;
+        oldestKey = key;
+      }
+    }
+    if (!oldestKey) break;
+    const state = store.processes.get(oldestKey);
+    if (state) discardLspState(scope, oldestKey, state);
+    else store.processes.delete(oldestKey);
   }
-  return serverId;
 }
 
 function workspaceRootUri(workspaceRoot = lspWorkspaceRoot()) {
@@ -963,14 +1002,16 @@ async function getConnection(scope, serverId, config) {
   const processKey = connectionProcessKey(scope, serverId);
   const store = getScopeStore(scope);
   if (store.processes.has(processKey)) {
-    return store.processes.get(processKey);
+    return touchLspProcess(store, processKey);
   }
   if (store.pendingConnections.has(processKey)) {
     return store.pendingConnections.get(processKey);
   }
 
   const connectPromise = connectLspServer(scope, serverId, config).then((state) => {
+    state.lastUsedAt = Date.now();
     store.processes.set(processKey, state);
+    evictLspProcessesLru(scope, store, processKey);
     return state;
   });
   store.pendingConnections.set(processKey, connectPromise);
@@ -1846,9 +1887,13 @@ export async function listLspServers() {
   return Object.entries(merged.lsp ?? {}).map(([id, cfg]) => {
     const disabled = cfg.disabled === true;
     const hasCommand = Array.isArray(cfg.command) && cfg.command.length > 0;
-    const editorRunning = getScopeStore(LSP_SCOPE_EDITOR).processes.has(id);
+    // Every scope now keys processes as `${id}::${root}`, so match on the prefix
+    // rather than the bare id (which older builds used for the editor scope).
+    const editorRunning = [...getScopeStore(LSP_SCOPE_EDITOR).processes.keys()].some(
+      (key) => matchesServerProcessKey(key, id),
+    );
     const agentRunning = [...getScopeStore(LSP_SCOPE_AGENT).processes.keys()].some(
-      (key) => key === id || key.startsWith(`${id}::`),
+      (key) => matchesServerProcessKey(key, id),
     );
     const running = editorRunning || agentRunning;
     const requirements =

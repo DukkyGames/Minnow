@@ -66,6 +66,14 @@ export const WINDOW_IS_MAXIMIZED = 'minnow:window:is-maximized';
 export const WINDOW_RESTORE_FOCUS = 'minnow:window:restore-focus';
 export const WINDOW_MAXIMIZED_CHANGED = 'minnow:window:maximized-changed';
 export const WINDOW_VISIBILITY_CHANGED = 'minnow:window:visibility-changed';
+/** Open a fresh window at the folder gate. */
+export const WINDOW_NEW = 'minnow:window:new';
+/** Open a folder in a window — or focus the one already on it. */
+export const WINDOW_OPEN_WORKSPACE = 'minnow:window:open-workspace';
+/** Folders currently open in some window, so recents can mark and focus them. */
+export const WINDOW_LIST_WORKSPACES = 'minnow:window:list-workspaces';
+/** Point this window at a different folder, then reload it. */
+export const WINDOW_SWITCH_WORKSPACE = 'minnow:window:switch-workspace';
 
 export const TRAY_PUBLISH_STATUS = 'minnow:tray:publish-status';
 export const TRAY_NOTIFY_READY = 'minnow:tray:notify-ready';

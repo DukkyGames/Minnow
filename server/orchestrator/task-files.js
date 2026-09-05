@@ -3,7 +3,7 @@
  */
 
 import { runProcess } from '../process-runner.js';
-import { getWorkspaceRoot } from '../workspace/root.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 const GIT_TIMEOUT_MS = 20_000;
 
@@ -69,7 +69,7 @@ function showArgs(sha) {
  *                     deletions: number, binary: boolean }>,
  *                     additions: number, deletions: number, truncated: boolean } | null>}
  */
-export async function readCommitFileStats(sha, cwd = getWorkspaceRoot()) {
+export async function readCommitFileStats(sha, cwd = getEffectiveWorkspaceRoot()) {
   const rev = safeSha(sha);
   if (!rev || !cwd) return null;
 
@@ -147,7 +147,7 @@ export function patchToDiffLines(patch) {
  * @returns {Promise<{ path: string, lines: Array<{ type: string, text: string }>,
  *                     truncated: boolean } | null>}
  */
-export async function readCommitFileDiff(sha, filePath, cwd = getWorkspaceRoot()) {
+export async function readCommitFileDiff(sha, filePath, cwd = getEffectiveWorkspaceRoot()) {
   const rev = safeSha(sha);
   const target = safeRepoPath(filePath);
   if (!rev || !target || !cwd) return null;

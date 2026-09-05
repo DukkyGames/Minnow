@@ -7,7 +7,7 @@ import {
   startupFilePath,
 } from '../../server/dev-server/parse-startup.js';
 import { resolveSafePath } from '../../server/runtime/path-access.js';
-import { getWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
+import { getDefaultWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
 import { rmTestHome, setTestHome } from '../config/test-helpers.js';
 import { ensureMinnowLayout } from '../../server/config/home.js';
 
@@ -54,7 +54,7 @@ describe('startup cwd resolution', () => {
     await import('node:fs/promises').then((fs) => fs.mkdir(ws, { recursive: true }));
     await setWorkspaceRoot(ws);
     const resolved = resolveSafePath('subdir', { write: false });
-    assert.equal(resolved, path.join(getWorkspaceRoot(), 'subdir'));
+    assert.equal(resolved, path.join(getDefaultWorkspaceRoot(), 'subdir'));
     await rmTestHome(homeDir);
   });
 

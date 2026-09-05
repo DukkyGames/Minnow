@@ -9,7 +9,7 @@ import {
   stopDevServer,
 } from '../../server/dev-server/manager.js';
 import { handleWorkspaceRequest } from '../../server/workspace/middleware.js';
-import { getWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
+import { getDefaultWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
 import { longRunningDevServerCommand, rmTestHome, setTestHome } from '../config/test-helpers.js';
 
 function createServer() {

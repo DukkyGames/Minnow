@@ -37,6 +37,7 @@ import {
 } from '../../server/git/git-ops.js';
 import { handleGitRequest } from '../../server/git/middleware.js';
 import { setWorkspaceRoot } from '../../server/workspace/root.js';
+import { closeWorkspace, openWorkspace } from '../../server/workspace/open-workspaces.js';
 import { httpRequest } from '../config/test-helpers.js';
 
 const execFileAsync = promisify(execFile);
@@ -367,13 +368,19 @@ describe('git API', () => {
   });
 
   test('POST /api/git status honors cwd', async () => {
-    const missing = await httpRequest(baseUrl, 'POST', '/api/git', {
-      op: 'status',
-      cwd: plainDir,
-    });
-    assert.equal(missing.status, 200);
-    assert.equal(missing.json?.ok, false);
-    assert.match(missing.json?.error ?? '', /Not a git repository/);
+    // An allowed folder that simply is not a repo still answers normally.
+    openWorkspace(plainDir);
+    try {
+      const missing = await httpRequest(baseUrl, 'POST', '/api/git', {
+        op: 'status',
+        cwd: plainDir,
+      });
+      assert.equal(missing.status, 200);
+      assert.equal(missing.json?.ok, false);
+      assert.match(missing.json?.error ?? '', /Not a git repository/);
+    } finally {
+      closeWorkspace(plainDir);
+    }
 
     const ok = await httpRequest(baseUrl, 'POST', '/api/git', {
       op: 'status',
@@ -382,6 +389,20 @@ describe('git API', () => {
     assert.equal(ok.status, 200);
     assert.equal(ok.json?.ok, true);
     assert.ok(Array.isArray(ok.json?.staged));
+  });
+
+  test('POST /api/git rejects a cwd outside the workspace allowlist', async () => {
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-git-outside-'));
+    try {
+      const res = await httpRequest(baseUrl, 'POST', '/api/git', {
+        op: 'status',
+        cwd: outside,
+      });
+      assert.equal(res.status, 400);
+      assert.match(res.json?.error ?? '', /not in the allowlist/);
+    } finally {
+      await fs.rm(outside, { recursive: true, force: true });
+    }
   });
 
   test('rejects unknown git op', async () => {

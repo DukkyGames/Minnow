@@ -14,7 +14,7 @@ import { createScriptedEffector } from '../../server/orchestrator/effector-scrip
 import { disposeEngines } from '../../server/orchestrator/engine.js';
 import { appendEvent, resetJournalCache } from '../../server/orchestrator/journal.js';
 import { createBoardsMiddleware, matchRoute, ROUTES, setEffectorFactory } from '../../server/orchestrator/middleware.js';
-import { getWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
+import { getDefaultWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
 
 const PLAN = `---
 name: demo-board
@@ -222,7 +222,7 @@ describe('POST /api/boards', () => {
   });
 
   it('reads the plan from the workspace when markdown is omitted', async () => {
-    const root = getWorkspaceRoot();
+    const root = getDefaultWorkspaceRoot();
     const rel = `documentation/plans/ov2-api-disk-${Date.now()}.md`;
     const abs = path.join(root, ...rel.split('/'));
     await fs.mkdir(path.dirname(abs), { recursive: true });
@@ -610,7 +610,7 @@ describe('the surface itself', () => {
 
 describe('GET /api/boards — workspace scope (MIN-752)', () => {
   it('lists only boards stamped for the live workspace and 409s start from another', async () => {
-    const originalRoot = getWorkspaceRoot();
+    const originalRoot = getDefaultWorkspaceRoot();
     const wsA = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-board-ws-a-'));
     const wsB = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-board-ws-b-'));
     try {

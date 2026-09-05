@@ -16,7 +16,7 @@ import {
   stopDevServerById,
 } from './manager.js';
 import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
-import { getWorkspaceRoot } from '../workspace/root.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 /**
  * @param {unknown} value
@@ -106,7 +106,7 @@ function formatDefinition(def) {
  */
 export async function toolManageDevServers(args) {
   const action = String(args.action ?? 'list').trim().toLowerCase();
-  const root = getWorkspaceRoot();
+  const root = getEffectiveWorkspaceRoot();
 
   if (action === 'list') {
     const { servers } = await listDevServerStatuses(root);

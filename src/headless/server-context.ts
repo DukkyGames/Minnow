@@ -9,6 +9,7 @@ import { defaultMinnowLocalOrigin } from '../config/minnow-port.ts';
 
 let headlessBaseUrl = defaultMinnowLocalOrigin();
 let restoreFetch: (() => void) | null = null;
+let headlessWorkspace = '';
 
 /** Resolve ~/.minnow (or MINNOW_HOME override) without importing server/* from src/. */
 function resolveMinnowHome(): string {
@@ -46,10 +47,16 @@ export function headlessApiUrl(path: string): string {
   return `${headlessBaseUrl}${p}`;
 }
 
-function withTokenHeader(init: RequestInit | undefined, token: string): RequestInit | undefined {
-  if (!token) return init;
+/**
+ * Stamp the credential and — when the run targets a specific folder — the
+ * workspace, so the server scopes the request instead of the CLI repointing
+ * everyone's workspace with a global `PUT /api/workspace`.
+ */
+function withMinnowHeaders(init: RequestInit | undefined, token: string): RequestInit | undefined {
+  if (!token && !headlessWorkspace) return init;
   const headers = new Headers(init?.headers);
-  headers.set('X-Minnow-Token', token);
+  if (token) headers.set('X-Minnow-Token', token);
+  if (headlessWorkspace) headers.set('X-Minnow-Workspace', headlessWorkspace);
   return { ...init, headers };
 }
 
@@ -81,17 +88,23 @@ async function fetchWithTransientRetry(
   throw lastError;
 }
 
+/** The workspace every headless request is scoped to, or `''` for the global. */
+export function getHeadlessWorkspace(): string {
+  return headlessWorkspace;
+}
+
 /** Patch global fetch so `/api/...` hits the dev server (returns restore fn). */
-export function installHeadlessFetch(baseUrl: string, token = ''): () => void {
+export function installHeadlessFetch(baseUrl: string, token = '', workspacePath = ''): () => void {
   if (restoreFetch) {
     restoreFetch();
     restoreFetch = null;
   }
   headlessBaseUrl = normalizeBaseUrl(baseUrl);
+  headlessWorkspace = workspacePath;
   const nativeFetch = globalThis.fetch.bind(globalThis);
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     if (typeof input === 'string' && input.startsWith('/api/')) {
-      return fetchWithTransientRetry(nativeFetch, headlessApiUrl(input), withTokenHeader(init, token));
+      return fetchWithTransientRetry(nativeFetch, headlessApiUrl(input), withMinnowHeaders(init, token));
     }
     if (input instanceof Request) {
       const url = input.url;
@@ -99,7 +112,7 @@ export function installHeadlessFetch(baseUrl: string, token = ''): () => void {
         return fetchWithTransientRetry(
           nativeFetch,
           headlessApiUrl(url),
-          withTokenHeader(init, token),
+          withMinnowHeaders(init, token),
         );
       }
     }

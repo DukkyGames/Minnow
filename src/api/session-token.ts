@@ -1,3 +1,5 @@
+import { getViewWorkspacePath } from '../state/view-workspace.ts';
+
 declare global {
   interface Window {
     __MINNOW_SESSION_TOKEN__?: string;
@@ -94,10 +96,23 @@ export function getSessionToken(): string {
   return window.__MINNOW_SESSION_TOKEN__ ?? getDeviceToken();
 }
 
-/** Append `?token=`/`&token=` to a same-origin URL. No-ops when there's no token. */
+/**
+ * Append `?token=`/`&token=` and, in a workspace-bound view, `&workspace=` to a
+ * same-origin URL. This is the choke point for every `EventSource` and the
+ * PTY/STT/TTS sockets — neither transport can set request headers, so the
+ * workspace rides the query string there.
+ */
 export function withSessionToken(url: string): string {
   const token = getSessionToken();
-  if (!token) return url;
-  const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}token=${encodeURIComponent(token)}`;
+  const workspace = getViewWorkspacePath();
+  let out = url;
+  if (token) {
+    const sep = out.includes('?') ? '&' : '?';
+    out = `${out}${sep}token=${encodeURIComponent(token)}`;
+  }
+  if (workspace) {
+    const sep = out.includes('?') ? '&' : '?';
+    out = `${out}${sep}workspace=${encodeURIComponent(workspace)}`;
+  }
+  return out;
 }

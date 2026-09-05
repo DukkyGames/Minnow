@@ -31,7 +31,7 @@ import {
   recordRunStart,
   updateRunIndexEntry,
 } from './terminal/run-index.js';
-import { getWorkspaceRoot } from './workspace/root.js';
+import { getEffectiveWorkspaceRoot } from './runtime/path-access.js';
 
 export const MAX_TERMINAL_BUFFER_BYTES = 2 * 1024 * 1024;
 
@@ -310,7 +310,7 @@ export async function createRun({
         mode: resolvedMode.mode,
         allowUnsandboxed: resolvedMode.allowUnsandboxed,
         cwd,
-        workspaceRoot: getWorkspaceRoot(),
+        workspaceRoot: getEffectiveWorkspaceRoot(),
         worktreeRoot,
       });
       state.sandbox = spawnTarget.sandbox ?? null;
@@ -484,7 +484,7 @@ export async function createBackgroundRun({
     mode: resolvedMode.mode,
     allowUnsandboxed: resolvedMode.allowUnsandboxed,
     cwd,
-    workspaceRoot: getWorkspaceRoot(),
+    workspaceRoot: getEffectiveWorkspaceRoot(),
     worktreeRoot,
   });
   state.sandbox = spawnTarget.sandbox ?? null;

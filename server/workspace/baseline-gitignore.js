@@ -6,7 +6,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { isResolvedPathUnderRoot } from './safe-path.js';
-import { getWorkspaceRoot } from './root.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 /** Default ignore patterns applied when .gitignore is missing. */
 export const BASELINE_GITIGNORE_LINES = [
@@ -38,7 +38,7 @@ export const BASELINE_GITIGNORE_CONTENT = `${BASELINE_GITIGNORE_LINES.join('\n')
  * @returns {Promise<{ ok: true; created: boolean; path: string } | { ok: false; error: string }>}
  */
 export async function ensureBaselineGitignore(workspaceRoot) {
-  const root = workspaceRoot?.trim() || getWorkspaceRoot();
+  const root = workspaceRoot?.trim() || getEffectiveWorkspaceRoot();
   const gitignorePath = path.resolve(root, '.gitignore');
 
   if (!isResolvedPathUnderRoot(gitignorePath, root)) {

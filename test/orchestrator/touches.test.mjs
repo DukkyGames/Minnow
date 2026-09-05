@@ -34,7 +34,7 @@ import {
   listChangedFiles,
   listRepoFiles,
 } from '../../server/orchestrator/touches.js';
-import { setWorkspaceRoot, getWorkspaceRoot } from '../../server/workspace/root.js';
+import { setWorkspaceRoot, getDefaultWorkspaceRoot } from '../../server/workspace/root.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -168,7 +168,7 @@ describe('summarizeTouchesOverflow', () => {
 
 describe('journaled expansion vs the live filesystem', () => {
   it('a file created after board start does not change what plan() decided', async () => {
-    const previousRoot = getWorkspaceRoot();
+    const previousRoot = getDefaultWorkspaceRoot();
     const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-exp-'));
     try {
     await gitInit(repo);
@@ -248,7 +248,7 @@ describe('journaled expansion vs the live filesystem', () => {
 
 describe('builder overflow journaling', () => {
   it('writes outside its globs produce one overflow event and the attempt still passes', async () => {
-    const previousRoot = getWorkspaceRoot();
+    const previousRoot = getDefaultWorkspaceRoot();
     const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'minnow-ovf-'));
     try {
     await gitInit(repo);

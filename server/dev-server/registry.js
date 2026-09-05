@@ -7,9 +7,10 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { readConfigJson, writeConfigJson } from '../config/store.js';
 import { mergeConfigMeta } from '../config/validators.js';
-import { getWorkspaceRoot, normalizeWorkspacePathKey } from '../workspace/root.js';
+import { normalizeWorkspacePathKey } from '../workspace/root.js';
 import { coerceNetwork, coercePort, DEFAULT_NETWORK, DEFAULT_PORT, readDevServerSettings } from './settings.js';
 import { readStartupGuide } from './startup-guide.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 /** @typedef {'startup.md' | 'user'} DevServerSource */
 
@@ -174,7 +175,7 @@ function hydrateStartupEntry(entry, guide, settings) {
  * @param {string} [workspaceRoot]
  * @returns {Promise<DevServerDefinition[]>}
  */
-export async function readDevServers(workspaceRoot = getWorkspaceRoot()) {
+export async function readDevServers(workspaceRoot = getEffectiveWorkspaceRoot()) {
   const root = path.resolve(workspaceRoot);
   const settings = await readDevServerSettings(root);
   const startup = await readStartupGuide(root);
@@ -222,7 +223,7 @@ export async function getDevServerDefinition(workspaceRoot, id) {
  * @param {string} [workspaceRoot]
  * @param {Partial<DevServerDefinition> & { name: string, command: string }} input
  */
-export async function createDevServer(workspaceRoot = getWorkspaceRoot(), input) {
+export async function createDevServer(workspaceRoot = getEffectiveWorkspaceRoot(), input) {
   const root = path.resolve(workspaceRoot);
   const list = await readDevServers(root);
   const id = typeof input.id === 'string' && input.id.trim() ? input.id.trim() : randomUUID();

@@ -26,9 +26,9 @@ import { readTranscript } from './transcripts.js';
 import { readCommitFileDiff, readCommitFileStats } from './task-files.js';
 import { cleanupBoardWorktrees } from '../worktree/worktree-ops.js';
 import { resolveSafePath } from '../runtime/path-access.js';
-import { getWorkspaceRoot } from '../workspace/root.js';
 import { attachTouchesExpansion, listRepoFiles } from './touches.js';
 import { boardBelongsToWorkspace } from './workspace-scope.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 /** Heartbeat cadence. Intermediaries close idle streams without it. */
 const HEARTBEAT_MS = 15_000;
@@ -245,7 +245,7 @@ async function dispatch(route, req, res) {
   switch (route.name) {
     case 'list': {
       const ids = await listBoards();
-      const workspaceRoot = getWorkspaceRoot();
+      const workspaceRoot = getEffectiveWorkspaceRoot();
       const boards = [];
       for (const id of ids) {
         const state = await loadState(id);
@@ -592,7 +592,7 @@ async function createFromPlan(req, res) {
       name: parsed.name,
       tasks,
       waves: parsed.waves,
-      workspacePath: path.resolve(getWorkspaceRoot()),
+      workspacePath: path.resolve(getEffectiveWorkspaceRoot()),
     }),
   );
 

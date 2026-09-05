@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { getMinnowHome } from '../../config/home.js';
 import { getWorktreesRoot, isPathUnderWorktreesRoot } from '../../worktree/paths.js';
-import { getWorkspaceRoot } from '../../workspace/root.js';
+import { getEffectiveWorkspaceRoot } from '../../runtime/path-access.js';
 
 /** @typedef {'workspace' | 'strict'} SandboxProfileName */
 
@@ -127,7 +127,7 @@ export function detectWorktreeRoot(cwd, worktreesRoot = getWorktreesRoot()) {
  */
 export function buildPolicy({
   profile = 'workspace',
-  workspaceRoot = getWorkspaceRoot(),
+  workspaceRoot = getEffectiveWorkspaceRoot(),
   cwd = null,
   worktreeRoot = null,
   home = os.homedir(),

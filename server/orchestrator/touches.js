@@ -1,9 +1,9 @@
 /** Expand touches globs and detect overflow writes. */
 
 import { runProcess } from '../process-runner.js';
-import { getWorkspaceRoot } from '../workspace/root.js';
 import { capDiffText } from './core/evidence.js';
 import { expandTouches, overflowPaths } from './core/plan.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 const GIT_TIMEOUT_MS = 60_000;
 
@@ -32,7 +32,7 @@ function parseNul(stdout) {
  * @param {string} [root]
  * @returns {Promise<string[]>}
  */
-export async function listRepoFiles(root = getWorkspaceRoot()) {
+export async function listRepoFiles(root = getEffectiveWorkspaceRoot()) {
   const listed = await git(
     ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
     root,

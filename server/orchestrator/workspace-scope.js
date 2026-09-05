@@ -3,7 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { getWorkspaceRoot, normalizeWorkspacePathKey } from '../workspace/root.js';
+import { normalizeWorkspacePathKey } from '../workspace/root.js';
 import { isResolvedPathUnderRoot } from '../workspace/safe-path.js';
 import {
   getBoardWorktreesDir,
@@ -11,6 +11,7 @@ import {
   getWorktreesRoot,
 } from '../worktree/paths.js';
 import { sanitizePathSegment } from '../../src/lib/sanitize-path-segment.mjs';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 /**
  * @param {string} absPath
@@ -75,7 +76,7 @@ async function planExistsInWorkspace(planPath, workspaceRoot) {
  * @param {string} [workspaceRoot]
  * @returns {Promise<boolean>}
  */
-export async function boardBelongsToWorkspace(state, workspaceRoot = getWorkspaceRoot()) {
+export async function boardBelongsToWorkspace(state, workspaceRoot = getEffectiveWorkspaceRoot()) {
   if (!state || typeof state !== 'object') return false;
   const root = path.resolve(workspaceRoot);
   const stamped = typeof state.workspacePath === 'string' ? state.workspacePath.trim() : '';

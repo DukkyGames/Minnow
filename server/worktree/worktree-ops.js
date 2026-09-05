@@ -3,7 +3,6 @@ import path from 'node:path';
 import { runProcess } from '../process-runner.js';
 import { parseGitNumstat } from '../tools/git-change-stats.js';
 import { invalidateRegisteredWorktreeCache } from './allowlist.js';
-import { getWorkspaceRoot } from '../workspace/root.js';
 import { slugifyGitRefName } from '../../src/lib/git-branch-slug.mjs';
 import { refreshDependencies } from './dep-install.js';
 import { ensureDependencyDirs, hasBrokenDepDir } from './dep-symlinks.js';
@@ -13,10 +12,11 @@ import {
   getWorktreeSlotPath,
   isPathUnderWorktreesRoot,
 } from './paths.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 const GIT_TIMEOUT_MS = 120_000;
 
-async function git(args, cwd = getWorkspaceRoot()) {
+async function git(args, cwd = getEffectiveWorkspaceRoot()) {
   return runProcess('git', args, { cwd, timeout: GIT_TIMEOUT_MS });
 }
 
@@ -31,7 +31,7 @@ const depFailureOutput = (deps) => deps.failed.map((f) => f.reason).join('; ');
  * @returns {Promise<{ ok: true, deps: { ok: boolean, linked: string[], repaired: string[], failed: Array<{ dir: string, reason: string }> } } | { ok: false, error: 'deps', deps: object, output: string }>}
  */
 async function seedTaskWorktreeDeps(wtPath, intPath) {
-  const workspace = getWorkspaceRoot();
+  const workspace = getEffectiveWorkspaceRoot();
   const preferred = (await pathExists(intPath)) ? intPath : workspace;
   let deps = await ensureDependencyDirs(preferred, wtPath);
   if (!deps.ok && preferred !== workspace) {
@@ -80,7 +80,7 @@ export async function deleteLocalBranch(branch) {
   return { ok: false, output: text };
 }
 
-async function resolveRef(ref, cwd = getWorkspaceRoot()) {
+async function resolveRef(ref, cwd = getEffectiveWorkspaceRoot()) {
   const r = await git(['rev-parse', '--verify', ref], cwd);
   if (!ok(r)) return null;
   const sha = `${r.stdout ?? ''}`.trim().split(/\s/)[0];
@@ -204,13 +204,13 @@ export async function ensureIntegration({ boardId, branch, baseRef }) {
   }
   const intPath = getWorktreeSlotPath(boardId, 'integration');
   if (await pathExists(intPath)) {
-    const deps = await ensureDependencyDirs(getWorkspaceRoot(), intPath);
+    const deps = await ensureDependencyDirs(getEffectiveWorkspaceRoot(), intPath);
     return { ok: true, path: intPath, branch, created: false, deps };
   }
   await fs.mkdir(path.dirname(intPath), { recursive: true });
   const w = await git(['worktree', 'add', intPath, branch]);
   if (!ok(w)) return { ok: false, stage: 'worktree', path: intPath, output: out(w) };
-  const deps = await ensureDependencyDirs(getWorkspaceRoot(), intPath);
+  const deps = await ensureDependencyDirs(getEffectiveWorkspaceRoot(), intPath);
   return { ok: true, path: intPath, branch, created: true, deps };
 }
 
@@ -733,7 +733,7 @@ async function workspaceGitCapabilities(workspace) {
 }
 
 async function workspaceDirtyStats() {
-  const workspace = getWorkspaceRoot();
+  const workspace = getEffectiveWorkspaceRoot();
   const diff = await git(['diff', '--numstat', 'HEAD'], workspace);
   if (!ok(diff)) return { ok: false, output: out(diff) };
   const parsed = parseGitNumstat(diff.stdout ?? '');
@@ -764,7 +764,7 @@ async function workspaceDirtyStats() {
  * @param {{ branch?: string }} input
  */
 export async function workspaceLandingStats({ branch } = {}) {
-  const workspace = getWorkspaceRoot();
+  const workspace = getEffectiveWorkspaceRoot();
   const intBranch = (branch && branch.trim()) || '';
   if (!intBranch) return workspaceDirtyStats();
   if (!(await branchExists(intBranch))) {
@@ -801,7 +801,7 @@ export async function workspaceLandingStats({ branch } = {}) {
  * @param {{ branch: string, message?: string }} input
  */
 export async function mergeIntegrationIntoWorkspace({ branch, message }) {
-  const workspace = getWorkspaceRoot();
+  const workspace = getEffectiveWorkspaceRoot();
   const intBranch = (branch && branch.trim()) || '';
   if (!intBranch) return { ok: false, error: 'branch required' };
   if (!(await branchExists(intBranch))) {
@@ -841,7 +841,7 @@ export async function mergeIntegrationIntoWorkspace({ branch, message }) {
  * @param {{ title?: string, body?: string }} input
  */
 export async function openWorkspacePr({ title, body }) {
-  const workspace = getWorkspaceRoot();
+  const workspace = getEffectiveWorkspaceRoot();
   const branchResult = await git(['branch', '--show-current'], workspace);
   const branch = `${branchResult.stdout ?? ''}`.trim();
   if (!branch) {
@@ -961,7 +961,7 @@ export async function createChatWorktree({ chatId, branch, baseRef }) {
   const wtPath = getChatWorktreePath(chatId.trim());
   const branchName = slugifyGitRefName(branch, 'worktree');
   const base = (baseRef && baseRef.trim()) || 'HEAD';
-  const depSource = getWorkspaceRoot();
+  const depSource = getEffectiveWorkspaceRoot();
 
   let exists = false;
   try {

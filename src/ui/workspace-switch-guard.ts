@@ -170,10 +170,63 @@ export async function confirmAndStopBoardsForWorkspaceSwitch(
   return true;
 }
 
-/** Guard, stop boards if confirmed, PUT workspace, and run shared client refresh. */
+/**
+ * Warn — but do not stop — when boards are running and the window is about to be
+ * retargeted. With one workspace per view the boards keep running server-side in
+ * the folder they belong to; nothing is orphaned, so the confirm is informational.
+ */
+async function confirmRetargetWithRunningBoards(targetPath: string): Promise<boolean> {
+  const current = normalizeWorkspacePath(getWorkspacePath());
+  const target = normalizeWorkspacePath(targetPath);
+  if (!current || current === target) return true;
+
+  const v1 = getBlockingBoardsForWorkspace(current);
+  const v2 = await getBlockingV2BoardsForWorkspace();
+  if (v1.length === 0 && v2.length === 0) return true;
+
+  const count = v1.length + v2.length;
+  const noun = count === 1 ? 'board is' : 'boards are';
+  return appConfirm(
+    `${count} orchestrator ${noun} still running in this workspace.
+
+` +
+      'They keep running in the background. Switch this window to another folder?',
+  );
+}
+
+/**
+ * Guard, then switch this window's workspace.
+ *
+ * In a workspace-bound Electron window the switch is "tell main this view is now
+ * folder X", and main replaces the view. Everything the old in-renderer teardown
+ * rebuilt — file panel, terminal tabs, chats, issues — is persisted per workspace
+ * on disk, so a fresh renderer is strictly safer than a partial reset.
+ *
+ * The browser and any older shell still have a single global workspace, so they
+ * keep the in-place refresh.
+ */
 export async function executeWorkspaceSwitch(
   absPath: string,
 ): Promise<import('../config/workspace-api').WorkspaceInfo | null> {
+  // Also taken by a window still at the folder gate: picking there has to bind
+  // the view to the folder, not repoint a global.
+  const retarget = window.minnow?.window?.switchWorkspace;
+  if (retarget) {
+    if (!(await confirmRetargetWithRunningBoards(absPath))) {
+      return null;
+    }
+    // Keep writing the cold-boot default and the MRU; this is no longer a global
+    // repoint of live work.
+    const info = await setWorkspacePath(absPath);
+    const result = await retarget(absPath);
+    if (!result.ok) {
+      const { setStatus } = await import('./status');
+      setStatus('err', result.error);
+      return null;
+    }
+    return info;
+  }
+
   const allowed = await confirmAndStopBoardsForWorkspaceSwitch(absPath);
   if (!allowed) {
     return null;

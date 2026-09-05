@@ -5,14 +5,21 @@
  */
 
 import path from 'node:path';
-import { getWorkspaceRoot, normalizeWorkspacePathKey } from '../workspace/root.js';
+import { normalizeWorkspacePathKey } from '../workspace/root.js';
 import { isResolvedPathUnderRoot } from '../workspace/safe-path.js';
 import { listWorktrees } from './worktree-ops.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 const CACHE_TTL_MS = 30_000;
 
-/** @type {{ paths: Set<string>, expiresAt: number } | null} */
-let cache = null;
+/**
+ * `git worktree list` output, cached per repo root.
+ *
+ * This used to be one global slot, which is wrong the moment two workspaces are
+ * open: whichever folder asked last would answer for both.
+ * @type {Map<string, { paths: Set<string>, expiresAt: number }>}
+ */
+const cacheByRepo = new Map();
 
 /** Parse absolute worktree paths from `git worktree list --porcelain`. */
 function parseWorktreePaths(porcelain) {
@@ -27,23 +34,33 @@ function parseWorktreePaths(porcelain) {
 }
 
 /** Repo-local default worktrees folder (`git worktree add .worktrees/...`). */
-function getRepoLocalWorktreesDir(workspaceRoot = getWorkspaceRoot()) {
+function getRepoLocalWorktreesDir(workspaceRoot = getEffectiveWorkspaceRoot()) {
   return path.join(path.resolve(workspaceRoot), '.worktrees');
 }
 
-/** Drop cached registered worktree paths (call after add/remove). */
-export function invalidateRegisteredWorktreeCache() {
-  cache = null;
+/**
+ * Drop cached registered worktree paths (call after add/remove).
+ * @param {string} [workspaceRoot] Defaults to every repo.
+ */
+export function invalidateRegisteredWorktreeCache(workspaceRoot) {
+  if (workspaceRoot && String(workspaceRoot).trim()) {
+    cacheByRepo.delete(normalizeWorkspacePathKey(workspaceRoot));
+    return;
+  }
+  cacheByRepo.clear();
 }
 
 /**
- * Load registered worktree paths for the active Code workspace (cached ~30s).
+ * Load registered worktree paths for one repo (cached ~30s).
+ * @param {string} workspaceRoot
  * @returns {Promise<Set<string>>}
  */
-async function loadRegisteredWorktreePaths() {
+async function loadRegisteredWorktreePaths(workspaceRoot) {
+  const repoKey = normalizeWorkspacePathKey(workspaceRoot);
   const now = Date.now();
-  if (cache && cache.expiresAt > now) {
-    return cache.paths;
+  const cached = cacheByRepo.get(repoKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.paths;
   }
 
   const paths = new Set();
@@ -54,7 +71,7 @@ async function loadRegisteredWorktreePaths() {
     }
   }
 
-  cache = { paths, expiresAt: now + CACHE_TTL_MS };
+  cacheByRepo.set(repoKey, { paths, expiresAt: now + CACHE_TTL_MS });
   return paths;
 }
 
@@ -68,10 +85,11 @@ export async function isRegisteredGitWorktreePath(resolvedPath) {
   const resolved = path.resolve(resolvedPath.trim());
   const key = normalizeWorkspacePathKey(resolved);
 
-  const registered = await loadRegisteredWorktreePaths();
+  const workspaceRoot = getEffectiveWorkspaceRoot();
+  const registered = await loadRegisteredWorktreePaths(workspaceRoot);
   if (registered.has(key)) return true;
 
-  const localWtDir = getRepoLocalWorktreesDir();
+  const localWtDir = getRepoLocalWorktreesDir(workspaceRoot);
   return isResolvedPathUnderRoot(resolved, localWtDir);
 }
 

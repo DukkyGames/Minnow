@@ -5,11 +5,16 @@
 import {
   buildRecentWorkspaceList,
   getWorkspaceInfo,
-  getWorkspaceRoot,
   removeRecentWorkspacePath,
-  setWorkspaceRoot,
+  setDefaultWorkspaceRoot,
   validateWorkspacePath,
+  workspaceLabel,
 } from './root.js';
+import {
+  closeWorkspace,
+  listOpenWorkspaces,
+  openWorkspace,
+} from './open-workspaces.js';
 import {
   browseWorkspaceFolders,
   createWorkspaceSubfolder,
@@ -40,6 +45,7 @@ import { initializeWorkspaceGit } from './initialize-git.js';
 import { revealInSystemExplorer } from './reveal-in-explorer.js';
 import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import { resolveSafePath, runWithPathAccess, runWithToolContext } from '../runtime/path-access.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -220,7 +226,7 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
     if (pathname === '/api/workspace/dev-server/start' && req.method === 'POST') {
       const body = await readJsonBody(req);
       if (body?.port != null || body?.network != null) {
-        await writeDevServerSettings(getWorkspaceRoot(), {
+        await writeDevServerSettings(getEffectiveWorkspaceRoot(), {
           port: body?.port,
           network: body?.network,
         });
@@ -242,14 +248,14 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
     }
 
     if (pathname === '/api/workspace/dev-server/settings' && req.method === 'GET') {
-      const settings = await readDevServerSettings(getWorkspaceRoot());
+      const settings = await readDevServerSettings(getEffectiveWorkspaceRoot());
       sendJson(res, 200, { ok: true, settings });
       return true;
     }
 
     if (pathname === '/api/workspace/dev-server/settings' && req.method === 'PUT') {
       const body = await readJsonBody(req);
-      const settings = await writeDevServerSettings(getWorkspaceRoot(), {
+      const settings = await writeDevServerSettings(getEffectiveWorkspaceRoot(), {
         port: body?.port,
         network: body?.network,
       });
@@ -266,7 +272,7 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
     if (pathname === '/api/workspace/dev-servers' && req.method === 'POST') {
       const body = await readJsonBody(req);
       try {
-        const created = await createDevServer(getWorkspaceRoot(), {
+        const created = await createDevServer(getEffectiveWorkspaceRoot(), {
           name: typeof body?.name === 'string' ? body.name : 'server',
           command: typeof body?.command === 'string' ? body.command : '',
           cwd: typeof body?.cwd === 'string' ? body.cwd : undefined,
@@ -310,7 +316,7 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
     {
       const matched = matchDevServerIdRoute(pathname);
       if (matched) {
-        const root = getWorkspaceRoot();
+        const root = getEffectiveWorkspaceRoot();
         if (matched.action == null && req.method === 'PUT') {
           const body = await readJsonBody(req);
           try {
@@ -362,9 +368,55 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
     }
 
     if (pathname === '/api/workspace' && req.method === 'GET') {
-      const recent = await buildRecentWorkspaceList();
+      const recent = await buildRecentWorkspaceList(getEffectiveWorkspaceRoot());
       const newProjectParent = await ensureDefaultProjectsParent();
-      sendJson(res, 200, { ok: true, ...getWorkspaceInfo(), recent, newProjectParent });
+      sendJson(res, 200, {
+        ok: true,
+        ...getWorkspaceInfo(getEffectiveWorkspaceRoot()),
+        recent,
+        newProjectParent,
+        open: listOpenWorkspaces().map((entry) => ({
+          path: entry.path,
+          label: workspaceLabel(entry.path),
+        })),
+      });
+      return true;
+    }
+
+    // Electron main (and the headless CLI) claim and release the folders their
+    // views are on. Membership here is the filesystem security boundary — see
+    // server/workspace/open-workspaces.js.
+    if (pathname === '/api/workspace/open' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const userPath = body?.path;
+      if (typeof userPath !== 'string' || !userPath.trim()) {
+        sendJson(res, 400, { error: 'path is required' });
+        return true;
+      }
+      const resolved = await validateWorkspacePath(userPath);
+      openWorkspace(resolved);
+      sendJson(res, 200, {
+        ok: true,
+        path: resolved,
+        label: workspaceLabel(resolved),
+        open: listOpenWorkspaces().map((entry) => entry.path),
+      });
+      return true;
+    }
+
+    if (pathname === '/api/workspace/open' && req.method === 'DELETE') {
+      const body = await readJsonBody(req);
+      const userPath = body?.path;
+      if (typeof userPath !== 'string' || !userPath.trim()) {
+        sendJson(res, 400, { error: 'path is required' });
+        return true;
+      }
+      const closed = closeWorkspace(userPath);
+      sendJson(res, 200, {
+        ok: true,
+        closed,
+        open: listOpenWorkspaces().map((entry) => entry.path),
+      });
       return true;
     }
 
@@ -381,6 +433,9 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
       return true;
     }
 
+    // No longer a global repoint of live work. It records the folder a cold boot
+    // should land in and touches the MRU; the calling view already carries its
+    // own workspace on every request.
     if (pathname === '/api/workspace' && req.method === 'PUT') {
       const body = await readJsonBody(req);
       const userPath = body?.path;
@@ -388,12 +443,13 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
         sendJson(res, 400, { error: 'path is required' });
         return true;
       }
-      const resolved = await setWorkspaceRoot(userPath);
+      const resolved = await setDefaultWorkspaceRoot(userPath);
+      const info = getWorkspaceInfo(resolved);
       sendJson(res, 200, {
         ok: true,
         path: resolved,
-        label: getWorkspaceInfo().label,
-        isDefault: getWorkspaceInfo().isDefault,
+        label: info.label,
+        isDefault: info.isDefault,
       });
       return true;
     }
@@ -409,13 +465,14 @@ export async function handleWorkspaceRequest(req, res, pathname, searchParams = 
         return true;
       }
       const resolved = await validateWorkspacePath(pick.path);
-      await setWorkspaceRoot(resolved);
+      await setDefaultWorkspaceRoot(resolved);
+      const info = getWorkspaceInfo(resolved);
       sendJson(res, 200, {
         ok: true,
         cancelled: false,
         path: resolved,
-        label: getWorkspaceInfo().label,
-        isDefault: getWorkspaceInfo().isDefault,
+        label: info.label,
+        isDefault: info.isDefault,
       });
       return true;
     }

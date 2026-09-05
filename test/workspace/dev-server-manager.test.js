@@ -19,7 +19,7 @@ import {
 } from '../../server/dev-server/manager.js';
 import { PRIMARY_DEV_SERVER_ID } from '../../server/dev-server/registry.js';
 import {
-  getWorkspaceRoot,
+  getDefaultWorkspaceRoot,
   normalizeWorkspacePathKey,
   setWorkspaceRoot,
 } from '../../server/workspace/root.js';
@@ -87,7 +87,7 @@ describe('dev-server manager tools', () => {
     assert.equal(parsed.guide?.command, LONG_RUNNING_CMD);
 
     await fs.writeFile(path.join(workspaceDir, 'startup.md'), startupContent, 'utf8');
-    assert.equal(path.resolve(getWorkspaceRoot()), path.resolve(workspaceDir));
+    assert.equal(path.resolve(getDefaultWorkspaceRoot()), path.resolve(workspaceDir));
 
     const started = await startDevServer(workspaceDir);
     assert.equal(started.ok, true);

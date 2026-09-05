@@ -117,7 +117,7 @@ import {
 } from '../tools/workspace-change-snapshot.js';
 import { runFindFilesSearch, runGrepSearch } from '../tools/grep.js';
 import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
-import { getAppRoot, getWorkspaceRoot } from '../workspace/root.js';
+import { getAppRoot } from '../workspace/root.js';
 import { wrapServerToolResult, wrapUntrusted } from '../security/untrusted.js';
 import {
   getEffectiveWorkspaceRoot,
@@ -855,7 +855,7 @@ async function toolGitCommit(args) {
   if (String(result).trimStart().startsWith('Error')) {
     return result;
   }
-  const codeChange = await codeChangeForGitCommit(getWorkspaceRoot());
+  const codeChange = await codeChangeForGitCommit(getEffectiveWorkspaceRoot());
   return withCodeChange(String(result), codeChange);
 }
 
@@ -1510,7 +1510,7 @@ export function createToolsMiddleware() {
           res.end(JSON.stringify({ error: 'Missing or invalid "sha"' }));
           return;
         }
-        const codeChange = await codeChangeForGitCommit(getWorkspaceRoot(), sha);
+        const codeChange = await codeChangeForGitCommit(getEffectiveWorkspaceRoot(), sha);
         res.statusCode = 200;
         res.end(JSON.stringify({ codeChange: codeChange ?? null }));
       } catch (err) {

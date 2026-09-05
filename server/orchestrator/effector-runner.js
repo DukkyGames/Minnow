@@ -13,7 +13,6 @@ import { BROWSER_DRIVER_TOOL_DEFINITIONS_BY_NAME } from '../tools/browser-driver
 import { cancel as cancelGeneration, listGenerationStates } from '../generations/store.js';
 import { resolveLibraryAttemptBinding } from '../models/library-binding.js';
 import { getProvider } from '../providers/store.js';
-import { getWorkspaceRoot } from '../workspace/root.js';
 import { peekEngine } from './engine.js';
 import * as diskJournal from './journal.js';
 import { attemptLimits } from './attempt-limits.js';
@@ -45,6 +44,7 @@ import {
   DEFAULT_AGENT_MAX_TOKENS,
   readGlobalSamplerForTurn,
 } from '../agents/sampler.js';
+import { getEffectiveWorkspaceRoot, runWithToolContext } from '../runtime/path-access.js';
 
 // ── Orphans ──────────────────────────────────────────────────────────────────
 
@@ -310,9 +310,10 @@ export function createRunnerEffector(options = {}) {
   const limits = attemptLimits(options.limits);
   const promptVariant = options.promptVariant === 'lite' ? 'lite' : 'full';
   const isolateWorktrees = options.worktrees ?? !(typeof options.cwd === 'string' && options.cwd.trim());
-  const fallbackCwd = typeof options.cwd === 'string' && options.cwd.trim()
+  const explicitCwd = typeof options.cwd === 'string' && options.cwd.trim()
     ? options.cwd.trim()
-    : getWorkspaceRoot();
+    : '';
+  const fallbackCwd = explicitCwd || getEffectiveWorkspaceRoot();
   const ladderFn = typeof options.runFinalLadder === 'function' ? options.runFinalLadder : runFinalLadder;
   const usingFakeTurn = typeof options.runTurn === 'function';
   const deps = options.deps ?? createServerRunnerDeps(
@@ -339,6 +340,28 @@ export function createRunnerEffector(options = {}) {
   const listeners = [];
   /** @type {Array<{ taskId: string | null, role: string, attemptId: string, seedKind?: string, worktree?: string }>} */
   const startLog = [];
+
+  /**
+   * The workspace this board belongs to.
+   *
+   * Board work outlives the request that started it, so ALS scoping does not
+   * reach it — it has to carry its own workspace. Boards journal one on
+   * `board.created`; read that rather than whatever folder happened to be
+   * global when the effector was constructed.
+   * @returns {Promise<string>}
+   */
+  async function boardWorkspaceRoot() {
+    if (explicitCwd) return explicitCwd;
+    try {
+      const state = await currentState();
+      const stamped =
+        typeof state?.workspacePath === 'string' ? state.workspacePath.trim() : '';
+      if (stamped) return stamped;
+    } catch {
+      // No journal yet (a fresh board, or a getState-less test effector).
+    }
+    return fallbackCwd;
+  }
 
   /**
    * @returns {Promise<import('./core/types').BoardState>}
@@ -414,7 +437,7 @@ export function createRunnerEffector(options = {}) {
     const attemptId = `r-${randomUUID()}`;
     const integrationCwd = boardId
       ? getWorktreeSlotPath(boardId, INTEGRATION_SLOT)
-      : fallbackCwd;
+      : await boardWorkspaceRoot();
     const entry = {
       taskId: desired.taskId,
       role: desired.role,
@@ -585,7 +608,7 @@ export function createRunnerEffector(options = {}) {
     await deliverEnd(entry, end);
   }
 
-  return {
+  const effector = {
     /** @returns {Array<{ taskId: string | null, role: string, attemptId: string }>} */
     inspect() {
       return [...running.values()].map(({ taskId, role, attemptId, worktree }) => ({
@@ -665,7 +688,7 @@ export function createRunnerEffector(options = {}) {
 
       const attemptId = `r-${randomUUID()}`;
       /** @type {string} */
-      let attemptCwd = fallbackCwd;
+      let attemptCwd = await boardWorkspaceRoot();
       /** @type {string | undefined} */
       let slotId;
       /** @type {Record<string, unknown>[]} */
@@ -837,4 +860,18 @@ export function createRunnerEffector(options = {}) {
       running.clear();
     },
   };
+
+  // Re-enter the path-access scope on the board's own workspace. Everything the
+  // attempt starts inherits it — worktree paths, git, and the tool loop — including
+  // the detached run that outlives `start()` returning.
+  const rawPreflight = effector.preflight.bind(effector);
+  const rawStart = effector.start.bind(effector);
+  effector.preflight = async () =>
+    runWithToolContext(rawPreflight, { workspaceRoot: await boardWorkspaceRoot() });
+  effector.start = async (desired) =>
+    runWithToolContext(() => rawStart(desired), {
+      workspaceRoot: await boardWorkspaceRoot(),
+    });
+
+  return effector;
 }

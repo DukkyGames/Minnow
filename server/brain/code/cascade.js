@@ -9,7 +9,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { getEffectiveWorkspaceRoot } from '../../runtime/path-access.js';
+import { getEffectiveWorkspaceRoot, runWithToolContext } from '../../runtime/path-access.js';
 import { brainWorkspaceKeyFromPath, getBrainSourcesDir, getBrainStatePath } from '../paths.js';
 import { loadCatalog, updatePage } from '../store.js';
 import { loadBrainConfig } from '../store.js';
@@ -41,11 +41,22 @@ const GIT_HOOK_SCRIPT = path.resolve(
   '../../../scripts/brain-git-post-commit.mjs',
 );
 
-/** @type {ReturnType<typeof setTimeout> | null} */
-let wikiResynthesisTimer = null;
+/**
+ * Both of these used to be single global slots, unlike the `cascadeInFlightByRepo`
+ * map right below them. With two workspaces open that is not just starvation:
+ * a lazy refresh for folder B would return folder A's in-flight promise, so B
+ * got A's answer. Key both per repo.
+ */
+/** @type {Map<string, ReturnType<typeof setTimeout>>} */
+const wikiResynthesisTimerByRepo = new Map();
 
-/** @type {Promise<unknown> | null} */
-let lazyRefreshInFlight = null;
+/** @type {Map<string, Promise<unknown>>} */
+const lazyRefreshInFlightByRepo = new Map();
+
+/** Repo key for the workspace this call is scoped to. */
+function currentBrainRepoKey() {
+  return brainWorkspaceKeyFromPath(getEffectiveWorkspaceRoot()) || 'workspace';
+}
 
 /** @type {Map<string, Promise<unknown>>} */
 const cascadeInFlightByRepo = new Map();
@@ -353,11 +364,15 @@ export async function propagateCodeChanges(opts = {}) {
  * Drain queued wiki pages on a background timer (LLM regen never blocks requests).
  */
 export function scheduleWikiResynthesis() {
-  if (wikiResynthesisTimer) return;
-  wikiResynthesisTimer = setTimeout(() => {
-    wikiResynthesisTimer = null;
-    void processWikiResynthesisQueue();
+  const repo = currentBrainRepoKey();
+  if (wikiResynthesisTimerByRepo.has(repo)) return;
+  const workspaceRoot = getEffectiveWorkspaceRoot();
+  const timer = setTimeout(() => {
+    wikiResynthesisTimerByRepo.delete(repo);
+    // The timer fires outside any request, so re-enter this repo's scope.
+    void runWithToolContext(() => processWikiResynthesisQueue(), { workspaceRoot });
   }, 250);
+  wikiResynthesisTimerByRepo.set(repo, timer);
 }
 
 /** Batch lint pass for queued wiki pages — marks issues, does not call the LLM inline. */
@@ -386,18 +401,20 @@ export async function ensureIndexFreshForQuery() {
   const code = await loadBrainCodeConfig();
   if (!code.enabled) return null;
 
-  if (lazyRefreshInFlight) {
-    return lazyRefreshInFlight;
-  }
-
   const root = getEffectiveWorkspaceRoot();
   const repo = brainWorkspaceKeyFromPath(root) || 'workspace';
+
+  const inFlight = lazyRefreshInFlightByRepo.get(repo);
+  if (inFlight) {
+    return inFlight;
+  }
+
   const db = getCodeDb(repo);
   const indexedCount =
     db.prepare('SELECT COUNT(*) AS n FROM file_hashes WHERE repo = ?').get(repo)?.n ?? 0;
   const discoverNewFiles = indexedCount === 0;
 
-  lazyRefreshInFlight = (async () => {
+  const refresh = (async () => {
     const stale = await detectStaleFiles({ codeConfig: code, discoverNewFiles });
     if (!stale.changedFiles.length) {
       if (stale.stale && stale.merkleRoot) {
@@ -415,10 +432,11 @@ export async function ensureIndexFreshForQuery() {
     return { refreshed: true, ...result };
   })();
 
+  lazyRefreshInFlightByRepo.set(repo, refresh);
   try {
-    return await lazyRefreshInFlight;
+    return await refresh;
   } finally {
-    lazyRefreshInFlight = null;
+    lazyRefreshInFlightByRepo.delete(repo);
   }
 }
 

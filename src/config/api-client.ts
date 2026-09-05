@@ -284,27 +284,60 @@ export interface PutSessionsOptions {
   baseRevision?: number;
 }
 
+/** How many times a write re-bases onto a newer revision before giving up. */
+const SESSIONS_CONFLICT_RETRIES = 2;
+
+/**
+ * Send a sessions write, re-basing onto the server's revision on 409.
+ *
+ * `sessions.db` keeps one global revision counter, so two workspace views saving
+ * at the same time will collide even though they touch disjoint rows. Blind
+ * retry is safe here **because a folder opens in exactly one view**: no two
+ * views ever own the same chat rows, and the bodies are whole objects for chats
+ * this client owns. There is no read-modify-write to lose, so re-sending the
+ * identical payload against the newer revision is the correct resolution.
+ *
+ * The upsert-only rule in `writeWholeSessionState` and the `pruneMissingChats`
+ * guard still stand behind this — do not relax either. They are what stopped the
+ * 2026-08 history wipe, and a second concurrent writer is precisely the
+ * condition they defend against.
+ */
+async function sendSessionsWrite(
+  method: 'PUT' | 'PATCH',
+  body: Record<string, unknown>,
+): Promise<number | undefined> {
+  let payload = body;
+  for (let attempt = 0; ; attempt += 1) {
+    const res = await fetch('/api/config/sessions', {
+      method,
+      headers: JSON_HEADERS,
+      body: JSON.stringify(payload),
+    });
+    try {
+      return await parseSessionsWriteResponse(res);
+    } catch (err) {
+      const rebased =
+        err instanceof SessionsRevisionConflictError &&
+        attempt < SESSIONS_CONFLICT_RETRIES &&
+        typeof err.revision === 'number' &&
+        typeof payload.baseRevision === 'number';
+      if (!rebased) throw err;
+      payload = { ...payload, baseRevision: (err as SessionsRevisionConflictError).revision };
+    }
+  }
+}
+
 /** PUT /api/config/sessions — returns the server's new revision when it reports one. */
 export async function putSessions(
   state: SessionState,
   options: PutSessionsOptions = {},
 ): Promise<number | undefined> {
-  const res = await fetch('/api/config/sessions', {
-    method: 'PUT',
-    headers: JSON_HEADERS,
-    body: JSON.stringify({ ...state, ...options }),
-  });
-  return parseSessionsWriteResponse(res);
+  return sendSessionsWrite('PUT', { ...state, ...options });
 }
 
 /** PATCH /api/config/sessions — partial upsert / explicit deletes. */
 export async function patchSessions(delta: SessionsPatchDelta): Promise<number | undefined> {
-  const res = await fetch('/api/config/sessions', {
-    method: 'PATCH',
-    headers: JSON_HEADERS,
-    body: JSON.stringify(delta),
-  });
-  return parseSessionsWriteResponse(res);
+  return sendSessionsWrite('PATCH', delta as unknown as Record<string, unknown>);
 }
 
 /**

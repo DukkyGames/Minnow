@@ -1,13 +1,14 @@
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
-import { getAppRoot, getWorkspaceRoot } from '../workspace/root.js';
+import { getAppRoot } from '../workspace/root.js';
 import {
   findExecutableInPaths,
   getLspSearchPaths,
   getManagedLspNpmRoot,
 } from './paths.js';
 import { getLspNodeExecutable, isNodeCommandToken } from './node-runtime.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 /** @typedef {{ argv: string[], displayBin: string }} ResolvedLspSpawn */
 
@@ -44,7 +45,7 @@ function resolvePackageSpec(specifier) {
  * @returns {string | undefined}
  */
 function tryResolvePackageSpec(specifier) {
-  const workspace = getWorkspaceRoot();
+  const workspace = getEffectiveWorkspaceRoot();
   const managed = getManagedLspNpmRoot();
   const appRoot = getAppRoot();
 

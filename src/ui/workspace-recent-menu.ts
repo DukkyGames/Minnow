@@ -4,6 +4,7 @@ import {
   type WorkspaceRecentItem,
 } from '../config/workspace-api';
 import { getWorkspaceRecentItems, setWorkspaceFromServer } from '../state/workspace';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import {
   registerChromePopover,
   unregisterChromePopover,
@@ -37,6 +38,46 @@ export type OpenNewWorkspaceHandler = () => Promise<void>;
 
 let onSelectWorkspace: WorkspaceSelectHandler | null = null;
 let onOpenNew: OpenNewWorkspaceHandler | null = null;
+
+/**
+ * Folders that already have a window, normalized. Only Electron can hold more
+ * than one view; elsewhere this is always empty and the per-row action is
+ * omitted entirely.
+ */
+let openWorkspaceKeys = new Set<string>();
+
+async function refreshOpenWorkspaceKeys(): Promise<void> {
+  const list = window.minnow?.window?.listWorkspaces;
+  if (!list) {
+    openWorkspaceKeys = new Set();
+    return;
+  }
+  try {
+    const paths = await list();
+    openWorkspaceKeys = new Set(paths.map((p) => normalizeWorkspacePath(p)));
+  } catch {
+    openWorkspaceKeys = new Set();
+  }
+}
+
+/**
+ * Open a folder in its own window, or focus the window that already has it —
+ * a folder opens in exactly one view.
+ */
+async function openRecentInNewWindow(item: WorkspaceRecentItem): Promise<void> {
+  const openWorkspace = window.minnow?.window?.openWorkspace;
+  if (!openWorkspace) return;
+  closeWorkspaceMenu();
+  const result = await openWorkspace(item.path);
+  if (!result.ok) {
+    menuDeps.reportStatus('err', result.error);
+    return;
+  }
+  menuDeps.reportStatus(
+    'ok',
+    result.focused ? `Focused the window on ${item.label}` : `Opened ${item.label} in a new window`,
+  );
+}
 
 /** Wire callbacks from workspace-button (shared post-switch refresh). */
 export function configureWorkspaceRecentMenu(handlers: {
@@ -149,6 +190,12 @@ function createRecentRow(item: WorkspaceRecentItem): HTMLLIElement {
   li.appendChild(label);
   li.appendChild(pathLine);
 
+  const alreadyOpen = openWorkspaceKeys.has(normalizeWorkspacePath(item.path));
+  if (alreadyOpen) {
+    li.dataset.openInWindow = 'true';
+    li.title = `${item.path} — already open in another window`;
+  }
+
   if (!item.exists) {
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
@@ -175,9 +222,33 @@ function createRecentRow(item: WorkspaceRecentItem): HTMLLIElement {
     return li;
   }
 
+  // Nothing to offer on the row for this window's own folder.
+  if (window.minnow?.window?.openWorkspace && !item.isCurrent) {
+    const newWindowBtn = document.createElement('button');
+    newWindowBtn.type = 'button';
+    newWindowBtn.className = 'workspace-menu__new-window';
+    newWindowBtn.textContent = alreadyOpen ? '→' : '⧉';
+    const action = alreadyOpen
+      ? `Focus the window already on ${item.label}`
+      : `Open ${item.label} in a new window`;
+    newWindowBtn.title = action;
+    newWindowBtn.setAttribute('aria-label', action);
+    newWindowBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void openRecentInNewWindow(item);
+    });
+    li.appendChild(newWindowBtn);
+  }
+
   li.addEventListener('click', () => {
     if (item.isCurrent) {
       closeWorkspaceMenu();
+      return;
+    }
+    // A folder open elsewhere is focused, never switched into this window —
+    // two views on one folder would fight over the same sessions.db rows.
+    if (alreadyOpen) {
+      void openRecentInNewWindow(item);
       return;
     }
     void selectRecentWorkspace(item.path);
@@ -224,6 +295,25 @@ function paintWorkspaceMenuList(menu: HTMLUListElement, recent: WorkspaceRecentI
   });
   openLi.appendChild(openBtn);
   menu.appendChild(openLi);
+
+  const newWindow = window.minnow?.window?.newWindow;
+  if (!newWindow) return;
+  const newWindowLi = document.createElement('li');
+  newWindowLi.setAttribute('role', 'none');
+  const newWindowBtn = document.createElement('button');
+  newWindowBtn.type = 'button';
+  newWindowBtn.className = 'workspace-menu__action';
+  newWindowBtn.setAttribute('role', 'menuitem');
+  newWindowBtn.textContent = 'New window';
+  newWindowBtn.addEventListener('click', () => {
+    closeWorkspaceMenu();
+    void (async () => {
+      const result = await newWindow();
+      if (!result.ok) menuDeps.reportStatus('err', result.error);
+    })();
+  });
+  newWindowLi.appendChild(newWindowBtn);
+  menu.appendChild(newWindowLi);
 }
 
 /** Re-fetch workspace and paint MRU rows. */
@@ -234,6 +324,7 @@ export async function renderMenuList(): Promise<void> {
     paintWorkspaceMenuList(menu, [...cached]);
   }
 
+  await refreshOpenWorkspaceKeys();
   const info = await fetchWorkspace();
   if (info) {
     setWorkspaceFromServer(info);
@@ -290,6 +381,7 @@ export async function renderWorkspaceMenuForTest(container?: HTMLElement): Promi
 
 /** Reset module singletons between workspace menu tests. */
 export function resetWorkspaceMenuForTests(): void {
+  openWorkspaceKeys = new Set();
   closeWorkspaceMenu();
   detachGlobalListeners();
   menuEl = null;

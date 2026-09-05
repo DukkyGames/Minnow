@@ -56,13 +56,14 @@ import {
 } from '../sub-agents/effector-runner.js';
 import { bootAgentsRuntime } from '../sub-agents/runtime.js';
 import { createBoardTestingMiddleware } from '../orchestrate/board-testing/middleware.js';
-import { getWorkspaceRoot } from '../workspace/root.js';
 import { createToolsMiddleware } from './tools-middleware.js';
 import { createAuthMiddleware } from './auth-middleware.js';
+import { createWorkspaceScopeMiddleware } from './workspace-scope-middleware.js';
 import { createAuthRoutesMiddleware } from '../auth/routes.js';
 import { createDiagnosticsMiddleware } from '../diagnostics/middleware.js';
 import { createIssueAttachmentsMiddleware } from '../issues/attachments-routes.js';
 import { installDiagnosticsProcessHandlers } from '../diagnostics/process-handlers.js';
+import { getEffectiveWorkspaceRoot } from './path-access.js';
 
 /**
  * @param {import('connect').Connect.Server} connectApp
@@ -77,6 +78,9 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   setAgentsEffectorFactory((parentChatId) => createSubAgentEffector({ parentChatId }));
   void bootAgentsRuntime();
   connectApp.use(createAuthMiddleware());
+  // Authenticate first, then scope: every downstream handler runs inside the
+  // requesting view's workspace.
+  connectApp.use(createWorkspaceScopeMiddleware());
   connectApp.use(createAuthRoutesMiddleware());
   connectApp.use(createDiagnosticsMiddleware());
   connectApp.use(createConfigMiddleware());
@@ -119,7 +123,7 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createBrainMiddleware());
   connectApp.use(createProductWikiMiddleware());
   connectApp.use(createWebhooksMiddleware());
-  connectApp.use(createLspMiddleware(() => getWorkspaceRoot()));
+  connectApp.use(createLspMiddleware(() => getEffectiveWorkspaceRoot()));
   connectApp.use(createMcpMiddleware());
   connectApp.use(createServersMiddleware());
   connectApp.use(createPluginsMiddleware());
@@ -137,5 +141,5 @@ export function applyMinnowMiddlewares(connectApp, { resolveSafePath, runWithPat
   connectApp.use(createBrowserAllowlistMiddleware());
   connectApp.use(createToolsMiddleware());
   connectApp.use(createSkillsMiddleware());
-  connectApp.use(createTerminalMiddleware(() => getWorkspaceRoot()));
+  connectApp.use(createTerminalMiddleware(() => getEffectiveWorkspaceRoot()));
 }

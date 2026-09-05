@@ -44,8 +44,16 @@ export function getAppRoot() {
   return APP_ROOT;
 }
 
-/** Active workspace for AI tools and file tree. */
-export function getWorkspaceRoot() {
+/**
+ * Persisted global workspace — the default for views that do not name one, and
+ * the folder a cold boot lands in.
+ *
+ * Almost every caller wants `getEffectiveWorkspaceRoot()` from
+ * `server/runtime/path-access.js` instead: that one honours the workspace the
+ * requesting window/tab is bound to. Reach for this only when you genuinely mean
+ * "the persisted default" (boot, config persistence, the MRU list).
+ */
+export function getDefaultWorkspaceRoot() {
   return workspaceRoot;
 }
 
@@ -233,9 +241,15 @@ async function pathExistsAsDirectory(absPath) {
  * Build recent workspace rows for GET /api/workspace (includes current path).
  * @returns {Promise<Array<{ path: string, label: string, exists: boolean, isCurrent: boolean }>>}
  */
-export async function buildRecentWorkspaceList() {
+/**
+ * @param {string} [currentPath] The requesting view's workspace; defaults to the global.
+ */
+export async function buildRecentWorkspaceList(currentPath) {
   const stored = await loadRecentPathsFromDisk();
-  const current = getWorkspaceRoot();
+  const current =
+    currentPath && String(currentPath).trim()
+      ? path.resolve(String(currentPath).trim())
+      : getDefaultWorkspaceRoot();
   const currentKey = normalizeWorkspacePathKey(current);
   const allPaths = dedupeRecentPaths([current, ...stored]);
   const recent = [];
@@ -350,32 +364,21 @@ export async function initWorkspaceRoot() {
 }
 
 /**
- * Set workspace root in memory and persist to config.json.
+ * Record the folder a cold boot should land in, and touch the MRU.
+ *
+ * This is **not** a global repoint of live work any more. Views carry their own
+ * workspace on every request, so there is nothing to tear down here: no
+ * `shutdownAllLsp()` (LSP processes are keyed per workspace), and no brain
+ * cascade kick (cascades are per repo). Both used to fire from here, which is
+ * how a scheduled headless job could kill the desktop's language servers
+ * mid-session.
+ *
  * @param {string} userPath
  * @returns {Promise<string>} absolute path
  */
-export async function setWorkspaceRoot(userPath) {
-  const previous = workspaceRoot;
+export async function setDefaultWorkspaceRoot(userPath) {
   const resolved = await validateWorkspacePath(userPath);
-  const changed =
-    path.resolve(previous) !== path.resolve(resolved);
   workspaceRoot = resolved;
-  if (changed) {
-    try {
-      const { shutdownAllLsp } = await import('../lsp/manager.js');
-      shutdownAllLsp();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(`[lsp] shutdown on workspace change failed: ${message}`);
-    }
-    try {
-      const { onWorkspaceSwitched } = await import('../brain/code/cascade.js');
-      void onWorkspaceSwitched(previous);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn(`[brain] cascade on workspace switch failed: ${message}`);
-    }
-  }
   workspaceUserChosen = true;
   const meta = (await readConfigJson('config.json')) ?? {};
   const merged = mergeConfigMeta(meta, { workspace: { path: resolved, userChosen: true } });
@@ -390,14 +393,34 @@ export async function setWorkspaceRoot(userPath) {
   return resolved;
 }
 
-/** Current workspace info for API responses. */
-export function getWorkspaceInfo() {
-  const placeholder = isPlaceholderWorkspacePath(workspaceRoot);
+/**
+ * Deprecated name kept for the brain index worker (a child process with no view)
+ * and the test suite, both of which genuinely mean "set the process default".
+ * New code should say `setDefaultWorkspaceRoot`.
+ */
+export { setDefaultWorkspaceRoot as setWorkspaceRoot };
+
+/**
+ * Workspace info for API responses.
+ *
+ * With a folder named (the requesting view's), `userChosen` is a property of
+ * *that* folder, not of the process: a window opened on a real project is on a
+ * chosen workspace even if the persisted global was never set. Only the global
+ * case still consults `workspaceUserChosen`.
+ * @param {string} [absPath] Defaults to the persisted global.
+ */
+export function getWorkspaceInfo(absPath) {
+  const named = Boolean(absPath && absPath.trim());
+  const root = named ? path.resolve(String(absPath).trim()) : workspaceRoot;
+  const placeholder = isPlaceholderWorkspacePath(root);
+  const chosen = named
+    ? !placeholder
+    : workspaceUserChosen && !placeholder;
   return {
-    path: workspaceRoot,
-    label: workspaceLabel(workspaceRoot),
-    isDefault: !workspaceUserChosen || placeholder,
-    userChosen: workspaceUserChosen,
+    path: root,
+    label: workspaceLabel(root),
+    isDefault: !chosen,
+    userChosen: chosen,
     scratchPath: getScratchWorkspacePath(),
   };
 }

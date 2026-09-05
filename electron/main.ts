@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -19,7 +21,13 @@ import {
 } from './preview-host.js';
 import { getProjectRoot, importServerModule } from './server-import.js';
 import { startInProcessServer, type InProcessServerHandle } from './server-host.js';
-import { loadWindowState, trackWindowState } from './window-state.js';
+import {
+  loadWindowSet,
+  setWindowStateQuitting,
+  trackWindowState,
+  type PersistedWindowState,
+} from './window-state.js';
+import { ShellWindowRegistry } from './shell-window-registry.js';
 import { resolveMinnowPort } from './minnow-port.js';
 import { disposeUpdater, initUpdater } from './updater.js';
 import {
@@ -92,19 +100,62 @@ const devUrl = (
   process.env.MINNOW_DEV_URL?.trim() || `http://localhost:${resolveMinnowPort()}/`
 ).replace(/\/?$/, '/');
 
-let mainWindow: BrowserWindow | null = null;
 let inProcessServer: InProcessServerHandle | null = null;
 let quitInProgress = false;
 let closeToTrayEnabled = true;
 let shellZoomPercent = DEFAULT_SHELL_ZOOM_PERCENT;
 let trayManager: TrayManager | null = null;
 let bootstrapPromise: Promise<void> | null = null;
-const queuedTrayCommands: TrayRendererCommand[] = [];
-let rendererTrayReady = false;
+
+/**
+ * Which window is on which workspace. Keys must match the server's exactly, so
+ * the normalizer is the server's own — see `installWorkspaceKeyNormalizer`.
+ */
+let normalizeWorkspaceKey: (absPath: string) => string = (absPath) => absPath;
+const shellWindows = new ShellWindowRegistry({
+  normalizeKey: (absPath) => normalizeWorkspaceKey(absPath),
+});
+
+/** Tray command queue per window — a window is not ready until its renderer says so. */
+const trayReadyByWindow = new Map<number, { ready: boolean; queue: TrayRendererCommand[] }>();
+
+function trayStateFor(windowId: number): { ready: boolean; queue: TrayRendererCommand[] } {
+  let entry = trayReadyByWindow.get(windowId);
+  if (!entry) {
+    entry = { ready: false, queue: [] };
+    trayReadyByWindow.set(windowId, entry);
+  }
+  return entry;
+}
+
+/** Every live shell window, most recently focused first. */
+function listShellWindows(): BrowserWindow[] {
+  const out: BrowserWindow[] = [];
+  for (const record of shellWindows.list()) {
+    const win = BrowserWindow.fromId(record.windowId);
+    if (win && !win.isDestroyed()) out.push(win);
+  }
+  return out;
+}
+
+/** Send to every shell window — for app-wide prefs and notifications. */
+function broadcastToShellWindows(channel: string, ...args: unknown[]): void {
+  for (const win of listShellWindows()) {
+    win.webContents.send(channel, ...args);
+  }
+}
+
+function focusedShellWindow(): BrowserWindow | null {
+  const record = shellWindows.mostRecentlyFocused();
+  if (!record) return null;
+  const win = BrowserWindow.fromId(record.windowId);
+  return win && !win.isDestroyed() ? win : null;
+}
 
 // ── Renderer recovery ────────────────────────────────────────────────────────
 
-const rendererCrashTimestamps: number[] = [];
+/** Per window, else one crashy window burns the others' reload allowance. */
+const rendererCrashTimestamps = new Map<number, number[]>();
 const RENDERER_CRASH_WINDOW_MS = 60_000;
 const RENDERER_CRASH_RELOAD_CAP = 3;
 
@@ -112,15 +163,17 @@ function recoverRenderer(win: BrowserWindow): void {
   if (win.isDestroyed()) return;
 
   const now = Date.now();
-  rendererCrashTimestamps.push(now);
-  while (
-    rendererCrashTimestamps.length > 0 &&
-    now - rendererCrashTimestamps[0]! > RENDERER_CRASH_WINDOW_MS
-  ) {
-    rendererCrashTimestamps.shift();
+  let timestamps = rendererCrashTimestamps.get(win.id);
+  if (!timestamps) {
+    timestamps = [];
+    rendererCrashTimestamps.set(win.id, timestamps);
+  }
+  timestamps.push(now);
+  while (timestamps.length > 0 && now - timestamps[0]! > RENDERER_CRASH_WINDOW_MS) {
+    timestamps.shift();
   }
 
-  if (rendererCrashTimestamps.length > RENDERER_CRASH_RELOAD_CAP) {
+  if (timestamps.length > RENDERER_CRASH_RELOAD_CAP) {
     const recoveryHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -149,9 +202,7 @@ function recoverRenderer(win: BrowserWindow): void {
 
 function wirePowerWakeNotifications(): void {
   const notify = (): void => {
-    const win = mainWindow;
-    if (!win || win.isDestroyed()) return;
-    win.webContents.send(channels.POWER_SCREEN_UNLOCKED);
+    broadcastToShellWindows(channels.POWER_SCREEN_UNLOCKED);
   };
   powerMonitor.on('resume', notify);
   powerMonitor.on('unlock-screen', notify);
@@ -247,9 +298,9 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.on(channels.TRAY_NOTIFY_READY, (event) => {
-    rendererTrayReady = true;
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || win.isDestroyed()) return;
+    trayStateFor(win.id).ready = true;
     flushQueuedTrayCommands(win);
   });
 
@@ -259,7 +310,7 @@ function registerIpcHandlers(): void {
     if (typeof enabled !== 'boolean') return closeToTrayEnabled;
     closeToTrayEnabled = await writeCloseToTrayPreference(enabled);
     trayManager?.rebuildMenu();
-    mainWindow?.webContents.send(channels.TRAY_CLOSE_TO_TRAY_CHANGED, closeToTrayEnabled);
+    broadcastToShellWindows(channels.TRAY_CLOSE_TO_TRAY_CHANGED, closeToTrayEnabled);
     return closeToTrayEnabled;
   });
 
@@ -289,15 +340,50 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle(channels.SHELL_GET_ZOOM_PERCENT, () => shellZoomPercent);
 
-  ipcMain.handle(channels.SHELL_SET_ZOOM_PERCENT, async (_event, percent: unknown) => {
+  // Shell zoom stays an app-wide preference, so apply it everywhere — but this
+  // used to ignore `event.sender` entirely and zoom whichever window happened to
+  // be `mainWindow`.
+  ipcMain.handle(channels.SHELL_SET_ZOOM_PERCENT, async (event, percent: unknown) => {
     if (typeof percent !== 'number' || !Number.isFinite(percent)) return shellZoomPercent;
     shellZoomPercent = await writeShellZoomPercent(percent);
-    const win = mainWindow;
-    if (win && !win.isDestroyed()) {
+    const sender = BrowserWindow.fromWebContents(event.sender);
+    if (sender && !sender.isDestroyed()) {
+      applyShellZoom(sender.webContents, shellZoomPercent);
+    }
+    for (const win of listShellWindows()) {
+      if (sender && win.id === sender.id) {
+        win.webContents.send(channels.SHELL_ZOOM_PERCENT_CHANGED, shellZoomPercent);
+        continue;
+      }
       applyShellZoom(win.webContents, shellZoomPercent);
       win.webContents.send(channels.SHELL_ZOOM_PERCENT_CHANGED, shellZoomPercent);
     }
     return shellZoomPercent;
+  });
+
+  ipcMain.handle(channels.WINDOW_NEW, async () => openNewShellWindow());
+
+  ipcMain.handle(channels.WINDOW_OPEN_WORKSPACE, async (_event, workspacePath: unknown) => {
+    if (typeof workspacePath !== 'string' || !workspacePath.trim()) {
+      return { ok: false, error: 'workspacePath is required' };
+    }
+    return openOrFocusWorkspaceWindow(workspacePath.trim());
+  });
+
+  ipcMain.handle(channels.WINDOW_LIST_WORKSPACES, () =>
+    shellWindows
+      .list()
+      .filter((record) => record.workspacePath)
+      .map((record) => record.workspacePath),
+  );
+
+  ipcMain.handle(channels.WINDOW_SWITCH_WORKSPACE, async (event, workspacePath: unknown) => {
+    if (typeof workspacePath !== 'string' || !workspacePath.trim()) {
+      return { ok: false, error: 'workspacePath is required' };
+    }
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) return { ok: false, error: 'No window' };
+    return retargetShellWindow(win, workspacePath.trim());
   });
 }
 
@@ -345,9 +431,7 @@ async function pauseOrchestrateBoardsInRenderer(win: BrowserWindow): Promise<voi
 // ── Shutdown ─────────────────────────────────────────────────────────────────
 
 async function shutdownRuntime(): Promise<void> {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    await pauseOrchestrateBoardsInRenderer(mainWindow);
-  }
+  await Promise.all(listShellWindows().map((win) => pauseOrchestrateBoardsInRenderer(win)));
   destroyAllPreviewHosts();
   const [ptyHost, generationsStore, modelsIndex, serversIndex] = await Promise.all([
     importServerModule<{ destroyAllPtySessions: () => void }>('terminal/pty-host.js'),
@@ -379,6 +463,7 @@ async function shutdownRuntime(): Promise<void> {
 async function prepareQuitForUpdate(): Promise<void> {
   if (quitInProgress) return;
   quitInProgress = true;
+  setWindowStateQuitting(true);
   disposeUpdater();
   await shutdownRuntime();
 }
@@ -391,24 +476,30 @@ function restoreShellWindowFocus(win: BrowserWindow): void {
   win.webContents.focus();
 }
 
-function focusMainWindow(): void {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  restoreShellWindowFocus(mainWindow);
+/** Focus a specific window, else the most recently focused one. */
+function focusWindow(target?: BrowserWindow | null): void {
+  const win = target && !target.isDestroyed() ? target : focusedShellWindow();
+  if (!win) return;
+  restoreShellWindowFocus(win);
 }
 
+/** Tray commands go to the focused window. */
 function sendTrayCommand(command: TrayRendererCommand): void {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (!rendererTrayReady) {
-    queuedTrayCommands.push(command);
+  const win = focusedShellWindow();
+  if (!win) return;
+  const state = trayStateFor(win.id);
+  if (!state.ready) {
+    state.queue.push(command);
     return;
   }
-  mainWindow.webContents.send(channels.TRAY_COMMAND, command);
+  win.webContents.send(channels.TRAY_COMMAND, command);
 }
 
 function flushQueuedTrayCommands(win: BrowserWindow): void {
   if (win.isDestroyed()) return;
-  while (queuedTrayCommands.length > 0) {
-    const command = queuedTrayCommands.shift();
+  const state = trayStateFor(win.id);
+  while (state.queue.length > 0) {
+    const command = state.queue.shift();
     if (command) win.webContents.send(channels.TRAY_COMMAND, command);
   }
 }
@@ -416,8 +507,9 @@ function flushQueuedTrayCommands(win: BrowserWindow): void {
 function requestExplicitQuit(): void {
   if (quitInProgress) return;
   quitInProgress = true;
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.close();
+  setWindowStateQuitting(true);
+  for (const win of listShellWindows()) {
+    win.close();
   }
   app.quit();
 }
@@ -429,16 +521,19 @@ function ensureTrayManager(): TrayManager {
     trayManager = createTrayManager({
       trayIconPath,
       trayIconFallbackPath,
-      focusMainWindow,
+      focusMainWindow: () => focusWindow(),
+      newWindow: () => {
+        void openNewShellWindow();
+      },
       requestQuit: requestExplicitQuit,
       sendTrayCommand: (command) => {
-        focusMainWindow();
+        focusWindow();
         sendTrayCommand(command);
       },
       getCloseToTray: () => closeToTrayEnabled,
       setCloseToTray: async (enabled) => {
         closeToTrayEnabled = await writeCloseToTrayPreference(enabled);
-        mainWindow?.webContents.send(channels.TRAY_CLOSE_TO_TRAY_CHANGED, closeToTrayEnabled);
+        broadcastToShellWindows(channels.TRAY_CLOSE_TO_TRAY_CHANGED, closeToTrayEnabled);
         return closeToTrayEnabled;
       },
       getLoginItem: readLoginItemSnapshot,
@@ -451,10 +546,22 @@ function ensureTrayManager(): TrayManager {
 
 // ── Main window ──────────────────────────────────────────────────────────────
 
-// Preload is electron/preload.mjs; Electron treats .js preloads as CommonJS.
-async function createMainWindow(): Promise<BrowserWindow> {
-  const saved = await loadWindowState();
+/**
+ * One SPA renderer per workspace.
+ *
+ * The workspace reaches the renderer through `webPreferences.additionalArguments`,
+ * read in preload from `process.argv` and exposed as `window.minnow.viewContext`.
+ * No IPC round-trip, and it works in dev and packaged alike.
+ *
+ * Preload is electron/preload.mjs; Electron treats .js preloads as CommonJS.
+ */
+async function createShellWindow(
+  options: { workspacePath?: string; bounds?: PersistedWindowState } = {},
+): Promise<BrowserWindow> {
+  const workspacePath = options.workspacePath?.trim() ?? '';
+  const saved = options.bounds ?? (await loadWindowSet()).windows[0]!;
   const preloadPath = path.join(__dirname, 'preload.mjs');
+  const viewId = shellWindows.nextViewId();
 
   const win = new BrowserWindow({
     width: saved.width,
@@ -478,8 +585,27 @@ async function createMainWindow(): Promise<BrowserWindow> {
       webviewTag: false,
       zoomFactor: shellZoomFactorFromPercent(shellZoomPercent),
       backgroundThrottling: false,
+      additionalArguments: [
+        `--minnow-workspace=${workspacePath}`,
+        `--minnow-view-id=${viewId}`,
+      ],
     },
   });
+
+  // Window-local, not a `globalShortcut` — that would take Ctrl/Cmd+Shift+N
+  // away from every other app on the machine.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown' || input.key?.toLowerCase() !== 'n') return;
+    if (!input.shift) return;
+    const modifier = process.platform === 'darwin' ? input.meta : input.control;
+    if (!modifier) return;
+    event.preventDefault();
+    void openNewShellWindow();
+  });
+
+  shellWindows.register(win.id, workspacePath, viewId);
+  if (workspacePath) void claimWorkspaceOnServer(workspacePath);
+  win.on('focus', () => shellWindows.markFocused(win.id));
 
   wireShellWindowVisibility(win);
 
@@ -499,7 +625,7 @@ async function createMainWindow(): Promise<BrowserWindow> {
     win.maximize();
   }
 
-  trackWindowState(win);
+  trackWindowState(win, () => shellWindows.get(win.id)?.workspacePath ?? '');
   wireShellWindowState(win);
 
   const showFallbackTimer = setTimeout(() => {
@@ -516,10 +642,10 @@ async function createMainWindow(): Promise<BrowserWindow> {
 
   win.on('closed', () => {
     clearTimeout(showFallbackTimer);
-    if (mainWindow === win) {
-      mainWindow = null;
-      rendererTrayReady = false;
-    }
+    const record = shellWindows.unregister(win.id);
+    trayReadyByWindow.delete(win.id);
+    rendererCrashTimestamps.delete(win.id);
+    if (record?.workspacePath) void releaseWorkspaceOnServer(record.workspacePath);
   });
 
   ensureTrayManager().wireWindowClose(win);
@@ -575,6 +701,190 @@ async function createMainWindow(): Promise<BrowserWindow> {
   return win;
 }
 
+/**
+ * Tell the server a view is on this folder. Membership in that registry is the
+ * filesystem security boundary — a folder no window has open is not writable.
+ *
+ * Packaged Minnow runs the HTTP server in this process, so calling the module
+ * directly reaches the live registry. In dev the server is a *separate* process
+ * (`npm run desktop` spawns `node server.js`), where the module import would
+ * register into a second, unused copy — so that case goes over HTTP.
+ */
+function minnowHomeDir(): string {
+  const override = process.env.MINNOW_HOME;
+  if (typeof override === 'string' && override.trim()) return override.trim();
+  const homedir = os.homedir();
+  if (homedir) return path.join(homedir, '.minnow');
+  return path.join(os.tmpdir(), '.minnow');
+}
+
+/** The per-boot credential the server writes at startup. */
+function readServerSessionToken(): string {
+  try {
+    return fs.readFileSync(path.join(minnowHomeDir(), 'session-token'), 'utf8').trim();
+  } catch {
+    return '';
+  }
+}
+
+async function callOpenWorkspaceApi(
+  method: 'POST' | 'DELETE',
+  workspacePath: string,
+): Promise<void> {
+  const base = (inProcessServer?.url ?? devUrl).replace(/\/$/, '');
+  const token = readServerSessionToken();
+  await fetch(`${base}/api/workspace/open`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'X-Minnow-Token': token } : {}),
+    },
+    body: JSON.stringify({ path: workspacePath }),
+  });
+}
+
+async function claimWorkspaceOnServer(workspacePath: string): Promise<void> {
+  if (inProcessServer) {
+    try {
+      const mod = await importServerModule<{ openWorkspace: (p: string) => string }>(
+        'workspace/open-workspaces.js',
+      );
+      mod.openWorkspace(workspacePath);
+      return;
+    } catch (err) {
+      console.warn('[electron] in-process workspace registration failed:', err);
+    }
+  }
+  try {
+    await callOpenWorkspaceApi('POST', workspacePath);
+  } catch (err) {
+    console.warn('[electron] could not register open workspace:', err);
+  }
+}
+
+async function releaseWorkspaceOnServer(workspacePath: string): Promise<void> {
+  if (inProcessServer) {
+    try {
+      const mod = await importServerModule<{ closeWorkspace: (p: string) => boolean }>(
+        'workspace/open-workspaces.js',
+      );
+      mod.closeWorkspace(workspacePath);
+      return;
+    } catch {
+      // The runtime may already be torn down.
+    }
+  }
+  try {
+    await callOpenWorkspaceApi('DELETE', workspacePath);
+  } catch {
+    // The server may already be gone; the registry is in-memory anyway.
+  }
+}
+
+/**
+ * Use the server's own path normalizer so window keys and allowlist keys agree.
+ * Writing a third normalizer here is how the duplicate-open rule would quietly
+ * stop working on Windows and macOS.
+ */
+async function installWorkspaceKeyNormalizer(): Promise<void> {
+  try {
+    const mod = await importServerModule<{
+      normalizeWorkspacePathKey: (absPath: string) => string;
+    }>('workspace/root.js');
+    normalizeWorkspaceKey = mod.normalizeWorkspacePathKey;
+  } catch (err) {
+    console.warn('[electron] falling back to identity workspace keys:', err);
+  }
+}
+
+/**
+ * A fresh window at the folder gate. The user picks a folder there, and that
+ * pick goes through `WINDOW_OPEN_WORKSPACE`, so the duplicate-open rule still
+ * applies.
+ */
+async function openNewShellWindow(): Promise<
+  { ok: true } | { ok: false; error: string }
+> {
+  try {
+    await bootstrap();
+    const win = await openShellWindow({});
+    focusWindow(win);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * A folder opens in exactly one view. Opening it again focuses the window that
+ * already has it — this is the rule that keeps two views from owning the same
+ * `sessions.db` chat rows and 409-thrashing each other.
+ */
+async function openOrFocusWorkspaceWindow(
+  workspacePath: string,
+): Promise<{ ok: true; focused: boolean } | { ok: false; error: string }> {
+  const existing = shellWindows.findByWorkspace(workspacePath);
+  if (existing) {
+    const win = BrowserWindow.fromId(existing.windowId);
+    if (win && !win.isDestroyed()) {
+      focusWindow(win);
+      return { ok: true, focused: true };
+    }
+    shellWindows.unregister(existing.windowId);
+  }
+
+  // A window still sitting at the folder gate adopts the folder rather than
+  // spawning a second, empty window beside itself.
+  const gateWindow = listShellWindows().find(
+    (win) => !shellWindows.get(win.id)?.workspacePath,
+  );
+  if (gateWindow) {
+    await retargetShellWindow(gateWindow, workspacePath);
+    focusWindow(gateWindow);
+    return { ok: true, focused: false };
+  }
+
+  try {
+    await openShellWindow({ workspacePath });
+    return { ok: true, focused: false };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * Switching folders inside a window is "tell main this view is now folder X,
+ * then reload the renderer". Everything the old in-renderer teardown rebuilt is
+ * persisted per workspace on disk, so a reload is strictly safer than a partial
+ * reset.
+ */
+async function retargetShellWindow(
+  win: BrowserWindow,
+  workspacePath: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const clash = shellWindows.findByWorkspace(workspacePath);
+  if (clash && clash.windowId !== win.id) {
+    const other = BrowserWindow.fromId(clash.windowId);
+    if (other && !other.isDestroyed()) {
+      focusWindow(other);
+      return { ok: false, error: 'That folder is already open in another window' };
+    }
+    shellWindows.unregister(clash.windowId);
+  }
+
+  const previous = shellWindows.get(win.id)?.workspacePath ?? '';
+  shellWindows.retarget(win.id, workspacePath);
+  await claimWorkspaceOnServer(workspacePath);
+  if (previous && previous !== workspacePath) {
+    await releaseWorkspaceOnServer(previous);
+  }
+
+  // additionalArguments are fixed at window creation, so a retarget needs a new
+  // window rather than a reload of this one.
+  await openShellWindow({ workspacePath, replacing: win });
+  return { ok: true };
+}
+
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 
 function resolveElectronAppRoot(): string {
@@ -618,6 +928,11 @@ async function bootstrap(): Promise<void> {
   }
 }
 
+/**
+ * Runtime init, exactly once. Split from `openShellWindow` because `bootstrap()`
+ * memoizes its promise and only clears it on failure — so on macOS, after a real
+ * close, `activate` resolved the cached promise and never recreated a window.
+ */
 async function bootstrapInner(): Promise<void> {
   app.setName('Minnow');
   if (process.platform === 'win32') {
@@ -634,17 +949,118 @@ async function bootstrapInner(): Promise<void> {
   tray.ensureTray();
   tray.updateStatus({ ...EMPTY_TRAY_STATUS });
 
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    focusMainWindow();
+  // Kick the server (and therefore the URL every window loads) once.
+  shellLoadUrlPromise = resolveLoadUrl();
+  shellLoadUrlPromise.catch(() => {});
+  await installWorkspaceKeyNormalizer();
+}
+
+let shellLoadUrlPromise: Promise<string> | null = null;
+
+async function shellLoadUrl(): Promise<string> {
+  if (!shellLoadUrlPromise) {
+    shellLoadUrlPromise = resolveLoadUrl();
+    shellLoadUrlPromise.catch(() => {});
+  }
+  return shellLoadUrlPromise;
+}
+
+/** Create one shell window bound to a workspace (or to the folder gate). */
+async function openShellWindow(
+  options: {
+    workspacePath?: string;
+    bounds?: PersistedWindowState;
+    replacing?: BrowserWindow;
+  } = {},
+): Promise<BrowserWindow> {
+  const replacing = options.replacing;
+  const bounds =
+    options.bounds ??
+    (replacing && !replacing.isDestroyed()
+      ? {
+          ...replacing.getBounds(),
+          isMaximized: replacing.isMaximized(),
+        }
+      : undefined);
+
+  const win = await createShellWindow({
+    workspacePath: options.workspacePath,
+    bounds,
+  });
+  await win.loadURL(await shellLoadUrl());
+  if (replacing && !replacing.isDestroyed()) {
+    // Drop the old view only once its replacement is live, so the user never
+    // sees the app with no window.
+    shellWindows.unregister(replacing.id);
+    replacing.destroy();
+  }
+  return win;
+}
+
+/**
+ * The folder a cold boot should land in, read straight off `config.json`.
+ *
+ * Not via `importServerModule`: in dev the server is a separate process, so the
+ * module imported here would be a fresh copy that never ran `initWorkspaceRoot()`
+ * and would answer with the app cwd.
+ */
+function readPersistedDefaultWorkspace(): string {
+  try {
+    const raw = fs.readFileSync(path.join(minnowHomeDir(), 'config.json'), 'utf8');
+    const meta = JSON.parse(raw) as { workspace?: { path?: unknown; userChosen?: unknown } };
+    const saved = meta?.workspace?.path;
+    if (typeof saved !== 'string' || !saved.trim()) return '';
+    if (meta.workspace?.userChosen === false) return '';
+    return path.resolve(saved.trim());
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Restore the previous window set, skipping folders that no longer exist. Falls
+ * back to a single gate window.
+ */
+async function restoreShellWindows(): Promise<void> {
+  const { windows } = await loadWindowSet();
+  const fsPromises = await import('node:fs/promises');
+  /** @type {PersistedWindowState[]} */
+  const usable: PersistedWindowState[] = [];
+  for (const entry of windows) {
+    const folder = entry.workspacePath?.trim() ?? '';
+    if (!folder) {
+      usable.push(entry);
+      continue;
+    }
+    try {
+      const stat = await fsPromises.stat(folder);
+      if (stat.isDirectory()) usable.push(entry);
+    } catch {
+      // The folder was moved or deleted since last run — skip it silently.
+    }
+  }
+
+  if (usable.length === 0) {
+    await openShellWindow({ workspacePath: readPersistedDefaultWorkspace() });
     return;
   }
 
-  const loadUrlPromise = resolveLoadUrl();
-  loadUrlPromise.catch(() => {});
+  // A v1 window-state file names no folder. Upgrading users should still boot
+  // into their persisted workspace rather than being sent back to the gate.
+  const soleUnbound = usable.length === 1 && !usable[0]!.workspacePath?.trim();
+  if (soleUnbound) {
+    await openShellWindow({
+      workspacePath: readPersistedDefaultWorkspace(),
+      bounds: usable[0],
+    });
+    return;
+  }
 
-  mainWindow = await createMainWindow();
-  rendererTrayReady = false;
-  await mainWindow.loadURL(await loadUrlPromise);
+  for (const entry of usable) {
+    const folder = entry.workspacePath?.trim() ?? '';
+    if (folder && shellWindows.findByWorkspace(folder)) continue;
+    await openShellWindow({ workspacePath: folder, bounds: entry });
+  }
 }
 
 function failBootstrap(err: unknown): void {
@@ -716,12 +1132,25 @@ if (!gotSingleInstanceLock) {
     console.error('[electron] child-process-gone:', details);
   });
 
-  app.on('second-instance', () => {
-    focusMainWindow();
+  // `minnow <path>` focuses that folder's window if it is open, else opens one.
+  // This used to drop argv entirely and just focus whatever was in front.
+  app.on('second-instance', (_event, argv) => {
+    const folder = argv
+      .slice(1)
+      .find((arg) => typeof arg === 'string' && arg.trim() && !arg.startsWith('-'));
+    if (folder) {
+      void bootstrap()
+        .then(() => openOrFocusWorkspaceWindow(path.resolve(folder.trim())))
+        .catch(failBootstrap);
+      return;
+    }
+    focusWindow();
   });
 
   app.whenReady().then(() => {
-    bootstrap().catch(failBootstrap);
+    bootstrap()
+      .then(() => restoreShellWindows())
+      .catch(failBootstrap);
   });
 
   app.on('window-all-closed', () => {
@@ -735,10 +1164,14 @@ if (!gotSingleInstanceLock) {
   });
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      bootstrap().catch(failBootstrap);
+    if (shellWindows.size === 0) {
+      // Runtime init is memoized; window creation is not, so this really does
+      // bring a window back after the last one was closed on macOS.
+      bootstrap()
+        .then(() => restoreShellWindows())
+        .catch(failBootstrap);
     } else {
-      focusMainWindow();
+      focusWindow();
     }
   });
 
@@ -746,6 +1179,7 @@ if (!gotSingleInstanceLock) {
     if (quitInProgress) return;
     event.preventDefault();
     quitInProgress = true;
+    setWindowStateQuitting(true);
     disposeUpdater();
     trayManager?.destroyTray();
     shutdownRuntime()

@@ -4,7 +4,7 @@
 
 import { runProcess } from '../process-runner.js';
 import { isGitRepository } from '../tools/git-change-stats.js';
-import { getWorkspaceRoot } from './root.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 /** True when `origin` has a configured URL in the workspace root. */
 async function hasOriginRemote(cwd) {
@@ -22,7 +22,7 @@ async function hasOriginRemote(cwd) {
  * @returns {Promise<{ isGitRepo: boolean; hasRemote: boolean }>}
  */
 export async function getWorkspaceGitStatus(workspaceRoot) {
-  const root = workspaceRoot?.trim() || getWorkspaceRoot();
+  const root = workspaceRoot?.trim() || getEffectiveWorkspaceRoot();
   const isGitRepo = await isGitRepository(root);
   const hasRemote = isGitRepo ? await hasOriginRemote(root) : false;
   return { isGitRepo, hasRemote };

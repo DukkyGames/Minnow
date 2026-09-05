@@ -10,7 +10,6 @@ import {
   LSP_SCOPE_INDEX,
   notifyLspDocumentForScope,
 } from '../../lsp/manager.js';
-import { getWorkspaceRoot } from '../../workspace/root.js';
 import { brainWorkspaceKeyFromPath } from '../paths.js';
 import { getEffectiveWorkspaceRoot } from '../../runtime/path-access.js';
 import { normalizeBrainCodeConfig } from './config.js';
@@ -343,7 +342,7 @@ export async function runBoundedPool(items, concurrency, fn, shouldContinue = ()
 /**
  * @param {import('better-sqlite3').Database} db
  * @param {string} repo
- * @param {ReturnType<typeof getWorkspaceRoot>} root
+ * @param {ReturnType<typeof getEffectiveWorkspaceRoot>} root
  */
 async function augmentUsageCounts(db, repo, root) {
   const symbols = db

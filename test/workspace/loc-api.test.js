@@ -6,7 +6,7 @@ import { after, before, describe, test } from 'node:test';
 import { ensureMinnowLayout } from '../../server/config/home.js';
 import { handleWorkspaceRequest } from '../../server/workspace/middleware.js';
 import { clearWorkspaceLocCache } from '../../server/workspace/loc.js';
-import { getWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
+import { getDefaultWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
 import { rmTestHome, setTestHome } from '../config/test-helpers.js';
 
 function createLocTestServer() {
@@ -66,7 +66,7 @@ describe('GET /api/workspace/loc', () => {
   });
 
   test('returns line and file counts for the workspace', async () => {
-    assert.equal(getWorkspaceRoot(), workspaceDir);
+    assert.equal(getDefaultWorkspaceRoot(), workspaceDir);
     const { status, json } = await httpGet(baseUrl, '/api/workspace/loc');
     assert.equal(status, 200);
     assert.equal(json.ok, true);

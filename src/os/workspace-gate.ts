@@ -12,6 +12,7 @@ import { loadWorkspaceFromServer } from '../state/workspace';
 import { isOsShellEnabled } from './page-bridge';
 import { getOsView, subscribeInstances } from './instances';
 import { launchApp } from './router';
+import { hasViewWorkspace } from '../state/view-workspace';
 
 // ── Session ──────────────────────────────────────────────────────────────────
 
@@ -194,6 +195,10 @@ export function syncWorkspaceGateFromRoute(): void {
     if (gateOpen) closeWorkspaceGate();
     return;
   }
+  if (hasViewWorkspace()) {
+    launchApp('code');
+    return;
+  }
   if (isPageReload() && hasWorkspaceGatePassedThisSession()) {
     launchApp('code');
     return;
@@ -211,10 +216,17 @@ function ensureBootGatePromise(): void {
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
-/** Whether initApp should block on the workspace gate (cold launch only). */
+/**
+ * Whether initApp should block on the workspace gate (cold launch only).
+ *
+ * A window opened *on* a folder already knows which one it is — its
+ * `viewContext.workspacePath` was fixed at window creation — so it must not
+ * stop at the picker. The "New window" case (no folder) still gets the gate.
+ */
 export function shouldBlockBootOnWorkspaceGate(): boolean {
   if (!isOsShellEnabled()) return false;
   if (isPageReload()) return false;
+  if (hasViewWorkspace()) return false;
   return true;
 }
 
@@ -232,6 +244,11 @@ export async function beginWorkspaceGateForBoot(): Promise<{ whenChosen: Promise
   await loadWorkspaceFromServer();
 
   if (!shouldBlockBootOnWorkspaceGate()) {
+    // A window bound to a folder resolves the gate immediately and goes to Code.
+    if (hasViewWorkspace()) {
+      markWorkspaceGatePassedThisSession();
+      launchApp('code');
+    }
     return null;
   }
 

@@ -10,6 +10,7 @@ import { isDefaultWorkspace } from '../state/workspace';
 import { detectLocalServer, getLocalServerAvailable } from '../tools/client';
 import { isOsShellEnabled } from '../os/page-bridge';
 import { executeWorkspaceSwitch } from './workspace-switch-guard';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { openWorkspaceFolderPicker } from './workspace-folder-picker';
 import { setStatus } from './status';
 
@@ -234,6 +235,8 @@ function createRecentRow(item: WorkspaceRecentItem): HTMLLIElement {
   li.setAttribute('role', 'listitem');
 
   if (!item.exists) {
+    // Same wrapper as a live entry so the divider comes from the same place.
+    li.className = 'welcome-page__recents-item';
     const row = document.createElement('div');
     row.className = 'welcome-page__recents-row welcome-page__recents-row--missing';
 
@@ -269,6 +272,8 @@ function createRecentRow(item: WorkspaceRecentItem): HTMLLIElement {
     return li;
   }
 
+  li.className = 'welcome-page__recents-item';
+
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'welcome-page__recents-row';
@@ -288,7 +293,60 @@ function createRecentRow(item: WorkspaceRecentItem): HTMLLIElement {
   });
 
   li.appendChild(btn);
+
+  // Only Electron can hold more than one view; the browser has a single global
+  // workspace and nothing to open a second window with.
+  if (window.minnow?.window?.openWorkspace) {
+    const newWindowBtn = document.createElement('button');
+    newWindowBtn.type = 'button';
+    newWindowBtn.className = 'welcome-page__recents-new-window';
+    newWindowBtn.textContent = 'New window';
+    newWindowBtn.title = `Open ${item.label} in a new window`;
+    newWindowBtn.setAttribute('aria-label', `Open ${item.label} in a new window`);
+    newWindowBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void openRecentWorkspaceInNewWindow(item.path);
+    });
+    li.appendChild(newWindowBtn);
+  }
+
   return li;
+}
+
+/**
+ * Open a folder in its own window — or focus the window that already has it,
+ * since a folder opens in exactly one view.
+ */
+async function openRecentWorkspaceInNewWindow(absPath: string): Promise<void> {
+  const openWorkspace = window.minnow?.window?.openWorkspace;
+  if (!openWorkspace) return;
+  if (!getLocalServerAvailable()) {
+    setStatus('err', 'Workspace requires Minnow running locally');
+    return;
+  }
+  const result = await openWorkspace(absPath);
+  if (!result.ok) {
+    setStatus('err', result.error);
+    return;
+  }
+  setStatus('ok', result.focused ? 'Focused the window already on that folder' : 'Opened a new window');
+  await renderRecentsList();
+}
+
+/**
+ * Folders another window already has open, normalized for comparison. A folder
+ * opens in exactly one view, so clicking one of these focuses that window rather
+ * than switching this one.
+ */
+async function readOpenWorkspacePaths(): Promise<Set<string>> {
+  const list = window.minnow?.window?.listWorkspaces;
+  if (!list) return new Set();
+  try {
+    const paths = await list();
+    return new Set(paths.map((p) => normalizeWorkspacePath(p)));
+  } catch {
+    return new Set();
+  }
 }
 
 async function renderRecentsList(): Promise<void> {
@@ -302,10 +360,25 @@ async function renderRecentsList(): Promise<void> {
   const info = await fetchWorkspace();
   const recent = info?.recent ?? [];
   const nonCurrent = recent.filter((r) => !r.isCurrent);
+  const openElsewhere = await readOpenWorkspacePaths();
 
   list.innerHTML = '';
   for (const item of recent) {
-    list.appendChild(createRecentRow(item));
+    const row = createRecentRow(item);
+    if (openElsewhere.has(normalizeWorkspacePath(item.path))) {
+      row.dataset.openInWindow = 'true';
+      const button = row.querySelector('button.welcome-page__recents-row');
+      if (button instanceof HTMLElement) {
+        button.title = `${item.path} — already open in another window`;
+      }
+      const newWindowBtn = row.querySelector('button.welcome-page__recents-new-window');
+      if (newWindowBtn instanceof HTMLElement) {
+        newWindowBtn.textContent = 'Focus';
+        newWindowBtn.title = `Focus the window already on ${item.label}`;
+        newWindowBtn.setAttribute('aria-label', `Focus the window already on ${item.label}`);
+      }
+    }
+    list.appendChild(row);
   }
 
   if (empty) {
@@ -328,6 +401,17 @@ async function activateRecentWorkspace(absPath: string): Promise<void> {
     setStatus('err', 'Workspace requires Minnow running locally');
     return;
   }
+
+  // A folder already open somewhere just gets focused — two views on one folder
+  // would fight over the same `sessions.db` rows.
+  const openWorkspace = window.minnow?.window?.openWorkspace;
+  if (openWorkspace && (await readOpenWorkspacePaths()).has(normalizeWorkspacePath(absPath))) {
+    const result = await openWorkspace(absPath);
+    if (!result.ok) setStatus('err', result.error);
+    else setStatus('ok', 'Focused the window already on that folder');
+    return;
+  }
+
   setStatus('spin', 'Switching workspace…');
   try {
     const info = await executeWorkspaceSwitch(absPath);

@@ -288,6 +288,18 @@ export interface MinnowWindowApi {
   onMaximizedChanged(callback: (maximized: boolean) => void): () => void;
   /** Optional: absent on a preload from an older build until the shell restarts. */
   onVisibilityChanged?(callback: (visible: boolean) => void): () => void;
+  /** Open a fresh window at the folder gate. */
+  newWindow?: () => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Open a folder in a window, or focus the window already on it. */
+  openWorkspace?: (
+    workspacePath: string,
+  ) => Promise<{ ok: true; focused: boolean } | { ok: false; error: string }>;
+  /** Folders currently open in some window. */
+  listWorkspaces?: () => Promise<string[]>;
+  /** Point this window at a different folder. */
+  switchWorkspace?: (
+    workspacePath: string,
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
 }
 
 export interface MinnowLastCrashMarker {
@@ -384,7 +396,19 @@ export interface MinnowBoardApi {
   onPauseForShutdown(callback: () => void): () => void;
 }
 
+/** Which workspace (and view) this renderer is bound to. */
+export interface MinnowViewContext {
+  /** Absolute workspace folder, or `''` when the window booted with no folder. */
+  workspacePath: string;
+  /** Stable id for this view, for main-process window/tab lookup. */
+  viewId: string;
+  /** True when the SPA runs inside a tab view under host chrome. */
+  hosted: boolean;
+}
+
 export interface MinnowElectronBridge {
+  /** Optional: shells built before multi-workspace do not set it. */
+  viewContext?: MinnowViewContext;
   preview: MinnowPreviewApi;
   /** Optional: shells built before MIN-543 lack host reveal. */
   shell?: MinnowShellApi;

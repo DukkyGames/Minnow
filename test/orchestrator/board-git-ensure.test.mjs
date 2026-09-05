@@ -24,7 +24,7 @@ import {
   resetEnsuredBoards,
 } from '../../server/orchestrator/worktree-lifecycle.js';
 import { isGitRepository } from '../../server/tools/git-change-stats.js';
-import { getWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
+import { getDefaultWorkspaceRoot, setWorkspaceRoot } from '../../server/workspace/root.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -105,7 +105,7 @@ function installIsolatedEffector() {
 describe('board git ensure at Start', { concurrency: false }, () => {
   before(() => {
     previousHome = process.env.MINNOW_HOME;
-    previousWorkspace = getWorkspaceRoot();
+    previousWorkspace = getDefaultWorkspaceRoot();
   });
 
   beforeEach(async () => {

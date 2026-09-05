@@ -4,7 +4,6 @@
 import { FAKE_PROVIDER_ID } from '../board-testing/fake-model-ids.js';
 import { listProviders } from '../../providers/store.js';
 import { readWholeSessionState } from '../../config/sessions-repo.js';
-import { getWorkspaceRoot } from '../../workspace/root.js';
 import {
   getFakeModelStatus,
   getFakeModelRequestTail,
@@ -22,6 +21,7 @@ import {
   TEST_BOARD_PLANNER_ID,
 } from './constants.js';
 import { isBoardTestingApiEnabled } from '../../config/dev-surfaces.js';
+import { getEffectiveWorkspaceRoot } from '../../runtime/path-access.js';
 
 const API_PREFIX = '/api/orchestrate/board-testing';
 
@@ -66,7 +66,7 @@ async function buildBoardTestingStatus() {
   }
 
   const state = readWholeSessionState();
-  const workspacePath = getWorkspaceRoot();
+  const workspacePath = getEffectiveWorkspaceRoot();
   const { normalizeWorkspacePath } = await importTsModule(
     '../../../src/lib/normalize-workspace-path.ts',
   );

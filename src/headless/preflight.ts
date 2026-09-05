@@ -85,15 +85,36 @@ export function stopSpawnedServer(): void {
   serverChild = null;
 }
 
-/** PUT workspace root on the dev server. */
-export async function putWorkspace(baseUrl: string, workspacePath: string): Promise<void> {
-  const res = await fetch(headlessApiUrl('/api/workspace'), {
-    method: 'PUT',
+/**
+ * Claim the run's folder in the server's open-workspace registry.
+ *
+ * This replaces the old `PUT /api/workspace`, which was a *global* repoint: a
+ * scheduled headless job would move the desktop UI's workspace out from under
+ * the user mid-session. Registering instead only widens the filesystem
+ * allowlist to this folder; the run then names it on every request via
+ * `X-Minnow-Workspace`.
+ */
+export async function openWorkspace(baseUrl: string, workspacePath: string): Promise<void> {
+  const res = await fetch(headlessApiUrl('/api/workspace/open'), {
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path: workspacePath }),
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`PUT /api/workspace failed: HTTP ${res.status} ${text}`);
+    throw new Error(`POST /api/workspace/open failed: HTTP ${res.status} ${text}`);
+  }
+}
+
+/** Release the claim when the run finishes. Best-effort: never fails the run. */
+export async function closeWorkspace(baseUrl: string, workspacePath: string): Promise<void> {
+  try {
+    await fetch(headlessApiUrl('/api/workspace/open'), {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: workspacePath }),
+    });
+  } catch {
+    // The server may already be gone; the registry is in-memory anyway.
   }
 }

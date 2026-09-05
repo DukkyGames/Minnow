@@ -6,8 +6,8 @@
 
 import { runProcess } from '../process-runner.js';
 import { isGitRepository } from '../tools/git-change-stats.js';
-import { getWorkspaceRoot } from './root.js';
 import { ensureBaselineGitignore } from './baseline-gitignore.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 const GIT_TIMEOUT_MS = 120_000;
 /** Conventional message for the first commit on a freshly initialized workspace. */
@@ -84,7 +84,7 @@ async function commitIdentity(cwd) {
  * } | { ok: false; error: string }>}
  */
 export async function initializeWorkspaceGit(workspaceRoot) {
-  const root = workspaceRoot?.trim() || getWorkspaceRoot();
+  const root = workspaceRoot?.trim() || getEffectiveWorkspaceRoot();
   if (!root) {
     return { ok: false, error: 'Workspace root is not set' };
   }

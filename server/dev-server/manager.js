@@ -11,7 +11,7 @@ import {
 } from '../terminal-runner.js';
 import { isPidAlive, readRunIndexEntry } from '../terminal/run-index.js';
 import { resolveSafePath, runWithToolContext } from '../runtime/path-access.js';
-import { getWorkspaceRoot, normalizeWorkspacePathKey } from '../workspace/root.js';
+import { normalizeWorkspacePathKey } from '../workspace/root.js';
 import { validateAllowedWorkspaceRoot } from '../chats-workspace/paths.js';
 import {
   buildDevServerSpawnEnv,
@@ -24,6 +24,7 @@ import { readStartupGuide } from './startup-guide.js';
 import { assessHostKillCommand } from '../tools/host-kill-guard.js';
 import { assessHostPortBindCommand } from '../tools/host-port-bind-guard.js';
 import { probePort } from './ports.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 /** @typedef {'no_guide' | 'stopped' | 'starting' | 'running' | 'stopping' | 'error'} DevServerStatus */
 
@@ -457,7 +458,7 @@ async function resolveDevServerRunRoot(registryRoot, def, overrideWorktreeRoot) 
  * @param {string} [serverId]
  */
 export async function getDevServerStatusById(
-  workspaceRoot = getWorkspaceRoot(),
+  workspaceRoot = getEffectiveWorkspaceRoot(),
   serverId = PRIMARY_DEV_SERVER_ID,
 ) {
   const root = path.resolve(workspaceRoot);
@@ -521,7 +522,7 @@ export async function getDevServerStatusById(
 /**
  * @param {string} [workspaceRoot]
  */
-export async function listDevServerStatuses(workspaceRoot = getWorkspaceRoot()) {
+export async function listDevServerStatuses(workspaceRoot = getEffectiveWorkspaceRoot()) {
   const root = path.resolve(workspaceRoot);
   const defs = await readDevServers(root);
   if (defs.length === 0) {
@@ -575,7 +576,7 @@ export async function listDevServerStatuses(workspaceRoot = getWorkspaceRoot()) 
 /**
  * @param {string} [workspaceRoot]
  */
-export async function getDevServerStatus(workspaceRoot = getWorkspaceRoot()) {
+export async function getDevServerStatus(workspaceRoot = getEffectiveWorkspaceRoot()) {
   return getDevServerStatusById(workspaceRoot, PRIMARY_DEV_SERVER_ID);
 }
 
@@ -585,7 +586,7 @@ export async function getDevServerStatus(workspaceRoot = getWorkspaceRoot()) {
  * @param {{ worktreeRoot?: string, strictPort?: boolean }} [options]
  */
 export async function startDevServerById(
-  workspaceRoot = getWorkspaceRoot(),
+  workspaceRoot = getEffectiveWorkspaceRoot(),
   serverId = PRIMARY_DEV_SERVER_ID,
   options = {},
 ) {
@@ -695,7 +696,7 @@ export async function startDevServerById(
 /**
  * @param {string} [workspaceRoot]
  */
-export async function startDevServer(workspaceRoot = getWorkspaceRoot()) {
+export async function startDevServer(workspaceRoot = getEffectiveWorkspaceRoot()) {
   return startDevServerById(workspaceRoot, PRIMARY_DEV_SERVER_ID);
 }
 
@@ -704,7 +705,7 @@ export async function startDevServer(workspaceRoot = getWorkspaceRoot()) {
  * @param {string} [serverId]
  */
 export async function stopDevServerById(
-  workspaceRoot = getWorkspaceRoot(),
+  workspaceRoot = getEffectiveWorkspaceRoot(),
   serverId = PRIMARY_DEV_SERVER_ID,
 ) {
   const registryRoot = path.resolve(workspaceRoot);
@@ -769,7 +770,7 @@ export async function stopDevServerById(
 /**
  * @param {string} [workspaceRoot]
  */
-export async function stopDevServer(workspaceRoot = getWorkspaceRoot()) {
+export async function stopDevServer(workspaceRoot = getEffectiveWorkspaceRoot()) {
   return stopDevServerById(workspaceRoot, PRIMARY_DEV_SERVER_ID);
 }
 
@@ -778,7 +779,7 @@ export async function stopDevServer(workspaceRoot = getWorkspaceRoot()) {
  * @param {string} [serverId]
  */
 export async function restartDevServerById(
-  workspaceRoot = getWorkspaceRoot(),
+  workspaceRoot = getEffectiveWorkspaceRoot(),
   serverId = PRIMARY_DEV_SERVER_ID,
   options = {},
 ) {
@@ -841,7 +842,7 @@ export async function toolStartBackgroundCommand(args) {
 
     const shellProfile = await (
       await import('../terminal/shell-config.js')
-    ).resolveExecuteShellProfile(getWorkspaceRoot());
+    ).resolveExecuteShellProfile(getEffectiveWorkspaceRoot());
 
     const started = await createBackgroundRun({
       command,
@@ -855,7 +856,7 @@ export async function toolStartBackgroundCommand(args) {
       ...(spawnEnv ? { env: spawnEnv } : {}),
     });
 
-    const root = path.resolve(getWorkspaceRoot());
+    const root = path.resolve(getEffectiveWorkspaceRoot());
     const startup = await readStartupGuide(root);
     if (startup.guide && shouldRegisterDevServerFromTool(args, startup.guide)) {
       const settings = await readDevServerSettings(root);

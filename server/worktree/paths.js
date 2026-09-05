@@ -7,9 +7,10 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { getMinnowHome } from '../config/home.js';
-import { getWorkspaceRoot, normalizeWorkspacePathKey } from '../workspace/root.js';
+import { normalizeWorkspacePathKey } from '../workspace/root.js';
 import { isResolvedPathUnderRoot } from '../workspace/safe-path.js';
 import { sanitizePathSegment } from '../../src/lib/sanitize-path-segment.mjs';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 const WORKTREES_DIR_NAME = 'worktrees';
 
@@ -22,7 +23,7 @@ export function getWorktreesRoot() {
 }
 
 /** Stable per-repo key (basename + short hash of the resolved path). */
-export function repoKeyForWorkspace(workspaceRoot = getWorkspaceRoot()) {
+export function repoKeyForWorkspace(workspaceRoot = getEffectiveWorkspaceRoot()) {
   const resolved = path.resolve(workspaceRoot);
   const base = seg(path.basename(resolved)) || 'repo';
   const hash = crypto
@@ -34,27 +35,27 @@ export function repoKeyForWorkspace(workspaceRoot = getWorkspaceRoot()) {
 }
 
 /** Per-repo worktrees directory. */
-export function getRepoWorktreesDir(workspaceRoot = getWorkspaceRoot()) {
+export function getRepoWorktreesDir(workspaceRoot = getEffectiveWorkspaceRoot()) {
   return path.join(getWorktreesRoot(), repoKeyForWorkspace(workspaceRoot));
 }
 
 /** Per-board worktrees directory. */
-export function getBoardWorktreesDir(boardId, workspaceRoot = getWorkspaceRoot()) {
+export function getBoardWorktreesDir(boardId, workspaceRoot = getEffectiveWorkspaceRoot()) {
   return path.join(getRepoWorktreesDir(workspaceRoot), seg(boardId));
 }
 
 /** Per-repo chat worktrees directory (MIN-276 regular-chat isolation). */
-export function getChatWorktreesDir(workspaceRoot = getWorkspaceRoot()) {
+export function getChatWorktreesDir(workspaceRoot = getEffectiveWorkspaceRoot()) {
   return path.join(getRepoWorktreesDir(workspaceRoot), 'chat');
 }
 
 /** Absolute path for one chat's managed worktree slot. */
-export function getChatWorktreePath(chatId, workspaceRoot = getWorkspaceRoot()) {
+export function getChatWorktreePath(chatId, workspaceRoot = getEffectiveWorkspaceRoot()) {
   return path.join(getChatWorktreesDir(workspaceRoot), seg(chatId));
 }
 
 /** Absolute path for a single worktree slot (`{boardSlug}-wave{n}-{taskId}` or `integration`). */
-export function getWorktreeSlotPath(boardId, slotId, workspaceRoot = getWorkspaceRoot()) {
+export function getWorktreeSlotPath(boardId, slotId, workspaceRoot = getEffectiveWorkspaceRoot()) {
   return path.join(getBoardWorktreesDir(boardId, workspaceRoot), seg(slotId));
 }
 

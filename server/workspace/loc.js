@@ -8,7 +8,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { getRipgrepPath } from '../lib/ripgrep-path.js';
-import { getWorkspaceRoot } from './root.js';
+import { getEffectiveWorkspaceRoot } from '../runtime/path-access.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -26,7 +26,15 @@ const MAX_FILE_BYTES = 512 * 1024;
 /** Stop scanning after this many bytes read across files. */
 const MAX_TOTAL_BYTES = 32 * 1024 * 1024;
 
-let locCache = { at: 0, key: '', lines: 0, files: 0 };
+/**
+ * Line counts per workspace root. A single slot used to be enough; with two
+ * folders open they would thrash it — correct, but recomputed on every switch.
+ * @type {Map<string, { at: number, lines: number, files: number }>}
+ */
+const locCacheByRoot = new Map();
+
+/** Keep a handful of folders warm without unbounded growth. */
+const MAX_LOC_CACHE_ENTRIES = 8;
 
 /**
  * @param {string} root
@@ -77,15 +85,16 @@ async function countLinesInFile(filePath) {
  * @returns {Promise<{ ok: boolean, lines?: number, files?: number, error?: string }>}
  */
 export async function countWorkspaceLoc() {
-  const root = getWorkspaceRoot();
+  const root = getEffectiveWorkspaceRoot();
   if (!root) {
     return { ok: false, error: 'No workspace configured' };
   }
 
   const key = root;
   const now = Date.now();
-  if (locCache.key === key && now - locCache.at < LOC_CACHE_TTL_MS) {
-    return { ok: true, lines: locCache.lines, files: locCache.files };
+  const cached = locCacheByRoot.get(key);
+  if (cached && now - cached.at < LOC_CACHE_TTL_MS) {
+    return { ok: true, lines: cached.lines, files: cached.files };
   }
 
   let relFiles;
@@ -114,11 +123,16 @@ export async function countWorkspaceLoc() {
     }
   }
 
-  locCache = { at: now, key, lines, files };
+  locCacheByRoot.set(key, { at: now, lines, files });
+  while (locCacheByRoot.size > MAX_LOC_CACHE_ENTRIES) {
+    const oldest = locCacheByRoot.keys().next().value;
+    if (oldest === undefined) break;
+    locCacheByRoot.delete(oldest);
+  }
   return { ok: true, lines, files };
 }
 
 /** @param {unknown} _reason */
 export function clearWorkspaceLocCache(_reason) {
-  locCache = { at: 0, key: '', lines: 0, files: 0 };
+  locCacheByRoot.clear();
 }
