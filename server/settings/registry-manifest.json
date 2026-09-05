@@ -84,6 +84,34 @@
     ]
   },
   {
+    "key": "general.desktop.windowCloseAction",
+    "label": "Closing one of several windows",
+    "description": "Whether closing one of several windows closes that workspace or leaves it running in the tray.",
+    "keywords": [
+      "workspace",
+      "window",
+      "close",
+      "background",
+      "tray",
+      "multi-window"
+    ],
+    "category": "general",
+    "area": "general",
+    "storage": "meta",
+    "path": "desktopShell.windowCloseAction",
+    "type": "enum",
+    "allowedValues": [
+      "ask",
+      "close",
+      "background"
+    ],
+    "sensitivity": "normal",
+    "writable": true,
+    "refreshAreas": [
+      "general"
+    ]
+  },
+  {
     "key": "general.desktop.zoom",
     "label": "Interface zoom",
     "description": "Scale the Minnow desktop window (Electron shell only).",

@@ -6,6 +6,11 @@ import {
 import { getWorkspaceRecentItems, setWorkspaceFromServer } from '../state/workspace';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import {
+  closeOpenWorkspace,
+  readOpenWorkspaceWindows,
+  type OpenWorkspaceMap,
+} from '../lib/open-workspace-windows';
+import {
   registerChromePopover,
   unregisterChromePopover,
 } from './preview-electron-visibility';
@@ -44,20 +49,24 @@ let onOpenNew: OpenNewWorkspaceHandler | null = null;
  * than one view; elsewhere this is always empty and the per-row action is
  * omitted entirely.
  */
-let openWorkspaceKeys = new Set<string>();
+let openWorkspaces: OpenWorkspaceMap = new Map();
 
-async function refreshOpenWorkspaceKeys(): Promise<void> {
-  const list = window.minnow?.window?.listWorkspaces;
-  if (!list) {
-    openWorkspaceKeys = new Set();
+async function refreshOpenWorkspaces(): Promise<void> {
+  openWorkspaces = await readOpenWorkspaceWindows();
+}
+
+/** Close the window holding a folder, then repaint the menu. */
+async function closeOpenWorkspaceRow(item: WorkspaceRecentItem): Promise<void> {
+  const result = await closeOpenWorkspace(item.path);
+  if (!result.ok) {
+    menuDeps.reportStatus('err', result.error);
     return;
   }
-  try {
-    const paths = await list();
-    openWorkspaceKeys = new Set(paths.map((p) => normalizeWorkspacePath(p)));
-  } catch {
-    openWorkspaceKeys = new Set();
-  }
+  menuDeps.reportStatus(
+    'ok',
+    result.closed ? `Closed ${item.label}` : `${item.label} was not open`,
+  );
+  await renderMenuList();
 }
 
 /**
@@ -190,10 +199,19 @@ function createRecentRow(item: WorkspaceRecentItem): HTMLLIElement {
   li.appendChild(label);
   li.appendChild(pathLine);
 
-  const alreadyOpen = openWorkspaceKeys.has(normalizeWorkspacePath(item.path));
+  const openWindow = openWorkspaces.get(normalizeWorkspacePath(item.path));
+  const alreadyOpen = Boolean(openWindow);
+  const backgrounded = openWindow?.visible === false;
   if (alreadyOpen) {
     li.dataset.openInWindow = 'true';
-    li.title = `${item.path} — already open in another window`;
+    if (backgrounded) li.dataset.workspaceBackgrounded = 'true';
+    li.title = backgrounded
+      ? `${item.path} — running in the background`
+      : `${item.path} — already open in another window`;
+    const badge = document.createElement('span');
+    badge.className = 'workspace-menu__open-badge';
+    badge.textContent = backgrounded ? 'Background' : 'Open';
+    li.appendChild(badge);
   }
 
   if (!item.exists) {
@@ -238,6 +256,23 @@ function createRecentRow(item: WorkspaceRecentItem): HTMLLIElement {
       void openRecentInNewWindow(item);
     });
     li.appendChild(newWindowBtn);
+  }
+
+  // A window can only be released from outside itself, so the row that reports
+  // a folder as open is also the place that closes it.
+  if (alreadyOpen && !item.isCurrent && window.minnow?.window?.closeWorkspace) {
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'workspace-menu__close-workspace';
+    closeBtn.textContent = '×';
+    const closeLabel = `Close the window on ${item.label}`;
+    closeBtn.title = closeLabel;
+    closeBtn.setAttribute('aria-label', closeLabel);
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      void closeOpenWorkspaceRow(item);
+    });
+    li.appendChild(closeBtn);
   }
 
   li.addEventListener('click', () => {
@@ -324,7 +359,7 @@ export async function renderMenuList(): Promise<void> {
     paintWorkspaceMenuList(menu, [...cached]);
   }
 
-  await refreshOpenWorkspaceKeys();
+  await refreshOpenWorkspaces();
   const info = await fetchWorkspace();
   if (info) {
     setWorkspaceFromServer(info);
@@ -381,7 +416,7 @@ export async function renderWorkspaceMenuForTest(container?: HTMLElement): Promi
 
 /** Reset module singletons between workspace menu tests. */
 export function resetWorkspaceMenuForTests(): void {
-  openWorkspaceKeys = new Set();
+  openWorkspaces = new Map();
   closeWorkspaceMenu();
   detachGlobalListeners();
   menuEl = null;

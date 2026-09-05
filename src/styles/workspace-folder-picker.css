@@ -259,6 +259,68 @@
   list-style: none;
 }
 
+/*
+ * A folder that already has a window. Close is a sibling of the row rather than
+ * a child — a button cannot nest inside a button — so the row turns into a flex
+ * line to keep the two on one row.
+ */
+.workspace-picker__item[data-open-in-window='true'] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.workspace-picker__item[data-open-in-window='true'] .workspace-picker__row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.workspace-picker__open-badge {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 1px 7px;
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  border: 1px solid var(--mn-border);
+  border-radius: 999px;
+  color: var(--mn-fg-muted);
+}
+
+.workspace-picker__item[data-workspace-backgrounded='true'] .workspace-picker__open-badge {
+  border-style: dashed;
+}
+
+.workspace-picker__close-workspace {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  white-space: nowrap;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+.workspace-picker__close-workspace:hover:not(:disabled) {
+  color: var(--mn-danger, #d64545);
+  border-color: var(--mn-danger, #d64545);
+}
+
+.workspace-picker__close-workspace:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.workspace-picker__close-workspace:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
 .workspace-picker__row {
   display: flex;
   align-items: center;

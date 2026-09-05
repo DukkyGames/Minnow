@@ -10,6 +10,7 @@ import {
 
 export {
   parseWindowSet,
+  selectRestorableWindows,
   type PersistedWindowSet,
   type PersistedWindowState,
 } from './window-state-schema.js';
@@ -93,6 +94,10 @@ export function trackWindowState(
       y: bounds.y,
       isMaximized: win.isMaximized(),
       workspacePath: getWorkspacePath(),
+      // Backgrounding is reported explicitly by the caller rather than read off
+      // `isVisible()`: a window is invisible before its first paint and, on
+      // Windows, while minimized — neither means "kept in the tray".
+      hidden: liveWindowState.get(win.id)?.hidden === true,
     });
   };
 
@@ -122,6 +127,17 @@ export function trackWindowState(
     liveWindowState.delete(win.id);
     void enqueueWrite(persistLiveWindows);
   });
+}
+
+/**
+ * Record that a window was hidden to the tray (or shown again). Only a window
+ * still on screen at quit time is restored on the next launch.
+ */
+export function markWindowBackgrounded(windowId: number, hidden: boolean): void {
+  const entry = liveWindowState.get(windowId);
+  if (!entry || entry.hidden === hidden) return;
+  entry.hidden = hidden;
+  void enqueueWrite(persistLiveWindows);
 }
 
 /** Test hook — forget every tracked window. */

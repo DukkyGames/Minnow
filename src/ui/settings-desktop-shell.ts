@@ -54,12 +54,14 @@ export async function renderDesktopShellSettings(mount: HTMLElement): Promise<vo
 
   const gpuApi = hardwareAccelerationApi();
 
-  const [closeToTray, loginItem, zoomPercent, hardwareAcceleration] = await Promise.all([
-    api.getCloseToTray(),
-    api.getLoginItem(),
-    api.getZoomPercent(),
-    gpuApi ? gpuApi.get() : Promise.resolve(true),
-  ]);
+  const [closeToTray, loginItem, zoomPercent, hardwareAcceleration, windowCloseAction] =
+    await Promise.all([
+      api.getCloseToTray(),
+      api.getLoginItem(),
+      api.getZoomPercent(),
+      gpuApi ? gpuApi.get() : Promise.resolve(true),
+      api.getWindowCloseAction ? api.getWindowCloseAction() : Promise.resolve(null),
+    ]);
 
   const zoomOptions = SHELL_ZOOM_PRESET_PERCENTS.map((value) => ({
     value: String(value),
@@ -90,6 +92,24 @@ export async function renderDesktopShellSettings(mount: HTMLElement): Promise<vo
     },
   );
 
+  // Absent on a preload from a build before the multi-window close prompt.
+  const setWindowCloseAction = api.setWindowCloseAction?.bind(api);
+  const closeActionRow =
+    windowCloseAction && setWindowCloseAction
+      ? createSettingsSelectRow('Closing one of several windows', {
+          searchKey: 'general.desktop.windowCloseAction',
+          description:
+            'With more than one window open, closing one can either close that workspace outright or leave it running in the tray. Its chats and agents keep going in the background, and only workspaces still on screen reopen next launch.',
+          options: [
+            { value: 'ask', label: 'Ask each time' },
+            { value: 'close', label: 'Close the workspace' },
+            { value: 'background', label: 'Keep it running in the background' },
+          ],
+          value: windowCloseAction,
+          disabled: serverUp !== 'server',
+        })
+      : null;
+
   const loginDescription = loginItem.supported
     ? 'Register Minnow as a login item so it opens when you sign in to this computer.'
     : 'Launch at startup is not supported on this platform.';
@@ -113,8 +133,31 @@ export async function renderDesktopShellSettings(mount: HTMLElement): Promise<vo
       })
     : null;
 
-  mount.append(zoomRow, closeRow, loginRow);
+  mount.append(zoomRow, closeRow);
+  if (closeActionRow) mount.append(closeActionRow.row);
+  mount.append(loginRow);
   if (gpuRow) mount.append(gpuRow.row);
+
+  closeActionRow?.select.addEventListener('change', () => {
+    void (async () => {
+      const select = closeActionRow.select;
+      const next = select.value;
+      if (next !== 'ask' && next !== 'close' && next !== 'background') return;
+      try {
+        select.value = await setWindowCloseAction!(next);
+        setStatus(
+          'ok',
+          next === 'ask'
+            ? 'Minnow will ask before closing a workspace'
+            : next === 'close'
+              ? 'Closing a window will close its workspace'
+              : 'Closing a window will leave its workspace running',
+        );
+      } catch {
+        setStatus('err', 'Could not save desktop preference');
+      }
+    })();
+  });
 
   zoomSelect.addEventListener('change', () => {
     void (async () => {

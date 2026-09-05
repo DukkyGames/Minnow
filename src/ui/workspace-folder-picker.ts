@@ -8,6 +8,12 @@ import {
   unregisterChromePopover,
 } from './preview-electron-visibility';
 import { createIcon, type IconName } from './icon';
+import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import {
+  closeOpenWorkspace,
+  readOpenWorkspaceWindows,
+  type OpenWorkspaceMap,
+} from '../lib/open-workspace-windows';
 
 export interface WorkspaceFolderPickerResult {
   cancelled: boolean;
@@ -44,6 +50,12 @@ let creatingFolder = false;
 
 let currentPath = '';
 let currentParent: string | null = null;
+/**
+ * Folders that already have a window, refreshed on every listing. A folder
+ * opens in exactly one view, so a row for one of these offers to close it
+ * rather than pretending it can be opened again.
+ */
+let openWorkspaces: OpenWorkspaceMap = new Map();
 let selectedEntryPath: string | null = null;
 let resolvePicker: ((result: WorkspaceFolderPickerResult) => void) | null = null;
 let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
@@ -210,7 +222,57 @@ function createChildFolderRow(entry: WorkspaceBrowseEntry): HTMLLIElement {
     void loadListing(entry.path);
   });
   li.appendChild(btn);
+  decorateOpenWorkspaceRow(li, btn, entry.path);
   return li;
+}
+
+/**
+ * Flag a folder that already has a window and offer to close it. Opening it
+ * again is not on the table — that is the one-view-per-folder rule — so the
+ * useful action here is releasing the window that holds it.
+ */
+function decorateOpenWorkspaceRow(
+  li: HTMLLIElement,
+  btn: HTMLButtonElement,
+  absPath: string,
+): void {
+  const openWindow = openWorkspaces.get(normalizeWorkspacePath(absPath));
+  if (!openWindow) return;
+
+  li.dataset.openInWindow = 'true';
+  const backgrounded = openWindow.visible === false;
+  if (backgrounded) li.dataset.workspaceBackgrounded = 'true';
+
+  const badge = document.createElement('span');
+  badge.className = 'workspace-picker__open-badge';
+  badge.textContent = backgrounded ? 'Background' : 'Open';
+  btn.insertBefore(badge, btn.querySelector('.workspace-picker__chevron'));
+  btn.title = backgrounded
+    ? `${absPath} — running in the background`
+    : `${absPath} — already open in another window`;
+
+  if (!window.minnow?.window?.closeWorkspace) return;
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'workspace-picker__close-workspace';
+  closeBtn.textContent = 'Close';
+  closeBtn.title = `Close the window on ${folderDisplayName(absPath)}`;
+  closeBtn.setAttribute('aria-label', `Close the window on ${folderDisplayName(absPath)}`);
+  closeBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void (async () => {
+      closeBtn.disabled = true;
+      const result = await closeOpenWorkspace(absPath);
+      if (!result.ok) {
+        closeBtn.disabled = false;
+        showPickerError(result.error);
+        return;
+      }
+      await loadListing(currentPath);
+    })();
+  });
+  li.appendChild(closeBtn);
 }
 
 function createQuickLocationRow(entry: WorkspaceBrowseEntry): HTMLLIElement {
@@ -249,6 +311,7 @@ function createQuickLocationRow(entry: WorkspaceBrowseEntry): HTMLLIElement {
     void loadListing(entry.path);
   });
   li.appendChild(btn);
+  decorateOpenWorkspaceRow(li, btn, entry.path);
   return li;
 }
 
@@ -680,7 +743,11 @@ function renderEntries(entries: WorkspaceBrowseEntry[]): void {
 
 async function loadListing(browsePath: string): Promise<void> {
   hideNewFolderPanel();
-  const listing = await browseWorkspaceFolders(browsePath);
+  const [listing, open] = await Promise.all([
+    browseWorkspaceFolders(browsePath),
+    readOpenWorkspaceWindows(),
+  ]);
+  openWorkspaces = open;
   currentPath = listing.path ?? '';
   currentParent = listing.parent ?? null;
   selectedEntryPath = null;
@@ -782,4 +849,5 @@ export function resetWorkspaceFolderPickerForTests(): void {
   breadcrumbsEl = null;
   listEl = null;
   shellListenersBound = false;
+  openWorkspaces = new Map();
 }

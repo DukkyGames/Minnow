@@ -11,6 +11,12 @@ import { detectLocalServer, getLocalServerAvailable } from '../tools/client';
 import { isOsShellEnabled } from '../os/page-bridge';
 import { executeWorkspaceSwitch } from './workspace-switch-guard';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
+import {
+  closeOpenWorkspace,
+  onOpenWorkspacesChanged,
+  readOpenWorkspaceWindows,
+  type OpenWorkspaceMap,
+} from '../lib/open-workspace-windows';
 import { openWorkspaceFolderPicker } from './workspace-folder-picker';
 import { setStatus } from './status';
 
@@ -333,20 +339,68 @@ async function openRecentWorkspaceInNewWindow(absPath: string): Promise<void> {
   await renderRecentsList();
 }
 
-/**
- * Folders another window already has open, normalized for comparison. A folder
- * opens in exactly one view, so clicking one of these focuses that window rather
- * than switching this one.
- */
-async function readOpenWorkspacePaths(): Promise<Set<string>> {
-  const list = window.minnow?.window?.listWorkspaces;
-  if (!list) return new Set();
-  try {
-    const paths = await list();
-    return new Set(paths.map((p) => normalizeWorkspacePath(p)));
-  } catch {
-    return new Set();
+/** Close the window holding a folder, then repaint the row that offered it. */
+async function closeRecentWorkspaceWindow(item: WorkspaceRecentItem): Promise<void> {
+  const result = await closeOpenWorkspace(item.path);
+  if (!result.ok) {
+    setStatus('err', result.error);
+    return;
   }
+  setStatus('ok', result.closed ? `Closed ${item.label}` : `${item.label} was not open`);
+  await renderRecentsList();
+}
+
+/**
+ * Mark a row whose folder already has a window, and offer to close it. Without
+ * the close action the only way to release a backgrounded workspace was to quit
+ * Minnow, which is how they piled up.
+ */
+function decorateOpenRecentRow(
+  row: HTMLLIElement,
+  item: WorkspaceRecentItem,
+  openElsewhere: OpenWorkspaceMap,
+): void {
+  const openWindow = openElsewhere.get(normalizeWorkspacePath(item.path));
+  if (!openWindow) return;
+
+  row.dataset.openInWindow = 'true';
+  const backgrounded = openWindow.visible === false;
+  if (backgrounded) row.dataset.workspaceBackgrounded = 'true';
+
+  const stateLabel = backgrounded ? 'Running in background' : 'Open';
+  const button = row.querySelector('button.welcome-page__recents-row');
+  if (button instanceof HTMLElement) {
+    button.title = backgrounded
+      ? `${item.path} — running in the background`
+      : `${item.path} — already open in another window`;
+    const badge = document.createElement('span');
+    badge.className = 'welcome-page__recents-badge';
+    badge.textContent = stateLabel;
+    button.appendChild(badge);
+  }
+
+  const newWindowBtn = row.querySelector('button.welcome-page__recents-new-window');
+  if (newWindowBtn instanceof HTMLElement) {
+    const focusLabel = backgrounded
+      ? `Show the window running ${item.label}`
+      : `Focus the window already on ${item.label}`;
+    newWindowBtn.textContent = backgrounded ? 'Show' : 'Focus';
+    newWindowBtn.title = focusLabel;
+    newWindowBtn.setAttribute('aria-label', focusLabel);
+  }
+
+  if (!window.minnow?.window?.closeWorkspace) return;
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'welcome-page__recents-close';
+  closeBtn.textContent = 'Close';
+  closeBtn.title = `Close ${item.label} and stop its chats and agents`;
+  closeBtn.setAttribute('aria-label', `Close the window on ${item.label}`);
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    void closeRecentWorkspaceWindow(item);
+  });
+  row.appendChild(closeBtn);
 }
 
 async function renderRecentsList(): Promise<void> {
@@ -360,24 +414,12 @@ async function renderRecentsList(): Promise<void> {
   const info = await fetchWorkspace();
   const recent = info?.recent ?? [];
   const nonCurrent = recent.filter((r) => !r.isCurrent);
-  const openElsewhere = await readOpenWorkspacePaths();
+  const openElsewhere = await readOpenWorkspaceWindows();
 
   list.innerHTML = '';
   for (const item of recent) {
     const row = createRecentRow(item);
-    if (openElsewhere.has(normalizeWorkspacePath(item.path))) {
-      row.dataset.openInWindow = 'true';
-      const button = row.querySelector('button.welcome-page__recents-row');
-      if (button instanceof HTMLElement) {
-        button.title = `${item.path} — already open in another window`;
-      }
-      const newWindowBtn = row.querySelector('button.welcome-page__recents-new-window');
-      if (newWindowBtn instanceof HTMLElement) {
-        newWindowBtn.textContent = 'Focus';
-        newWindowBtn.title = `Focus the window already on ${item.label}`;
-        newWindowBtn.setAttribute('aria-label', `Focus the window already on ${item.label}`);
-      }
-    }
+    decorateOpenRecentRow(row, item, openElsewhere);
     list.appendChild(row);
   }
 
@@ -405,7 +447,8 @@ async function activateRecentWorkspace(absPath: string): Promise<void> {
   // A folder already open somewhere just gets focused — two views on one folder
   // would fight over the same `sessions.db` rows.
   const openWorkspace = window.minnow?.window?.openWorkspace;
-  if (openWorkspace && (await readOpenWorkspacePaths()).has(normalizeWorkspacePath(absPath))) {
+  const openWindows = await readOpenWorkspaceWindows();
+  if (openWorkspace && openWindows.has(normalizeWorkspacePath(absPath))) {
     const result = await openWorkspace(absPath);
     if (!result.ok) setStatus('err', result.error);
     else setStatus('ok', 'Focused the window already on that folder');
@@ -690,6 +733,11 @@ export function initWelcomePage(): void {
   bindStaticControls();
   window.addEventListener('hashchange', onHashChange);
 
+  // Another window opening or closing changes what these rows should offer.
+  onOpenWorkspacesChanged(() => {
+    if (document.getElementById('welcomeRecentsList')) void renderRecentsList();
+  });
+
   if (window.location.hash.startsWith('#/welcome')) {
     if (isDefaultWorkspace()) {
       openWelcome({ skipHash: true });
@@ -709,6 +757,11 @@ export function markWelcomePendingIfNeeded(): void {
   if (hash === '' || hash === '#/' || hash === '#' || hash.startsWith('#/welcome')) {
     setWelcomePending(true);
   }
+}
+
+/** Test helper — paint the recents list into an existing `#welcomeRecentsList`. */
+export async function renderWelcomeRecentsForTest(): Promise<void> {
+  await renderRecentsList();
 }
 
 /** Test helper — reset session dismiss and wizard parent. */

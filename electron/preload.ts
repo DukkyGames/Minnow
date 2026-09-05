@@ -83,6 +83,18 @@ const viewContext: MinnowViewContext = {
   hosted: process.argv.includes('--minnow-hosted'),
 };
 
+/** Preference for closing one of several open windows. */
+export type WindowCloseActionPref = 'ask' | 'close' | 'background';
+
+/** One open shell window, as the workspace pickers and tray see it. */
+export interface WorkspaceWindowInfo {
+  windowId: number;
+  /** Absolute folder, or `''` for a window still at the folder gate. */
+  workspacePath: string;
+  /** False while the window is hidden in the system tray. */
+  visible: boolean;
+}
+
 // ── Preview API ──────────────────────────────────────────────────────────────
 
 const preview = {
@@ -376,6 +388,24 @@ const minnowBridge = {
     /** Folders currently open in some window. */
     listWorkspaces: (): Promise<string[]> =>
       ipcRenderer.invoke(channels.WINDOW_LIST_WORKSPACES),
+    /** The same list with window ids and whether each window is on screen. */
+    listWorkspaceWindows: (): Promise<WorkspaceWindowInfo[]> =>
+      ipcRenderer.invoke(channels.WINDOW_LIST_WORKSPACE_WINDOWS),
+    /** Close the window on a folder for real — never hide it to the tray. */
+    closeWorkspace: (
+      workspacePath: string,
+    ): Promise<{ ok: true; closed: boolean } | { ok: false; error: string }> =>
+      ipcRenderer.invoke(channels.WINDOW_CLOSE_WORKSPACE, workspacePath),
+    onWorkspacesChanged: (
+      callback: (windows: WorkspaceWindowInfo[]) => void,
+    ): (() => void) => {
+      const handler = (_event: IpcRendererEvent, windows: WorkspaceWindowInfo[]) =>
+        callback(windows);
+      ipcRenderer.on(channels.WINDOW_WORKSPACES_CHANGED, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.WINDOW_WORKSPACES_CHANGED, handler);
+      };
+    },
     /** Point this window at a different folder (main replaces the view). */
     switchWorkspace: (
       workspacePath: string,
@@ -438,6 +468,11 @@ const minnowBridge = {
       ipcRenderer.invoke(channels.TRAY_GET_CLOSE_TO_TRAY),
     setCloseToTray: (enabled: boolean): Promise<boolean> =>
       ipcRenderer.invoke(channels.TRAY_SET_CLOSE_TO_TRAY, enabled),
+    /** What closing one of several windows does: ask, close, or background. */
+    getWindowCloseAction: (): Promise<WindowCloseActionPref> =>
+      ipcRenderer.invoke(channels.TRAY_GET_WINDOW_CLOSE_ACTION),
+    setWindowCloseAction: (action: WindowCloseActionPref): Promise<WindowCloseActionPref> =>
+      ipcRenderer.invoke(channels.TRAY_SET_WINDOW_CLOSE_ACTION, action),
     getLoginItem: (): Promise<{ openAtLogin: boolean; supported: boolean }> =>
       ipcRenderer.invoke(channels.TRAY_GET_LOGIN_ITEM),
     setLoginItem: (enabled: boolean): Promise<{ openAtLogin: boolean; supported: boolean }> =>

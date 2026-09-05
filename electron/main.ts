@@ -23,6 +23,8 @@ import { getProjectRoot, importServerModule } from './server-import.js';
 import { startInProcessServer, type InProcessServerHandle } from './server-host.js';
 import {
   loadWindowSet,
+  markWindowBackgrounded,
+  selectRestorableWindows,
   setWindowStateQuitting,
   trackWindowState,
   type PersistedWindowState,
@@ -35,9 +37,11 @@ import {
   readHardwareAccelerationPreference,
   readHardwareAccelerationSync,
   readShellZoomPercent,
+  readWindowCloseAction,
   writeCloseToTrayPreference,
   writeHardwareAccelerationPreference,
   writeShellZoomPercent,
+  writeWindowCloseAction,
 } from './desktop-shell-config.js';
 import { applyShellZoom, DEFAULT_SHELL_ZOOM_PERCENT, shellZoomFactorFromPercent, wireShellZoom } from './shell-zoom.js';
 import { readLoginItemSnapshot, writeLoginItemOpenAtLogin } from './login-item.js';
@@ -46,7 +50,12 @@ import {
   resolveTrayIconFallbackPath,
   resolveTrayIconPath,
 } from './tray-icon.js';
-import { shouldQuitOnWindowAllClosed } from './tray-close.js';
+import {
+  normalizeWindowCloseAction,
+  shouldQuitOnWindowAllClosed,
+  type WindowCloseAction,
+} from './tray-close.js';
+import { workspaceMenuLabel, type TrayWorkspaceEntry } from './tray-workspaces.js';
 import { revealAbsolutePathInExplorer } from './shell-reveal.js';
 import { setAfkBoardPowerGuardActive } from './afk-power-guard.js';
 import {
@@ -103,6 +112,13 @@ const devUrl = (
 let inProcessServer: InProcessServerHandle | null = null;
 let quitInProgress = false;
 let closeToTrayEnabled = true;
+let windowCloseAction: WindowCloseAction = 'ask';
+/**
+ * Windows the user (or the tray) has decided really are going away. Without
+ * this, close-to-tray would hide them right back and the workspace would stay
+ * claimed forever — the pile-up this whole feature exists to stop.
+ */
+const forceClosingWindowIds = new Set<number>();
 let shellZoomPercent = DEFAULT_SHELL_ZOOM_PERCENT;
 let trayManager: TrayManager | null = null;
 let bootstrapPromise: Promise<void> | null = null;
@@ -150,6 +166,58 @@ function focusedShellWindow(): BrowserWindow | null {
   if (!record) return null;
   const win = BrowserWindow.fromId(record.windowId);
   return win && !win.isDestroyed() ? win : null;
+}
+
+// ── Open workspaces ──────────────────────────────────────────────────────────
+
+/**
+ * Every shell window with the state the tray and the pickers need: which folder
+ * it holds and whether it is still on screen. A window hidden to the tray is
+ * reported as a background workspace rather than silently counted as open.
+ */
+function listWorkspaceWindows(): TrayWorkspaceEntry[] {
+  const out: TrayWorkspaceEntry[] = [];
+  for (const record of shellWindows.list()) {
+    const win = BrowserWindow.fromId(record.windowId);
+    if (!win || win.isDestroyed()) continue;
+    out.push({
+      windowId: record.windowId,
+      workspacePath: record.workspacePath,
+      visible: win.isVisible(),
+    });
+  }
+  return out;
+}
+
+/** Rebuild the tray menu and let every renderer repaint its workspace lists. */
+function notifyWorkspaceWindowsChanged(): void {
+  if (quitInProgress) return;
+  trayManager?.rebuildMenu();
+  broadcastToShellWindows(channels.WINDOW_WORKSPACES_CHANGED, listWorkspaceWindows());
+}
+
+/**
+ * Close a window for real. `forceClosingWindowIds` is what tells the
+ * close-to-tray handler to step aside — otherwise this would just hide it.
+ */
+function closeWorkspaceWindow(windowId: number): boolean {
+  const win = BrowserWindow.fromId(windowId);
+  if (!win || win.isDestroyed()) {
+    shellWindows.unregister(windowId);
+    return false;
+  }
+  forceClosingWindowIds.add(windowId);
+  win.close();
+  return true;
+}
+
+/** Close whichever window holds this folder, if any. */
+function closeWorkspaceByPath(
+  workspacePath: string,
+): { ok: true; closed: boolean } | { ok: false; error: string } {
+  const record = shellWindows.findByWorkspace(workspacePath);
+  if (!record) return { ok: true, closed: false };
+  return { ok: true, closed: closeWorkspaceWindow(record.windowId) };
 }
 
 // ── Renderer recovery ────────────────────────────────────────────────────────
@@ -314,6 +382,13 @@ function registerIpcHandlers(): void {
     return closeToTrayEnabled;
   });
 
+  ipcMain.handle(channels.TRAY_GET_WINDOW_CLOSE_ACTION, () => windowCloseAction);
+
+  ipcMain.handle(channels.TRAY_SET_WINDOW_CLOSE_ACTION, async (_event, action: unknown) => {
+    windowCloseAction = await writeWindowCloseAction(normalizeWindowCloseAction(action));
+    return windowCloseAction;
+  });
+
   ipcMain.handle(channels.TRAY_GET_LOGIN_ITEM, () => readLoginItemSnapshot());
 
   ipcMain.handle(channels.TRAY_SET_LOGIN_ITEM, (_event, enabled: unknown) => {
@@ -377,6 +452,15 @@ function registerIpcHandlers(): void {
       .map((record) => record.workspacePath),
   );
 
+  ipcMain.handle(channels.WINDOW_LIST_WORKSPACE_WINDOWS, () => listWorkspaceWindows());
+
+  ipcMain.handle(channels.WINDOW_CLOSE_WORKSPACE, (_event, workspacePath: unknown) => {
+    if (typeof workspacePath !== 'string' || !workspacePath.trim()) {
+      return { ok: false, error: 'workspacePath is required' };
+    }
+    return closeWorkspaceByPath(workspacePath.trim());
+  });
+
   ipcMain.handle(channels.WINDOW_SWITCH_WORKSPACE, async (event, workspacePath: unknown) => {
     if (typeof workspacePath !== 'string' || !workspacePath.trim()) {
       return { ok: false, error: 'workspacePath is required' };
@@ -409,8 +493,18 @@ function wireShellWindowVisibility(win: BrowserWindow): void {
     win.webContents.send(channels.WINDOW_VISIBILITY_CHANGED, visible);
   };
 
-  win.on('show', emit);
-  win.on('hide', emit);
+  // Minimizing is not backgrounding: only hide/show move a window in and out of
+  // the tray, and only that decides whether the next launch restores it.
+  win.on('show', () => {
+    markWindowBackgrounded(win.id, false);
+    notifyWorkspaceWindowsChanged();
+    emit();
+  });
+  win.on('hide', () => {
+    markWindowBackgrounded(win.id, true);
+    notifyWorkspaceWindowsChanged();
+    emit();
+  });
   win.on('minimize', emit);
   win.on('restore', emit);
   win.webContents.on('did-finish-load', emit);
@@ -516,12 +610,60 @@ function requestExplicitQuit(): void {
 
 // ── Tray ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Ask what closing one of several windows should do.
+ *
+ * Modal to the window being closed, so the answer is unambiguous when several
+ * are open. "Remember" writes the answer to `config.json`; the Desktop settings
+ * section can set it back to asking.
+ */
+async function promptWindowClose(
+  win: BrowserWindow,
+): Promise<{ action: 'close' | 'background' | 'cancel'; remember: boolean }> {
+  const record = shellWindows.get(win.id);
+  const folder = record?.workspacePath?.trim() ?? '';
+  const name = folder ? workspaceMenuLabel(folder) : 'this window';
+
+  const { response, checkboxChecked } = await dialog.showMessageBox(win, {
+    type: 'question',
+    buttons: ['Close workspace', 'Keep in background', 'Cancel'],
+    defaultId: 0,
+    cancelId: 2,
+    title: 'Close workspace?',
+    message: `Close ${name}?`,
+    detail: folder
+      ? `${folder}
+
+Keeping it in the background leaves its chats and agents running and reachable from the tray. Closing it stops them and drops the folder from the next launch.`
+      : 'Keeping it in the background leaves it running and reachable from the tray.',
+    checkboxLabel: 'Do this every time',
+    checkboxChecked: false,
+    noLink: true,
+  });
+
+  const action = response === 0 ? 'close' : response === 1 ? 'background' : 'cancel';
+  if (checkboxChecked && action !== 'cancel') {
+    windowCloseAction = await writeWindowCloseAction(action);
+  }
+  return { action, remember: checkboxChecked };
+}
+
 function ensureTrayManager(): TrayManager {
   if (!trayManager) {
     trayManager = createTrayManager({
       trayIconPath,
       trayIconFallbackPath,
-      focusMainWindow: () => focusWindow(),
+      // Closing every workspace can now really leave zero windows, so the tray
+      // has to be able to bring one back rather than clicking into nothing.
+      focusMainWindow: () => {
+        if (shellWindows.size > 0) {
+          focusWindow();
+          return;
+        }
+        bootstrap()
+          .then(() => restoreShellWindows())
+          .catch(failBootstrap);
+      },
       newWindow: () => {
         void openNewShellWindow();
       },
@@ -539,6 +681,17 @@ function ensureTrayManager(): TrayManager {
       getLoginItem: readLoginItemSnapshot,
       setLoginItem: writeLoginItemOpenAtLogin,
       isQuitInProgress: () => quitInProgress,
+      listWorkspaceWindows,
+      focusWorkspaceWindow: (windowId) => {
+        const win = BrowserWindow.fromId(windowId);
+        if (win && !win.isDestroyed()) focusWindow(win);
+      },
+      closeWorkspaceWindow: (windowId) => {
+        closeWorkspaceWindow(windowId);
+      },
+      isForceClosing: (windowId) => forceClosingWindowIds.has(windowId),
+      getWindowCloseAction: () => windowCloseAction,
+      promptWindowClose: promptWindowClose,
     });
   }
   return trayManager;
@@ -605,6 +758,7 @@ async function createShellWindow(
 
   shellWindows.register(win.id, workspacePath, viewId);
   if (workspacePath) void claimWorkspaceOnServer(workspacePath);
+  notifyWorkspaceWindowsChanged();
   win.on('focus', () => shellWindows.markFocused(win.id));
 
   wireShellWindowVisibility(win);
@@ -645,7 +799,9 @@ async function createShellWindow(
     const record = shellWindows.unregister(win.id);
     trayReadyByWindow.delete(win.id);
     rendererCrashTimestamps.delete(win.id);
+    forceClosingWindowIds.delete(win.id);
     if (record?.workspacePath) void releaseWorkspaceOnServer(record.workspacePath);
+    notifyWorkspaceWindowsChanged();
   });
 
   ensureTrayManager().wireWindowClose(win);
@@ -977,6 +1133,7 @@ async function bootstrapInner(): Promise<void> {
   initUpdater({ prepareQuitForUpdate });
 
   closeToTrayEnabled = await readCloseToTrayPreference();
+  windowCloseAction = await readWindowCloseAction();
   shellZoomPercent = await readShellZoomPercent();
   const tray = ensureTrayManager();
   tray.ensureTray();
@@ -1059,7 +1216,9 @@ async function restoreShellWindows(): Promise<void> {
   const fsPromises = await import('node:fs/promises');
   /** @type {PersistedWindowState[]} */
   const usable: PersistedWindowState[] = [];
-  for (const entry of windows) {
+  // A window the user parked in the tray is not reopened: restoring those is
+  // what made every folder ever opened come back on the next launch.
+  for (const entry of selectRestorableWindows(windows)) {
     const folder = entry.workspacePath?.trim() ?? '';
     if (!folder) {
       usable.push(entry);

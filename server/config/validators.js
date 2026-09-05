@@ -2086,6 +2086,13 @@ export function mergeConfigMeta(existing, patch) {
     if (typeof ds.closeToTray === 'boolean') {
       existingShell.closeToTray = ds.closeToTray;
     }
+    if (
+      ds.windowCloseAction === 'ask' ||
+      ds.windowCloseAction === 'close' ||
+      ds.windowCloseAction === 'background'
+    ) {
+      existingShell.windowCloseAction = ds.windowCloseAction;
+    }
     if (typeof ds.hardwareAcceleration === 'boolean') {
       existingShell.hardwareAcceleration = ds.hardwareAcceleration;
     }

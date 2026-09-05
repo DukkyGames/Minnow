@@ -151,6 +151,17 @@ const SETTINGS_FIELD_CATALOG_ALL: SettingsFieldEntry[] = [
   field('general.desktop.closeToTray', 'Keep Minnow running after closing the window', 'general', 'general', {
     keywords: ['tray', 'background', 'close', 'hide'],
   }),
+  field(
+    'general.desktop.windowCloseAction',
+    'Closing one of several windows',
+    'general',
+    'general',
+    {
+      keywords: ['workspace', 'window', 'close', 'background', 'tray', 'multi-window'],
+      description:
+        'Whether closing one of several windows closes that workspace or leaves it running in the tray.',
+    },
+  ),
   field('general.desktop.zoom', 'Interface zoom', 'general', 'general', {
     keywords: ['zoom', 'scale', 'size', 'magnify', 'desktop', 'ui'],
     description: 'Scale the Minnow desktop window (Electron shell only).',

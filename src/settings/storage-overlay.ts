@@ -81,6 +81,10 @@ export const SETTINGS_STORAGE_OVERLAY: Record<string, OverlayEntry> = {
   'general.desktop.closeToTray': meta('desktopShell.closeToTray', 'boolean', {
     refreshAreas: ['general'],
   }),
+  'general.desktop.windowCloseAction': meta('desktopShell.windowCloseAction', 'enum', {
+    allowedValues: ['ask', 'close', 'background'],
+    refreshAreas: ['general'],
+  }),
   'general.desktop.zoom': meta('desktopShell.zoomPercent', 'number', {
     refreshAreas: ['general'],
   }),

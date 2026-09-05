@@ -77,7 +77,76 @@ const {
   resetWorkspaceFolderPickerForTests,
 } = await import('../../src/ui/workspace-folder-picker.ts');
 
+/** Stand in for the Electron preload bridge; returns the paths it was asked to close. */
+function installMinnowWindowApi(openWindows) {
+  const closed = [];
+  globalThis.window.minnow = {
+    window: {
+      listWorkspaceWindows: async () => openWindows,
+      closeWorkspace: async (path) => {
+        closed.push(path);
+        return { ok: true, closed: true };
+      },
+    },
+  };
+  return closed;
+}
+
 describe('workspace-folder-picker', { concurrency: false }, () => {
+  // A folder that already has a window cannot be opened a second time, so the
+  // picker has to say so and offer the one action that helps: closing it.
+  test('marks a folder that already has a window and closes it from the row', async () => {
+    setupDom();
+    resetWorkspaceFolderPickerForTests();
+    const closed = installMinnowWindowApi([
+      { windowId: 1, workspacePath: '/projects/parent', visible: true },
+    ]);
+
+    void openWorkspaceFolderPicker({ initialPath: '' });
+    await flushPromises();
+
+    const row = document.querySelector('.workspace-picker__item[data-open-in-window="true"]');
+    assert.ok(row, 'the open folder should be marked');
+    assert.equal(row.querySelector('.workspace-picker__open-badge')?.textContent, 'Open');
+
+    row.querySelector('.workspace-picker__close-workspace').click();
+    await flushPromises();
+    assert.deepEqual(closed, ['/projects/parent']);
+
+    delete globalThis.window.minnow;
+    resetWorkspaceFolderPickerForTests();
+  });
+
+  test('a backgrounded window is labelled as such, not as plainly open', async () => {
+    setupDom();
+    resetWorkspaceFolderPickerForTests();
+    installMinnowWindowApi([
+      { windowId: 2, workspacePath: '/projects/parent', visible: false },
+    ]);
+
+    void openWorkspaceFolderPicker({ initialPath: '' });
+    await flushPromises();
+
+    const row = document.querySelector('[data-workspace-backgrounded="true"]');
+    assert.ok(row);
+    assert.equal(row.querySelector('.workspace-picker__open-badge')?.textContent, 'Background');
+
+    delete globalThis.window.minnow;
+    resetWorkspaceFolderPickerForTests();
+  });
+
+  test('leaves rows untouched outside Electron', async () => {
+    setupDom();
+    resetWorkspaceFolderPickerForTests();
+
+    void openWorkspaceFolderPicker({ initialPath: '' });
+    await flushPromises();
+
+    assert.equal(document.querySelector('[data-open-in-window="true"]'), null);
+    assert.equal(document.querySelector('.workspace-picker__close-workspace'), null);
+    resetWorkspaceFolderPickerForTests();
+  });
+
   test('new folder input receives focus and accepts a custom name', async () => {
     const win = setupDom();
     resetWorkspaceFolderPickerForTests();

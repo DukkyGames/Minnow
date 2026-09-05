@@ -296,10 +296,29 @@ export interface MinnowWindowApi {
   ) => Promise<{ ok: true; focused: boolean } | { ok: false; error: string }>;
   /** Folders currently open in some window. */
   listWorkspaces?: () => Promise<string[]>;
+  /** The same list with window ids and whether each window is on screen. */
+  listWorkspaceWindows?: () => Promise<MinnowWorkspaceWindow[]>;
+  /** Close the window on a folder for real — never hide it to the tray. */
+  closeWorkspace?: (
+    workspacePath: string,
+  ) => Promise<{ ok: true; closed: boolean } | { ok: false; error: string }>;
+  /** Fires whenever a workspace window opens, closes, or is backgrounded. */
+  onWorkspacesChanged?: (
+    callback: (windows: MinnowWorkspaceWindow[]) => void,
+  ) => () => void;
   /** Point this window at a different folder. */
   switchWorkspace?: (
     workspacePath: string,
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
+}
+
+/** One open shell window, as the workspace pickers see it. */
+export interface MinnowWorkspaceWindow {
+  windowId: number;
+  /** Absolute folder, or `''` for a window still at the folder gate. */
+  workspacePath: string;
+  /** False while the window is hidden in the system tray. */
+  visible: boolean;
 }
 
 export interface MinnowLastCrashMarker {
@@ -365,6 +384,9 @@ export type MinnowTrayCommand =
   | { type: 'open_settings' }
   | { type: 'unload_local_models' };
 
+/** Preference for closing one of several open windows. */
+export type MinnowWindowCloseAction = 'ask' | 'close' | 'background';
+
 export interface MinnowLoginItemSnapshot {
   openAtLogin: boolean;
   supported: boolean;
@@ -376,6 +398,11 @@ export interface MinnowTrayApi {
   notifyReady(): void;
   getCloseToTray(): Promise<boolean>;
   setCloseToTray(enabled: boolean): Promise<boolean>;
+  /** What closing one of several windows does. Absent on an older preload. */
+  getWindowCloseAction?(): Promise<MinnowWindowCloseAction>;
+  setWindowCloseAction?(
+    action: MinnowWindowCloseAction,
+  ): Promise<MinnowWindowCloseAction>;
   getLoginItem(): Promise<MinnowLoginItemSnapshot>;
   setLoginItem(enabled: boolean): Promise<MinnowLoginItemSnapshot>;
   onCommand(callback: (command: MinnowTrayCommand) => void): () => void;

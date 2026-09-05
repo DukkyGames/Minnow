@@ -72,12 +72,21 @@ export const WINDOW_NEW = 'minnow:window:new';
 export const WINDOW_OPEN_WORKSPACE = 'minnow:window:open-workspace';
 /** Folders currently open in some window, so recents can mark and focus them. */
 export const WINDOW_LIST_WORKSPACES = 'minnow:window:list-workspaces';
+/** The same list with window ids and background state, for close/focus actions. */
+export const WINDOW_LIST_WORKSPACE_WINDOWS = 'minnow:window:list-workspace-windows';
+/** Really close the window on a folder — never hide it to the tray. */
+export const WINDOW_CLOSE_WORKSPACE = 'minnow:window:close-workspace';
+/** Broadcast whenever a workspace window opens, closes, or is backgrounded. */
+export const WINDOW_WORKSPACES_CHANGED = 'minnow:window:workspaces-changed';
 /** Point this window at a different folder, then reload it. */
 export const WINDOW_SWITCH_WORKSPACE = 'minnow:window:switch-workspace';
 
 export const TRAY_PUBLISH_STATUS = 'minnow:tray:publish-status';
 export const TRAY_NOTIFY_READY = 'minnow:tray:notify-ready';
 export const TRAY_GET_CLOSE_TO_TRAY = 'minnow:tray:get-close-to-tray';
+/** What closing one of several windows should do: ask, close, or background. */
+export const TRAY_GET_WINDOW_CLOSE_ACTION = 'minnow:tray:get-window-close-action';
+export const TRAY_SET_WINDOW_CLOSE_ACTION = 'minnow:tray:set-window-close-action';
 export const TRAY_SET_CLOSE_TO_TRAY = 'minnow:tray:set-close-to-tray';
 export const TRAY_GET_LOGIN_ITEM = 'minnow:tray:get-login-item';
 export const TRAY_SET_LOGIN_ITEM = 'minnow:tray:set-login-item';

@@ -7,6 +7,11 @@ import {
   clampShellZoomPercent,
   DEFAULT_SHELL_ZOOM_PERCENT,
 } from './shell-zoom.js';
+import {
+  DEFAULT_WINDOW_CLOSE_ACTION,
+  normalizeWindowCloseAction,
+  type WindowCloseAction,
+} from './tray-close.js';
 
 const CONFIG_FILE = 'config.json';
 
@@ -27,6 +32,12 @@ function normalizeCloseToTray(raw: unknown): boolean {
   if (!shell) return DEFAULT_CLOSE_TO_TRAY;
   const value = shell.closeToTray;
   return typeof value === 'boolean' ? value : DEFAULT_CLOSE_TO_TRAY;
+}
+
+function normalizeWindowCloseActionPref(raw: unknown): WindowCloseAction {
+  const shell = readDesktopShell(raw);
+  if (!shell) return DEFAULT_WINDOW_CLOSE_ACTION;
+  return normalizeWindowCloseAction(shell.windowCloseAction);
 }
 
 function normalizeHardwareAcceleration(raw: unknown): boolean {
@@ -110,6 +121,39 @@ export async function writeCloseToTrayPreference(enabled: boolean): Promise<bool
   });
   await writeConfigJson(CONFIG_FILE, merged);
   return enabled;
+}
+
+export async function readWindowCloseAction(): Promise<WindowCloseAction> {
+  try {
+    const configPath = await resolveConfigPath();
+    const raw = await fs.readFile(configPath, 'utf8');
+    return normalizeWindowCloseActionPref(JSON.parse(raw) as unknown);
+  } catch {
+    return DEFAULT_WINDOW_CLOSE_ACTION;
+  }
+}
+
+export async function writeWindowCloseAction(
+  action: WindowCloseAction,
+): Promise<WindowCloseAction> {
+  const next = normalizeWindowCloseAction(action);
+  const { readConfigJson, writeConfigJson } = await importServerModule<{
+    readConfigJson: (rel: string) => Promise<Record<string, unknown> | null>;
+    writeConfigJson: (rel: string, data: Record<string, unknown>) => Promise<void>;
+  }>('config/store.js');
+  const { mergeConfigMeta } = await importServerModule<{
+    mergeConfigMeta: (
+      existing: Record<string, unknown> | null,
+      patch: Record<string, unknown>,
+    ) => Record<string, unknown>;
+  }>('config/validators.js');
+
+  const existing = (await readConfigJson(CONFIG_FILE)) ?? {};
+  const merged = mergeConfigMeta(existing, {
+    desktopShell: { windowCloseAction: next },
+  });
+  await writeConfigJson(CONFIG_FILE, merged);
+  return next;
 }
 
 // Read-only home lookup; skip the ~/.speedchat rename from server/config/home.js.

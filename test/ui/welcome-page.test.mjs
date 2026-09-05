@@ -85,15 +85,86 @@ const {
   isOtherFullPageHash,
   isWelcomePageOpen,
   openWelcome,
+  renderWelcomeRecentsForTest,
   resetWelcomeStateForTests,
   shouldShowWelcomeOnBoot,
   validateProjectFolderName,
   shouldPromptCodeWorkspaceWelcome,
 } = await import('../../src/ui/welcome-page.ts');
 
+/** Stand in for the Electron preload bridge; returns paths it was asked to close. */
+function installMinnowWindowApi(openWindows) {
+  const closed = [];
+  globalThis.window.minnow = {
+    window: {
+      openWorkspace: async () => ({ ok: true, focused: true }),
+      listWorkspaceWindows: async () => openWindows,
+      closeWorkspace: async (path) => {
+        closed.push(path);
+        return { ok: true, closed: true };
+      },
+    },
+  };
+  return closed;
+}
+
 const { resetWorkspaceStateForTests, setWorkspaceFromServer } = await import(
   '../../src/state/workspace.ts'
 );
+
+describe('welcome-page recents open state', { concurrency: false }, () => {
+  test('badges a folder that already has a window and closes it from the row', async () => {
+    setupWelcomeDom();
+    resetWelcomeStateForTests();
+    const closed = installMinnowWindowApi([
+      { windowId: 1, workspacePath: '/projects/old', visible: true },
+    ]);
+
+    await renderWelcomeRecentsForTest();
+
+    const row = document.querySelector('[data-open-in-window="true"]');
+    assert.ok(row, 'the open folder should be marked');
+    assert.equal(row.querySelector('.welcome-page__recents-badge')?.textContent, 'Open');
+    // The secondary action becomes "focus that window", not "open another".
+    assert.equal(row.querySelector('.welcome-page__recents-new-window')?.textContent, 'Focus');
+
+    row.querySelector('.welcome-page__recents-close').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(closed, ['/projects/old']);
+
+    delete globalThis.window.minnow;
+  });
+
+  test('a backgrounded window offers Show rather than Focus', async () => {
+    setupWelcomeDom();
+    resetWelcomeStateForTests();
+    installMinnowWindowApi([
+      { windowId: 2, workspacePath: '/projects/old', visible: false },
+    ]);
+
+    await renderWelcomeRecentsForTest();
+
+    const row = document.querySelector('[data-workspace-backgrounded="true"]');
+    assert.ok(row);
+    assert.equal(row.querySelector('.welcome-page__recents-badge')?.textContent, 'Running in background');
+    assert.equal(row.querySelector('.welcome-page__recents-new-window')?.textContent, 'Show');
+
+    delete globalThis.window.minnow;
+  });
+
+  test('leaves rows untouched when nothing has a window', async () => {
+    setupWelcomeDom();
+    resetWelcomeStateForTests();
+    installMinnowWindowApi([]);
+
+    await renderWelcomeRecentsForTest();
+
+    assert.equal(document.querySelector('[data-open-in-window="true"]'), null);
+    assert.equal(document.querySelector('.welcome-page__recents-close'), null);
+
+    delete globalThis.window.minnow;
+  });
+});
 
 describe('welcome-page', { concurrency: false }, () => {
   test('validateProjectFolderName rejects invalid names', () => {

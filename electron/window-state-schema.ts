@@ -12,6 +12,12 @@ export interface PersistedWindowState {
   isMaximized?: boolean;
   /** Absolute workspace folder this window was on, or `''` for the gate. */
   workspacePath?: string;
+  /**
+   * The window was hidden to the tray rather than shown when the app quit.
+   * Backgrounded windows are not restored on the next launch — that is exactly
+   * the pile-up that made Minnow reopen every folder ever opened.
+   */
+  hidden?: boolean;
 }
 
 /** v2 stores one entry per open window instead of a single blob. */
@@ -34,7 +40,21 @@ function coerceWindowState(raw: unknown): PersistedWindowState {
     height: Number(parsed.height) || DEFAULT_WINDOW_STATE.height,
     workspacePath:
       typeof parsed.workspacePath === 'string' ? parsed.workspacePath : '',
+    hidden: parsed.hidden === true,
   };
+}
+
+/**
+ * The windows a launch should reopen: everything the user still had on screen.
+ *
+ * A window kept in the background is deliberately dropped. If that leaves
+ * nothing, the caller falls back to a single window on the default workspace,
+ * so a session spent entirely in the tray still boots into something.
+ */
+export function selectRestorableWindows(
+  windows: PersistedWindowState[],
+): PersistedWindowState[] {
+  return windows.filter((entry) => entry.hidden !== true);
 }
 
 /**

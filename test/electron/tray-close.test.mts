@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  decideWindowClose,
+  normalizeWindowCloseAction,
   shouldHideWindowOnClose,
   shouldQuitOnWindowAllClosed,
 } from '../../electron/tray-close.ts';
@@ -37,6 +39,85 @@ describe('shouldHideWindowOnClose', () => {
       }),
       false,
     );
+  });
+});
+
+describe('shouldHideWindowOnClose forceClose', () => {
+  test('never hides a window something already decided to close', () => {
+    assert.equal(
+      shouldHideWindowOnClose({
+        closeToTrayEnabled: true,
+        explicitQuit: false,
+        quitInProgress: false,
+        forceClose: true,
+      }),
+      false,
+    );
+  });
+});
+
+describe('decideWindowClose', () => {
+  const base = {
+    closeToTrayEnabled: true,
+    explicitQuit: false,
+    quitInProgress: false,
+    forceClose: false,
+  };
+
+  test('backgrounds the last window without asking — that is close-to-tray', () => {
+    assert.equal(
+      decideWindowClose({ ...base, openWindowCount: 1, preference: 'ask' }),
+      'background',
+    );
+  });
+
+  test('asks when one of several windows closes', () => {
+    assert.equal(
+      decideWindowClose({ ...base, openWindowCount: 2, preference: 'ask' }),
+      'prompt',
+    );
+  });
+
+  test('honours a remembered answer instead of asking again', () => {
+    assert.equal(
+      decideWindowClose({ ...base, openWindowCount: 3, preference: 'close' }),
+      'close',
+    );
+    assert.equal(
+      decideWindowClose({ ...base, openWindowCount: 3, preference: 'background' }),
+      'background',
+    );
+  });
+
+  test('never asks during a quit, an explicit close, or with close-to-tray off', () => {
+    assert.equal(
+      decideWindowClose({ ...base, quitInProgress: true, openWindowCount: 4, preference: 'ask' }),
+      'close',
+    );
+    assert.equal(
+      decideWindowClose({ ...base, forceClose: true, openWindowCount: 4, preference: 'ask' }),
+      'close',
+    );
+    assert.equal(
+      decideWindowClose({
+        ...base,
+        closeToTrayEnabled: false,
+        openWindowCount: 4,
+        preference: 'ask',
+      }),
+      'close',
+    );
+  });
+});
+
+describe('normalizeWindowCloseAction', () => {
+  test('keeps the three known answers and falls back to asking', () => {
+    assert.equal(normalizeWindowCloseAction('close'), 'close');
+    assert.equal(normalizeWindowCloseAction('background'), 'background');
+    assert.equal(normalizeWindowCloseAction('ask'), 'ask');
+    for (const junk of [undefined, null, '', 'nope', 7, {}]) {
+      assert.equal(normalizeWindowCloseAction(junk), 'ask');
+    }
   });
 });
 

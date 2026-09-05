@@ -22,6 +22,25 @@ describe('desktopShell config', () => {
     assert.equal(merged.desktopShell.closeToTray, true);
   });
 
+  // The merge whitelists keys, so a value it does not know is silently dropped
+  // and the setting never persists.
+  test('round-trips windowCloseAction and rejects unknown answers', () => {
+    for (const action of ['close', 'background', 'ask']) {
+      const merged = mergeConfigMeta({}, { desktopShell: { windowCloseAction: action } });
+      assert.equal(merged.desktopShell.windowCloseAction, action);
+    }
+
+    const kept = mergeConfigMeta(
+      { desktopShell: { windowCloseAction: 'close' } },
+      { desktopShell: { windowCloseAction: 'sometimes' } },
+    );
+    assert.equal(kept.desktopShell.windowCloseAction, 'close');
+
+    // Survives an unrelated later write.
+    const rewritten = mergeConfigMeta(kept, { desktopShell: { closeToTray: true } });
+    assert.equal(rewritten.desktopShell.windowCloseAction, 'close');
+  });
+
   test('defaults hardwareAcceleration to true when missing', () => {
     const merged = mergeConfigMeta({}, {});
     assert.equal(merged.desktopShell?.hardwareAcceleration, undefined);

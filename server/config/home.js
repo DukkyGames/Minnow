@@ -159,6 +159,7 @@ const DEFAULT_META = {
   },
   desktopShell: {
     closeToTray: true,
+    windowCloseAction: 'ask',
     zoomPercent: 80,
     hardwareAcceleration: true,
   },

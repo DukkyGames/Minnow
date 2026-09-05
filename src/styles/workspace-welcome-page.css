@@ -368,6 +368,62 @@
   border-color: var(--mn-fg-subtle);
 }
 
+/*
+ * A folder that already has a window. The badge sits in the row button's third
+ * column, and Close is a sibling of the row for the same reason New window is:
+ * a button cannot nest inside a button.
+ */
+.welcome-page__recents-badge {
+  justify-self: end;
+  padding: 1px 8px;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: nowrap;
+  border: 1px solid var(--mn-border);
+  border-radius: 999px;
+  color: var(--mn-fg-subtle);
+}
+
+.welcome-page__recents-item[data-workspace-backgrounded='true'] .welcome-page__recents-badge {
+  border-style: dashed;
+}
+
+.welcome-page__recents-close {
+  align-self: center;
+  margin-right: 14px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--mn-radius-sm, 6px);
+  background: transparent;
+  color: var(--mn-fg-subtle);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.welcome-page__recents-item:hover .welcome-page__recents-close,
+.welcome-page__recents-close:focus-visible {
+  opacity: 1;
+}
+
+.welcome-page__recents-close:hover {
+  color: var(--mn-danger, #d64545);
+  border-color: var(--mn-danger, #d64545);
+}
+
+.welcome-page__recents-close:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+@media (hover: none) {
+  .welcome-page__recents-close {
+    opacity: 1;
+  }
+}
+
 .welcome-page__recents-empty {
   margin: 0;
   font-size: 13px;

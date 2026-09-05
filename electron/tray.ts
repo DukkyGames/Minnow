@@ -13,8 +13,12 @@ import {
   writeLoginItemOpenAtLogin,
   type LoginItemSnapshot,
 } from './login-item.js';
-import { shouldHideWindowOnClose } from './tray-close.js';
+import { decideWindowClose, type WindowCloseAction } from './tray-close.js';
 import { shouldUseTemplateTrayIcon, type TrayPlatform } from './tray-icon.js';
+import {
+  buildWorkspacesMenuTemplate,
+  type TrayWorkspaceEntry,
+} from './tray-workspaces.js';
 import {
   EMPTY_TRAY_STATUS,
   formatTrayAgentLabel,
@@ -75,6 +79,24 @@ export interface TrayManagerDeps {
   getLoginItem: () => LoginItemSnapshot;
   setLoginItem: (enabled: boolean) => LoginItemSnapshot;
   isQuitInProgress: () => boolean;
+  /** Every shell window, most recently focused first. */
+  listWorkspaceWindows: () => TrayWorkspaceEntry[];
+  /** Show and focus one window by `BrowserWindow.id`. */
+  focusWorkspaceWindow: (windowId: number) => void;
+  /** Really close one window — never hide it to the tray. */
+  closeWorkspaceWindow: (windowId: number) => void;
+  /** True once something has decided this window really is going away. */
+  isForceClosing: (windowId: number) => boolean;
+  /** Remembered answer to the multi-window close prompt. */
+  getWindowCloseAction: () => WindowCloseAction;
+  /**
+   * Ask whether a window should close or stay in the background. Resolves to
+   * `cancel` when the user backs out; `remember` persists the choice.
+   */
+  promptWindowClose: (win: BrowserWindow) => Promise<{
+    action: 'close' | 'background' | 'cancel';
+    remember: boolean;
+  }>;
 }
 
 export interface TrayManager {
@@ -133,6 +155,16 @@ export function createTrayManager(deps: TrayManagerDeps): TrayManager {
     const login = deps.getLoginItem();
     const closeToTray = deps.getCloseToTray();
 
+    const workspaces = buildWorkspacesMenuTemplate(deps.listWorkspaceWindows(), {
+      focus: (windowId) => deps.focusWorkspaceWindow(windowId),
+      close: (windowId) => deps.closeWorkspaceWindow(windowId),
+      closeBackgrounded: () => {
+        for (const entry of deps.listWorkspaceWindows()) {
+          if (!entry.visible) deps.closeWorkspaceWindow(entry.windowId);
+        }
+      },
+    });
+
     return Menu.buildFromTemplate([
       {
         label: 'Open Minnow',
@@ -147,6 +179,8 @@ export function createTrayManager(deps: TrayManagerDeps): TrayManager {
         label: 'New chat',
         click: () => deps.sendTrayCommand({ type: 'new_chat' }),
       },
+      { type: 'separator' },
+      workspaces as Electron.MenuItemConstructorOptions,
       { type: 'separator' },
       {
         label: formatTrayAgentLabel(status.agentCount),
@@ -237,18 +271,51 @@ export function createTrayManager(deps: TrayManagerDeps): TrayManager {
     showCloseNotificationOnce();
   }
 
+  /**
+   * Closing the last window is close-to-tray and hides silently. Closing one of
+   * several is ambiguous — "I am done with this workspace" and "keep it warm in
+   * the tray" look identical — so ask, unless the user has already answered.
+   */
   function wireWindowClose(win: BrowserWindow): void {
+    // A prompt has to preventDefault first and close later; this flag lets the
+    // second, deliberate close through instead of re-asking forever.
+    let closeApproved = false;
+
     win.on('close', (event) => {
-      const hide = shouldHideWindowOnClose({
+      if (closeApproved) return;
+      const outcome = decideWindowClose({
         closeToTrayEnabled: deps.getCloseToTray(),
         explicitQuit: deps.isQuitInProgress(),
         quitInProgress: deps.isQuitInProgress(),
+        forceClose: deps.isForceClosing(win.id),
+        openWindowCount: deps.listWorkspaceWindows().length,
+        preference: deps.getWindowCloseAction(),
       });
-      if (!hide) return;
+      if (outcome === 'close') return;
+
       event.preventDefault();
-      win.hide();
-      maybeNotifyHidden();
+
+      if (outcome === 'background') {
+        hideToTray(win);
+        return;
+      }
+
+      void deps.promptWindowClose(win).then((answer) => {
+        if (win.isDestroyed() || answer.action === 'cancel') return;
+        if (answer.action === 'background') {
+          hideToTray(win);
+          return;
+        }
+        closeApproved = true;
+        win.close();
+      });
     });
+  }
+
+  function hideToTray(win: BrowserWindow): void {
+    if (win.isDestroyed()) return;
+    win.hide();
+    maybeNotifyHidden();
   }
 
   return {
