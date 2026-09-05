@@ -78,6 +78,11 @@ function isMemoryPartEnabled(ctx: ComposeContext): boolean {
   return ctx.memoryEnabled === true && contextHasBrainWriteTools(ctx);
 }
 
+/** True when a non-empty Brain notes block is in the composed system prompt. */
+export function isBrainNotesPartEnabled(ctx: ComposeContext): boolean {
+  return Boolean(ctx.memoryBlock?.trim());
+}
+
 /** True when the outbound prompt will include the code-map part (injection on + non-empty map). */
 export function isCodeMapPartEnabled(ctx: ComposeContext): boolean {
   return (

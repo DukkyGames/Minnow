@@ -1084,6 +1084,11 @@ export interface Chat {
   brainNotesInjection?: ThinkingTriState;
   /** Tri-state workspace context documents override (inherit uses features.contextDocumentsInjectionDefault). */
   contextDocumentsInjection?: ThinkingTriState;
+  /**
+   * First-turn injection bodies kept for follow-up compose. History `role: 'injection'`
+   * rows can be omitted from the runner view; this snapshot still replays them.
+   */
+  injectedContext?: Partial<Record<PromptInjectionKind, string>>;
   /** Per-chat reasoning effort override; unset resolves from catalog default + inherit stack. */
   reasoningEffort?: ReasoningEffortOption;
   /** Active Work Agent; null = default / auto from mode (Step 08). */

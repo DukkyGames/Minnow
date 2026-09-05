@@ -59,6 +59,10 @@ export interface OutboundPromptEstimate {
     history: number;
     tools: number;
     legacyFallback: boolean;
+    /** Approximate tokens for injected Brain notes (subset of composedSystem). */
+    brainNotesSystem?: number;
+    /** Resolved on for this estimate (notes may still be loading). */
+    brainNotesInjectionEnabled?: boolean;
     /** Approximate tokens for injected code map (subset of composedSystem). */
     codeMapSystem?: number;
     /** Resolved on for this estimate (map may still be loading). */

@@ -4,6 +4,7 @@ import {
   savePromptMetaSettings,
   type PromptProfileName,
 } from '../config/prompt-meta';
+import { formatStatCount } from '../usage/format-stat-count';
 import {
   getActiveContextUsageSurface,
   getContextUsageBreakdownPanel,
@@ -24,7 +25,12 @@ const PROFILE_TABS: { id: PromptProfileName; label: string }[] = [
 
 function formatTokens(n: number): string {
   if (!Number.isFinite(n) || n < 0) return '—';
-  return n.toLocaleString();
+  return formatStatCount(n).full || formatStatCount(n).display;
+}
+
+function formatUsedTokens(budget: ContextBudget): string {
+  const count = formatTokens(budget.used);
+  return budget.isEstimate ? `~${count}` : count;
 }
 
 function maxSectionTokens(sections: ContextUsageSection[]): number {
@@ -76,26 +82,32 @@ function renderSummary(budget: ContextBudget): string {
       <div class="context-usage-breakdown__summary-stats">
         <div class="context-usage-breakdown__summary-stat">
           <span class="context-usage-breakdown__summary-label">Used</span>
-          <span class="context-usage-breakdown__summary-value">~${formatTokens(budget.used)}</span>
+          <span class="context-usage-breakdown__summary-value">${formatUsedTokens(budget)}</span>
         </div>
       </div>
       <p class="context-usage-breakdown__limit-unknown">Context limit unknown — compression disabled.</p>
     </div>`;
   }
 
+  const usedLabel = formatUsedTokens(budget);
+  const remainingLabel =
+    budget.remaining != null
+      ? `${budget.isEstimate ? '~' : ''}${formatTokens(budget.remaining)} free`
+      : null;
   const ariaLabel = [
     budget.percent != null ? `${budget.percent}% used` : null,
-    `~${formatTokens(budget.used)} of ${formatTokens(budget.limit)} tokens`,
-    budget.remaining != null ? `~${formatTokens(budget.remaining)} free` : null,
+    `${usedLabel} of ${formatTokens(budget.limit)} tokens`,
+    remainingLabel,
   ]
     .filter(Boolean)
     .join(', ');
 
+  const remainingPrefix = budget.isEstimate ? '~' : '';
   const freeStat =
     budget.remaining != null
       ? `<div class="context-usage-breakdown__summary-stat context-usage-breakdown__summary-stat--end">
           <span class="context-usage-breakdown__summary-label">Free</span>
-          <span class="context-usage-breakdown__summary-value">~${formatTokens(budget.remaining)}</span>
+          <span class="context-usage-breakdown__summary-value">${remainingPrefix}${formatTokens(budget.remaining)}</span>
         </div>`
       : '';
 
@@ -109,7 +121,7 @@ function renderSummary(budget: ContextBudget): string {
       <div class="context-usage-breakdown__summary-stats">
         <div class="context-usage-breakdown__summary-stat">
           <span class="context-usage-breakdown__summary-label">Used</span>
-          <span class="context-usage-breakdown__summary-value">~${formatTokens(budget.used)}</span>
+          <span class="context-usage-breakdown__summary-value">${formatUsedTokens(budget)}</span>
         </div>
         ${freeStat}
       </div>
@@ -210,16 +222,26 @@ function renderPanelBody(budget: ContextBudget): string {
     visibleSections.length > 0
       ? `<div class="context-usage-breakdown__sections" role="list">${rows}</div>`
       : `<p class="context-usage-breakdown__sections-empty">No context allocated yet.</p>`;
+  const lastTurnParts: string[] = [];
+  if (budget.lastTurnPromptTokens != null) {
+    lastTurnParts.push(`${formatTokens(budget.lastTurnPromptTokens)} prompt`);
+  }
+  if (budget.lastTurnCompletionTokens != null) {
+    lastTurnParts.push(`${formatTokens(budget.lastTurnCompletionTokens)} completion`);
+  }
+  if (budget.lastTurnTotalTokens != null) {
+    lastTurnParts.push(`${formatTokens(budget.lastTurnTotalTokens)} total`);
+  }
   const lastTurnLine =
-    budget.lastTurnPromptTokens != null
+    lastTurnParts.length > 0
       ? `<p class="context-usage-breakdown__api-turn">
           <span class="context-usage-breakdown__api-turn-label">Last turn (API)</span>
-          <span class="context-usage-breakdown__api-turn-value">${formatTokens(budget.lastTurnPromptTokens)} prompt</span>
+          <span class="context-usage-breakdown__api-turn-value">${lastTurnParts.join(' · ')}</span>
         </p>`
       : '';
   const estimateNote = budget.isEstimate
     ? `<p class="context-usage-breakdown__note">Section sizes use characters ÷ 4. Token counts vary by model tokenizer.</p>`
-    : `<p class="context-usage-breakdown__note">Last turn prompt tokens came from the provider. Section rows remain approximate.</p>`;
+    : `<p class="context-usage-breakdown__note">Used matches last-turn API total. Section rows are scaled estimates.</p>`;
 
   return `
     <header class="context-usage-breakdown__header">

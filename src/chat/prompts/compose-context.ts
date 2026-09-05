@@ -25,7 +25,10 @@ import { fetchBrainCodeConfig } from '../../brain/client';
 import { loadContextDocumentsSettings, shouldInjectContextDocuments } from '../../chat/context-documents/config';
 import { retrieveContextDocumentsBlock } from '../../chat/context-documents/injection';
 import { shouldRunFirstTurnInjections } from './first-turn-injection';
-import { resolveInjectionReplay } from '../context/injection-replay';
+import {
+  resolveInjectionReplay,
+  shouldReplayStoredInjection,
+} from '../context/injection-replay';
 import { loadPromptConfig } from './prompt-configs';
 import { chatHistoryHasBrowserToolUse } from './browser-allowlist-gate';
 import { getWorkspacePath } from '../../state/workspace';
@@ -61,7 +64,7 @@ export interface BuildComposeContextOptions {
   routeUserText?: string;
   /** First user message send (set before history.push); gates first-turn injections. */
   firstUserSend?: boolean;
-  /** Model context window; sizes the replay cap for stored injection bodies. */
+  /** Model context window (callers still pass it; injection replay is uncapped). */
   modelContextLimit?: number | null;
   overrides?: Partial<ComposeContext>;
 }
@@ -109,15 +112,18 @@ export async function buildComposeContext(
   });
   const replayBodies = runFirstTurn
     ? {}
-    : resolveInjectionReplay(chat.history, {
-        modelContextLimit: options?.modelContextLimit,
-      });
+    : resolveInjectionReplay(chat.history, chat.injectedContext);
   let injectionsReplayed = false;
 
   let memoryBlock: string | null = null;
-  const replayBrainNotes = replayBodies['brain-notes'] ?? null;
-  const injectMemory =
-    (runFirstTurn || Boolean(replayBrainNotes)) && (await shouldInjectMemory(chat));
+  const replayBrainNotes =
+    replayBodies['brain-notes'] &&
+    shouldReplayStoredInjection(chat.brainNotesInjection)
+      ? replayBodies['brain-notes']
+      : null;
+  const injectMemory = runFirstTurn
+    ? await shouldInjectMemory(chat)
+    : Boolean(replayBrainNotes);
   if (injectMemory && !runFirstTurn) {
     memoryBlock = replayBrainNotes;
     injectionsReplayed = true;
@@ -141,9 +147,13 @@ export async function buildComposeContext(
   const worktreeCwd = resolveChatToolWorkspaceRoot(chat, sessionState?.groups);
 
   let codeMapBlock: string | null = null;
-  const replayCodeMap = replayBodies['code-map'] ?? null;
-  const injectCodeMap =
-    (runFirstTurn || Boolean(replayCodeMap)) && (await shouldInjectCodeMap(chat));
+  const replayCodeMap =
+    replayBodies['code-map'] && shouldReplayStoredInjection(chat.codeMapInjection)
+      ? replayBodies['code-map']
+      : null;
+  const injectCodeMap = runFirstTurn
+    ? await shouldInjectCodeMap(chat)
+    : Boolean(replayCodeMap);
   if (injectCodeMap && !runFirstTurn) {
     codeMapBlock = replayCodeMap;
     injectionsReplayed = true;
@@ -174,10 +184,14 @@ export async function buildComposeContext(
   }
 
   let contextDocumentsBlock: string | null = null;
-  const replayContextDocuments = replayBodies['context-documents'] ?? null;
-  const injectContextDocuments =
-    (runFirstTurn || Boolean(replayContextDocuments)) &&
-    (await shouldInjectContextDocuments(chat));
+  const replayContextDocuments =
+    replayBodies['context-documents'] &&
+    shouldReplayStoredInjection(chat.contextDocumentsInjection)
+      ? replayBodies['context-documents']
+      : null;
+  const injectContextDocuments = runFirstTurn
+    ? await shouldInjectContextDocuments(chat)
+    : Boolean(replayContextDocuments);
   if (injectContextDocuments && !runFirstTurn) {
     contextDocumentsBlock = replayContextDocuments;
     injectionsReplayed = true;

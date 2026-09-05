@@ -5,21 +5,13 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
-  capInjectionReplay,
-  INJECTION_REPLAY_FALLBACK_TOKEN_CAP,
   latestInjectionBodies,
   resolveInjectionReplay,
-  resolveInjectionReplayTokenCap,
 } from '../../src/chat/context/injection-replay.ts';
 import type { Message, PromptInjectionKind } from '../../src/types.ts';
 
 function injection(kind: PromptInjectionKind, body: string): Message {
   return { role: 'injection', kind, body, createdAt: 1 };
-}
-
-/** Text that estimates to roughly `tokens` (estimator is chars ÷ 4). */
-function bodyOfTokens(tokens: number): string {
-  return 'x'.repeat(tokens * 4);
 }
 
 describe('latestInjectionBodies', () => {
@@ -51,75 +43,38 @@ describe('latestInjectionBodies', () => {
   });
 });
 
-describe('resolveInjectionReplayTokenCap', () => {
-  test('uses a fifth of the model window', () => {
-    assert.equal(resolveInjectionReplayTokenCap(100_000), 20_000);
-  });
-
-  test('falls back to a fixed cap when the window is unknown', () => {
-    assert.equal(
-      resolveInjectionReplayTokenCap(null),
-      INJECTION_REPLAY_FALLBACK_TOKEN_CAP,
-    );
-    assert.equal(
-      resolveInjectionReplayTokenCap(undefined),
-      INJECTION_REPLAY_FALLBACK_TOKEN_CAP,
-    );
-    assert.equal(resolveInjectionReplayTokenCap(0), INJECTION_REPLAY_FALLBACK_TOKEN_CAP);
-  });
-});
-
-describe('capInjectionReplay', () => {
-  test('keeps everything when it fits', () => {
-    const bodies = {
-      'brain-notes': 'notes',
-      'code-map': 'map',
-      'context-documents': 'docs',
-    };
-    assert.deepEqual(capInjectionReplay(bodies, { modelContextLimit: 100_000 }), bodies);
-  });
-
-  test('fills in priority order: context documents, then brain notes, then code map', () => {
-    // Cap is 1,000 tokens; docs (600) + notes (300) fit, the map (600) does not.
-    const capped = capInjectionReplay(
-      {
-        'context-documents': bodyOfTokens(600),
-        'brain-notes': bodyOfTokens(300),
-        'code-map': bodyOfTokens(600),
-      },
-      { modelContextLimit: 5_000 },
-    );
-    assert.deepEqual(Object.keys(capped).sort(), ['brain-notes', 'context-documents']);
-  });
-
-  test('drops a kind whole rather than truncating it', () => {
-    const capped = capInjectionReplay(
-      { 'code-map': bodyOfTokens(5_000) },
-      { modelContextLimit: 5_000 },
-    );
-    assert.deepEqual(capped, {});
-  });
-
-  test('a later kind still fits after an oversized one is skipped', () => {
-    const capped = capInjectionReplay(
-      {
-        'context-documents': bodyOfTokens(2_000),
-        'code-map': bodyOfTokens(10),
-      },
-      { modelContextLimit: 5_000 },
-    );
-    assert.deepEqual(Object.keys(capped), ['code-map']);
-  });
-});
-
 describe('resolveInjectionReplay', () => {
-  test('reads the transcript and applies the cap in one pass', () => {
+  test('keeps every stored kind, including bodies that used to exceed the old 20% cap', () => {
+    const notes = 'n'.repeat(8_000);
+    const map = 'm'.repeat(36_000);
+    const docs = 'd'.repeat(48_000);
     const history: Message[] = [
       { role: 'user', content: 'hi' },
-      injection('context-documents', 'docs body'),
-      injection('code-map', bodyOfTokens(10_000)),
+      injection('context-documents', docs),
+      injection('brain-notes', notes),
+      injection('code-map', map),
     ];
-    const replay = resolveInjectionReplay(history, { modelContextLimit: 8_000 });
-    assert.deepEqual(replay, { 'context-documents': 'docs body' });
+    assert.deepEqual(resolveInjectionReplay(history), {
+      'context-documents': docs,
+      'brain-notes': notes,
+      'code-map': map,
+    });
+  });
+
+  test('fills missing history kinds from the chat snapshot', () => {
+    const history: Message[] = [
+      { role: 'user', content: 'hi' },
+      injection('brain-notes', 'notes from history'),
+    ];
+    assert.deepEqual(
+      resolveInjectionReplay(history, {
+        'brain-notes': 'stale notes',
+        'code-map': 'src/foo.ts:1',
+      }),
+      {
+        'brain-notes': 'notes from history',
+        'code-map': 'src/foo.ts:1',
+      },
+    );
   });
 });

@@ -1,24 +1,20 @@
 import { STATS_STRIP_OPEN_KEY } from '../constants';
 import { getArchiveDisabledReason } from '../chat/archive/index';
 import { resolveModelInfo } from '../api/models';
-import { getActiveChat } from '../state/sessions';
+import { getActiveChat, markChatDirty } from '../state/sessions';
+import {
+  buildLastStatsSnapshot,
+  lastStatsHasMetrics,
+  lastStatsNeedsHydration,
+  lastStatsToStats,
+  lastStatsToUsage,
+  resolveLastTurnMetrics,
+} from '../usage/chat-turn-metrics';
 import { formatStatCount } from '../usage/format-stat-count';
 import { formatUsd } from '../usage/token-ledger';
-import type { Chat, LastStats, ModelInfo, Stats, Usage } from '../types';
+import type { Chat, ModelInfo, Stats, Usage } from '../types';
 
-export function buildLastStatsSnapshot(stats: Stats | undefined, usage: Usage | undefined): LastStats {
-  const s = stats || {};
-  const u = usage || {};
-  return {
-    tokens_per_second: s.tokens_per_second != null ? s.tokens_per_second : null,
-    time_to_first_token: s.time_to_first_token != null ? s.time_to_first_token : null,
-    generation_time: s.generation_time != null ? s.generation_time : null,
-    stop_reason: s.stop_reason != null ? s.stop_reason : null,
-    total_tokens: u.total_tokens != null ? u.total_tokens : null,
-    prompt_tokens: u.prompt_tokens != null ? u.prompt_tokens : null,
-    completion_tokens: u.completion_tokens != null ? u.completion_tokens : null,
-  };
-}
+export { buildLastStatsSnapshot } from '../usage/chat-turn-metrics';
 
 /** Whether the bottom metrics strip is visible (not fully collapsed). */
 export function isStatsStripOpen(): boolean {
@@ -135,8 +131,8 @@ export function updateStrip(
   modelInfo: ModelInfo | undefined,
   options?: UpdateStripOptions,
 ): void {
-  const s = stats || {};
-  const u = usage || {};
+  const snapshot = buildLastStatsSnapshot(stats, usage);
+  const s = lastStatsToStats(snapshot);
   const m = modelInfo || {};
 
   function set(id: string, html: string, blank: boolean, title?: string): void {
@@ -177,22 +173,26 @@ export function updateStrip(
     s.generation_time == null
   );
 
-  setCount('stripTotal', u.total_tokens);
+  setCount('stripTotal', snapshot.total_tokens);
 
   let costLabel = '—';
   if (options?.costUsd != null && options.costUsd > 0) {
     costLabel = formatUsd(options.costUsd);
   } else if (options?.costUsd === undefined) {
-    const ledger = getActiveChat().tokenLedger;
-    const lastEntry = ledger?.entries?.[ledger.entries.length - 1];
-    if (lastEntry?.costUsd != null && lastEntry.costUsd > 0) {
-      costLabel = formatUsd(lastEntry.costUsd);
+    try {
+      const ledger = getActiveChat().tokenLedger;
+      const lastEntry = ledger?.entries?.[ledger.entries.length - 1];
+      if (lastEntry?.costUsd != null && lastEntry.costUsd > 0) {
+        costLabel = formatUsd(lastEntry.costUsd);
+      }
+    } catch {
+      // Catalog refresh can run before sessions hydrate.
     }
   }
   set('stripCost', costLabel, costLabel === '—');
 
-  const p = u.prompt_tokens ?? 0;
-  const c = u.completion_tokens ?? 0;
+  const p = snapshot.prompt_tokens ?? 0;
+  const c = snapshot.completion_tokens ?? 0;
   const t = p + c || 1;
   const barPrompt = document.getElementById('barPrompt');
   const barCompletion = document.getElementById('barCompletion');
@@ -201,13 +201,15 @@ export function updateStrip(
   if (barPrompt && barCompletion && cntPrompt && cntCompletion) {
     barPrompt.style.setProperty('--fill-scale', String(p / t || 0));
     barCompletion.style.setProperty('--fill-scale', String(c / t || 0));
-    const promptFmt = formatStatCount(p || null);
-    const completionFmt = formatStatCount(c || null);
-    cntPrompt.textContent = p ? promptFmt.display : '—';
-    cntCompletion.textContent = c ? completionFmt.display : '—';
-    if (p) cntPrompt.setAttribute('title', promptFmt.full);
+    const promptFmt = formatStatCount(snapshot.prompt_tokens);
+    const completionFmt = formatStatCount(snapshot.completion_tokens);
+    const promptBlank = promptFmt.display === '—';
+    const completionBlank = completionFmt.display === '—';
+    cntPrompt.textContent = promptFmt.display;
+    cntCompletion.textContent = completionFmt.display;
+    if (!promptBlank) cntPrompt.setAttribute('title', promptFmt.full);
     else cntPrompt.removeAttribute('title');
-    if (c) cntCompletion.setAttribute('title', completionFmt.full);
+    if (!completionBlank) cntCompletion.setAttribute('title', completionFmt.full);
     else cntCompletion.removeAttribute('title');
   }
 
@@ -229,32 +231,22 @@ export function updateStrip(
   updateStatsExpandPreview();
 }
 
-/** Paint the metrics strip from one chat's lastStats. */
+/** Paint the metrics strip from the canonical last-turn snapshot. */
 export function refreshMetricsStripForChat(chat: Chat): void {
   const mid = chat.modelId?.trim() || '';
-  const ls = chat.lastStats;
-  const hasNumeric =
-    ls &&
-    (ls.tokens_per_second != null ||
-      ls.time_to_first_token != null ||
-      ls.generation_time != null ||
-      ls.total_tokens != null);
-  if (!hasNumeric) {
+  const resolved = resolveLastTurnMetrics(chat);
+  if (resolved && lastStatsNeedsHydration(chat.lastStats, resolved)) {
+    chat.lastStats = resolved;
+    markChatDirty(chat);
+  }
+  const ls = resolved ?? chat.lastStats;
+  if (!lastStatsHasMetrics(ls)) {
     updateStrip({}, {}, resolveModelInfo(mid, chat.modelInfo || {}));
     return;
   }
   updateStrip(
-    {
-      tokens_per_second: ls.tokens_per_second ?? undefined,
-      time_to_first_token: ls.time_to_first_token ?? undefined,
-      generation_time: ls.generation_time ?? undefined,
-      stop_reason: ls.stop_reason ?? undefined,
-    },
-    {
-      total_tokens: ls.total_tokens ?? undefined,
-      prompt_tokens: ls.prompt_tokens ?? undefined,
-      completion_tokens: ls.completion_tokens ?? undefined,
-    },
+    lastStatsToStats(ls),
+    lastStatsToUsage(ls),
     resolveModelInfo(mid, chat.modelInfo || {}),
   );
 }

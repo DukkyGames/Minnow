@@ -16,6 +16,7 @@ export declare function isUiOnlyTranscriptRole(role: Message['role']): boolean;
 export declare function isUiOnlyTranscriptMessage(msg: Message): msg is ContextNoticeMessage | InjectionNoticeMessage;
 export declare function isInjectionNoticeMessage(msg: Message): msg is InjectionNoticeMessage;
 /**
- * Append 0–2 injection notice rows after the user message for this send.
+ * Append 0–3 injection notice rows after the user message for this send.
+ * Also stamps `chat.injectedContext` so later turns can replay if history drops the rows.
  */
 export declare function appendInjectionNoticesForTurn(chat: Chat, blocks: PromptInjectionBlocks): InjectionNoticeMessage[];

@@ -52,6 +52,12 @@ function shouldAppendInjection(chat, kind, body) {
   }
   return true;
 }
+function rememberInjectedContext(chat, kind, body) {
+  if (!chat.injectedContext || typeof chat.injectedContext !== "object") {
+    chat.injectedContext = {};
+  }
+  chat.injectedContext[kind] = body;
+}
 function appendInjectionNoticesForTurn(chat, blocks) {
   const added = [];
   const candidates = [
@@ -62,6 +68,7 @@ function appendInjectionNoticesForTurn(chat, blocks) {
   for (const { kind, raw } of candidates) {
     if (!raw?.trim()) continue;
     const body = boundInjectionBody(raw);
+    rememberInjectedContext(chat, kind, body);
     if (!shouldAppendInjection(chat, kind, body)) continue;
     const notice = {
       role: "injection",

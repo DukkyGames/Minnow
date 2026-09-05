@@ -5,6 +5,7 @@ import {
   type ContextBudget,
 } from '../chat/context-usage';
 import { TOKEN_ESTIMATE_TOOLTIP } from '../chat/prompts/token-estimate-core';
+import { formatStatCount } from '../usage/format-stat-count';
 import { getPendingAttachments } from '../attachments/store';
 import { resolveEffectiveChatModelBinding } from './default-model';
 import { getActiveChat, sessionState } from '../state/sessions';
@@ -45,19 +46,40 @@ function readPendingComposerText(): string {
   return getActiveComposerSurface().inputEl?.value ?? '';
 }
 
+function formatCount(n: number): string {
+  return formatStatCount(n).full || formatStatCount(n).display;
+}
+
+function formatUsedLabel(budget: ContextBudget): string {
+  const count = formatCount(budget.used);
+  return budget.isEstimate ? `~${count}` : count;
+}
+
 function formatTooltip(budget: ContextBudget): string {
   const lines: string[] = [budget.modelDisplayName];
   if (budget.limit != null) {
-    lines.push(`Context: ${budget.limit.toLocaleString()} tokens`);
+    lines.push(`Context: ${formatCount(budget.limit)} tokens`);
   } else {
     lines.push('Context limit unknown — compression disabled');
   }
-  lines.push(`Used (approx.): ~${budget.used.toLocaleString()}`);
+  lines.push(`${budget.isEstimate ? 'Used (approx.)' : 'Used'}: ${formatUsedLabel(budget)}`);
   if (budget.remaining != null) {
-    lines.push(`Remaining (approx.): ~${budget.remaining.toLocaleString()}`);
+    const remaining = formatCount(budget.remaining);
+    lines.push(
+      budget.isEstimate
+        ? `Remaining (approx.): ~${remaining}`
+        : `Remaining: ${remaining}`,
+    );
   }
   if (budget.lastTurnPromptTokens != null) {
-    lines.push(`Last turn prompt: ${budget.lastTurnPromptTokens.toLocaleString()} (API)`);
+    const parts = [`prompt ${formatCount(budget.lastTurnPromptTokens)}`];
+    if (budget.lastTurnCompletionTokens != null) {
+      parts.push(`completion ${formatCount(budget.lastTurnCompletionTokens)}`);
+    }
+    if (budget.lastTurnTotalTokens != null) {
+      parts.push(`total ${formatCount(budget.lastTurnTotalTokens)}`);
+    }
+    lines.push(`Last turn (API): ${parts.join(', ')}`);
   }
   lines.push(TOKEN_ESTIMATE_TOOLTIP);
   return lines.join('\n');
@@ -85,10 +107,11 @@ function paintRingSurface(surface: ContextUsageSurface, budget: ContextBudget): 
 
   svg.querySelector('.context-usage-ring__fill-code-map')?.remove();
 
+  const usedLabel = formatUsedLabel(budget);
   const label =
     budget.limit != null
-      ? `Context ${percent}% used, ~${budget.used.toLocaleString()} of ${budget.limit.toLocaleString()} tokens`
-      : `Context ~${budget.used.toLocaleString()} tokens used, limit unknown`;
+      ? `Context ${percent}% used, ${usedLabel} of ${formatCount(budget.limit)} tokens`
+      : `Context ${usedLabel} tokens used, limit unknown`;
   button.setAttribute('aria-label', label);
   button.title = formatTooltip(budget);
 }

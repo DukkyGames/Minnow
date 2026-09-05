@@ -62,7 +62,7 @@ import {
 } from '../models/model-select-library';
 import { renderSidebar } from '../ui/sidebar';
 import { setReadyStatus, setStatus } from '../ui/status';
-import { updateStrip } from '../ui/stats';
+import { refreshMetricsStripForChat, updateStrip } from '../ui/stats';
 
 export { modelCache };
 export { isModelLoaded } from './model-loaded-state';
@@ -109,11 +109,19 @@ export function resolveModelInfo(modelIdOrKey: string, fromResponse?: ModelInfo 
   return merged;
 }
 
-/** Refresh the stats strip from the model select + cache (no new inference). */
+/**
+ * Refresh model-info cells on the metrics strip without wiping last-turn tokens/timing.
+ * Catalog and capability probes used to call `updateStrip({}, {})`, which blanked the strip
+ * whenever models refreshed even though the chat still had usage.
+ */
 export function showCachedModelInfo(): void {
-  const modelIdOrKey = (document.getElementById('modelSelect') as HTMLSelectElement).value;
+  const modelIdOrKey = (document.getElementById('modelSelect') as HTMLSelectElement | null)?.value;
   if (!modelIdOrKey) return;
-  updateStrip({}, {}, resolveModelInfo(modelIdOrKey));
+  try {
+    refreshMetricsStripForChat(getActiveChat());
+  } catch {
+    updateStrip({}, {}, resolveModelInfo(modelIdOrKey));
+  }
 }
 
 function optionForModelSelectValue(

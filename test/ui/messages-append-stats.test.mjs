@@ -8,6 +8,7 @@ import { afterEach, describe, test } from 'node:test';
 import { Window } from 'happy-dom';
 
 const { appendStats } = await import('../../src/ui/messages.ts');
+const { formatStatCount } = await import('../../src/usage/format-stat-count.ts');
 
 function setupDom() {
   const window = new Window();
@@ -42,7 +43,8 @@ describe('appendStats chip parity', { concurrency: false }, () => {
     assert.ok(chips);
     const texts = [...chips.querySelectorAll('.stat-chip')].map((el) => el.textContent);
     assert.ok(texts.some((t) => t.includes('tok/s') && t.includes('43.8')));
-    assert.ok(texts.some((t) => t.includes('15522') && t.includes('tokens')));
+    const totalLabel = formatStatCount(15522).display;
+    assert.ok(texts.some((t) => t.includes(totalLabel) && t.includes('tokens')));
     assert.ok(texts.some((t) => t.includes('pp') && t.includes('275')));
     assert.ok(texts.some((t) => t.includes('draft') && t.includes('78%')));
   });
@@ -56,6 +58,6 @@ describe('appendStats chip parity', { concurrency: false }, () => {
 
     const red = wrap.querySelector('.stat-chip.r');
     assert.ok(red);
-    assert.match(red.textContent ?? '', /15522/);
+    assert.match(red.textContent ?? '', new RegExp(formatStatCount(15522).display.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   });
 });

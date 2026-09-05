@@ -95,6 +95,7 @@ import { refreshMetricsStripForChat } from './stats';
 import { refreshContextUsageRing } from './context-usage-ring';
 import { resetCodeChangeTotals, recomputeWorkspaceCodeChangeTotals } from '../usage/code-change-ledger';
 import { normalizeUsageTotals } from '../usage/pricing';
+import { formatStatCount } from '../usage/format-stat-count';
 import { sessionState } from '../state/sessions';
 import { updateWorkspaceCodeChangeDisplay } from './workspace-code-change';
 import { resetTokenLedger } from '../usage/token-ledger';
@@ -685,6 +686,7 @@ export function renderChatFromHistory(chat: Chat, mount?: string | HTMLElement):
   syncThoughtsCaretPulse(area);
   syncComposerMessageQueue();
   restoreChatScrollAnchor(scrollAnchor);
+  refreshMetricsStripForChat(chat);
   refreshContextUsageRing();
   if (isChatStreaming(chat.id) && isStreamDomVisible(chat.id)) {
     void import('../tools/stream-chat-dom').then((m) => m.remountStreamDomForChat(chat.id));
@@ -1188,7 +1190,7 @@ export function appendStats(
     ['c', s.tokens_per_second != null, `<span>${s.tokens_per_second?.toFixed(1)}</span> tok/s`],
     ['g', s.time_to_first_token != null, `TTFT <span>${s.time_to_first_token?.toFixed(3)}s</span>`],
     ['y', s.generation_time != null, `gen <span>${s.generation_time?.toFixed(3)}s</span>`],
-    ['r', u.total_tokens != null, `<span>${u.total_tokens}</span> tokens`],
+    ['r', u.total_tokens != null, `<span>${formatStatCount(u.total_tokens).display}</span> tokens`],
     [
       'b',
       s.prompt_tokens_per_second != null,
@@ -1206,6 +1208,10 @@ export function appendStats(
     const chip = document.createElement('div');
     chip.className = `stat-chip ${cls}`;
     chip.innerHTML = html;
+    if (cls === 'r' && u.total_tokens != null) {
+      const formatted = formatStatCount(u.total_tokens);
+      if (formatted.full) chip.setAttribute('title', formatted.full);
+    }
     chips.appendChild(chip);
   }
 

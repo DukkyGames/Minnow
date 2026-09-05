@@ -29,7 +29,14 @@ import {
   type BuildComposeContextOptions,
   buildComposeContext,
 } from './compose-context';
-import { composeSystemPrompt, isCodeMapPartEnabled, isContextDocumentsPartEnabled } from './prompt-composer';
+import { shouldRunFirstTurnInjections } from './first-turn-injection';
+import { latestInjectionBodies } from '../context/injection-replay';
+import {
+  composeSystemPrompt,
+  isBrainNotesPartEnabled,
+  isCodeMapPartEnabled,
+  isContextDocumentsPartEnabled,
+} from './prompt-composer';
 import type { ComposeContext } from './types';
 import {
   computeOutboundPromptEstimateFromParts,
@@ -247,6 +254,8 @@ interface CachedOutboundStaticEstimate {
   composedSystem: number;
   userRulesTokens: number;
   tools: number;
+  brainNotesSystem?: number;
+  brainNotesInjectionEnabled?: boolean;
   codeMapSystem?: number;
   codeMapInjectionEnabled?: boolean;
   contextDocumentsSystem?: number;
@@ -256,8 +265,28 @@ interface CachedOutboundStaticEstimate {
 let cachedStaticEstimateKey = '';
 let cachedStaticEstimate: CachedOutboundStaticEstimate | null = null;
 
-function outboundStaticEstimateCacheKey(chatId: string, modelId: string): string {
-  return `${chatId}\0${modelId}\0${getToolConfigEpoch()}\0${getPromptConfigEpoch()}`;
+/**
+ * Static compose (system + tools) changes when first-turn retrieve gives way
+ * to stored injection replay, or when those stored bodies / toggles change.
+ */
+function outboundStaticEstimateCacheKey(
+  chat: Chat,
+  modelId: string,
+  options?: ResolveOutboundPromptEstimateOptions,
+): string {
+  const firstTurn = shouldRunFirstTurnInjections(chat, {
+    firstUserSend: options?.composeOptions?.firstUserSend,
+  });
+  const bodies = firstTurn ? {} : latestInjectionBodies(chat.history);
+  const injectionFp = [
+    firstTurn ? 'first' : 'replay',
+    `bn:${bodies['brain-notes']?.length ?? 0}`,
+    `cm:${bodies['code-map']?.length ?? 0}`,
+    `cd:${bodies['context-documents']?.length ?? 0}`,
+    `snap:${chat.injectedContext?.['brain-notes']?.length ?? 0}:${chat.injectedContext?.['code-map']?.length ?? 0}:${chat.injectedContext?.['context-documents']?.length ?? 0}`,
+    `tog:${chat.brainNotesInjection ?? ''}:${chat.codeMapInjection ?? ''}:${chat.contextDocumentsInjection ?? ''}`,
+  ].join('\0');
+  return `${chat.id}\0${modelId}\0${getToolConfigEpoch()}\0${getPromptConfigEpoch()}\0${injectionFp}`;
 }
 
 // ── Cache ────────────────────────────────────────────────────────────────────
@@ -273,7 +302,7 @@ async function resolveCachedStaticOutboundEstimate(
   options: ResolveOutboundPromptEstimateOptions | undefined,
 ): Promise<CachedOutboundStaticEstimate> {
   const modelId = options?.modelId?.trim() ?? '';
-  const cacheKey = outboundStaticEstimateCacheKey(chat.id, modelId);
+  const cacheKey = outboundStaticEstimateCacheKey(chat, modelId, options);
   if (cacheKey === cachedStaticEstimateKey && cachedStaticEstimate) {
     return cachedStaticEstimate;
   }
@@ -313,6 +342,12 @@ async function resolveCachedStaticOutboundEstimate(
   };
 
   if (ctx) {
+    if (ctx.memoryEnabled === true) {
+      entry.brainNotesInjectionEnabled = true;
+    }
+    if (isBrainNotesPartEnabled(ctx) && ctx.memoryBlock?.trim()) {
+      entry.brainNotesSystem = estimateTokensFromText(ctx.memoryBlock);
+    }
     if (ctx.codeMapInjectionEnabled === true) {
       entry.codeMapInjectionEnabled = true;
     }
@@ -357,6 +392,8 @@ export async function resolveOutboundPromptEstimate(
     history: historyTokens,
     tools: staticPart.tools,
     legacyFallback: staticPart.legacyFallback,
+    brainNotesSystem: staticPart.brainNotesSystem,
+    brainNotesInjectionEnabled: staticPart.brainNotesInjectionEnabled,
     codeMapSystem: staticPart.codeMapSystem,
     codeMapInjectionEnabled: staticPart.codeMapInjectionEnabled,
     contextDocumentsSystem: staticPart.contextDocumentsSystem,

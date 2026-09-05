@@ -179,6 +179,20 @@ describe('buildContextUsageBreakdown', () => {
     assert.equal(loadingRows.find((r) => r.key === 'codeMap')?.label, 'Code map (loading)');
     assert.equal(loadingRows.find((r) => r.key === 'codeMap')?.tokens, 0);
   });
+
+  test('splits Brain notes from system', () => {
+    const estimate = computeOutboundPromptEstimateFromParts({
+      systemText: 'sys',
+      history: [],
+      tools: [],
+    });
+    estimate.composedSystem = 1000;
+    estimate.brainNotesSystem = 250;
+    estimate.brainNotesInjectionEnabled = true;
+    const rows = buildContextUsageBreakdown(estimate, 0, 0);
+    assert.equal(rows.find((r) => r.key === 'system')?.tokens, 750);
+    assert.equal(rows.find((r) => r.key === 'brainNotes')?.tokens, 250);
+  });
 });
 
 describe('computeContextUsagePercent', () => {
@@ -346,6 +360,8 @@ describe('assembleContextBudget', () => {
     assert.equal(budget.percent, Math.round((budget.used / 32_768) * 100));
     assert.equal(budget.isEstimate, true);
     assert.equal(budget.lastTurnPromptTokens, null);
+    assert.equal(budget.lastTurnCompletionTokens, null);
+    assert.equal(budget.lastTurnTotalTokens, null);
   });
 
   test('marks non-estimate when API prompt tokens exist', () => {
@@ -364,8 +380,35 @@ describe('assembleContextBudget', () => {
       lastTurnPromptTokens: 1200,
     });
     assert.equal(budget.isEstimate, false);
+    assert.equal(budget.used, 1200);
     assert.equal(budget.limit, null);
     assert.equal(budget.percent, null);
     assert.equal(budget.remaining, null);
+  });
+
+  test('USED matches last-turn API total and keeps pending extras on top', () => {
+    const estimate = computeOutboundPromptEstimateFromParts({
+      systemText: 'System prompt body',
+      history: [{ role: 'user', content: 'hello world' }],
+      tools: [],
+    });
+    const budget = assembleContextBudget({
+      modelId: 'm',
+      modelDisplayName: 'M',
+      limit: 68_608,
+      estimate,
+      composerTokens: 10,
+      attachmentTokens: 0,
+      lastTurnPromptTokens: 61_692,
+      lastTurnCompletionTokens: 5_794,
+      lastTurnTotalTokens: 67_486,
+    });
+    const core = budget.breakdown
+      .filter((row) => row.key !== 'composer' && row.key !== 'attachments' && row.key !== 'inFlight')
+      .reduce((sum, row) => sum + row.tokens, 0);
+    assert.equal(core, 67_486);
+    assert.equal(budget.used, 67_496);
+    assert.equal(budget.isEstimate, false);
+    assert.equal(budget.lastTurnTotalTokens, 67_486);
   });
 });

@@ -10,6 +10,7 @@ import { getChatsForWorkspace, getChatLastMessageAt } from '../state/session-wor
 import { getChatMessageCount, sessionState } from '../state/sessions';
 import type { LastStats } from '../types';
 import type { Chat } from '../types';
+import { resolveLastTurnMetrics } from '../usage/chat-turn-metrics';
 import { syncModeSelectorFromActiveChat } from './mode-selector';
 import { switchChat } from './sidebar';
 import { updateWorkspaceCodeChangeDisplay } from './workspace-code-change';
@@ -263,7 +264,7 @@ function renderRecentTiles(container: HTMLElement, activeChat: Chat): void {
     const title =
       chat.name && chat.name !== PLACEHOLDER_CHAT_NAME ? chat.name : PLACEHOLDER_CHAT_NAME;
     const when = formatRelativeTime(getChatLastMessageAt(chat));
-    const metrics = buildHubTileMetrics(chat.lastStats);
+    const metrics = buildHubTileMetrics(resolveLastTurnMetrics(chat));
     const chipClass = modeId === 'build' ? 'hub-tile__chip mode' : 'hub-tile__chip';
     tile.innerHTML = `
       <div class="hub-tile__head">

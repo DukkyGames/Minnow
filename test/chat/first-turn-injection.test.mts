@@ -142,21 +142,59 @@ describe('injection replay on later turns', () => {
     assert.equal(chat.history.filter((m) => m.role === 'injection').length, 1);
   });
 
-  test('the replay cap drops a body too large for the model window', async () => {
+  test('turn 2 keeps a stored body even when it would have exceeded the old 20% window share', async () => {
+    const stored = 'x'.repeat(40_000);
     const chat = chatWithStoredInjection({
       history: [
         { role: 'user', content: 'first question' },
         {
           role: 'injection',
           kind: 'context-documents',
-          body: 'x'.repeat(40_000),
+          body: stored,
           createdAt: 1,
         },
         { role: 'assistant', content: 'first answer' },
       ],
     });
     const ctx = await buildComposeContext(chat, { modelContextLimit: 8_000 });
-    assert.equal(ctx.contextDocumentsBlock, null);
-    assert.equal(ctx.injectionsReplayed, false);
+    assert.equal(ctx.contextDocumentsBlock, stored);
+    assert.equal(ctx.injectionsReplayed, true);
+  });
+
+  test('turn 2 replays code map and brain notes without live Brain/memory gates', async () => {
+    const notes = 'wiki note from first turn';
+    const map = 'src/chat/prompts/compose-context.ts:80';
+    const chat = chatWithStoredInjection({
+      codeMapInjection: 'on',
+      brainNotesInjection: 'on',
+      history: [
+        { role: 'user', content: 'first question' },
+        { role: 'injection', kind: 'brain-notes', body: notes, createdAt: 1 },
+        { role: 'injection', kind: 'code-map', body: map, createdAt: 1 },
+        { role: 'assistant', content: 'first answer' },
+      ],
+    });
+    const ctx = await buildComposeContext(chat);
+    assert.equal(ctx.memoryBlock, notes);
+    assert.equal(ctx.codeMapBlock, map);
+    assert.equal(ctx.injectionsReplayed, true);
+    const composed = composeSystemPrompt(ctx);
+    assert.ok(composed.includes(notes));
+    assert.ok(composed.includes(map));
+  });
+
+  test('turn 2 replays from chat.injectedContext when history rows are missing', async () => {
+    const map = 'src/missing-row.ts:1';
+    const chat = chatWithStoredInjection({
+      codeMapInjection: 'on',
+      injectedContext: { 'code-map': map },
+      history: [
+        { role: 'user', content: 'first question' },
+        { role: 'assistant', content: 'first answer' },
+      ],
+    });
+    const ctx = await buildComposeContext(chat);
+    assert.equal(ctx.codeMapBlock, map);
+    assert.equal(ctx.injectionsReplayed, true);
   });
 });

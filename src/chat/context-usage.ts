@@ -6,6 +6,7 @@ import { modelCache } from '../app-state';
 import type { Attachment } from '../attachments/types';
 import { attachmentImageDataUrl } from '../attachments/attachment-image';
 import type { Chat, LmModelRecord } from '../types';
+import { resolveLastTurnMetrics } from '../usage/chat-turn-metrics';
 import {
   estimateInFlightOverlayTokens,
   type ContextInFlightOverlay,
@@ -20,6 +21,7 @@ import {
 
 export type ContextUsageSectionKey =
   | 'system'
+  | 'brainNotes'
   | 'codeMap'
   | 'contextDocuments'
   | 'rules'
@@ -36,21 +38,41 @@ export interface ContextUsageSection {
   tokens: number;
 }
 
+/** Breakdown rows that describe the last request (not pending extras). */
+const CORE_USAGE_SECTION_KEYS = new Set<ContextUsageSectionKey>([
+  'system',
+  'brainNotes',
+  'codeMap',
+  'contextDocuments',
+  'rules',
+  'tools',
+  'history',
+  'compressed',
+]);
+
 export interface ContextBudget {
   modelId: string;
   modelDisplayName: string;
   /** Model max context length when known. */
   limit: number | null;
-  /** Estimated tokens for the next send (includes pending composer + attachments). */
+  /**
+   * Tokens counted toward the window: last-turn API total when known,
+   * otherwise the character estimate. Pending composer/attachments/in-flight
+   * tool JSON are added on top.
+   */
   used: number;
   /** limit - used when limit is known. */
   remaining: number | null;
   /** 0–100 for the ring; capped at 100; null when limit unknown. */
   percent: number | null;
-  /** False when the last turn reported provider prompt_tokens. */
+  /** False when USED is grounded in provider last-turn usage. */
   isEstimate: boolean;
   /** Provider prompt_tokens from the last completed turn, if any. */
   lastTurnPromptTokens: number | null;
+  /** Provider completion_tokens from the last completed turn, if any. */
+  lastTurnCompletionTokens: number | null;
+  /** Provider total_tokens (prompt+completion) from the last completed turn. */
+  lastTurnTotalTokens: number | null;
   breakdown: ContextUsageSection[];
 }
 
@@ -110,11 +132,25 @@ export function buildContextUsageBreakdown(
       tokens: Math.max(
         0,
         estimate.composedSystem -
+          (estimate.brainNotesSystem ?? 0) -
           (estimate.codeMapSystem ?? 0) -
           (estimate.contextDocumentsSystem ?? 0),
       ),
     },
   ];
+  if (estimate.brainNotesSystem != null && estimate.brainNotesSystem > 0) {
+    rows.push({
+      key: 'brainNotes',
+      label: 'Brain notes',
+      tokens: estimate.brainNotesSystem,
+    });
+  } else if (estimate.brainNotesInjectionEnabled) {
+    rows.push({
+      key: 'brainNotes',
+      label: 'Brain notes (loading)',
+      tokens: 0,
+    });
+  }
   if (estimate.codeMapSystem != null && estimate.codeMapSystem > 0) {
     rows.push({
       key: 'codeMap',
@@ -178,6 +214,56 @@ function sumBreakdownTokens(sections: ContextUsageSection[]): number {
     total += section.tokens;
   }
   return total;
+}
+
+function sumCoreBreakdownTokens(sections: ContextUsageSection[]): number {
+  let total = 0;
+  for (const section of sections) {
+    if (CORE_USAGE_SECTION_KEYS.has(section.key)) total += section.tokens;
+  }
+  return total;
+}
+
+/**
+ * Scale system/tools/history rows so they sum to the last-turn API total.
+ * Composer / attachments / in-flight stay unscaled extras on top.
+ */
+export function scaleCoreBreakdownToTarget(
+  sections: ContextUsageSection[],
+  target: number,
+): ContextUsageSection[] {
+  if (!Number.isFinite(target) || target < 0) return sections;
+  const coreSum = sumCoreBreakdownTokens(sections);
+  if (coreSum <= 0) return sections;
+
+  const scaled = sections.map((section) => {
+    if (!CORE_USAGE_SECTION_KEYS.has(section.key)) return section;
+    return {
+      ...section,
+      tokens: Math.round((section.tokens * target) / coreSum),
+    };
+  });
+
+  const drift = target - sumCoreBreakdownTokens(scaled);
+  if (drift === 0) return scaled;
+
+  let maxIndex = -1;
+  let maxTokens = -1;
+  for (let i = 0; i < scaled.length; i += 1) {
+    const section = scaled[i];
+    if (!CORE_USAGE_SECTION_KEYS.has(section.key)) continue;
+    if (section.tokens >= maxTokens) {
+      maxTokens = section.tokens;
+      maxIndex = i;
+    }
+  }
+  if (maxIndex < 0) return scaled;
+  const adjusted = scaled[maxIndex];
+  scaled[maxIndex] = {
+    ...adjusted,
+    tokens: Math.max(0, adjusted.tokens + drift),
+  };
+  return scaled;
 }
 
 function lookupCachedModelRow(modelId: string): LmModelRecord | undefined {
@@ -245,14 +331,36 @@ export function assembleContextBudget(params: {
   composerTokens: number;
   attachmentTokens: number;
   inFlightTokens?: number;
-  lastTurnPromptTokens: number | null;
+  lastTurnPromptTokens?: number | null;
+  lastTurnCompletionTokens?: number | null;
+  lastTurnTotalTokens?: number | null;
 }): ContextBudget {
-  const breakdown = buildContextUsageBreakdown(
+  const lastTurnPromptTokens = params.lastTurnPromptTokens ?? null;
+  const lastTurnCompletionTokens = params.lastTurnCompletionTokens ?? null;
+  const lastTurnTotalTokens = params.lastTurnTotalTokens ?? null;
+  const apiCore =
+    lastTurnTotalTokens != null
+      ? lastTurnTotalTokens
+      : lastTurnPromptTokens;
+
+  let breakdown = buildContextUsageBreakdown(
     params.estimate,
     params.composerTokens,
     params.attachmentTokens,
     params.inFlightTokens ?? 0,
   );
+  if (apiCore != null) {
+    if (sumCoreBreakdownTokens(breakdown) > 0) {
+      breakdown = scaleCoreBreakdownToTarget(breakdown, apiCore);
+    } else {
+      // Nothing to scale (empty first-turn estimate) — show the API total as history.
+      breakdown = [
+        { key: 'history', label: 'History', tokens: apiCore },
+        ...breakdown.filter((section) => !CORE_USAGE_SECTION_KEYS.has(section.key)),
+      ];
+    }
+  }
+
   const used = sumBreakdownTokens(breakdown);
   const limit = params.limit;
   const remaining = limit != null ? Math.max(0, limit - used) : null;
@@ -265,8 +373,10 @@ export function assembleContextBudget(params: {
     used,
     remaining,
     percent,
-    isEstimate: params.lastTurnPromptTokens == null,
-    lastTurnPromptTokens: params.lastTurnPromptTokens,
+    isEstimate: apiCore == null,
+    lastTurnPromptTokens,
+    lastTurnCompletionTokens,
+    lastTurnTotalTokens,
     breakdown,
   };
 }
@@ -288,10 +398,7 @@ export async function getContextBudget(
   const attachmentTokens = options?.pendingAttachmentTokens ?? 0;
   const inFlightTokens = estimateInFlightOverlayTokens(options?.inFlight);
 
-  const lastTurnPromptTokens =
-    chat.lastStats?.prompt_tokens != null && Number.isFinite(chat.lastStats.prompt_tokens)
-      ? chat.lastStats.prompt_tokens
-      : null;
+  const lastTurn = resolveLastTurnMetrics(chat);
 
   return assembleContextBudget({
     modelId,
@@ -301,6 +408,8 @@ export async function getContextBudget(
     composerTokens,
     attachmentTokens,
     inFlightTokens,
-    lastTurnPromptTokens,
+    lastTurnPromptTokens: lastTurn?.prompt_tokens ?? null,
+    lastTurnCompletionTokens: lastTurn?.completion_tokens ?? null,
+    lastTurnTotalTokens: lastTurn?.total_tokens ?? null,
   });
 }

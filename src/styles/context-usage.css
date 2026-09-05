@@ -72,6 +72,10 @@
   transition: stroke-dashoffset 0.35s var(--ease-out), stroke 0.2s var(--ease-out);
 }
 
+.context-usage-row[data-section='brainNotes'] .context-usage-row__fill {
+  background: color-mix(in oklch, var(--mn-accent-ink) 40%, var(--mn-border));
+}
+
 .context-usage-row[data-section='codeMap'] .context-usage-row__fill {
   background: color-mix(in oklch, var(--mn-accent-ink) 55%, var(--mn-border));
 }
