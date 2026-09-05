@@ -10,6 +10,7 @@ import {
   type CustomThemeTokens,
   tokenKeyToCssVar,
 } from './types';
+import { scheduleAppearancePersist } from './persist-schedule';
 
 type CustomThemeListener = () => void;
 
@@ -27,12 +28,14 @@ function writeStorage(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
   } catch {}
+  scheduleAppearancePersist();
 }
 
 function removeStorage(key: string): void {
   try {
     localStorage.removeItem(key);
   } catch {}
+  scheduleAppearancePersist();
 }
 
 function emitChange(): void {

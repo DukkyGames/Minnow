@@ -2024,7 +2024,10 @@ function unwrapNewIssueDescriptionLabel(host: HTMLElement): void {
 
 function ensureNewIssueDescriptionEditor(): void {
   const host = getNewIssueDescriptionHost();
-  if (!host || host.querySelector('.mn-editor')) return;
+  if (!host) return;
+  if (newIssueDescriptionEditor && host.contains(newIssueDescriptionEditor.root)) return;
+  newIssueDescriptionEditor?.destroy();
+  host.replaceChildren();
 
   newIssueDescriptionEditor = createIssueEditor(host, {
     value: '',
@@ -2035,7 +2038,8 @@ function ensureNewIssueDescriptionEditor(): void {
 }
 
 function getNewIssueDescription(): string {
-  return newIssueDescriptionEditor?.getValue().trim() ?? '';
+  // Flush so Create reads the live DOM, not the empty parse from mount.
+  return newIssueDescriptionEditor?.flush().trim() ?? '';
 }
 
 function resetNewIssueDescription(): void {

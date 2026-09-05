@@ -1,6 +1,6 @@
 # Setup from source
 
-Step-by-step guide to run Minnow from a git clone. For a packaged install, use the release artifacts and the user manual under [`../manual/`](../manual/). Short version: [README quick start](../../README.md#quick-start). Index: [`../README.md`](../README.md). Architecture orientation: [architecture.md](architecture.md). Exhaustive reference: [`../context.md`](../context.md).
+Step-by-step guide to run Minnow from a git clone **for development**. End users should download a packaged build from [Releases](https://github.com/HenriGrimm/Minnow/releases) and follow [Install and first launch](../manual/get-started/install.md). Index: [`../README.md`](../README.md). Architecture orientation: [architecture.md](architecture.md). Exhaustive reference: [`../context.md`](../context.md).
 
 ## 1. Prerequisites
 

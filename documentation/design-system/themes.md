@@ -19,7 +19,9 @@ Default when storage is empty: **`swamp-dark`** ([`DEFAULT_THEME_ID`](../../src/
 
 Family metadata (names, blurbs): [`THEME_FAMILY_META`](../../src/theme.ts).
 
-## Storage keys
+## Storage
+
+Canonical file: `~/.minnow/appearance.json` (`GET`/`PUT /api/config/appearance`). `localStorage` is a first-paint cache and Vite-only fallback.
 
 | Key | Purpose |
 |-----|---------|
@@ -31,10 +33,11 @@ Legacy values (`light`, `dark`, `system`, pre-rename families like `sage`→`swa
 
 ## Runtime pipeline
 
-1. **FOUC boot** — inline script in [`index.html`](../../index.html) sets `data-theme` before paint.
-2. **`applyTheme()`** — [`src/theme.ts`](../../src/theme.ts) sets `data-theme`, updates `theme-color` meta.
-3. **`initTheme()`** — [`src/ui/theme.ts`](../../src/ui/theme.ts) wires hljs, xterm, custom tokens, fonts; adds `theme-ready`.
-4. **Transitions** — [`theme-transitions.css`](../../src/styles/theme-transitions.css) guards first paint; text-entry controls use `transition: none` (MIN-168 caret + macOS composer glyph lag).
+1. **FOUC boot** — inline script in [`index.html`](../../index.html) sets `data-theme` before paint. Served HTML injects `window.__MINNOW_APPEARANCE_BOOT__` from `appearance.json` so a new origin still has the saved palette.
+2. **`applyTheme()`** — [`src/theme.ts`](../../src/theme.ts) sets `data-theme`, updates `theme-color` meta, and schedules a write to `appearance.json`.
+3. **`hydrateAppearanceFromServer()`** — [`src/appearance/persist.ts`](../../src/appearance/persist.ts) loads the home file after `/api/config` is up (server wins; localStorage migrates if the file was never saved).
+4. **`initTheme()`** — [`src/ui/theme.ts`](../../src/ui/theme.ts) wires hljs, xterm, custom tokens, fonts; adds `theme-ready`.
+5. **Transitions** — [`theme-transitions.css`](../../src/styles/theme-transitions.css) guards first paint; text-entry controls use `transition: none` (MIN-168 caret + macOS composer glyph lag).
 
 ## Custom appearance
 

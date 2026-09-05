@@ -10,11 +10,11 @@ import {
 import { loadNotificationPrefs, saveNotificationPref } from '../notifications/prefs';
 import {
   getFollowSystem,
+  getStoredFamily,
   getStoredTheme,
   setFollowSystem,
   setThemeFamily,
   setThemeMode,
-  THEME_FAMILY_KEY,
   type ThemeFamily,
   type ThemeMode,
 } from '../theme';
@@ -122,11 +122,7 @@ function readBrowserFieldValue(key: string): unknown {
   }
 
   if (key === 'appearance.theme.family') {
-    try {
-      return localStorage.getItem(THEME_FAMILY_KEY);
-    } catch {
-      return null;
-    }
+    return getStoredFamily();
   }
 
   if (key === 'appearance.theme.mode') {

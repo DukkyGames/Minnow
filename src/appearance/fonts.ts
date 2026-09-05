@@ -20,6 +20,7 @@ import {
   type AppearanceFonts,
   type FontRef,
 } from './types';
+import { scheduleAppearancePersist } from './persist-schedule';
 
 export {
   buildGoogleFontsCss2Url,
@@ -85,6 +86,7 @@ function writeStorage(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
   } catch {}
+  scheduleAppearancePersist();
 }
 
 function emitChange(): void {
@@ -286,4 +288,5 @@ function removeStorage(key: string): void {
   try {
     localStorage.removeItem(key);
   } catch {}
+  scheduleAppearancePersist();
 }

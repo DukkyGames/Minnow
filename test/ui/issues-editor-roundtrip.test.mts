@@ -148,4 +148,60 @@ describe('issue editor round-trip', () => {
     assert.equal(handle.getValue(), '');
     assert.ok(body.classList.contains('is-empty'));
   });
+
+  test('empty descriptions seed an editable paragraph, not a locked blank', async () => {
+    const { body } = await mountEditor('');
+    const para = body.querySelector('.mn-editor__para');
+    assert.ok(para, 'empty editor must offer a paragraph to type into');
+    assert.notEqual(para.getAttribute('contenteditable'), 'false');
+  });
+
+  test('typing into an empty description is readable back', async () => {
+    const { handle, body } = await mountEditor('');
+    const para = body.querySelector('.mn-editor__para');
+    assert.ok(para);
+    para.textContent = 'Filed from the new-issue form.';
+    body.dispatchEvent(new (windows[0] as unknown as Window).Event('input', { bubbles: true }));
+    assert.equal(handle.getValue(), 'Filed from the new-issue form.');
+  });
+
+  test('flush commits an empty-document edit through onChange', async () => {
+    const { handle, body, changes } = await mountEditor('');
+    const para = body.querySelector('.mn-editor__para');
+    assert.ok(para);
+    para.textContent = 'Saved on create.';
+    body.dispatchEvent(new (windows[0] as unknown as Window).Event('input', { bubbles: true }));
+    handle.flush();
+    assert.equal(changes.at(-1), 'Saved on create.');
+  });
+
+  test('browser-inserted nodes without a block id are still serialized', async () => {
+    const { handle, body } = await mountEditor('');
+    const extra = body.ownerDocument.createElement('div');
+    extra.textContent = 'Orphan typed node';
+    body.appendChild(extra);
+    body.dispatchEvent(new (windows[0] as unknown as Window).Event('input', { bubbles: true }));
+    assert.equal(handle.getValue(), 'Orphan typed node');
+  });
+
+  test('a new paragraph typed after existing content is kept', async () => {
+    const { handle, body } = await mountEditor('Original line.');
+    const extra = body.ownerDocument.createElement('p');
+    extra.textContent = 'Second line.';
+    body.appendChild(extra);
+    body.dispatchEvent(new (windows[0] as unknown as Window).Event('input', { bubbles: true }));
+    const out = handle.getValue();
+    assert.match(out, /Original line/);
+    assert.match(out, /Second line/);
+  });
+
+  test('destroy flushes before the node is removed', async () => {
+    const { handle, body, changes } = await mountEditor('');
+    const para = body.querySelector('.mn-editor__para');
+    assert.ok(para);
+    para.textContent = 'Kept after remount.';
+    body.dispatchEvent(new (windows[0] as unknown as Window).Event('input', { bubbles: true }));
+    handle.destroy();
+    assert.equal(changes.at(-1), 'Kept after remount.');
+  });
 });

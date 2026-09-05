@@ -55,7 +55,7 @@ import { startPrReview } from '../chat/review/run-pr-review';
 import { renderPrReviewPanel } from './pr-review-panel';
 import { switchChat } from './sidebar';
 import { createCodeRefLinkButton } from './code-ref-link';
-import { createIssueEditor } from './issue-editor';
+import { createIssueEditor, type IssueEditorHandle } from './issue-editor';
 import { collectInlineRefs } from '../issues/markdown-inline';
 import { codeRefsExcludingPlan, inferIssuePlanPath } from '../issues/plan-attach';
 import { renderIssueAttachments } from './issues-attachments-section';
@@ -98,6 +98,10 @@ const gitErrorByIssueId = new Map<string, string>();
 
 let selectedIssueId: string | undefined;
 let detailHost: HTMLElement | null = null;
+/** Live peek editor; flushed before remount so innerHTML cannot drop the body. */
+let detailEditor: IssueEditorHandle | null = null;
+/** Guards flush → store emit → refresh from rebuilding the panel mid-paint. */
+let paintingDetail = false;
 
 subscribePrReviews(() => {
   if (selectedIssueId) refreshIssueDetailIfOpen();
@@ -158,9 +162,17 @@ function syncDetailLayoutClass(open: boolean): void {
   root?.querySelector('.issues-shell')?.classList.toggle('is-detail', open);
 }
 
+/** Flush and drop the peek editor while its DOM is still mounted. */
+function teardownDetailEditor(): void {
+  const editor = detailEditor;
+  detailEditor = null;
+  editor?.destroy();
+}
+
 /** Close the detail panel and clear selection. */
 export function closeIssueDetail(): void {
   selectedIssueId = undefined;
+  teardownDetailEditor();
   const host = detailHost ?? document.getElementById('issuesDetailHost');
   if (host) {
     host.classList.remove('is-open');
@@ -419,7 +431,7 @@ function buildDescriptionSection(issue: IssueCard): HTMLElement {
 
   let lastCommitted = findIssueById(issue.id)?.description ?? issue.description;
 
-  createIssueEditor(host, {
+  detailEditor = createIssueEditor(host, {
     value: lastCommitted,
     issueId: issue.id,
     placeholder: 'Describe the problem. / for blocks, # for issues, @ for files.',
@@ -451,7 +463,11 @@ function syncDescriptionRefs(issueId: string, markdown: string): void {
 
 /** Build the detail panel DOM for one issue. */
 function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
-  host.innerHTML = '';
+  if (paintingDetail) return;
+  paintingDetail = true;
+  try {
+    teardownDetailEditor();
+    host.innerHTML = '';
 
   const panel = document.createElement('div');
   panel.className = 'issues-detail';
@@ -614,6 +630,9 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   panel.appendChild(scroll);
   bindIssueDropTarget(panel, issue.id, () => refreshIssueDetailIfOpen());
   host.appendChild(panel);
+  } finally {
+    paintingDetail = false;
+  }
 }
 
 // ── Links ────────────────────────────────────────────────────────────────────

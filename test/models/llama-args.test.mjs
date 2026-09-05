@@ -68,11 +68,13 @@ describe('llama args', () => {
     assert.equal(CONTEXT_LADDER.includes(Number(flagValue(args, '-c'))), true);
     assert.ok(Number(flagValue(args, '-c')) <= 32768);
     assert.equal(flagValue(args, '--flash-attn'), 'on');
+    // Pin both sides including f16 so `--fit` cannot quantize only V.
+    assert.equal(flagValue(args, '--cache-type-k'), 'f16');
+    assert.equal(flagValue(args, '--cache-type-v'), 'f16');
     assert.equal(flagValue(args, '--fit-ctx'), '4096');
     // 12 GB reserve is max(0.9 GiB, 8% of 12) = 0.96 GiB → 983 MiB (--fit-target units are MiB).
     assert.equal(flagValue(args, '--fit-target'), '983');
     assert.equal(args.includes('--swa-full'), false);
-    assert.equal(args.includes('--cache-type-k'), false);
     // Phase 4 LM-Studio-feel defaults. GPU auto leaves ngl unset → no `-t`.
     assert.equal(args.includes('--cont-batching'), true);
     assert.equal(flagValue(args, '--cache-reuse'), '256');
@@ -578,8 +580,8 @@ describe('llama args', () => {
     assert.equal(flagValue(args, '--cache-type-k'), 'q8_0');
   });
 
-  test('cache_type_k / cache_type_v override the shared type per side', () => {
-    const split = buildLlamaServerArgs({
+  test('cache_type_k / cache_type_v stay paired; a one-sided override copies to both', () => {
+    const split = buildLlamaServerLaunch({
       modelPath: '/tmp/model.gguf',
       port: 8085,
       variant: 'cuda-12.4',
@@ -588,11 +590,12 @@ describe('llama args', () => {
       ggufMeta: GGUF_8B,
       settings: { fit_mode: 'manual', ctx: 4096, cache_type: 'q8_0', cache_type_v: 'q4_0' },
     });
-    assert.equal(flagValue(split, '--cache-type-k'), 'q8_0');
-    assert.equal(flagValue(split, '--cache-type-v'), 'q4_0');
+    // Match KV + q4_0 V used to emit q8_0/q4_0 and crawl. Copy the explicit side.
+    assert.equal(flagValue(split.args, '--cache-type-k'), 'q4_0');
+    assert.equal(flagValue(split.args, '--cache-type-v'), 'q4_0');
+    assert.match(String(split.warning), /K cache q8_0 and V cache q4_0 differ/);
 
-    // f16 is llama.cpp's own default, so pinning it means omitting the flag.
-    const pinnedF16 = buildLlamaServerArgs({
+    const pinnedF16 = buildLlamaServerLaunch({
       modelPath: '/tmp/model.gguf',
       port: 8085,
       variant: 'cuda-12.4',
@@ -601,8 +604,24 @@ describe('llama args', () => {
       ggufMeta: GGUF_8B,
       settings: { fit_mode: 'manual', ctx: 4096, cache_type: 'q8_0', cache_type_k: 'f16' },
     });
-    assert.equal(pinnedF16.includes('--cache-type-k'), false);
-    assert.equal(flagValue(pinnedF16, '--cache-type-v'), 'q8_0');
+    assert.equal(flagValue(pinnedF16.args, '--cache-type-k'), 'f16');
+    assert.equal(flagValue(pinnedF16.args, '--cache-type-v'), 'f16');
+    assert.match(String(pinnedF16.warning), /mixed types/);
+  });
+
+  test('matching K and V do not warn and emit the shared type on both flags', () => {
+    const { args, warning } = buildLlamaServerLaunch({
+      modelPath: '/tmp/model.gguf',
+      port: 8085,
+      variant: 'cuda-12.4',
+      hardware: HW_12GB,
+      weightsBytes: WEIGHTS_8B_Q4_KM,
+      ggufMeta: GGUF_8B,
+      settings: { fit_mode: 'manual', ctx: 4096, cache_type: 'q8_0', cache_type_k: 'q8_0', cache_type_v: 'q8_0' },
+    });
+    assert.equal(flagValue(args, '--cache-type-k'), 'q8_0');
+    assert.equal(flagValue(args, '--cache-type-v'), 'q8_0');
+    assert.equal(warning, null);
   });
 
   test('the removed --draft-max / --draft-min spellings are never emitted', () => {
@@ -738,7 +757,7 @@ describe('llama args', () => {
       ggufMeta: GGUF_8B,
       settings: { fit_mode: 'manual', ctx: 4096, cache_type: 'q8_0', cache_type_v: 'q4_0', swa_full: true },
     });
-    assert.equal(plan.cache_type_k, 'q8_0');
+    assert.equal(plan.cache_type_k, 'q4_0');
     assert.equal(plan.cache_type_v, 'q4_0');
     assert.equal(plan.swa_full, true);
   });

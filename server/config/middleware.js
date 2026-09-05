@@ -368,7 +368,7 @@ export async function handleConfigRequest(req, res, pathname) {
     }
 
     const resourceMatch = pathname.match(
-      /^\/api\/config\/(sessions|tools|search|servers|research|skills|system-prompt|rules|sub-agents|bugs|issues|issues-taxonomy|reviews|meta)$/,
+      /^\/api\/config\/(sessions|tools|search|servers|research|skills|system-prompt|rules|sub-agents|bugs|issues|issues-taxonomy|reviews|appearance|meta)$/,
     );
     if (resourceMatch) {
       const resource = resourceMatch[1];

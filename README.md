@@ -19,17 +19,29 @@ You pick a workspace folder, land in **Code**, and work with chat beside the rep
 
 ## Quick start
 
-```bash
-git clone https://github.com/HenriGrimm/Minnow.git
-```
+Download a packaged build from **[Releases](https://github.com/HenriGrimm/Minnow/releases)**. That is how you run Minnow.
+
+| Platform | What you download |
+|----------|-------------------|
+| Windows | NSIS installer (`.exe`) |
+| macOS | `.dmg` (or `.zip` into Applications) |
+| Linux | AppImage — `chmod +x` and run it |
+
+First launch, SmartScreen, tray, and updates: **[Install and first launch](documentation/manual/get-started/install.md)**. Packaged builds check GitHub Releases in the background (Settings → General → App updates).
+
+You supply the model. Minnow ships no weights and has no built-in provider: point it at LM Studio, Ollama, `llama-server`, or any OpenAI-compatible API, or let it host a model for you. It holds no opinion about which one you choose, and will let you make your own mistakes at any scale you like.
+
+### Build from source
+
+Clone and `npm start` only if you are developing Minnow itself. Node 18+, then:
 
 ```bash
+git clone https://github.com/HenriGrimm/Minnow.git
+cd Minnow
 npm install && npm start
 ```
 
-Prefer an installer? Packaged builds for Windows, macOS, and Linux are on [Releases](https://github.com/HenriGrimm/Minnow/releases). The Electron shell can auto-update when your build supports it (Settings → About → Updates).
-
-You supply the model. Minnow ships no weights and has no built-in provider: point it at LM Studio, Ollama, `llama-server`, or any OpenAI-compatible API, or let it host a model for you. It holds no opinion about which one you choose, and will let you make your own mistakes at any scale you like.
+Full steps: [Setup from source](documentation/contributor/setup-from-source.md).
 
 ---
 
@@ -175,7 +187,8 @@ Pull requests, docs fixes, skills, and themes are all welcome. Working in the co
 
 | Doc | What's in it |
 |-----|--------------|
-| [Setup from source](documentation/contributor/setup-from-source.md) | Clone, install, providers, first run |
+| [Install](documentation/manual/get-started/install.md) | Packaged desktop app from Releases |
+| [Setup from source](documentation/contributor/setup-from-source.md) | Clone and `npm start` for development |
 | [Apps](documentation/manual/apps/overview.md) | Code and the surfaces around it |
 | [Skills and commands](documentation/manual/chat/skills-and-commands.md) | `/` skills, the Skills Library, `/goal`, `/loop` |
 | [Commands](documentation/contributor/commands.md) | Every script, flag, and environment variable |

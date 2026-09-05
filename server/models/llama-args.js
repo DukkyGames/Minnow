@@ -279,6 +279,39 @@ function resolveCacheType(manual, planned) {
 }
 
 /**
+ * Mixed `--cache-type-k` / `--cache-type-v` fragments the CUDA flash-attn graph
+ * (f16 K + q8_0 V dropped Qwen3.8 prefill from ~2000 tok/s to ~120). Keep them
+ * identical. `--fit` will also quantize only V when the flags are omitted, so
+ * callers always emit both even for f16.
+ *
+ * @param {LlamaServeSettings} merged
+ * @returns {{ type: string, coerced: boolean, fromK: string, fromV: string }}
+ */
+export function pairKvCacheTypes(merged) {
+  const shared = resolveCacheType(undefined, merged.cache_type);
+  const kSet = typeof merged.cache_type_k === 'string' && Boolean(merged.cache_type_k.trim());
+  const vSet = typeof merged.cache_type_v === 'string' && Boolean(merged.cache_type_v.trim());
+  const fromK = kSet ? String(merged.cache_type_k).trim() : shared;
+  const fromV = vSet ? String(merged.cache_type_v).trim() : shared;
+  if (fromK === fromV) return { type: fromK, coerced: false, fromK, fromV };
+  // One-sided inspector override (Match KV + q8_0 V) is the usual crawl. Prefer
+  // the explicit side; if both are explicit, prefer V (quantize-V is the ask).
+  const type = vSet && !kSet ? fromV : kSet && !vSet ? fromK : fromV;
+  return { type, coerced: true, fromK, fromV };
+}
+
+/**
+ * @param {string | null} existing
+ * @param {string | null | undefined} next
+ * @returns {string | null}
+ */
+function joinWarning(existing, next) {
+  if (!next) return existing;
+  if (!existing) return next;
+  return `${existing} ${next}`;
+}
+
+/**
  * @returns {number}
  */
 function cpuThreadCount() {
@@ -365,14 +398,15 @@ function manualOverBudgetWarning(opts, variant, merged, plan) {
 
   const geometry = resolveLaunchGeometry(opts.modelMeta ?? {}, opts.ggufMeta ?? null);
   const weightsBytes = resolveWeightsBytes(opts);
+  const kv = pairKvCacheTypes({
+    ...merged,
+    cache_type: merged.cache_type || plan.cache_type,
+  });
   const estimate = estimateRunMemory({
     geometry,
     weightsBytes,
     ctx: Number(merged.ctx) > 0 ? Number(merged.ctx) : plan.ctx,
-    cacheType: {
-      k: resolveCacheType(merged.cache_type_k, merged.cache_type || plan.cache_type),
-      v: resolveCacheType(merged.cache_type_v, merged.cache_type || plan.cache_type),
-    },
+    cacheType: { k: kv.type, v: kv.type },
     swaFull: merged.swa_full === true,
     draftWeightsBytes: Number(opts.draftWeightsBytes) || 0,
     nGpuLayers: merged.n_gpu_layers == null ? undefined : merged.n_gpu_layers,
@@ -496,12 +530,23 @@ export function buildLlamaServerLaunch(opts) {
     args.push('-ngl', String(fullOffloadNGpuLayers(merged.n_gpu_layers, ggufMeta)));
   }
 
-  const cacheTypeK = resolveCacheType(merged.cache_type_k, merged.cache_type);
-  const cacheTypeV = resolveCacheType(merged.cache_type_v, merged.cache_type);
-  if (cacheTypeK !== 'f16' && !extraHasFlag('--cache-type-k')) {
+  const kvPair = pairKvCacheTypes(merged);
+  const cacheTypeK = kvPair.type;
+  const cacheTypeV = kvPair.type;
+  merged.cache_type = kvPair.type;
+  merged.cache_type_k = kvPair.type;
+  merged.cache_type_v = kvPair.type;
+  if (kvPair.coerced) {
+    warning = joinWarning(
+      warning,
+      `warning: K cache ${kvPair.fromK} and V cache ${kvPair.fromV} differ; mixed types collapse prompt processing onto the CPU. Using ${kvPair.type} for both.`,
+    );
+  }
+  // Always emit both, including f16: omitting them lets `--fit` quantize only V.
+  if (!extraHasFlag('--cache-type-k')) {
     args.push('--cache-type-k', cacheTypeK);
   }
-  if (cacheTypeV !== 'f16' && !extraHasFlag('--cache-type-v')) {
+  if (!extraHasFlag('--cache-type-v')) {
     args.push('--cache-type-v', cacheTypeV);
   }
 

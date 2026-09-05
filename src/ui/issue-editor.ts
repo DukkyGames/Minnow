@@ -29,6 +29,11 @@ export interface IssueEditorHandle {
   root: HTMLElement;
   /** Current markdown. */
   getValue: () => string;
+  /**
+   * Write dirty / untracked DOM back through `onChange` without requiring a blur.
+   * Used by submit and peek remount so a description cannot vanish with the node.
+   */
+  flush: () => string;
   /** Replace the document (external update, e.g. an agent wrote to it). */
   setValue: (markdown: string) => void;
   focus: () => void;
@@ -352,26 +357,85 @@ function serializeTable(el: HTMLElement, block: MarkdownBlock): string {
   return out.join('\n');
 }
 
+/** True when the parsed document has nowhere for the caret to type. */
+function needsEditableSeed(blocks: MarkdownBlock[]): boolean {
+  return blocks.length === 0 || blocks.every((block) => block.kind === 'blank');
+}
+
+/**
+ * Markdown from DOM nodes the block model does not own.
+ *
+ * Empty documents seed an editable paragraph that is not in `state.blocks`
+ * (so getValue stays `''` until the user types). Browsers also insert extra
+ * `<div>`/`<p>` nodes on Enter. Neither is in the parse, so a serialize that
+ * only walks `state.blocks` silently drops the description.
+ */
+function collectUntrackedMarkdown(state: EditorState, trackedIds: Set<string>): string[] {
+  const extras: string[] = [];
+  for (const node of Array.from(state.body.childNodes)) {
+    if (node.nodeType === 3) {
+      const text = (node.nodeValue ?? '').trim();
+      if (text) extras.push(text);
+      continue;
+    }
+    if (node.nodeType !== 1) continue;
+    const el = node as HTMLElement;
+    const id = el.dataset.blockId;
+    if (id && trackedIds.has(id)) continue;
+    if (el.classList.contains('mn-editor__blank')) continue;
+    const kind = (el.dataset.kind as MarkdownBlock['kind'] | undefined) ?? 'paragraph';
+    const source = serializeBlockElement(el, {
+      id: id || 'blk-dom',
+      kind: kind === 'blank' || kind === 'raw' ? 'paragraph' : kind,
+      source: '',
+      start: 0,
+      end: 0,
+    }).trim();
+    if (source) extras.push(source);
+  }
+  return extras;
+}
+
 /** Serialize the whole document, re-reading only the blocks marked dirty. */
 function currentMarkdown(state: EditorState): string {
   markDirtyAtCaret(state);
-  if (state.dirty.size === 0) return serializeMarkdownBlocks(state.blocks);
-
   const next = state.blocks.map((block) => {
     if (!state.dirty.has(block.id)) return block;
     const el = state.body.querySelector<HTMLElement>(`[data-block-id="${block.id}"]`);
     if (!el) return block;
     return { ...block, source: serializeBlockElement(el, block) };
   });
-  return serializeMarkdownBlocks(next);
+  const extras = collectUntrackedMarkdown(
+    state,
+    new Set(state.blocks.map((block) => block.id)),
+  );
+  if (extras.length === 0) return serializeMarkdownBlocks(next);
+  // Placeholder blanks are not content; the seed / orphan nodes are the document.
+  if (needsEditableSeed(next)) return extras.join('\n\n');
+  const base = serializeMarkdownBlocks(next);
+  return base ? `${base}\n\n${extras.join('\n\n')}` : extras.join('\n\n');
 }
 
-function commit(state: EditorState): void {
+/**
+ * Persist the live DOM. Skips `onChange` when markdown is unchanged so a caret
+ * sitting in the empty seed does not write a blank description.
+ */
+function flush(state: EditorState, renderAfter: boolean): string {
   const markdown = currentMarkdown(state);
+  const previous = serializeMarkdownBlocks(state.blocks);
+  if (markdown === previous) {
+    state.dirty.clear();
+    return markdown;
+  }
   state.dirty.clear();
   state.blocks = parseMarkdownBlocks(markdown);
   state.options.onChange(markdown);
-  render(state);
+  if (renderAfter) render(state);
+  return markdown;
+}
+
+function commit(state: EditorState): void {
+  flush(state, true);
 }
 
 function render(state: EditorState): void {
@@ -383,8 +447,13 @@ function render(state: EditorState): void {
     el.dataset.renderedText = el.textContent ?? '';
     state.body.appendChild(el);
   }
-  if (state.blocks.every((b) => b.kind === 'blank') || state.blocks.length === 0) {
-    state.body.appendChild(blockElement(state, parseMarkdownBlocks('')[0] ?? emptyParagraph()));
+  // Empty / blank-only documents have no editable block. Seed a paragraph so
+  // the caret has a real target; it is omitted from markdown until it has text.
+  if (needsEditableSeed(state.blocks)) {
+    const seed = emptyParagraph();
+    const el = blockElement(state, seed);
+    el.dataset.renderedText = el.textContent ?? '';
+    state.body.appendChild(el);
   }
   syncPlaceholder(state);
   restoreCaret(state, selection);
@@ -781,9 +850,15 @@ export function createIssueEditor(
   };
 
   const onBlur = (event: FocusEvent): void => {
+    // Teardown (innerHTML / remove) fires blur after children are gone; serializing
+    // that empty DOM would write an empty description over live text.
+    if (!state.body.isConnected) {
+      options.onBlur?.();
+      return;
+    }
     const next = event.relatedTarget;
     if (next instanceof Node && root.contains(next)) return;
-    if (state.dirty.size > 0) commit(state);
+    flush(state, true);
     options.onBlur?.();
   };
 
@@ -819,6 +894,7 @@ export function createIssueEditor(
   return {
     root,
     getValue: () => currentMarkdown(state),
+    flush: () => (state.body.isConnected ? flush(state, false) : serializeMarkdownBlocks(state.blocks)),
     setValue: (markdown: string) => {
       state.blocks = parseMarkdownBlocks(markdown);
       state.dirty.clear();
@@ -826,6 +902,8 @@ export function createIssueEditor(
     },
     focus: () => body.focus(),
     destroy: () => {
+      // Flush while the nodes still exist so peek remount cannot drop the body.
+      if (state.body.isConnected) flush(state, false);
       body.removeEventListener('input', onInput);
       body.removeEventListener('keydown', onKeyDown);
       body.removeEventListener('blur', onBlur, true);

@@ -107,9 +107,11 @@ export function kvElementBytes(cacheType) {
 }
 
 /**
- * K and V element sizes. llama.cpp quantizes the two caches independently
- * (`--cache-type-k` / `--cache-type-v`), so a q8_0/f16 pair is not the same size as
- * either type doubled. A plain string means both sides share it.
+ * K and V element sizes. llama.cpp *can* quantize the two caches independently
+ * (`--cache-type-k` / `--cache-type-v`), but Minnow launches matching types only —
+ * mixed pairs fragment the CUDA flash-attn graph. A `{k, v}` pair is still accepted
+ * here so occupancy estimates of a saved mismatch stay honest. A plain string means
+ * both sides share it.
  * @param {KvCacheType | null | undefined} cacheType
  * @returns {{ k: number, v: number }}
  */

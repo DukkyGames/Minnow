@@ -509,6 +509,16 @@ async function startApp(): Promise<void> {
   installLongTaskObserver();
   initNotificationAudioUnlock();
   await detectConfigServer();
+  const { installAppearancePersistence, hydrateAppearanceFromServer } = await import(
+    './appearance/persist'
+  );
+  installAppearancePersistence();
+  const appearanceChanged = await hydrateAppearanceFromServer();
+  if (appearanceChanged) {
+    const { applyResolvedTheme } = await import('./ui/theme');
+    const { getStoredTheme } = await import('./theme');
+    applyResolvedTheme(getStoredTheme());
+  }
   if (isOsShellEnabled() && !isPageReload()) {
     const hash = window.location.hash;
     const bootToWorkspacePicker =

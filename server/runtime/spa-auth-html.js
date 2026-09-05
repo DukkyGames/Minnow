@@ -4,8 +4,16 @@
  */
 
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import { isHostAllowed } from '../network/access.js';
 import { getSessionToken, injectSessionTokenScript } from './session-token.js';
+import { getMinnowHome } from '../config/home.js';
+import {
+  appearanceBootPayload,
+  appearanceLooksPersisted,
+  injectAppearanceBootScript,
+  normalizeAppearanceConfig,
+} from '../config/appearance.js';
 
 /** Vite dev-only paths have no file extension but must not receive the SPA shell. */
 function isViteDevInternalPath(pathname) {
@@ -38,6 +46,18 @@ export function addRequestAuthToHtml(html, hostHeader) {
   return injectSessionTokenScript(html, getSessionToken());
 }
 
+/** Read persisted appearance for FOUC seeding. Missing/unpersisted files skip inject. */
+async function readAppearanceBootPayload() {
+  try {
+    const raw = await fs.readFile(path.join(getMinnowHome(), 'appearance.json'), 'utf8');
+    const state = normalizeAppearanceConfig(JSON.parse(raw));
+    if (!appearanceLooksPersisted(state)) return null;
+    return appearanceBootPayload(state);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Build a navigation middleware shared by Vite and packaged Electron.
  * Vite supplies transformHtml so its normal HTML plugins still run.
@@ -52,7 +72,9 @@ export function createSpaAuthHtmlMiddleware({ indexPath, transformHtml = async (
     try {
       const source = await fs.readFile(indexPath, 'utf8');
       const transformed = await transformHtml(req.originalUrl ?? req.url ?? '/', source);
-      const html = addRequestAuthToHtml(transformed, req.headers.host);
+      const boot = await readAppearanceBootPayload();
+      const withAppearance = injectAppearanceBootScript(transformed, boot);
+      const html = addRequestAuthToHtml(withAppearance, req.headers.host);
       res.statusCode = 200;
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Cache-Control', 'no-store');

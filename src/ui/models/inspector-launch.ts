@@ -171,20 +171,33 @@ export function applyCacheTypeTouch(
 ): LlamaServeSettings {
   const next = ensureManualDraft(draft, displayed);
   next.cache_type = cacheType;
+  // Shared KV type owns both sides. Leftover K-only / V-only overrides are the crawl.
+  delete next.cache_type_k;
+  delete next.cache_type_v;
   return next;
 }
 
-/** Pinning K or V independently is a cache-type choice, so it leaves auto the same way the shared KV select does. */
+/**
+ * Pinning K or V independently is a cache-type choice, so it leaves auto the same way the shared KV select does.
+ * Mixed K/V types fragment the CUDA flash-attn graph, so a one-sided change writes both sides.
+ */
 export function applyCacheTypeSideTouch(
   draft: LlamaServeSettings | undefined,
   displayed: DisplayedLaunch,
-  side: 'k' | 'v',
+  _side: 'k' | 'v',
   cacheType: string | undefined,
 ): LlamaServeSettings {
   const next = ensureManualDraft(draft, displayed);
-  const key = side === 'k' ? 'cache_type_k' : 'cache_type_v';
-  if (cacheType) next[key] = cacheType;
-  else delete next[key];
+  if (cacheType) {
+    next.cache_type_k = cacheType;
+    next.cache_type_v = cacheType;
+    if (cacheType === 'f16' || cacheType === 'q8_0' || cacheType === 'q4_0') {
+      next.cache_type = cacheType;
+    }
+  } else {
+    delete next.cache_type_k;
+    delete next.cache_type_v;
+  }
   return next;
 }
 

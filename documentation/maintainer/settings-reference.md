@@ -530,7 +530,7 @@ Full table: [commands.md](../contributor/commands.md#environment-variables).
 | `minnow.tools` | Tool toggles + web search keys |
 | `minnow-sessions-v1` | Legacy sessions |
 | `minnow.userRules` | Rules mirror |
-| `minnow.theme`, `minnow.theme.followSystem`, `minnow.theme.family` | Theme |
+| `minnow.theme`, `minnow.theme.followSystem`, `minnow.theme.family` | Theme (FOUC cache; canonical file is `appearance.json`) |
 
 Most features require `npm start` for full persistence.
 
@@ -559,6 +559,7 @@ Most features require `npm start` for full persistence.
 | `prompts/` | Prompt overrides |
 | `evals/` | Eval packs + runs |
 | `email/`, `scheduler.json` | App-specific data |
+| `appearance.json` | Theme family/mode, custom colors, fonts |
 
 ---
 

@@ -35,7 +35,7 @@ describe('resolveConfigPath', () => {
     assert.throws(() => resolveConfigPath('providers/foo.json'), /Invalid config path/);
   });
 
-  test('allows reviews/state.json', () => {
-    assert.ok(resolveConfigPath('reviews/state.json'));
+  test('allows appearance.json', () => {
+    assert.ok(resolveConfigPath('appearance.json'));
   });
 });

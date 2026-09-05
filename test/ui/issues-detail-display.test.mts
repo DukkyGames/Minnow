@@ -12,7 +12,7 @@ import { Window } from 'happy-dom';
 import type { IssueCard } from '../../src/types.ts';
 import { ISSUES_COMPAT_VERSION, ISSUES_SCHEMA_VERSION } from '../../src/types.ts';
 
-const { setIssuesStateForTests } = await import('../../src/state/issues-store.ts');
+const { findIssueById, setIssuesStateForTests } = await import('../../src/state/issues-store.ts');
 const { closeIssueDetail, openIssueDetail } = await import('../../src/ui/issues-detail.ts');
 const { resetGhAvailableCache } = await import('../../src/chat/issues/git-actions.ts');
 const { setLocalServerAvailableForTests, setToolConfigForTests } = await import(
@@ -31,6 +31,7 @@ function setupDom(): void {
   globalThis.document = window.document;
   globalThis.HTMLElement = window.HTMLElement;
   globalThis.Node = window.Node;
+  globalThis.NodeFilter = window.NodeFilter;
   globalThis.Element = window.Element;
   globalThis.SVGElement = window.SVGElement;
   globalThis.getComputedStyle = window.getComputedStyle.bind(window);
@@ -169,5 +170,59 @@ describe('issues detail display', () => {
     assert.ok(titles.includes('Plan'));
     assert.ok(titles.includes('Related issues'));
     assert.equal(titles.includes('Description'), false);
+  });
+
+  test('typing a description in peek is written to the store on close', () => {
+    setupDom();
+    seedIssues([
+      {
+        id: 'GET-3',
+        type: 'task',
+        title: 'test',
+        description: '',
+        status: 'backlog',
+        priority: 'none',
+        labels: [],
+        workspacePath: '/repo',
+        createdAt: FIXED_NOW,
+        updatedAt: FIXED_NOW,
+        source: 'user',
+      },
+    ]);
+
+    openIssueDetail('GET-3');
+    const para = document.querySelector('.mn-editor__para');
+    assert.ok(para);
+    para.textContent = 'Repro: save from peek.';
+    closeIssueDetail();
+
+    assert.equal(findIssueById('GET-3')?.description, 'Repro: save from peek.');
+  });
+
+  test('editing an existing description is written to the store on close', () => {
+    setupDom();
+    seedIssues([
+      {
+        id: 'GET-4',
+        type: 'task',
+        title: 'Has body',
+        description: 'A real description.',
+        status: 'backlog',
+        priority: 'none',
+        labels: [],
+        workspacePath: '/repo',
+        createdAt: FIXED_NOW,
+        updatedAt: FIXED_NOW,
+        source: 'user',
+      },
+    ]);
+
+    openIssueDetail('GET-4');
+    const para = document.querySelector('.mn-editor__para');
+    assert.ok(para);
+    para.textContent = 'Updated description.';
+    closeIssueDetail();
+
+    assert.equal(findIssueById('GET-4')?.description, 'Updated description.');
   });
 });

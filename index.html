@@ -25,8 +25,31 @@
   function normalizeFamily(f) {
     return LEGACY_FAMILY[f] || f;
   }
+  /** Copy ~/.minnow appearance into localStorage so this origin paints the saved theme. */
+  function seedFromBootPayload() {
+    var boot = window.__MINNOW_APPEARANCE_BOOT__;
+    if (!boot || typeof boot !== 'object') return;
+    if (boot.followSystem) {
+      localStorage.setItem('minnow.theme.followSystem', '1');
+      if (boot.family) localStorage.setItem('minnow.theme.family', boot.family);
+      localStorage.removeItem('minnow.theme');
+    } else if (boot.themeId) {
+      localStorage.setItem('minnow.theme', boot.themeId);
+      localStorage.removeItem('minnow.theme.followSystem');
+      if (boot.family) localStorage.setItem('minnow.theme.family', boot.family);
+    }
+    if (boot.customEnabled) {
+      localStorage.setItem('minnow.appearance.customEnabled', '1');
+      if (boot.customTokens) {
+        localStorage.setItem('minnow.appearance.customTokens', JSON.stringify(boot.customTokens));
+      }
+    }
+    if (boot.customAdvanced) localStorage.setItem('minnow.appearance.customAdvanced', '1');
+    if (boot.fonts) localStorage.setItem('minnow.appearance.fonts', JSON.stringify(boot.fonts));
+  }
   function resolveThemeId() {
     try {
+      seedFromBootPayload();
       var follow = localStorage.getItem('minnow.theme.followSystem') === '1';
       var family = normalizeFamily(localStorage.getItem('minnow.theme.family') || 'swamp');
       if (!/^(swamp|desert|ocean|coral|mono|matrix|human|mint)$/.test(family)) family = 'swamp';

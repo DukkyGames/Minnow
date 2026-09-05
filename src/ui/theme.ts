@@ -27,6 +27,7 @@ import {
   applyAppearanceFonts,
   subscribeAppearanceFonts,
 } from '../appearance/fonts';
+import { seedLocalStorageFromAppearanceBoot } from '../appearance/persist';
 
 export {
   getFollowSystem,
@@ -93,6 +94,7 @@ function wireAppearanceListeners(): void {
 
 /** Call once at startup after DOM exists. */
 export function initTheme(): void {
+  seedLocalStorageFromAppearanceBoot();
   initThemeCore();
   syncThemeListeners();
   wireAppearanceListeners();

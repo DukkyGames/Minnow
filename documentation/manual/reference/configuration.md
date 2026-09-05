@@ -55,6 +55,7 @@ The simplest approach is to back up the whole `.minnow` folder and exclude `mode
 | `auth/devices.json` | Paired LAN companions — hashes only, never tokens |
 | `oauth/` | Encrypted OAuth tokens |
 | `updater.json` | Your update channel |
+| `appearance.json` | Theme, custom colors, and fonts |
 | `logs/` | `diagnostics.jsonl` and `crash.jsonl` |
 | `worktrees/` | Git worktrees created for isolated board tasks |
 | `workspace/` | **Sandbox** workspace folder (`~/.minnow/workspace`) for chats without a project root |

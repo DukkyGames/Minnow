@@ -14,6 +14,8 @@ import { llamaSettingsFromLaunchPrefs, estimateLoadDurationMs } from '../../src/
 import {
   applyGpuLayersAuto,
   applyGpuLayersTouch,
+  applyCacheTypeTouch,
+  applyCacheTypeSideTouch,
   contextSliderMax,
   CONTEXT_SLIDER_STEP,
   ensureManualDraft,
@@ -194,5 +196,28 @@ describe('inspector-launch draft helpers', () => {
     assert.equal(snapCtxPerSlot(40000, 131072), 39936);
     // Far-right max is always legal, even when trainCtx is not step-aligned.
     assert.equal(snapCtxPerSlot(10000, 10000), 10000);
+  });
+
+  it('applyCacheTypeTouch clears one-sided K/V overrides', () => {
+    const next = applyCacheTypeTouch(
+      { fit_mode: 'manual', ctx: 32768, cache_type: 'f16', cache_type_v: 'q8_0' },
+      DISPLAYED,
+      'q8_0',
+    );
+    assert.equal(next.cache_type, 'q8_0');
+    assert.equal(next.cache_type_k, undefined);
+    assert.equal(next.cache_type_v, undefined);
+  });
+
+  it('applyCacheTypeSideTouch writes the same type on both K and V', () => {
+    const fromV = applyCacheTypeSideTouch(undefined, DISPLAYED, 'v', 'q8_0');
+    assert.equal(fromV.fit_mode, 'manual');
+    assert.equal(fromV.cache_type_k, 'q8_0');
+    assert.equal(fromV.cache_type_v, 'q8_0');
+    assert.equal(fromV.cache_type, 'q8_0');
+
+    const cleared = applyCacheTypeSideTouch(fromV, DISPLAYED, 'k', undefined);
+    assert.equal(cleared.cache_type_k, undefined);
+    assert.equal(cleared.cache_type_v, undefined);
   });
 });

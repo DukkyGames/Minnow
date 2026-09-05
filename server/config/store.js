@@ -46,6 +46,10 @@ import {
   writeWholeSessionState,
 } from './sessions-repo.js';
 import { sessionsJsonPath } from './sessions-paths.js';
+import {
+  defaultAppearanceConfig,
+  normalizeAppearanceConfig,
+} from './appearance.js';
 
 async function chmodSecretFile(filePath) {
   try {
@@ -399,6 +403,10 @@ export async function readResource(resource) {
     const data = await readConfigJson(key);
     return data ?? defaultIssuesTaxonomy();
   }
+  if (resource === 'appearance') {
+    const data = await readConfigJson(key);
+    return normalizeAppearanceConfig(data ?? defaultAppearanceConfig());
+  }
 
   return readConfigJson(key);
 }
@@ -514,6 +522,12 @@ export async function writeResource(resource, body) {
     });
     await writeConfigJson(key, validated);
     return validated;
+  }
+  if (resource === 'appearance') {
+    const normalized = normalizeAppearanceConfig(body);
+    normalized.updatedAt = new Date().toISOString();
+    await writeConfigJson(key, normalized);
+    return normalized;
   }
 
   await writeConfigJson(key, body);

@@ -2,6 +2,8 @@
  * Sixteen palette themes (8 families × dark/light), persistence, and DOM application.
  */
 
+import { scheduleAppearancePersist } from './appearance/persist-schedule';
+
 // ── Catalog ──────────────────────────────────────────────────────────────────
 
 export const THEME_STORAGE_KEY = 'minnow.theme';
@@ -107,12 +109,14 @@ function writeStorage(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
   } catch {}
+  scheduleAppearancePersist();
 }
 
 function removeStorage(key: string): void {
   try {
     localStorage.removeItem(key);
   } catch {}
+  scheduleAppearancePersist();
 }
 
 function systemPrefersLight(): boolean {

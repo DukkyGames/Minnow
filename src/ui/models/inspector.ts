@@ -886,6 +886,10 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
     ),
   );
 
+  const resolvedK = draft?.cache_type_k || displayed.cache_type;
+  const resolvedV = draft?.cache_type_v || displayed.cache_type;
+  const kvMismatch = resolvedK !== resolvedV;
+
   const kvChildren: Node[] = [
     checkboxField('Unified KV cache', draft?.kv_unified === true, (checked) => {
       touch({ kv_unified: checked ? true : undefined });
@@ -901,6 +905,13 @@ function renderLoadTab(model: LibraryModel, body: HTMLElement): void {
       persistDraft(model, applyCacheTypeSideTouch(draftFor(model.id), displayed, 'v', v));
       refreshAfterTouch();
     }),
+    el(
+      'p',
+      kvMismatch ? 'models-hint models-hint--warning' : 'models-hint',
+      kvMismatch
+        ? 'K and V cache types differ. Mixed types collapse prompt processing onto the CPU. Load will use one type for both; set them equal here, or use KV cache above.'
+        : 'K and V must use the same type. Mixed types (for example f16 K with q8_0 V) drop prompt processing onto the CPU on this llama.cpp build.',
+    ),
     optionalSelectField(
       'Flash attention',
       [

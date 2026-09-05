@@ -3,6 +3,8 @@ import path from 'node:path';
 import connect from 'connect';
 import sirv from 'sirv';
 import { importServerModule } from './server-import.js';
+import { listenOnPreferredLoopback } from './loopback-listen.js';
+import { resolveMinnowPort } from './minnow-port.js';
 
 export interface InProcessServerHandle {
   url: string;
@@ -71,18 +73,15 @@ export async function startInProcessServer(): Promise<InProcessServerHandle> {
   attachSttWebSocketServer(server);
   attachTtsWebSocketServer(server);
 
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => resolve());
-  });
-
-  const address = server.address();
-  if (!address || typeof address === 'string') {
-    server.close();
-    throw new Error('In-process server failed to bind to 127.0.0.1');
+  const preferredPort = resolveMinnowPort();
+  // Prefer 9473 so Chromium localStorage (FOUC cache) keeps the same origin across launches.
+  const bound = await listenOnPreferredLoopback(server, preferredPort);
+  const url = `http://127.0.0.1:${bound.port}/`;
+  if (bound.ephemeral) {
+    console.warn(
+      `Minnow preferred port ${preferredPort} was busy; in-process server using ephemeral ${bound.port}`,
+    );
   }
-
-  const url = `http://127.0.0.1:${address.port}/`;
   console.log(`Minnow in-process server: ${url}`);
 
   return {
