@@ -15,7 +15,10 @@ import { getLocalServerAvailable } from '../tools/client';
 import { resolveFileExplorerTerminalCwd } from './terminal-worktree-cwd';
 import {
   copyTextToClipboard,
+  isTerminalPasteShortcut,
+  readTextFromClipboard,
   shouldCopyTerminalSelectionOnKeydown,
+  shouldPasteTerminalOnKeydown,
 } from './terminal-copy-shortcut';
 import {
   buildHistoryClearInput,
@@ -325,21 +328,29 @@ function ensureTerminal(): Terminal | null {
   term.open(hostEl);
   hostEl.setAttribute('role', 'document');
   hostEl.setAttribute('aria-label', 'Terminal');
-  hostEl.setAttribute('aria-keyshortcuts', 'Control+C Meta+C');
+  hostEl.setAttribute('aria-keyshortcuts', 'Control+C Meta+C Control+V Meta+V');
 
   const activeTerminal = term;
   if (!activeTerminal) return null;
 
   activeTerminal.attachCustomKeyEventHandler((event) => {
-    if (!shouldCopyTerminalSelectionOnKeydown(event, activeTerminal.hasSelection())) {
-      return true;
+    if (shouldCopyTerminalSelectionOnKeydown(event, activeTerminal.hasSelection())) {
+      const selection = activeTerminal.getSelection();
+      if (selection) {
+        event.preventDefault();
+        void copyTextToClipboard(selection);
+      }
+      return false;
     }
-    const selection = activeTerminal.getSelection();
-    if (selection) {
-      event.preventDefault();
-      void copyTextToClipboard(selection);
+    // Swallow keydown/keypress/keyup so xterm never emits SYN; paste only on keydown.
+    if (isTerminalPasteShortcut(event)) {
+      if (shouldPasteTerminalOnKeydown(event)) {
+        event.preventDefault();
+        void pasteClipboardIntoActiveTerminal();
+      }
+      return false;
     }
-    return false;
+    return true;
   });
 
   activeTerminal.onData((data) => {
@@ -479,6 +490,13 @@ export async function detachTerminalTab(
 
 export function focusTerminalXterm(): void {
   term?.focus();
+}
+
+/** Paste clipboard text through xterm (uses bracketed paste when the shell asked for it). */
+async function pasteClipboardIntoActiveTerminal(): Promise<void> {
+  const text = await readTextFromClipboard();
+  if (!text || !term) return;
+  term.paste(text);
 }
 
 /** Insert plain text at the shell prompt (file-tree drag-drop, paste helpers). */

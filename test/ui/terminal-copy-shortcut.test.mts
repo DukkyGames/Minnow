@@ -2,7 +2,9 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   isTerminalCopyShortcut,
+  isTerminalPasteShortcut,
   shouldCopyTerminalSelectionOnKeydown,
+  shouldPasteTerminalOnKeydown,
 } from '../../src/ui/terminal-copy-shortcut.ts';
 
 describe('terminal copy shortcut', () => {
@@ -67,5 +69,77 @@ describe('terminal copy shortcut', () => {
       shouldCopyTerminalSelectionOnKeydown({ ...event, type: 'keyup' }, true),
       false,
     );
+  });
+});
+
+describe('terminal paste shortcut', () => {
+  test('isTerminalPasteShortcut accepts Ctrl+V only', () => {
+    assert.equal(
+      isTerminalPasteShortcut({
+        key: 'v',
+        ctrlKey: true,
+        metaKey: false,
+        altKey: false,
+        shiftKey: false,
+      }),
+      true,
+    );
+    assert.equal(
+      isTerminalPasteShortcut({
+        key: 'V',
+        ctrlKey: true,
+        metaKey: false,
+        altKey: false,
+        shiftKey: false,
+      }),
+      true,
+    );
+  });
+
+  test('isTerminalPasteShortcut leaves Cmd+V and shifted chords to the browser', () => {
+    assert.equal(
+      isTerminalPasteShortcut({
+        key: 'v',
+        ctrlKey: false,
+        metaKey: true,
+        altKey: false,
+        shiftKey: false,
+      }),
+      false,
+    );
+    assert.equal(
+      isTerminalPasteShortcut({
+        key: 'v',
+        ctrlKey: true,
+        metaKey: false,
+        altKey: false,
+        shiftKey: true,
+      }),
+      false,
+    );
+    assert.equal(
+      isTerminalPasteShortcut({
+        key: 'c',
+        ctrlKey: true,
+        metaKey: false,
+        altKey: false,
+        shiftKey: false,
+      }),
+      false,
+    );
+  });
+
+  test('shouldPasteTerminalOnKeydown only on keydown', () => {
+    const event = {
+      type: 'keydown',
+      key: 'v',
+      ctrlKey: true,
+      metaKey: false,
+      altKey: false,
+      shiftKey: false,
+    };
+    assert.equal(shouldPasteTerminalOnKeydown(event), true);
+    assert.equal(shouldPasteTerminalOnKeydown({ ...event, type: 'keyup' }), false);
+    assert.equal(shouldPasteTerminalOnKeydown({ ...event, type: 'keypress' }), false);
   });
 });

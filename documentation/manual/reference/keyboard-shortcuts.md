@@ -69,6 +69,7 @@ With the tree focused and the editor not:
 | **Ctrl+`** | Toggle the terminal panel (Ctrl on every platform for this one) |
 | **↑** / **↓** | Command history for that tab |
 | **Mod+C** | Copy the selection, or send SIGINT when nothing is selected |
+| **Ctrl+V** / **Cmd+V** | Paste clipboard text at the prompt |
 
 ## Browser preview
 

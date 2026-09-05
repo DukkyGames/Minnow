@@ -83,6 +83,7 @@ When an agent writes files, the tree patches only the affected folders instead o
 
 - **↑ / ↓** recalls that tab's command history, kept per tab across reloads.
 - **Ctrl/Cmd+C** copies the selection, or sends SIGINT when nothing is selected.
+- **Ctrl+V** (Windows/Linux) and **Cmd+V** (macOS) paste clipboard text at the prompt.
 - **Expand** fills the chat column with the terminal; press it again to dock.
 - Sessions survive a reload — Minnow reconnects and replays scrollback rather than killing your shell.
 
