@@ -169,6 +169,8 @@ Browser / Electron (same origin, default :9473)
 
 **Browser-only tools** (`get_datetime`, `calculate`, `ask_question`, sub-agent/board tools, mode handoff, `browser_*`) run client-side; `POST /api/tools` returns `Not implemented` for those names.
 
+**Server browser-drive tools** (`browser_drive_*` in [`server/tools/browser-driver-tools.js`](../server/tools/browser-driver-tools.js)) run on the tool server via CDP. `browser_drive_resize` waits for `window.innerWidth` / `innerHeight` and dispatches a `resize` event after `Emulation.setDeviceMetricsOverride` so page listeners observe the new viewport (macOS Chrome can skip the event otherwise).
+
 Middleware registration: [`server/runtime/middlewares.js`](../server/runtime/middlewares.js). Bootstrap: [`server/runtime/bootstrap.js`](../server/runtime/bootstrap.js).
 
 ---

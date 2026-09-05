@@ -236,7 +236,8 @@ describe('browser tools — live, through the real dispatch', { skip: skipReason
   test('resize changes the real viewport', async () => {
     const content = await callTool('browser_drive_resize', { width: 420, height: 900 });
     assert.match(content, /viewport: 420x900/);
-    const text = await callTool('browser_drive_read_page', { mode: 'text' });
+    // macOS Chrome can apply CDP metrics before the page's resize listener runs.
+    const text = await waitForText('width: 420');
     assert.match(text, /width: 420/, text);
     await callTool('browser_drive_resize', { width: 1280, height: 800 });
   });

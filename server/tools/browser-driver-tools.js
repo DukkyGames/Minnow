@@ -726,6 +726,30 @@ export async function toolBrowserDriveScreenshot(args = {}) {
 }
 
 /**
+ * CDP `setDeviceMetricsOverride` can return before `window.innerWidth` updates
+ * and may skip a `resize` event (macOS Chrome). Wait, then fire one so page
+ * listeners (and live tests that assert on them) see the new viewport.
+ *
+ * @param {import('../browser-driver/index.js').BrowserSession} session
+ * @param {number} width
+ * @param {number} height
+ * @param {number} timeoutMs
+ */
+async function settleViewportAfterOverride(session, width, height, timeoutMs) {
+  const waitMs = Math.min(Math.max(250, timeoutMs), 2_000);
+  const expression = `(async () => {
+    const deadline = Date.now() + ${waitMs};
+    while (Date.now() < deadline) {
+      if (window.innerWidth === ${width} && window.innerHeight === ${height}) break;
+      await new Promise((resolve) => setTimeout(resolve, 16));
+    }
+    window.dispatchEvent(new Event('resize'));
+    return { w: window.innerWidth, h: window.innerHeight };
+  })()`;
+  await session.evaluate(expression, { awaitPromise: true, timeoutMs: waitMs + 500 });
+}
+
+/**
  * @param {Record<string, unknown>} [args]
  * @returns {Promise<string>}
  */
@@ -746,9 +770,14 @@ export async function toolBrowserDriveResize(args = {}) {
 
     await entry.session.client.send(
       'Emulation.setDeviceMetricsOverride',
-      { width: w, height: h, deviceScaleFactor: 1, mobile: false },
+      { width: w, height: h, deviceScaleFactor: 1, mobile: false, screenWidth: w, screenHeight: h },
       { timeoutMs },
     );
+    try {
+      await settleViewportAfterOverride(entry.session, w, h, timeoutMs);
+    } catch {
+      // Page may be unloading; CDP already applied the metrics.
+    }
     invalidateSnapshot(entry);
     return `viewport: ${w}x${h}\n${STALE_SNAPSHOT_NOTE}`;
   });
