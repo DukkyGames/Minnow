@@ -184,13 +184,13 @@ describe('wrapSandbox argv composition', () => {
       workspaceRoot: FAKE_WORKSPACE,
       platform: 'win32',
     });
-    // No WSL fixtures → honest unavailable; leave cmd.exe untouched (do not rewrite to bare wsl).
+    // No WSL fixtures → honest unavailable; leave the spawn target untouched (do not rewrite to bare wsl).
     const wrapped = wrapSandbox(resolved, policy, {
       platform: 'win32',
       wsl: { skipLiveProbe: true, wslFixtures: { listOutput: '' } },
     });
 
-    assert.equal(wrapped.command, 'cmd.exe');
+    assert.equal(wrapped.command, 'echo hi');
     assert.equal(wrapped.sandbox.applied, false);
     assert.equal(wrapped.sandbox.kind, 'wsl-landlock');
     assert.equal(

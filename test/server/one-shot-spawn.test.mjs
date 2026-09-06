@@ -46,15 +46,15 @@ describe('resolveOneShotSpawn', () => {
     }
   });
 
-  it('uses cmd.exe for Windows one-shot strings', () => {
+  it('passes Windows one-shot strings through shell:true (cmd-aware quoting)', () => {
     const win = resolveOneShotSpawn({
       command: 'echo MINNOW_WIN',
       args: [],
       platform: 'win32',
     });
-    assert.equal(win.command, 'cmd.exe');
-    assert.deepEqual(win.args, ['/d', '/s', '/c', 'echo MINNOW_WIN']);
-    assert.equal(win.shell, false);
+    assert.equal(win.command, 'echo MINNOW_WIN');
+    assert.deepEqual(win.args, []);
+    assert.equal(win.shell, true);
   });
 
   it('routes Windows one-shot strings through WSL when profile is wsl', () => {
@@ -123,7 +123,7 @@ describe('resolveOneShotSpawn', () => {
     assert.equal(resolved.shell, false);
   });
 
-  it('keeps PowerShell profile one-shots on cmd.exe', () => {
+  it('keeps PowerShell profile one-shots on the cmd shell', () => {
     const win = resolveOneShotSpawn({
       command: 'echo MINNOW_WIN',
       args: [],
@@ -137,8 +137,9 @@ describe('resolveOneShotSpawn', () => {
         runtime: 'native',
       },
     });
-    assert.equal(win.command, 'cmd.exe');
-    assert.deepEqual(win.args, ['/d', '/s', '/c', 'echo MINNOW_WIN']);
+    assert.equal(win.command, 'echo MINNOW_WIN');
+    assert.deepEqual(win.args, []);
+    assert.equal(win.shell, true);
   });
 
   it('passes argv invocations through unchanged', () => {
@@ -185,6 +186,31 @@ describe('executeCommandBlocking unix shell strings', () => {
 
     assert.match(output, new RegExp(marker));
     assert.doesNotMatch(output, /\(no output\)/);
+
+    await rmTestHome(homeDir);
+    homeDir = undefined;
+  });
+});
+describe('executeCommandBlocking windows one-shot quoting (MIN-269)', () => {
+  let homeDir;
+
+  it('preserves double-quoted args through the cmd.exe one-shot path', async () => {
+    if (process.platform !== 'win32') return;
+
+    homeDir = setTestHome(process.env, 'minnow-test-win-quoting');
+    await ensureMinnowLayout();
+    await initWorkspaceRoot();
+    await setWorkspaceRoot(repoRoot);
+
+    const output = await executeCommandBlocking({
+      command: 'echo A "x - y" B',
+      cwd: repoRoot,
+    });
+
+    // Before MIN-269 the libuv \" escaping reached cmd literally and the
+    // argument split at spaces (echo printed A \"x - y\" B).
+    assert.match(output, /A "x - y" B/);
+    assert.doesNotMatch(output, /\\"/);
 
     await rmTestHome(homeDir);
     homeDir = undefined;

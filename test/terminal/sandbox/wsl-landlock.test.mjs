@@ -177,13 +177,15 @@ describe('WSL argv split / ensure / recover', () => {
     assert.deepEqual(split.innerArgv, ['bash', '-l', '-c', 'echo hi']);
   });
 
-  it('recovers cmd.exe /c one-shots and routes through WSL', () => {
+  it('recovers Windows one-shot strings and routes through WSL', () => {
     const resolved = resolveOneShotSpawn({
       command: 'npm test',
       args: [],
       platform: 'win32',
     });
-    assert.equal(resolved.command, 'cmd.exe');
+    assert.equal(resolved.command, 'npm test');
+    assert.deepEqual(resolved.args, []);
+    assert.equal(resolved.shell, true);
     const recovered = recoverCommandFromWinSpawn(resolved);
     assert.equal(recovered.command, 'npm test');
     assert.deepEqual(recovered.args, []);
