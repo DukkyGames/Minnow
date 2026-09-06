@@ -921,6 +921,24 @@
   background: color-mix(in oklch, var(--mn-accent) 10%, transparent);
 }
 
+.issues-row__github-conflict {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
+  vertical-align: 1px;
+  color: var(--mn-warning);
+  background: color-mix(in oklch, var(--mn-warning) 10%, transparent);
+  border: 1px solid color-mix(in oklch, var(--mn-warning) 40%, var(--mn-border));
+}
+
+.issues-row.has-github-conflict {
+  background: color-mix(in oklch, var(--mn-warning) 6%, transparent);
+}
+
 .issues-row__updated {
   font-size: 12px;
   color: var(--mn-fg-muted);

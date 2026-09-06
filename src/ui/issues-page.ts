@@ -129,7 +129,9 @@ import {
   type IssuesContextMenuItem,
 } from './issues-context-menu';
 import {
+  hasGithubSyncConflict,
   runIssuesGithubSyncAll,
+  subscribeGithubSyncConflicts,
   syncIssuesGithubSyncAllButton,
 } from './issues-github-section';
 import {
@@ -232,6 +234,7 @@ let activeViewId = SESSION_VIEW_ALL;
 let issuesUnsub: (() => void) | null = null;
 let taxonomyUnsub: (() => void) | null = null;
 let githubModeUnsub: (() => void) | null = null;
+let githubConflictUnsub: (() => void) | null = null;
 let pendingIssueId: string | undefined;
 const selectedIssueIds = new Set<string>();
 let lastSelectionAnchorId: string | undefined;
@@ -1241,6 +1244,16 @@ function buildIssueRow(
     title.appendChild(badge);
   }
 
+  if (hasGithubSyncConflict(issue.id)) {
+    const conflictBadge = document.createElement('span');
+    conflictBadge.className = 'issues-row__github-conflict';
+    conflictBadge.textContent = 'Conflict';
+    conflictBadge.title = 'GitHub sync conflict — open to resolve';
+    title.appendChild(document.createTextNode(' '));
+    title.appendChild(conflictBadge);
+    row.classList.add('has-github-conflict');
+  }
+
   const status = createStatusChip(issue.status);
   status.className = `${status.className} issues-row__status`;
   bindCellMenu(status, (anchor) => openStatusMenu(anchor, issue));
@@ -2006,6 +2019,11 @@ function ensureSubscriptions(): void {
   if (!githubModeUnsub) {
     githubModeUnsub = subscribeIssuesGithubMode(() => {
       syncIssuesGithubSyncAllButton();
+    });
+  }
+  if (!githubConflictUnsub) {
+    githubConflictUnsub = subscribeGithubSyncConflicts(() => {
+      if (isIssuesPageOpen()) renderIssuesPanel();
     });
   }
 }

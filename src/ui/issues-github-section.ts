@@ -44,6 +44,36 @@ let liveConflictTarget: {
   onChanged: GithubSectionChanged;
 } | null = null;
 const pendingConflicts = new Map<string, SyncConflict>();
+const conflictListeners = new Set<() => void>();
+
+function notifyGithubSyncConflictListeners(): void {
+  for (const listener of conflictListeners) {
+    try {
+      listener();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** True when a GitHub sync conflict is waiting for the user on this card. */
+export function hasGithubSyncConflict(issueId: string): boolean {
+  return pendingConflicts.has(issueId);
+}
+
+/** Re-render list rows when conflicts are stored or cleared. */
+export function subscribeGithubSyncConflicts(listener: () => void): () => void {
+  conflictListeners.add(listener);
+  return () => {
+    conflictListeners.delete(listener);
+  };
+}
+
+/** Test-only reset of in-memory conflict state. */
+export function resetGithubSyncConflictsForTests(): void {
+  pendingConflicts.clear();
+  conflictListeners.clear();
+}
 
 /** Two-way mirror is the only mode that may contact GitHub. */
 export function githubSyncEnabled(): boolean {
@@ -203,6 +233,7 @@ export function clearGithubConflictHost(issueId?: string): void {
  */
 export function presentGithubSyncConflict(conflict: SyncConflict): boolean {
   pendingConflicts.set(conflict.issueId, conflict);
+  notifyGithubSyncConflictListeners();
   if (liveConflictTarget?.issueId !== conflict.issueId) return false;
   if (!liveConflictTarget.host.isConnected) return false;
   showConflict(liveConflictTarget.host, conflict, liveConflictTarget.onChanged);
@@ -210,7 +241,8 @@ export function presentGithubSyncConflict(conflict: SyncConflict): boolean {
 }
 
 function clearPendingConflict(issueId: string): void {
-  pendingConflicts.delete(issueId);
+  if (!pendingConflicts.delete(issueId)) return;
+  notifyGithubSyncConflictListeners();
 }
 
 // ── Conflict ─────────────────────────────────────────────────────────────────
@@ -311,7 +343,10 @@ export function bindGithubSyncButton(
         if (outcome.conflict) {
           btn.disabled = false;
           btn.textContent = idle;
-          showConflict(options.conflictHost, outcome.conflict, options.onChanged);
+          const shown = presentGithubSyncConflict(outcome.conflict);
+          if (!shown && options.conflictHost.isConnected) {
+            showConflict(options.conflictHost, outcome.conflict, options.onChanged);
+          }
           return;
         }
         if (!outcome.ok) {
