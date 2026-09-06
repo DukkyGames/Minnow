@@ -550,15 +550,17 @@ describe('openai-v1 capabilities/probe route', () => {
       res.statusCode = 404;
       res.end('not found');
     });
-    await new Promise((resolve) => visionMock.listen(0, '127.0.0.2', resolve));
+    await new Promise((resolve) => visionMock.listen(0, '0.0.0.0', resolve));
     const port = /** @type {import('net').AddressInfo} */ (visionMock.address()).port;
 
     try {
       await httpRequest(baseUrl, 'POST', '/api/providers', {
         id: 'probe-vision',
         label: 'Probe vision',
-        // 127.0.0.2 is not classified as loopback, so the corrupt-image control runs.
-        baseUrl: `http://127.0.0.2:${port}`,
+        // 0.0.0.0 is not classified as loopback (unlike 127.0.0.1), so the
+        // corrupt-image control still runs. Bind all-interfaces so macOS lo0
+        // (which has no 127.0.0.2) can still accept the probe POSTs.
+        baseUrl: `http://0.0.0.0:${port}`,
         apiKind: 'openai-v1',
       });
 
