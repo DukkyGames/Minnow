@@ -72,6 +72,8 @@ describe('issues list CSS contract', () => {
     const css = fs.readFileSync(new URL('../../src/styles/issues.css', import.meta.url), 'utf8');
     const chrome = fs.readFileSync(new URL('../../src/ui/issues-chrome.ts', import.meta.url), 'utf8');
     const page = fs.readFileSync(new URL('../../src/ui/issues-page.ts', import.meta.url), 'utf8');
+    assert.match(chrome, /id: 'btnIssuesSyncAll'/);
+    assert.match(page, /btnIssuesSyncAll/);
     assert.match(css, /--issues-row-h:\s*36px/);
     assert.match(css, /id priority type title labels/);
     assert.match(css, /minmax\(0, 1fr\).*max-content.*minmax\(5rem, max-content\)/);

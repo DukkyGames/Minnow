@@ -35,6 +35,7 @@ import {
 } from '../issues/taxonomy';
 import { subscribeIssuesTaxonomyChanges } from '../state/issues-taxonomy-events';
 import { getIssuesTaxonomySync } from '../state/issues-taxonomy-store';
+import { subscribeIssuesGithubMode } from '../state/issues-github';
 import { subscribeIssuesChanges } from '../state/issues-events';
 import {
   acceptTriageIssue,
@@ -127,6 +128,10 @@ import {
   openIssuesContextMenu,
   type IssuesContextMenuItem,
 } from './issues-context-menu';
+import {
+  runIssuesGithubSyncAll,
+  syncIssuesGithubSyncAllButton,
+} from './issues-github-section';
 
 const CHAT_AREA_ISSUES_CLASS = 'chat-area--issues';
 const MAIN_COLUMN_ISSUES_CLASS = 'main-column--issues';
@@ -221,6 +226,7 @@ let groupBy: IssuesGroupBy = 'status';
 let activeViewId = SESSION_VIEW_ALL;
 let issuesUnsub: (() => void) | null = null;
 let taxonomyUnsub: (() => void) | null = null;
+let githubModeUnsub: (() => void) | null = null;
 let pendingIssueId: string | undefined;
 const selectedIssueIds = new Set<string>();
 let lastSelectionAnchorId: string | undefined;
@@ -1952,6 +1958,7 @@ function syncControlsFromState(): void {
   document
     .getElementById('issuesViewBoard')
     ?.setAttribute('aria-pressed', viewMode === 'board' ? 'true' : 'false');
+  syncIssuesGithubSyncAllButton();
 }
 
 function readFiltersFromControls(): void {
@@ -1960,6 +1967,14 @@ function readFiltersFromControls(): void {
     ...filters,
     scope: scope === 'all' ? 'all' : 'current_workspace',
     search: controlValue('issuesSearch'),
+  };
+}
+
+function issuesGithubSyncScope(): { scope: 'all' | 'current_workspace'; workspacePath: string } {
+  readFiltersFromControls();
+  return {
+    scope: filters.scope,
+    workspacePath: getWorkspacePath(),
   };
 }
 
@@ -1978,6 +1993,11 @@ function ensureSubscriptions(): void {
     taxonomyUnsub = subscribeIssuesTaxonomyChanges(() => {
       syncIssuesFilterSelects();
       if (isIssuesPageOpen()) renderIssuesPanel();
+    });
+  }
+  if (!githubModeUnsub) {
+    githubModeUnsub = subscribeIssuesGithubMode(() => {
+      syncIssuesGithubSyncAllButton();
     });
   }
 }
@@ -2490,6 +2510,10 @@ function bindStaticControls(): void {
     }
     if (target.closest('#btnIssuesFiles')) {
       toggleIssuesFileDrawer();
+      return;
+    }
+    if (target.closest('#btnIssuesSyncAll')) {
+      void runIssuesGithubSyncAll(issuesGithubSyncScope());
       return;
     }
     if (target.closest('#btnIssuesGroupBy')) {

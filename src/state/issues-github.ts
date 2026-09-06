@@ -24,6 +24,7 @@ import { userFacingGithubError, isLocalServerOfflineError } from '../issues/gith
 import {
   addIssue,
   appendIssueLinks,
+  collectIssues,
   findIssueById,
   isIssuesStoreLoaded,
   listIssues,
@@ -499,6 +500,9 @@ export async function importGithubIssues(options?: {
 export async function syncAllIssuesWithGithub(options?: {
   /** Skip unlinked cards so a poller cannot backfill creates. */
   linkedOnly?: boolean;
+  /** Match Issues list scope; defaults to the current workspace. */
+  scope?: 'all' | 'current_workspace';
+  workspacePath?: string;
 }): Promise<{
   synced: number;
   conflicts: SyncConflict[];
@@ -511,7 +515,13 @@ export async function syncAllIssuesWithGithub(options?: {
   const mode = getIssuesGithubMode();
   if (mode === 'off') return { synced, conflicts, errors };
 
-  for (const issue of listIssues()) {
+  const issues = collectIssues({
+    scope: options?.scope ?? 'current_workspace',
+    workspacePath: options?.workspacePath ?? getWorkspacePath(),
+    hideDone: false,
+  });
+
+  for (const issue of issues) {
     if (options?.linkedOnly && !issue.github) continue;
     const outcome = await syncIssueWithGithub(issue.id);
     if (outcome.conflict) conflicts.push(outcome.conflict);

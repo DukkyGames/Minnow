@@ -251,9 +251,33 @@ describe('GitHub auto-sync', () => {
       issues: [card({ id: 'MIN-1' }), card({ id: 'MIN-2', github: githubLink() })],
       workspaces: {},
     });
-    await syncAllIssuesWithGithub({ linkedOnly: true });
+    await syncAllIssuesWithGithub({ linkedOnly: true, scope: 'current_workspace', workspacePath: '/w' });
     assert.equal(ops.includes('issueCreate'), false);
     assert.equal(ops.includes('issueView'), true);
+  });
+
+  test('syncAll respects workspace scope', async () => {
+    setIssuesGithubMode('mirror');
+    setIssuesStateForTests({
+      version: 2,
+      nextId: 4,
+      issues: [
+        card({ id: 'MIN-1', workspacePath: '/w', github: githubLink({ number: 1 }) }),
+        card({ id: 'MIN-2', workspacePath: '/other', github: githubLink({ number: 2 }) }),
+      ],
+      workspaces: {},
+    });
+    ops.length = 0;
+    await syncAllIssuesWithGithub({
+      linkedOnly: true,
+      scope: 'current_workspace',
+      workspacePath: '/w',
+    });
+    assert.equal(ops.filter((op) => op === 'issueView').length, 1);
+
+    ops.length = 0;
+    await syncAllIssuesWithGithub({ linkedOnly: true, scope: 'all' });
+    assert.equal(ops.filter((op) => op === 'issueView').length, 2);
   });
 
   test('conflict skips the auto write', async () => {

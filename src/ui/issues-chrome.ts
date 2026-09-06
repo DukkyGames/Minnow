@@ -101,9 +101,18 @@ function buildHeader(): HTMLElement {
     text: 'Files',
   });
 
+  const syncAllBtn = el('button', {
+    type: 'button',
+    class: 'issues-btn',
+    id: 'btnIssuesSyncAll',
+    title: 'Sync all issues with GitHub',
+    text: 'Sync all',
+  });
+
   const controls = el('div', { class: 'issues-header__controls' }, [
     scopeLabel,
     scope,
+    syncAllBtn,
     toggle,
     groupBy,
     filesBtn,

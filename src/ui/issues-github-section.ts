@@ -8,9 +8,15 @@
 import {
   getIssuesGithubMode,
   resolveSyncConflict,
+  syncAllIssuesWithGithub,
   syncIssueWithGithub,
   type SyncConflict,
 } from '../state/issues-github';
+import {
+  githubAutoConflictShouldUsePeek,
+  githubAutoConflictToast,
+} from '../issues/github-auto-conflict';
+import { userFacingGithubError } from '../issues/github-error';
 import { githubSyncCaption } from '../issues/github-sync-status';
 import type { IssueCard } from '../types';
 import { openExternalGitUrl } from '../chat/issues/git-actions';
@@ -42,6 +48,127 @@ const pendingConflicts = new Map<string, SyncConflict>();
 /** Two-way mirror is the only mode that may contact GitHub. */
 export function githubSyncEnabled(): boolean {
   return getIssuesGithubMode() === 'mirror';
+}
+
+const SYNC_ALL_IDLE_LABEL = 'Sync all';
+
+let syncAllInFlight = false;
+
+/** True while a header Sync all pass is running. */
+export function isIssuesGithubSyncAllBusy(): boolean {
+  return syncAllInFlight;
+}
+
+/** Show one conflict in the open peek or toast; batch callers pick which to surface first. */
+async function surfaceGithubSyncConflict(conflict: SyncConflict): Promise<void> {
+  let openIssueId: string | undefined;
+  try {
+    const detail = await import('./issues-detail');
+    openIssueId = detail.getSelectedIssueId();
+  } catch {
+    openIssueId = undefined;
+  }
+
+  if (githubAutoConflictShouldUsePeek(conflict.issueId, openIssueId)) {
+    if (presentGithubSyncConflict(conflict)) return;
+  }
+
+  showToast(githubAutoConflictToast(conflict.number), 'error', 6_000);
+}
+
+/** Surface conflicts from a bulk sync: peek for the open issue, toast the rest. */
+async function surfaceGithubSyncConflicts(conflicts: SyncConflict[]): Promise<void> {
+  if (conflicts.length === 0) return;
+
+  if (conflicts.length === 1) {
+    await surfaceGithubSyncConflict(conflicts[0]);
+    return;
+  }
+
+  let openIssueId: string | undefined;
+  try {
+    const detail = await import('./issues-detail');
+    openIssueId = detail.getSelectedIssueId();
+  } catch {
+    openIssueId = undefined;
+  }
+
+  const openConflict = conflicts.find((row) => row.issueId === openIssueId);
+  if (openConflict) await surfaceGithubSyncConflict(openConflict);
+
+  const rest = openConflict
+    ? conflicts.filter((row) => row.issueId !== openConflict.issueId)
+    : conflicts;
+  if (rest.length === 0) return;
+
+  const message =
+    rest.length === 1
+      ? githubAutoConflictToast(rest[0].number)
+      : `Both sides changed on ${rest.length} issues. Open an issue to pick.`;
+  showToast(message, 'error', 6_000);
+}
+
+/** Sync scope for header Sync all — follows the workspace scope control. */
+export type IssuesGithubSyncAllScope = {
+  scope: 'all' | 'current_workspace';
+  workspacePath: string;
+};
+
+/** Sync every issue with GitHub (push unlinked, pull/push linked). */
+export async function runIssuesGithubSyncAll(
+  syncScope: IssuesGithubSyncAllScope,
+): Promise<void> {
+  if (!githubSyncEnabled()) {
+    showToast('Turn on Two-way mirror in Settings → Issues → GitHub', 'error');
+    return;
+  }
+  if (syncAllInFlight) return;
+
+  const btn = document.getElementById('btnIssuesSyncAll');
+  syncAllInFlight = true;
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Syncing…';
+  }
+
+  try {
+    const { synced, conflicts, errors } = await syncAllIssuesWithGithub({
+      scope: syncScope.scope,
+      workspacePath: syncScope.workspacePath,
+    });
+    await surfaceGithubSyncConflicts(conflicts);
+
+    if (errors.length > 0) {
+      const first = userFacingGithubError(errors[0]);
+      const extra = errors.length > 1 ? ` (+${errors.length - 1} more)` : '';
+      showToast(`${first}${extra}`, 'error');
+    } else if (conflicts.length === 0) {
+      if (synced > 0) {
+        showToast(
+          synced === 1 ? 'Synced 1 issue with GitHub' : `Synced ${synced} issues with GitHub`,
+          'success',
+        );
+      } else {
+        showToast('Already in sync with GitHub', 'success');
+      }
+    }
+  } catch {
+    showToast('Could not sync with GitHub', 'error');
+  } finally {
+    syncAllInFlight = false;
+    syncIssuesGithubSyncAllButton();
+  }
+}
+
+/** Show or hide the header Sync all control based on GitHub mode. */
+export function syncIssuesGithubSyncAllButton(): void {
+  const btn = document.getElementById('btnIssuesSyncAll');
+  if (!btn) return;
+
+  const enabled = githubSyncEnabled();
+  btn.hidden = !enabled;
+  btn.toggleAttribute('disabled', !enabled || syncAllInFlight);
+  btn.textContent = syncAllInFlight ? 'Syncing…' : SYNC_ALL_IDLE_LABEL;
 }
 
 function showConflict(
