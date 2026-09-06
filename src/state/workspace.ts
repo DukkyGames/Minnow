@@ -3,6 +3,8 @@
  */
 
 import { fetchWorkspace, type WorkspaceInfo, type WorkspaceRecentItem } from '../config/workspace-api';
+import { workspacePathsEqual } from '../lib/normalize-workspace-path';
+import { getViewWorkspacePath } from './view-workspace';
 
 let workspacePath = '';
 let workspaceLabel = '';
@@ -12,6 +14,31 @@ let workspaceRecent: WorkspaceRecentItem[] = [];
 /** Absolute path of the AI workspace folder. */
 export function getWorkspacePath(): string {
   return workspacePath;
+}
+
+/**
+ * True when `targetPath` is already the folder this renderer is on.
+ *
+ * Bound Electron windows compare against `viewContext` (the window's real
+ * folder). An unbound gate window is never a match, so the first pick still
+ * retargets. Browser / tests fall back to the live `/api/workspace` path.
+ */
+export function isCurrentWindowWorkspace(targetPath: string): boolean {
+  const trimmed = targetPath.trim();
+  if (!trimmed) return true;
+  const viewPath = getViewWorkspacePath();
+  if (viewPath) return workspacePathsEqual(viewPath, trimmed);
+  if (typeof window !== 'undefined' && window.minnow?.viewContext) return false;
+  return workspacePathsEqual(getWorkspacePath(), trimmed);
+}
+
+/** Snapshot for callers that no-op a switch because this window is already on the folder. */
+export function getCurrentWorkspaceInfo(): WorkspaceInfo {
+  return {
+    path: getWorkspacePath() || getViewWorkspacePath(),
+    label: getWorkspaceLabel(),
+    isDefault: isDefaultWorkspace(),
+  };
 }
 
 /** Folder basename for compact UI. */

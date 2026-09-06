@@ -11,7 +11,7 @@
       "merged": 3,
       "retries": 0,
       "abandoned": 0,
-      "ms": 1619
+      "ms": 1656
     },
     {
       "n": 2,
@@ -19,7 +19,7 @@
       "merged": 3,
       "retries": 0,
       "abandoned": 0,
-      "ms": 1230
+      "ms": 1294
     },
     {
       "n": 3,
@@ -27,7 +27,7 @@
       "merged": 3,
       "retries": 0,
       "abandoned": 0,
-      "ms": 1170
+      "ms": 1254
     },
     {
       "n": 4,
@@ -35,7 +35,7 @@
       "merged": 3,
       "retries": 0,
       "abandoned": 0,
-      "ms": 1144
+      "ms": 1519
     },
     {
       "n": 5,
@@ -43,7 +43,7 @@
       "merged": 3,
       "retries": 0,
       "abandoned": 0,
-      "ms": 1437
+      "ms": 1468
     },
     {
       "n": 6,
@@ -51,7 +51,7 @@
       "merged": 3,
       "retries": 0,
       "abandoned": 0,
-      "ms": 1120
+      "ms": 1423
     },
     {
       "n": 7,
@@ -59,7 +59,7 @@
       "merged": 3,
       "retries": 0,
       "abandoned": 0,
-      "ms": 1061
+      "ms": 1336
     },
     {
       "n": 8,
@@ -67,7 +67,7 @@
       "merged": 3,
       "retries": 0,
       "abandoned": 0,
-      "ms": 975
+      "ms": 1155
     },
     {
       "n": 9,
@@ -75,7 +75,7 @@
       "merged": 3,
       "retries": 0,
       "abandoned": 0,
-      "ms": 1002
+      "ms": 1186
     },
     {
       "n": 10,
@@ -83,7 +83,7 @@
       "merged": 3,
       "retries": 0,
       "abandoned": 0,
-      "ms": 1029
+      "ms": 1055
     }
   ],
   "recordedAt": "2026-08-29",

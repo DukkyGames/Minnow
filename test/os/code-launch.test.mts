@@ -152,6 +152,18 @@ describe('applyCodeLaunchOptions', () => {
     assert.equal(input.value, '');
   });
 
+  test('does not switch when launch path is the same folder with different spelling', async () => {
+    const { applyCodeLaunchOptions } = await import('../../src/os/code-launch.ts');
+
+    await applyCodeLaunchOptions({
+      workspacePath: `${CURRENT_WS}/`,
+      autoRun: false,
+    });
+
+    const { getWorkspacePath } = await import('../../src/state/workspace.ts');
+    assert.equal(getWorkspacePath(), CURRENT_WS);
+  });
+
   test('switches workspace, creates debug chat, and fills composer', async () => {
     const { applyCodeLaunchOptions } = await import('../../src/os/code-launch.ts');
     await applyCodeLaunchOptions({

@@ -3,9 +3,8 @@
  */
 
 import { isMinnowSandboxWorkspacePath } from '../lib/workspace-sandbox';
-import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
 import { sessionState } from '../state/sessions';
-import { getWorkspacePath } from '../state/workspace';
+import { isCurrentWindowWorkspace } from '../state/workspace';
 import { launchApp } from './router';
 
 /** True when the chat belongs to a user project folder (not a Minnow sandbox). */
@@ -23,7 +22,7 @@ async function ensureWorkspaceForCodeChat(chatId: string): Promise<boolean> {
     return true;
   }
 
-  if (normalizeWorkspacePath(chatWorkspace) === normalizeWorkspacePath(getWorkspacePath())) {
+  if (isCurrentWindowWorkspace(chatWorkspace)) {
     return true;
   }
 

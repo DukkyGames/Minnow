@@ -12,6 +12,7 @@ import { resetWorkspaceStateForTests, setWorkspaceFromServer } from '../../src/s
 import type { Chat, ChatGroup } from '../../src/types.ts';
 import {
   confirmAndStopBoardsForWorkspaceSwitch,
+  executeWorkspaceSwitch,
   formatWorkspaceSwitchBoardConfirmMessage,
   getBlockingBoardsForWorkspace,
   isBoardBlockingWorkspaceSwitch,
@@ -117,6 +118,7 @@ describe('workspace-switch-guard', () => {
     setV2WorkspaceSwitchDepsForTests(null);
     setSessionStateForTests(null);
     resetWorkspaceStateForTests();
+    delete window.minnow;
     domWindow.close();
   });
 
@@ -250,5 +252,21 @@ describe('workspace-switch-guard', () => {
     const allowed = await allowedPromise;
     assert.equal(allowed, true);
     assert.equal(isLeftoverBoardRunning(group), false);
+  });
+
+  test('executeWorkspaceSwitch is a no-op when this window is already on that folder', async () => {
+    let switchCalls = 0;
+    window.minnow = {
+      window: {
+        switchWorkspace: async () => {
+          switchCalls += 1;
+          return { ok: true };
+        },
+      },
+    } as typeof window.minnow;
+
+    const info = await executeWorkspaceSwitch(`${CURRENT_WS}/`);
+    assert.equal(switchCalls, 0);
+    assert.equal(info?.path, CURRENT_WS);
   });
 });

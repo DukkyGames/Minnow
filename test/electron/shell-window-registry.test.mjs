@@ -38,6 +38,20 @@ describe('ShellWindowRegistry', () => {
     assert.equal(registry.findByWorkspace(path.resolve('/tmp/repo-b')), undefined);
   });
 
+  test('isWindowOnWorkspace is true only for the window already on that folder', () => {
+    const registry = makeRegistry();
+    const repo = path.resolve('/tmp/repo-a');
+    const other = path.resolve('/tmp/repo-b');
+    registry.register(7, repo, 'view-1');
+    registry.register(8, other, 'view-2');
+
+    assert.equal(registry.isWindowOnWorkspace(7, repo), true);
+    assert.equal(registry.isWindowOnWorkspace(7, `${repo}${path.sep}`), true);
+    assert.equal(registry.isWindowOnWorkspace(7, other), false);
+    assert.equal(registry.isWindowOnWorkspace(8, repo), false);
+    assert.equal(registry.isWindowOnWorkspace(99, repo), false);
+  });
+
   test('key normalization matches the server, so the allowlist and the registry agree', () => {
     const registry = makeRegistry();
     const repo = path.resolve('/tmp/Repo-Mixed-Case');

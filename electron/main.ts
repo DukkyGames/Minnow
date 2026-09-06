@@ -1123,6 +1123,14 @@ async function retargetShellWindow(
   win: BrowserWindow,
   workspacePath: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+  // Already this view: focusing is enough. Replacing the window made Open plan
+  // (and any other launch that passed the same folder with different spelling)
+  // look like the workspace opened a second time.
+  if (shellWindows.isWindowOnWorkspace(win.id, workspacePath)) {
+    focusWindow(win);
+    return { ok: true };
+  }
+
   const clash = shellWindows.findByWorkspace(workspacePath);
   if (clash && clash.windowId !== win.id) {
     const other = BrowserWindow.fromId(clash.windowId);

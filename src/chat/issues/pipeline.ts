@@ -450,12 +450,32 @@ export async function openIssuePlanInEditor(
   const path = planPath.trim();
   if (!path) return;
 
+  const targetWs = workspacePath?.trim() || '';
+  const { isCurrentWindowWorkspace } = await import('../../state/workspace.ts');
+  const alreadyHere = !targetWs || isCurrentWindowWorkspace(targetWs);
+
+  // Folder already open in another window: focus that view. Retargeting this
+  // one would either recreate it or steal the folder from the window that owns it.
+  if (!alreadyHere) {
+    const { readOpenWorkspaceWindows } = await import('../../lib/open-workspace-windows.ts');
+    const { normalizeWorkspacePath } = await import('../../lib/normalize-workspace-path.ts');
+    const openWorkspace = window.minnow?.window?.openWorkspace;
+    const openMap = await readOpenWorkspaceWindows();
+    if (openWorkspace && openMap.has(normalizeWorkspacePath(targetWs))) {
+      await openWorkspace(targetWs);
+      return;
+    }
+  }
+
   const { getForegroundAppId } = await import('../../os/instances.ts');
-  if (getForegroundAppId() !== 'code') {
+  // Foreground Code when Issues is the app, and still pass workspacePath when
+  // this window is on a different folder (embedded Issues + all-workspaces).
+  if (getForegroundAppId() !== 'code' || (!alreadyHere && targetWs)) {
     const { launchApp } = await import('../../os/router.ts');
     launchApp('code', {
       codeSection: 'chat',
-      workspacePath: workspacePath?.trim() || undefined,
+      // Omit when we are already on this folder so Code launch does not retarget.
+      workspacePath: alreadyHere ? undefined : targetWs || undefined,
     });
     await new Promise((r) => setTimeout(r, 0));
   }

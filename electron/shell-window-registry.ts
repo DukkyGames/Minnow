@@ -96,6 +96,17 @@ export class ShellWindowRegistry {
     return undefined;
   }
 
+  /**
+   * True when this window is already the one view on `workspacePath`.
+   * Retargeting in that case would destroy and recreate the same folder.
+   */
+  isWindowOnWorkspace(windowId: number, workspacePath: string): boolean {
+    if (!workspacePath || !workspacePath.trim()) return false;
+    const record = this.byWindowId.get(windowId);
+    if (!record?.workspacePath) return false;
+    return this.normalizeKey(record.workspacePath) === this.normalizeKey(workspacePath);
+  }
+
   markFocused(windowId: number): void {
     const record = this.byWindowId.get(windowId);
     if (record) record.lastFocusedAt = this.nextFocus();

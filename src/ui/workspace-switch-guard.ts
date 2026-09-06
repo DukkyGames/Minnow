@@ -11,7 +11,11 @@ import {
   isLeftoverBoardRunning,
 } from '../state/chat-groups';
 import { markGroupDirty, scheduleSaveSessions, sessionState } from '../state/sessions';
-import { getWorkspacePath } from '../state/workspace';
+import {
+  getCurrentWorkspaceInfo,
+  getWorkspacePath,
+  isCurrentWindowWorkspace,
+} from '../state/workspace';
 import type { ChatGroup } from '../types';
 
 /** How long a workspace switch waits for V2 stop before continuing the PUT. */
@@ -208,6 +212,11 @@ async function confirmRetargetWithRunningBoards(targetPath: string): Promise<boo
 export async function executeWorkspaceSwitch(
   absPath: string,
 ): Promise<import('../config/workspace-api').WorkspaceInfo | null> {
+  // Same folder, possibly different spelling — do not PUT or replace the view.
+  if (isCurrentWindowWorkspace(absPath)) {
+    return getCurrentWorkspaceInfo();
+  }
+
   // Also taken by a window still at the folder gate: picking there has to bind
   // the view to the folder, not repoint a global.
   const retarget = window.minnow?.window?.switchWorkspace;

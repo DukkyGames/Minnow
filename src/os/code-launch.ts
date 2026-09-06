@@ -5,7 +5,7 @@
 import { DEFAULT_MODE_ID, normalizeModeId } from '../chat/modes/types';
 import { sendMessageWithTools } from '../chat/messaging';
 import { normalizeWorkspacePath } from '../lib/normalize-workspace-path';
-import { getWorkspacePath } from '../state/workspace';
+import { getWorkspacePath, isCurrentWindowWorkspace } from '../state/workspace';
 import { clearForegroundSeed } from './instances';
 import type { LaunchOptions } from './types';
 import { executeWorkspaceSwitch } from '../ui/workspace-switch-guard';
@@ -120,7 +120,9 @@ export async function applyCodeLaunchOptions(
   }
 
   const targetPath = options.workspacePath?.trim();
-  if (targetPath && targetPath !== getWorkspacePath()) {
+  // Issue cards store a normalized path; the live window path is OS-native.
+  // A raw !== here retargeted (destroyed + recreated) the current window.
+  if (targetPath && !isCurrentWindowWorkspace(targetPath)) {
     try {
       await executeWorkspaceSwitch(targetPath);
     } catch {}
