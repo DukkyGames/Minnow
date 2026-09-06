@@ -30,7 +30,7 @@ describe('importGithubIssues', () => {
   beforeEach(() => {
     setIssuesStateForTests({ version: 2, nextId: 1, issues: [], workspaces: {} });
     resetIssuesGithubForTests();
-    setIssuesGithubMode('link');
+    setIssuesGithubMode('mirror');
     setLocalServerAvailableForTests(true);
   });
 
@@ -113,7 +113,7 @@ describe('importGithubIssues', () => {
     assert.equal(cards[0]?.source, 'github');
     assert.equal(cards[0]?.title, 'From GitHub');
     assert.equal(cards[0]?.github?.number, 12);
-    assert.equal(cards[0]?.githubSync, true);
+    assert.equal(cards[0]?.githubSync, undefined);
     assert.equal(cards[0]?.triagedAt, undefined);
     assert.equal(cards[1]?.title, 'GitHub #13');
     assert.equal(cards[1]?.status, 'done');

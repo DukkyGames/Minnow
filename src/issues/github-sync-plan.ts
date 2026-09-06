@@ -7,27 +7,27 @@
  * last watermark is a **conflict the user resolves**, never a race the last
  * writer wins.
  *
- * The three modes:
+ * The two modes:
  *
  * - **off** — nothing is ever contacted.
- * - **link** — local is the source of truth. Local changes push; remote changes
- *   are read for display but never overwrite local text. Per-issue opt-in.
  * - **mirror** — both directions, with conflicts surfaced.
+ *
+ * Stored `'link'` (retired Link + push) normalizes to `'off'` so those
+ * workspaces stop syncing until the user opts into Two-way mirror.
  *
  * Phase 5 of `documentation/plans/issues-app-v2.md`.
  */
 
-import type { IssueCard, IssueGithubLink } from '../types';
+import type { IssueCard, IssueGitLink, IssueGithubLink } from '../types';
 
 /** Settings-gated sync mode. */
-export type IssuesGithubMode = 'off' | 'link' | 'mirror';
+export type IssuesGithubMode = 'off' | 'mirror';
 
-export const ISSUES_GITHUB_MODES: readonly IssuesGithubMode[] = ['off', 'link', 'mirror'];
+export const ISSUES_GITHUB_MODES: readonly IssuesGithubMode[] = ['off', 'mirror'];
 
 /** Human labels for the settings control. */
 export const ISSUES_GITHUB_MODE_LABELS: Record<IssuesGithubMode, string> = {
   off: 'Off',
-  link: 'Link + push',
   mirror: 'Two-way mirror',
 };
 
@@ -111,10 +111,6 @@ export function planIssueSync(input: PlanSyncInput): SyncAction {
 
   if (mode === 'off') return { kind: 'noop', reason: 'GitHub sync is off' };
 
-  if (mode === 'link' && !issue.githubSync) {
-    return { kind: 'noop', reason: 'This issue is not opted into sync' };
-  }
-
   const link = issue.github;
   const local = localFields(issue, isClosed);
 
@@ -131,10 +127,6 @@ export function planIssueSync(input: PlanSyncInput): SyncAction {
   const localChanged = hasLocalChanged(issue, link);
   const remoteChanged = hasRemoteChanged(remote, link);
 
-  if (mode === 'link') {
-    return { kind: 'push', fields: local };
-  }
-
   if (localChanged && remoteChanged) {
     return { kind: 'conflict', local, remote: remoteSide };
   }
@@ -147,6 +139,35 @@ export function planIssueSync(input: PlanSyncInput): SyncAction {
 function hasLocalChanged(issue: IssueCard, link: IssueGithubLink): boolean {
   const baseline = link.localUpdatedAt ?? link.syncedAt;
   return issue.updatedAt > baseline;
+}
+
+/** True when this card changed locally since the last GitHub watermark. */
+export function issueNeedsGithubPush(issue: IssueCard): boolean {
+  const link = issue.github;
+  if (!link) return false;
+  return hasLocalChanged(issue, link);
+}
+
+/** Parse `#12` / `12` from a git-link ref. */
+export function githubIssueNumberFromRef(ref: string): number | null {
+  const match = /^#?(\d+)$/.exec(ref.trim());
+  if (!match) return null;
+  const number = Number(match[1]);
+  return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+/**
+ * True when a Git chip is the same GitHub issue as `issue.github`.
+ * Peek renders that identity once on the sync row, not again as a chip.
+ */
+export function gitLinkDuplicatesGithubIssue(
+  link: Pick<IssueGitLink, 'kind' | 'ref'>,
+  issue: Pick<IssueCard, 'github'>,
+): boolean {
+  if (link.kind !== 'github-issue') return false;
+  const number = issue.github?.number;
+  if (!number) return false;
+  return githubIssueNumberFromRef(link.ref) === number;
 }
 
 function hasRemoteChanged(remote: RemoteIssueSnapshot, link: IssueGithubLink): boolean {
@@ -176,8 +197,9 @@ export function nextGithubLink(input: {
   return link;
 }
 
-/** Coerce stored settings into a valid mode. */
+/** Coerce stored settings into a valid mode. Retired `link` becomes Off. */
 export function normalizeGithubMode(raw: unknown): IssuesGithubMode {
+  if (raw === 'link') return 'off';
   return typeof raw === 'string' && ISSUES_GITHUB_MODES.includes(raw as IssuesGithubMode)
     ? (raw as IssuesGithubMode)
     : 'off';

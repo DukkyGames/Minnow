@@ -1,21 +1,48 @@
+/**
+ * GitHub identity + sync controls that live inside the Issues peek Git section.
+ *
+ * Open always goes through `openExternal` (system browser). Sync/Push share
+ * one click handler so the toolbar Push and the linked-row Sync cannot drift.
+ */
+
 import {
   getIssuesGithubMode,
   resolveSyncConflict,
   syncIssueWithGithub,
   type SyncConflict,
 } from '../state/issues-github';
-import { scheduleSaveIssues, updateIssue } from '../state/issues-store';
+import { githubSyncCaption } from '../issues/github-sync-status';
 import type { IssueCard } from '../types';
+import { openExternalGitUrl } from '../chat/issues/git-actions';
 import { showToast } from './toast';
 
 /** Called after any change so the panel re-renders from store state. */
 export type GithubSectionChanged = () => void;
+
+export type GithubSyncButtonOptions = {
+  idleLabel: string;
+  conflictHost: HTMLElement;
+  onChanged: GithubSectionChanged;
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function truncate(text: string, max = 400): string {
   const clean = text.trim();
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
+}
+
+/** Two-way mirror is the only mode that may contact GitHub. */
+export function githubSyncEnabled(): boolean {
+  return getIssuesGithubMode() === 'mirror';
+}
+
+function showConflict(
+  host: HTMLElement,
+  conflict: SyncConflict,
+  onChanged: GithubSectionChanged,
+): void {
+  host.replaceChildren(buildConflictPane(conflict, onChanged));
 }
 
 // ── Conflict ─────────────────────────────────────────────────────────────────
@@ -31,13 +58,18 @@ function buildConflictPane(
 
   const head = document.createElement('p');
   head.className = 'issues-github__conflict-head';
-  head.textContent = `Both sides changed since the last sync. Pick which to keep — neither is overwritten until you do.`;
+  head.textContent =
+    'Both sides changed since the last sync. Pick which to keep. Neither is overwritten until you do.';
   wrap.appendChild(head);
 
   const grid = document.createElement('div');
   grid.className = 'issues-github__conflict-grid';
 
-  const side = (label: string, fields: SyncConflict['local'], keep: 'local' | 'remote'): HTMLElement => {
+  const side = (
+    label: string,
+    fields: SyncConflict['local'],
+    keep: 'local' | 'remote',
+  ): HTMLElement => {
     const column = document.createElement('div');
     column.className = 'issues-github__conflict-side';
 
@@ -88,80 +120,35 @@ function buildConflictPane(
     return column;
   };
 
-  grid.append(
-    side('Yours', conflict.local, 'local'),
-    side('GitHub', conflict.remote, 'remote'),
-  );
+  grid.append(side('Yours', conflict.local, 'local'), side('GitHub', conflict.remote, 'remote'));
   wrap.appendChild(grid);
   return wrap;
 }
 
-// ── Render ───────────────────────────────────────────────────────────────────
+// ── Sync action ──────────────────────────────────────────────────────────────
 
-/** Render the section into a peek-panel section body. */
-export function renderIssueGithubSection(
-  body: HTMLElement,
+/** Wire Push / Sync to the same forge path. Idle label is restored on failure. */
+export function bindGithubSyncButton(
+  btn: HTMLButtonElement,
   issue: IssueCard,
-  onChanged: GithubSectionChanged,
-): boolean {
-  const mode = getIssuesGithubMode();
-  if (mode === 'off') return false;
-
-  const link = issue.github;
-
-  const status = document.createElement('p');
-  status.className = 'issues-detail__empty';
-  if (link) {
-    status.textContent = `Linked to #${link.number}.`;
-    body.appendChild(status);
-  }
-
-  if (link?.url) {
-    const open = document.createElement('a');
-    open.className = 'issues-github__link';
-    open.href = link.url;
-    open.target = '_blank';
-    open.rel = 'noreferrer';
-    open.textContent = `#${link.number} · github`;
-    body.appendChild(open);
-  }
-
-  const controls = document.createElement('div');
-  controls.className = 'issues-detail__add-code';
-
-  if (mode === 'link') {
-    const toggleLabel = document.createElement('label');
-    toggleLabel.className = 'issues-github__toggle';
-    const toggle = document.createElement('input');
-    toggle.type = 'checkbox';
-    toggle.checked = issue.githubSync === true;
-    toggle.addEventListener('change', () => {
-      updateIssue(issue.id, { githubSync: toggle.checked });
-      scheduleSaveIssues();
-      onChanged();
-    });
-    toggleLabel.append(toggle, document.createTextNode(' Sync this issue'));
-    controls.appendChild(toggleLabel);
-  }
-
-  const syncBtn = document.createElement('button');
-  syncBtn.type = 'button';
-  syncBtn.className = 'issues-btn';
-  syncBtn.textContent = link ? 'Sync now' : 'Push to GitHub';
-  syncBtn.addEventListener('click', () => {
-    syncBtn.disabled = true;
-    syncBtn.textContent = 'Syncing…';
+  options: GithubSyncButtonOptions,
+): void {
+  btn.addEventListener('click', () => {
+    const idle = options.idleLabel;
+    btn.disabled = true;
+    btn.textContent = 'Syncing…';
     void syncIssueWithGithub(issue.id)
       .then((outcome) => {
-        syncBtn.disabled = false;
         if (outcome.conflict) {
-          body.appendChild(buildConflictPane(outcome.conflict, onChanged));
-          syncBtn.textContent = 'Sync now';
+          btn.disabled = false;
+          btn.textContent = idle;
+          showConflict(options.conflictHost, outcome.conflict, options.onChanged);
           return;
         }
         if (!outcome.ok) {
+          btn.disabled = false;
+          btn.textContent = idle;
           showToast(outcome.error ?? 'Sync failed', 'error');
-          syncBtn.textContent = link ? 'Sync now' : 'Push to GitHub';
           return;
         }
         if (outcome.droppedLabels) {
@@ -171,16 +158,85 @@ export function renderIssueGithubSection(
         } else {
           showToast(outcome.action === 'pull' ? 'Took the GitHub version' : 'Pushed to GitHub', 'success');
         }
-        onChanged();
+        options.onChanged();
       })
       .catch(() => {
-        syncBtn.disabled = false;
+        btn.disabled = false;
+        btn.textContent = idle;
         showToast('Sync failed', 'error');
-        syncBtn.textContent = link ? 'Sync now' : 'Push to GitHub';
       });
   });
-  controls.appendChild(syncBtn);
-  body.appendChild(controls);
+}
 
-  return true;
+// ── Linked row ───────────────────────────────────────────────────────────────
+
+/**
+ * First Git-list row for a linked GitHub issue: `#n · synced …` / Needs push,
+ * Open in the system browser, and Sync when Two-way mirror is on.
+ */
+export function buildGithubIssueChip(
+  issue: IssueCard,
+  options: { canSync: boolean; conflictHost: HTMLElement; onChanged: GithubSectionChanged },
+): HTMLLIElement {
+  const link = issue.github;
+  const number = link?.number ?? 0;
+  const url = link?.url?.trim() ?? '';
+  const caption = githubSyncCaption(issue);
+  const needsPush = caption === 'Needs push';
+
+  const li = document.createElement('li');
+  li.className = 'issues-detail__git-chip issues-detail__git-chip--github';
+
+  const identity = document.createElement('span');
+  identity.className = 'issues-detail__git-chip-label';
+
+  const ref = document.createElement('span');
+  ref.className = 'issues-detail__git-chip-ref';
+  ref.textContent = `#${number}`;
+  identity.appendChild(ref);
+
+  if (caption) {
+    const status = document.createElement('span');
+    status.className = 'issues-detail__git-chip-status';
+    if (needsPush) status.classList.add('is-needs-push');
+    status.textContent = ` · ${caption}`;
+    identity.appendChild(status);
+  }
+  li.appendChild(identity);
+
+  const actions = document.createElement('span');
+  actions.className = 'issues-detail__git-chip-actions';
+
+  const openBtn = document.createElement('button');
+  openBtn.type = 'button';
+  openBtn.className = 'issues-btn issues-detail__git-open';
+  openBtn.textContent = 'Open';
+  openBtn.title = 'Open on GitHub in your browser';
+  openBtn.setAttribute('aria-label', `Open GitHub issue #${number} in your browser`);
+  openBtn.disabled = !url;
+  openBtn.addEventListener('click', () => {
+    if (!url) {
+      showToast('No web URL for this link', 'error');
+      return;
+    }
+    openExternalGitUrl(url);
+  });
+  actions.appendChild(openBtn);
+
+  if (options.canSync) {
+    const syncBtn = document.createElement('button');
+    syncBtn.type = 'button';
+    syncBtn.className = 'issues-btn issues-detail__git-open';
+    syncBtn.textContent = 'Sync';
+    syncBtn.title = 'Sync this issue with GitHub';
+    bindGithubSyncButton(syncBtn, issue, {
+      idleLabel: 'Sync',
+      conflictHost: options.conflictHost,
+      onChanged: options.onChanged,
+    });
+    actions.appendChild(syncBtn);
+  }
+
+  li.appendChild(actions);
+  return li;
 }

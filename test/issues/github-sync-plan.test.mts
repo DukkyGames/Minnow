@@ -10,6 +10,9 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import {
+  gitLinkDuplicatesGithubIssue,
+  githubIssueNumberFromRef,
+  issueNeedsGithubPush,
   nextGithubLink,
   normalizeGithubMode,
   planIssueSync,
@@ -67,18 +70,7 @@ describe('mode gating', () => {
     assert.equal(action.kind, 'noop');
   });
 
-  test('link respects the per-issue opt-in', () => {
-    const action = planIssueSync({
-      mode: 'link',
-      issue: issue({ githubSync: false }),
-      isClosed: false,
-      remote: null,
-    });
-    assert.equal(action.kind, 'noop');
-    assert.match(action.kind === 'noop' ? action.reason : '', /not opted into sync/);
-  });
-
-  test('mirror ignores the per-issue flag — the mode is the opt-in', () => {
+  test('mirror ignores the leftover per-issue flag — the mode is the opt-in', () => {
     const action = planIssueSync({
       mode: 'mirror',
       issue: issue({ githubSync: false }),
@@ -92,7 +84,7 @@ describe('mode gating', () => {
 describe('first push', () => {
   test('an unlinked issue is created', () => {
     assert.equal(
-      planIssueSync({ mode: 'link', issue: issue(), isClosed: false, remote: null }).kind,
+      planIssueSync({ mode: 'mirror', issue: issue(), isClosed: false, remote: null }).kind,
       'create',
     );
   });
@@ -132,18 +124,6 @@ describe('one-sided changes', () => {
     });
     assert.equal(action.kind, 'pull');
     assert.equal(action.kind === 'pull' ? action.fields.title : '', 'Changed remotely');
-  });
-
-  test('a remote edit never overwrites local in link mode', () => {
-    // Local is the source of truth there; the remote gets pushed over.
-    const action = planIssueSync({
-      mode: 'link',
-      issue: issue({ github: link() }),
-      isClosed: false,
-      remote: remote({ title: 'Changed remotely', updatedAt: SYNCED_AT + 10 }),
-    });
-    assert.equal(action.kind, 'push');
-    assert.equal(action.kind === 'push' ? action.fields.title : '', 'Local title');
   });
 
   test('closing locally pushes the closed state', () => {
@@ -269,9 +249,35 @@ describe('watermark', () => {
 describe('normalizeGithubMode', () => {
   test('defaults to off for anything unrecognized', () => {
     assert.equal(normalizeGithubMode('mirror'), 'mirror');
-    assert.equal(normalizeGithubMode('link'), 'link');
+    assert.equal(normalizeGithubMode('link'), 'off');
     assert.equal(normalizeGithubMode('nonsense'), 'off');
     assert.equal(normalizeGithubMode(undefined), 'off');
     assert.equal(normalizeGithubMode(3), 'off');
+  });
+});
+
+describe('issueNeedsGithubPush', () => {
+  test('is false when unlinked or unchanged since the watermark', () => {
+    assert.equal(issueNeedsGithubPush(issue()), false);
+    assert.equal(issueNeedsGithubPush(issue({ github: link() })), false);
+  });
+
+  test('is true when local updatedAt is after the watermark', () => {
+    assert.equal(
+      issueNeedsGithubPush(issue({ github: link(), updatedAt: SYNCED_AT + 10 })),
+      true,
+    );
+  });
+});
+
+describe('gitLinkDuplicatesGithubIssue', () => {
+  test('parses #n and matches the linked GitHub number', () => {
+    assert.equal(githubIssueNumberFromRef('#12'), 12);
+    assert.equal(githubIssueNumberFromRef('12'), 12);
+    assert.equal(githubIssueNumberFromRef('pr/12'), null);
+    const linked = issue({ github: link({ number: 5 }) });
+    assert.equal(gitLinkDuplicatesGithubIssue({ kind: 'github-issue', ref: '#5' }, linked), true);
+    assert.equal(gitLinkDuplicatesGithubIssue({ kind: 'github-issue', ref: '#6' }, linked), false);
+    assert.equal(gitLinkDuplicatesGithubIssue({ kind: 'pr', ref: '#5' }, linked), false);
   });
 });

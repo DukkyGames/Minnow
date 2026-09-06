@@ -55,6 +55,7 @@ Issues have workspace-specific ids like `MIN-12` (configure the prefix under **S
 - Plans live at `documentation/plans/issues/<id>.md`
 - Pull requests go through the `gh` CLI when it is installed, with GitHub links appearing on the issue
 - **Review PR** (when `gh` is available and a PR can be resolved) runs an in-app reviewer and shows the verdict on the issue. Reviews are not posted to GitHub.
+- **GitHub sync** (Settings → Apps → Issues → GitHub) is **Off** or **Two-way mirror**. When it is on, the peek Git section can push a new issue, sync a linked one, and import open GitHub issues into Triage. **Open** uses your system browser, not the in-app browser. If both sides changed since the last sync, you pick which to keep.
 
 When a board finishes work on an issue, the issue moves to **review** rather than closing itself.
 

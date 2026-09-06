@@ -42,13 +42,22 @@ const MODE_STORAGE_KEY = 'minnow.issues.github.mode';
 let cachedMode: IssuesGithubMode | null = null;
 const modeListeners = new Set<(mode: IssuesGithubMode) => void>();
 
-/** The settings-gated sync mode. */
+/** The settings-gated sync mode. Retired Link + push (`link`) becomes Off. */
 export function getIssuesGithubMode(): IssuesGithubMode {
   if (cachedMode) return cachedMode;
+  let stored: string | null = null;
   try {
-    cachedMode = normalizeGithubMode(localStorage.getItem(MODE_STORAGE_KEY));
+    stored = localStorage.getItem(MODE_STORAGE_KEY);
   } catch {
     cachedMode = 'off';
+    return cachedMode;
+  }
+  cachedMode = normalizeGithubMode(stored);
+  // Persist the migration so Settings does not bounce back to a removed mode.
+  if (stored === 'link' && cachedMode === 'off') {
+    try {
+      localStorage.setItem(MODE_STORAGE_KEY, 'off');
+    } catch {}
   }
   return cachedMode;
 }
@@ -407,7 +416,6 @@ export async function importGithubIssues(options?: {
           source: 'github',
           ...(remote.state === 'closed' && closedStatus ? { status: closedStatus } : {}),
         });
-        updateIssue(card.id, { githubSync: true });
         writeLink(card.id, remote.number, remote.url, remote.updatedAt);
         linked.add(remote.number);
         imported += 1;
@@ -440,7 +448,6 @@ export async function syncAllIssuesWithGithub(): Promise<{
   if (mode === 'off') return { synced, conflicts, errors };
 
   for (const issue of listIssues()) {
-    if (mode === 'link' && !issue.githubSync) continue;
     const outcome = await syncIssueWithGithub(issue.id);
     if (outcome.conflict) conflicts.push(outcome.conflict);
     else if (outcome.ok && outcome.action !== 'noop') synced += 1;

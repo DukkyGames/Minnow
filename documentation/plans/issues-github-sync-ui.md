@@ -4,14 +4,14 @@ Design brief for unifying GitHub sync with the Issues peek Git section. Confirm 
 
 ## Todos
 
-- [ ] Confirm this brief
-- [ ] Drop **Link + push**; migrate stored `link` → `off`; Settings is Off | Two-way mirror
-- [ ] Merge GitHub sync into the Git peek section; remove the duplicate GITHUB block and GH-issue chip
-- [ ] Linked row: `#5 · synced 2h ago` or `#5 · Needs push`; Open uses the system browser
-- [ ] Unlinked + mode on: **Push to GitHub** in the Git toolbar; mode off: hide Push
-- [ ] Rewrite Settings → Issues → GitHub copy; make Import a first-class action
-- [ ] Tests, `documentation/context.md`, Issues manual
-- [ ] Browser-verify peek states and Settings
+- [x] Confirm this brief
+- [x] Drop **Link + push**; migrate stored `link` → `off`; Settings is Off | Two-way mirror
+- [x] Merge GitHub sync into the Git peek section; remove the duplicate GITHUB block and GH-issue chip
+- [x] Linked row: `#5 · synced 2h ago` or `#5 · Needs push`; Open uses the system browser
+- [x] Unlinked + mode on: **Push to GitHub** in the Git toolbar; mode off: hide Push
+- [x] Rewrite Settings → Issues → GitHub copy; make Import a first-class action
+- [x] Tests, `documentation/context.md`, Issues manual
+- [x] Browser-verify peek states and Settings
 
 ---
 

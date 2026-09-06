@@ -65,7 +65,12 @@ import { collectInlineRefs } from '../issues/markdown-inline';
 import { codeRefsExcludingPlan, inferIssuePlanPath } from '../issues/plan-attach';
 import { renderIssueAttachments } from './issues-attachments-section';
 import { bindIssueDropTarget } from './issue-drop-target';
-import { renderIssueGithubSection } from './issues-github-section';
+import {
+  bindGithubSyncButton,
+  buildGithubIssueChip,
+  githubSyncEnabled,
+} from './issues-github-section';
+import { gitLinkDuplicatesGithubIssue } from '../issues/github-sync-plan';
 import { createIssuesLabelsField, isIssuesLabelsFieldFocused } from './issues-labels-field';
 import { appConfirm } from './app-dialog';
 import { executeTool } from '../tools/client';
@@ -602,15 +607,6 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   const planPath = inferIssuePlanPath(issue);
   scroll.appendChild(buildCodeLinksSection(issue, planPath));
 
-  const githubHasLink = Boolean(issue.github);
-  const githubSection = section(githubHasLink ? 'GitHub' : null, {
-    untitled: !githubHasLink,
-    compact: !githubHasLink,
-  });
-  if (renderIssueGithubSection(githubSection.body, issue, () => refreshIssueDetailIfOpen())) {
-    scroll.appendChild(githubSection.section);
-  }
-
   const attachmentCount = issue.attachments?.length ?? 0;
   const attachmentsSection = section(attachmentCount > 0 ? 'Attachments' : null, {
     untitled: attachmentCount === 0,
@@ -868,14 +864,22 @@ function buildIssueReviewSection(issue: IssueCard): HTMLElement | null {
 
 /** Restrained Git menu + linked chips + commit grep list for the detail panel. */
 function buildGitSection(issue: IssueCard): HTMLElement {
-  const gitLinks = issue.gitLinks ?? [];
-  const empty = gitLinks.length === 0;
+  const canSync = githubSyncEnabled();
+  const github = issue.github;
+  // Same-number GH chips are the GitHub row; keep other git links (PRs, other issues).
+  const gitLinks = (issue.gitLinks ?? []).filter((link) => !gitLinkDuplicatesGithubIssue(link, issue));
+  const showPush = canSync && !github;
+  const empty = gitLinks.length === 0 && !github && !showPush;
   const gitSection = section(empty ? null : 'Git', {
     untitled: empty,
     compact: empty,
   });
   const body = gitSection.body;
   const busy = gitBusyIds.has(issue.id);
+  const onGithubChanged = (): void => refreshIssueDetailIfOpen();
+
+  const conflictHost = document.createElement('div');
+  conflictHost.className = 'issues-detail__git-conflict';
 
   const errEl = document.createElement('p');
   errEl.className = 'issues-detail__git-error';
@@ -934,16 +938,40 @@ function buildGitSection(issue: IssueCard): HTMLElement {
   linkToggle.setAttribute('aria-controls', `issues-git-link-fields-${issue.id}`);
 
   menu.append(branchBtn, prBtn, reviewBtn, linkToggle);
+  if (showPush) {
+    const pushBtn = document.createElement('button');
+    pushBtn.type = 'button';
+    pushBtn.className = 'issues-btn';
+    pushBtn.textContent = 'Push to GitHub';
+    pushBtn.title = 'Create this issue on GitHub';
+    pushBtn.disabled = busy;
+    bindGithubSyncButton(pushBtn, issue, {
+      idleLabel: 'Push to GitHub',
+      conflictHost,
+      onChanged: onGithubChanged,
+    });
+    menu.appendChild(pushBtn);
+  }
   body.append(menu, errEl);
 
-  if (!empty) {
+  if (github || gitLinks.length > 0) {
     const chipList = document.createElement('ul');
     chipList.className = 'issues-detail__git-list';
+    if (github) {
+      chipList.appendChild(
+        buildGithubIssueChip(issue, {
+          canSync,
+          conflictHost,
+          onChanged: onGithubChanged,
+        }),
+      );
+    }
     for (const link of gitLinks) {
       chipList.appendChild(buildGitLinkRow(link));
     }
     body.appendChild(chipList);
   }
+  body.appendChild(conflictHost);
 
   const commitsHead = document.createElement('h4');
   commitsHead.className = 'issues-detail__git-subhead';

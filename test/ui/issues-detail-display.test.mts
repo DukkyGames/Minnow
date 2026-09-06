@@ -15,6 +15,9 @@ import { ISSUES_COMPAT_VERSION, ISSUES_SCHEMA_VERSION } from '../../src/types.ts
 const { findIssueById, setIssuesStateForTests } = await import('../../src/state/issues-store.ts');
 const { closeIssueDetail, openIssueDetail } = await import('../../src/ui/issues-detail.ts');
 const { resetGhAvailableCache } = await import('../../src/chat/issues/git-actions.ts');
+const { resetIssuesGithubForTests, setIssuesGithubMode } = await import(
+  '../../src/state/issues-github.ts'
+);
 const { setLocalServerAvailableForTests, setToolConfigForTests } = await import(
   '../../src/tools/config.ts'
 );
@@ -37,6 +40,8 @@ function setupDom(): void {
   globalThis.getComputedStyle = window.getComputedStyle.bind(window);
   setLocalServerAvailableForTests(false);
   setToolConfigForTests(defaultToolConfig());
+  resetIssuesGithubForTests();
+  setIssuesGithubMode('off');
 
   document.body.innerHTML = `
     <main id="issuesView" class="issues-page">
@@ -66,6 +71,7 @@ function headingTexts(root: Element): string[] {
 afterEach(() => {
   closeIssueDetail();
   resetGhAvailableCache();
+  resetIssuesGithubForTests();
   setIssuesStateForTests(null);
   domWindow?.close();
   domWindow = null;
@@ -119,6 +125,11 @@ describe('issues detail display', () => {
     assert.equal(titles.includes('Related issues'), false);
     assert.equal(titles.includes('Code links'), false);
     assert.equal(titles.includes('Git'), false);
+    assert.equal(titles.includes('GitHub'), false);
+    assert.equal(
+      [...scroll.querySelectorAll('button')].some((btn) => btn.textContent === 'Push to GitHub'),
+      false,
+    );
 
     const copy = scroll.textContent ?? '';
     assert.equal(copy.includes('No code links yet.'), false);
@@ -170,6 +181,90 @@ describe('issues detail display', () => {
     assert.ok(titles.includes('Plan'));
     assert.ok(titles.includes('Related issues'));
     assert.equal(titles.includes('Description'), false);
+  });
+
+  test('linked GitHub issue lives in Git, not a second GITHUB block', () => {
+    setupDom();
+    setIssuesGithubMode('mirror');
+    seedIssues([
+      {
+        id: 'GET-7',
+        type: 'task',
+        title: 'Linked',
+        description: '',
+        status: 'backlog',
+        priority: 'none',
+        labels: [],
+        workspacePath: '/repo',
+        createdAt: FIXED_NOW,
+        updatedAt: FIXED_NOW,
+        source: 'github',
+        github: {
+          number: 5,
+          url: 'https://github.com/acme/app/issues/5',
+          syncedAt: FIXED_NOW,
+          localUpdatedAt: FIXED_NOW,
+        },
+        gitLinks: [
+          {
+            kind: 'github-issue',
+            ref: '#5',
+            url: 'https://github.com/acme/app/issues/5',
+            title: 'GH issue: #5',
+            addedAt: FIXED_NOW,
+          },
+        ],
+      },
+    ]);
+
+    openIssueDetail('GET-7');
+
+    const scroll = document.querySelector('.issues-detail__scroll');
+    assert.ok(scroll);
+    const titles = headingTexts(scroll);
+    assert.ok(titles.includes('Git'));
+    assert.equal(titles.includes('GitHub'), false);
+    const copy = scroll.textContent ?? '';
+    assert.equal(copy.includes('Linked to #5'), false);
+    assert.equal(copy.includes('GH issue: #5'), false);
+    assert.equal(copy.includes('Sync this issue'), false);
+    assert.match(copy, /#5/);
+    assert.match(copy, /synced/);
+    const githubRow = scroll.querySelector('.issues-detail__git-chip--github');
+    assert.ok(githubRow);
+    assert.ok([...githubRow.querySelectorAll('button')].some((btn) => btn.textContent === 'Open'));
+    assert.ok([...githubRow.querySelectorAll('button')].some((btn) => btn.textContent === 'Sync'));
+    assert.equal(githubRow.querySelector('a'), null);
+    assert.equal(scroll.querySelectorAll('.issues-detail__git-chip').length, 1);
+  });
+
+  test('Push to GitHub is in the Git toolbar only when mirror is on and unlinked', () => {
+    setupDom();
+    setIssuesGithubMode('mirror');
+    seedIssues([
+      {
+        id: 'GET-8',
+        type: 'task',
+        title: 'Unlinked',
+        description: '',
+        status: 'backlog',
+        priority: 'none',
+        labels: [],
+        workspacePath: '/repo',
+        createdAt: FIXED_NOW,
+        updatedAt: FIXED_NOW,
+        source: 'user',
+      },
+    ]);
+
+    openIssueDetail('GET-8');
+
+    const scroll = document.querySelector('.issues-detail__scroll');
+    assert.ok(scroll);
+    assert.ok(headingTexts(scroll).includes('Git'));
+    assert.ok(
+      [...scroll.querySelectorAll('button')].some((btn) => btn.textContent === 'Push to GitHub'),
+    );
   });
 
   test('typing a description in peek is written to the store on close', () => {

@@ -717,7 +717,7 @@ export function renderIssuesSettingsSection(mount: HTMLElement): void {
   }
 }
 
-/** GitHub sync mode (Phase 5). */
+/** GitHub sync mode. Off or Two-way mirror; Import is a first-class action. */
 function renderIssuesGithubPanel(mount: HTMLElement, onChange: () => void): void {
   const body = appendSettingsGroup(
     mount,
@@ -728,13 +728,10 @@ function renderIssuesGithubPanel(mount: HTMLElement, onChange: () => void): void
 
   const hint = el('p', 'settings-field-hint');
   const describeMode = (): void => {
-    const mode = getIssuesGithubMode();
     hint.textContent =
-      mode === 'off'
+      getIssuesGithubMode() === 'off'
         ? 'Nothing is sent to or read from GitHub.'
-        : mode === 'link'
-          ? 'Issues you flag are pushed to GitHub. Your copy wins; a change made on GitHub is overwritten on the next push.'
-          : 'Issues sync both ways. When both sides changed, you are asked which to keep — neither is overwritten silently.';
+        : 'Issues sync both ways. When both sides changed, you pick which to keep.';
   };
   describeMode();
 
@@ -756,9 +753,22 @@ function renderIssuesGithubPanel(mount: HTMLElement, onChange: () => void): void
   body.appendChild(row);
   body.appendChild(hint);
 
+  const importRow = el('div', 'settings-row settings-issues-github-import');
+  importRow.dataset.settingsSearchKey = 'apps.issues.github.import';
+  const importLabel = el('div', 'settings-row__label');
+  const importTitle = el('span', 'settings-row__title', 'Import');
+  const importDesc = el(
+    'span',
+    'settings-row__desc',
+    'Open issues that are not already linked land in Triage.',
+  );
+  importLabel.append(importTitle, importDesc);
+  const importControl = el('div', 'settings-row__control');
+  const importActions = el('div', 'settings-actions');
+
   const importBtn = document.createElement('button');
   importBtn.type = 'button';
-  importBtn.className = 'settings-btn';
+  importBtn.className = 'settings-action-btn';
   importBtn.textContent = 'Import issues from GitHub';
   const githubImportReady = (): boolean =>
     getIssuesGithubMode() !== 'off' && isIssuesStoreLoaded();
@@ -784,5 +794,8 @@ function renderIssuesGithubPanel(mount: HTMLElement, onChange: () => void): void
       }
     })();
   });
-  body.appendChild(importBtn);
+  importActions.appendChild(importBtn);
+  importControl.appendChild(importActions);
+  importRow.append(importLabel, importControl);
+  body.appendChild(importRow);
 }

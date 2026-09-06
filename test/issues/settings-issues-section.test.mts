@@ -73,7 +73,7 @@ beforeEach(() => {
   setStorageModeForTests('localStorage');
   setLocalServerAvailableForTests(true);
   resetIssuesGithubForTests();
-  setIssuesGithubMode('link');
+  setIssuesGithubMode('mirror');
 });
 
 afterEach(async () => {
@@ -105,6 +105,21 @@ describe('Settings → Issues GitHub import', () => {
     assert.equal(importButton(mount).disabled, true);
     const preview = mount.querySelector('.settings-issues-id-preview');
     assert.equal(preview?.textContent, '—');
+  });
+
+  test('GitHub panel lists Off and Two-way mirror only', async () => {
+    const mount = setupDom();
+    setIssuesStateForTests({ version: 2, nextId: 1, issues: [], workspaces: {} });
+    const { renderIssuesSettingsSection } = await import('../../src/ui/settings-issues.ts');
+    renderIssuesSettingsSection(mount);
+
+    const select = mount.querySelector('#settingsIssuesGithubMode');
+    assert.ok(select);
+    const labels = [...select.querySelectorAll('option')].map((option) => option.textContent);
+    assert.deepEqual(labels, ['Off', 'Two-way mirror']);
+    assert.doesNotMatch(mount.textContent ?? '', /Link \+ push/);
+    assert.match(mount.textContent ?? '', /land in Triage/);
+    assert.equal(importButton(mount).className, 'settings-action-btn');
   });
 
   test('failed fetch shows Open or restart Minnow and re-enables Import', async () => {

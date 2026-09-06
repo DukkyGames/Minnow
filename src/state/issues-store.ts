@@ -1272,7 +1272,7 @@ export type UpdateIssuePatch = {
   source?: IssueSource;
   /** Pass null to return the card to the unreviewed Triage lane. */
   triagedAt?: number | null;
-  /** Per-issue opt-in for GitHub sync while the mode is Link + push. */
+  /** Leftover per-issue flag from retired Link + push. Ignored by sync. */
   githubSync?: boolean;
 };
 

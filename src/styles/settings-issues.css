@@ -209,6 +209,10 @@
   color: var(--mn-danger);
 }
 
+.settings-issues-github-import .settings-actions {
+  margin-top: 0;
+}
+
 .settings-issues-table col.settings-issues-col-icon {
   width: 3.25rem;
 }

@@ -828,7 +828,7 @@ export interface IssueCard {
   source?: IssueSource;
   /** Set when the issue left the Triage lane (accepted or declined). */
   triagedAt?: number;
-  /** Opt this issue into GitHub sync while the mode is Link + push. */
+  /** Leftover per-issue flag from retired Link + push. Ignored by sync. */
   githubSync?: boolean;
   /** Remote identity and the watermark conflict detection compares against. */
   github?: IssueGithubLink;

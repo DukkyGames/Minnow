@@ -2421,11 +2421,41 @@ button.issues-detail__activity-chip {
   word-break: break-word;
 }
 
+.issues-detail__git-chip-ref {
+  color: var(--mn-accent);
+  font-weight: 600;
+}
+
+.issues-detail__git-chip-status {
+  color: var(--mn-fg-muted);
+  font-weight: 400;
+}
+
+.issues-detail__git-chip-status.is-needs-push {
+  color: var(--mn-fg);
+  font-weight: 600;
+}
+
+.issues-detail__git-chip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .issues-detail__git-open {
   margin-top: 0 !important;
   font-size: 11px;
   padding: 4px 8px;
   min-height: 28px;
+}
+
+.issues-detail__git-conflict:empty {
+  display: none;
+}
+
+.issues-detail__git-conflict {
+  margin-top: 8px;
 }
 
 .issues-detail__related-list {
@@ -2775,33 +2805,11 @@ button.issues-detail__activity-chip {
   outline-offset: -2px;
 }
 
-/* ── GitHub sync (Phase 5) ─────────────────────────────────────────────────
+/* ── GitHub sync
  *
- * `gh` CLI tone: terse and factual. A conflict is two plain columns and two
- * buttons — never a resolution wizard, and never a silent winner.
+ * Identity lives in the Git list (`#n · synced …`). A conflict is two plain
+ * columns and two buttons — never a resolution wizard, and never a silent winner.
  */
-
-.issues-github__link {
-  display: inline-block;
-  margin-bottom: 6px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 11px;
-  color: var(--mn-accent);
-}
-
-.issues-github__toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  color: var(--mn-fg-muted);
-  cursor: pointer;
-}
-
-.issues-github__toggle input {
-  accent-color: var(--mn-accent);
-  margin: 0;
-}
 
 .issues-github__conflict {
   margin-top: 8px;
