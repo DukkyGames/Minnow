@@ -1,4 +1,4 @@
-import { createIcon } from './icon';
+import { createIcon, type IconName } from './icon';
 
 export interface IssuesWorkflowMenuItem {
   id: string;
@@ -16,6 +16,8 @@ export interface IssuesWorkflowDropdownOptions {
   disabled?: boolean;
   /** Primary styling for the foreground control. */
   primary?: boolean;
+  /** Leading glyph so the two dispatch controls are told apart at a glance. */
+  icon?: IconName;
 }
 
 let openMenu: HTMLElement | null = null;
@@ -151,6 +153,11 @@ export function createIssuesWorkflowDropdown(
   const label = document.createElement('span');
   label.className = 'issues-workflow-menu__label';
   label.textContent = options.label;
+  if (options.icon) {
+    trigger.appendChild(
+      createIcon(options.icon, { size: 13, className: 'issues-workflow-menu__icon' }),
+    );
+  }
   trigger.append(label, chevronSvg());
 
   trigger.addEventListener('click', (event) => {

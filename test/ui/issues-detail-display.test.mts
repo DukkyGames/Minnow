@@ -1,5 +1,6 @@
 /**
- * Peek panel DOM contract: description-first sticky, collapsed empty sections.
+ * Peek panel DOM contract: description-first sticky, one header row per rail
+ * section, and a body only where the section has content.
  *
  * Cards are injected via `setIssuesStateForTests` so addIssue cannot schedule a
  * persist that hangs the runner waiting on /api.
@@ -18,6 +19,7 @@ import { setSessionStateForTests } from '../../src/state/sessions.ts';
 const { findIssueById, setIssuesStateForTests } = await import('../../src/state/issues-store.ts');
 const { closeIssueDetail, openIssueDetail } = await import('../../src/ui/issues-detail.ts');
 const { resetIssuesDetailLayoutForTests } = await import('../../src/ui/issues-detail-layout.ts');
+const { resetDetailSectionsForTests } = await import('../../src/ui/issues-detail-section.ts');
 const { resetGhAvailableCache } = await import('../../src/chat/issues/git-actions.ts');
 const { resetIssuesGithubForTests, setIssuesGithubMode } = await import(
   '../../src/state/issues-github.ts'
@@ -72,9 +74,33 @@ function headingTexts(root: Element): string[] {
   );
 }
 
+/** Count pill beside a rail section's name, or undefined when it has none. */
+function sectionCount(root: Element, key: string): string | undefined {
+  return (
+    root
+      .querySelector(`[data-section="${key}"] .issues-detail__sec-count`)
+      ?.textContent ?? undefined
+  );
+}
+
+function sectionBody(root: Element, key: string): HTMLElement | null {
+  return root.querySelector(`[data-section="${key}"] .issues-detail__section-body`);
+}
+
+/** Body children the reader can actually see (latent pickers/fields excluded). */
+function visibleBodyChildren(root: Element, key: string): Element[] {
+  const body = sectionBody(root, key);
+  return [...(body?.children ?? [])].filter((el) => !el.hasAttribute('hidden'));
+}
+
+function buttonByLabel(root: Element, label: string): HTMLButtonElement | null {
+  return root.querySelector(`button[aria-label="${label}"]`);
+}
+
 afterEach(() => {
   closeIssueDetail();
   resetIssuesDetailLayoutForTests();
+  resetDetailSectionsForTests();
   resetGhAvailableCache();
   resetIssuesGithubForTests();
   setIssuesStateForTests(null);
@@ -84,7 +110,7 @@ afterEach(() => {
 });
 
 describe('issues detail display', () => {
-  test('empty peek is identity + description, not a stack of empty sections', () => {
+  test('empty peek is identity, description, and one row per rail section', () => {
     setupDom();
     seedIssues([
       {
@@ -111,6 +137,10 @@ describe('issues detail display', () => {
 
     assert.equal(sticky.querySelector('.issues-detail__id')?.textContent, 'GET-3');
     assert.equal(
+      sticky.querySelector('.issues-detail__id')?.getAttribute('aria-label'),
+      'Copy issue id GET-3',
+    );
+    assert.equal(
       sticky.querySelector('.issues-detail__close')?.getAttribute('aria-label'),
       'Close issue detail',
     );
@@ -124,41 +154,57 @@ describe('issues detail display', () => {
     assert.ok(sticky.querySelector('.issues-detail__prop[aria-label="Type: Task"]'));
     assert.ok(sticky.querySelector('.issues-detail__prop[aria-haspopup="menu"]'));
     assert.ok(sticky.querySelector('.issues-workflow-menu-wrap'));
+    // Priority is a picker like the others, so it carries a glyph too.
+    assert.ok(sticky.querySelector('.issues-priority-chip .issues-priority-chip__icon'));
+
+    // Three zones: document, links rail, conversation.
+    assert.ok(scroll.querySelector('.issues-detail__doc'));
+    assert.ok(scroll.querySelector('.issues-detail__rail'));
+    assert.ok(scroll.querySelector('.issues-detail__talk'));
 
     const titles = headingTexts(scroll);
     assert.equal(titles.includes('Description'), false);
-    assert.equal(titles.includes('Activity'), false);
-    assert.equal(titles.includes('Plan'), false);
-    assert.equal(titles.includes('Related issues'), false);
-    assert.equal(titles.includes('Code links'), false);
-    assert.equal(titles.includes('Git'), false);
-    assert.equal(titles.includes('GitHub'), false);
-    assert.equal(
-      [...scroll.querySelectorAll('button')].some((btn) => btn.textContent === 'Push to GitHub'),
-      false,
-    );
+    assert.equal(titles.includes('Plan'), false, 'no plan file, no Plan section');
+    assert.equal(titles.includes('Related'), false, 'no refs, no Related section');
+    // Everything else is one labelled row, so nothing is an orphan form control.
+    for (const heading of ['Code links', 'Attachments', 'Git', 'Chats']) {
+      assert.ok(titles.includes(heading), `${heading} row is missing`);
+    }
+
+    // No counts and no bodies for the sections with nothing in them.
+    for (const key of ['code', 'attachments', 'sub-issues', 'chats']) {
+      assert.equal(sectionCount(scroll, key), undefined, `${key} should have no count`);
+      assert.equal(visibleBodyChildren(scroll, key).length, 0, `${key} body should be latent`);
+    }
 
     const copy = scroll.textContent ?? '';
     assert.equal(copy.includes('No code links yet.'), false);
+    assert.equal(copy.includes('No sub-issues yet.'), false);
+    assert.equal(copy.includes('No chats yet.'), false);
     assert.equal(copy.includes('No plan yet.'), false);
     assert.equal(copy.includes('No related issues yet.'), false);
-    assert.equal(copy.includes('No linked branches'), false);
 
-    assert.ok(scroll.querySelector('input[aria-label="Paste code link"]'));
-    assert.ok(
-      [...scroll.querySelectorAll('button')].some((btn) => btn.textContent === 'Attach…'),
-    );
+    // Add affordances live in the header, and the code field waits behind one.
+    assert.ok(buttonByLabel(scroll, 'Add code link'));
+    assert.ok(buttonByLabel(scroll, 'Attach files'));
+    assert.ok(buttonByLabel(scroll, 'Add a sub-issue'));
+    assert.ok(buttonByLabel(scroll, 'Add a chat'));
+    assert.ok(buttonByLabel(scroll, 'Link a commit or URL'));
+
+    const pasteRow = scroll.querySelector('.issues-detail__add-code') as HTMLElement | null;
+    assert.ok(pasteRow);
+    assert.equal(pasteRow.hidden, true, 'the paste field is revealed by +, not always open');
+    buttonByLabel(scroll, 'Add code link')?.click();
+    assert.equal(pasteRow.hidden, false);
+
     assert.ok(
       [...scroll.querySelectorAll('button')].some((btn) => btn.textContent === 'Create branch'),
-    );
-    assert.ok(
-      [...scroll.querySelectorAll('button')].some((btn) => btn.textContent === 'Link…'),
     );
     assert.ok(scroll.querySelector('.issues-detail__section--document'));
     assert.ok(scroll.querySelector('.issues-detail__section--meta'));
   });
 
-  test('filled peek shows headings only for sections that have content', () => {
+  test('filled peek counts what a section holds and folds it away on demand', () => {
     setupDom();
     seedIssues([
       {
@@ -186,8 +232,39 @@ describe('issues detail display', () => {
     const titles = headingTexts(scroll);
     assert.ok(titles.includes('Code links'));
     assert.ok(titles.includes('Plan'));
-    assert.ok(titles.includes('Related issues'));
+    assert.ok(titles.includes('Related'));
     assert.equal(titles.includes('Description'), false);
+
+    assert.equal(sectionCount(scroll, 'code'), '1');
+    assert.equal(sectionCount(scroll, 'related'), '1');
+    assert.equal(sectionCount(scroll, 'attachments'), undefined);
+
+    // A section with content folds, and the fold survives a re-render.
+    const codeLabel = scroll.querySelector(
+      '[data-section="code"] button.issues-detail__sec-label',
+    ) as HTMLButtonElement | null;
+    assert.ok(codeLabel, 'a section with content is collapsible');
+    assert.equal(codeLabel.getAttribute('aria-expanded'), 'true');
+    codeLabel.click();
+    assert.equal(codeLabel.getAttribute('aria-expanded'), 'false');
+    assert.equal(sectionBody(scroll, 'code')?.hidden, true);
+
+    openIssueDetail('GET-4');
+    const repainted = document.querySelector('.issues-detail__scroll');
+    assert.ok(repainted);
+    assert.equal(
+      repainted
+        .querySelector('[data-section="code"] button.issues-detail__sec-label')
+        ?.getAttribute('aria-expanded'),
+      'false',
+      'the fold is remembered across renders',
+    );
+
+    // An empty section has nothing to fold, so its label is not a button.
+    assert.equal(
+      repainted.querySelector('[data-section="attachments"] button.issues-detail__sec-label'),
+      null,
+    );
   });
 
   test('linked GitHub issue lives in Git, not a second GITHUB block', () => {
@@ -368,10 +445,11 @@ describe('issues detail display', () => {
     assert.ok(comment.querySelector('strong'), 'comment markdown is rendered');
     assert.ok(document.querySelector('.issues-activity-row'), 'activity is shown too');
     assert.ok(document.querySelector('.issues-comments__input'), 'a composer is offered');
-    assert.ok(headingTexts(document.body).includes('Comments · 1'));
+    assert.ok(headingTexts(document.body).includes('Comments'));
+    assert.equal(sectionCount(document.body, 'comments'), '1');
   });
 
-  test('an issue with no comments collapses to the composer, no heading', () => {
+  test('an issue with no comments is a labelled Activity row and a composer', () => {
     setupDom();
     seedIssues([
       {
@@ -394,8 +472,9 @@ describe('issues detail display', () => {
     assert.equal(document.querySelector('.issues-comment'), null);
     assert.ok(document.querySelector('.issues-comments__input'));
     const titles = headingTexts(document.body);
-    assert.equal(titles.includes('Activity'), false);
-    assert.equal(titles.some((t) => t.startsWith('Comments')), false);
+    assert.ok(titles.includes('Activity'), 'the composer keeps a name');
+    assert.equal(titles.includes('Comments'), false);
+    assert.equal(sectionCount(document.body, 'comments'), undefined);
   });
 
   test('Chats section lists linked sessions and unlinks without deleting the chat', () => {
@@ -437,14 +516,13 @@ describe('issues detail display', () => {
     const scroll = document.querySelector('.issues-detail__scroll');
     assert.ok(scroll);
     assert.ok(headingTexts(scroll).includes('Chats'));
+    assert.equal(sectionCount(scroll, 'chats'), '2');
     const copy = scroll.textContent ?? '';
     assert.match(copy, /Fix header/);
     assert.match(copy, /Debug/);
     assert.match(copy, /Done/);
     assert.match(copy, /Chat unavailable/);
-    assert.match(copy, /No chats yet\.|New/);
-    assert.ok([...scroll.querySelectorAll('button')].some((btn) => btn.textContent === 'New'));
-    assert.ok([...scroll.querySelectorAll('button')].some((btn) => btn.textContent === 'Existing'));
+    assert.ok(buttonByLabel(scroll, 'Add a chat'));
 
     const removeLive = [...scroll.querySelectorAll('.issues-detail__chat-remove')].find(
       (btn) => btn.getAttribute('aria-label') === 'Remove chat Fix header from this issue',
@@ -456,7 +534,7 @@ describe('issues detail display', () => {
     assert.equal(sessions.chats.some((row) => row.id === 'chat-issue-1'), true);
   });
 
-  test('empty Chats section still shows New and Existing', () => {
+  test('empty Chats section is one row with a + control', () => {
     setupDom();
     seedIssues([
       {
@@ -478,8 +556,9 @@ describe('issues detail display', () => {
     const scroll = document.querySelector('.issues-detail__scroll');
     assert.ok(scroll);
     assert.ok(headingTexts(scroll).includes('Chats'));
-    assert.match(scroll.textContent ?? '', /No chats yet\./);
-    assert.ok([...scroll.querySelectorAll('button')].some((btn) => btn.textContent === 'New'));
-    assert.ok([...scroll.querySelectorAll('button')].some((btn) => btn.textContent === 'Existing'));
+    assert.equal(scroll.textContent?.includes('No chats yet.'), false);
+    assert.equal(sectionCount(scroll, 'chats'), undefined);
+    assert.equal(visibleBodyChildren(scroll, 'chats').length, 0);
+    assert.ok(buttonByLabel(scroll, 'Add a chat'));
   });
 });

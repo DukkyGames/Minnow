@@ -12,7 +12,8 @@ import {
   sessionState,
 } from '../state/sessions';
 import type { Chat, IssueCard } from '../types';
-import { openIssuesContextMenu } from './issues-context-menu';
+import { createIcon } from './icon';
+import { openIssuesContextMenu, type IssuesContextMenuItem } from './issues-context-menu';
 import { canRunIssueWorkflow, runIssueForegroundChat } from '../chat/issues/pipeline';
 
 /** Keep the attach picker a menu, not a search dialog. */
@@ -78,24 +79,6 @@ export function attachExistingIssueChat(issueId: string, chatId: string): void {
   }
   appendIssueLinks(issueId, { chatId });
   refreshOpenPeek();
-}
-
-function openAttachIssueChatMenu(issueId: string, anchor: HTMLElement): void {
-  const issue = findIssueById(issueId);
-  if (!issue) return;
-  const candidates = eligibleIssuePeekChats(issue).slice(0, ATTACH_MENU_CAP);
-  if (candidates.length === 0) return;
-  openIssuesContextMenu({
-    anchor,
-    restoreFocus: anchor,
-    label: 'Attach existing chat',
-    items: candidates.map((chat) => ({
-      id: `attach-chat-${chat.id}`,
-      label: chat.name.trim() || chat.id,
-      hint: chat.id.slice(0, 8),
-      onSelect: () => attachExistingIssueChat(issueId, chat.id),
-    })),
-  });
 }
 
 async function startNewIssueChat(issueId: string): Promise<void> {
@@ -180,13 +163,13 @@ function buildChatRow(issueId: string, row: IssuePeekChatRow): HTMLLIElement {
   if (canUnlink) {
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
-    removeBtn.className = 'issues-btn issues-detail__chat-remove';
-    removeBtn.textContent = 'Remove';
+    removeBtn.className = 'issues-detail__row-remove issues-detail__chat-remove';
+    removeBtn.appendChild(createIcon('close', { size: 13 }));
     const name = row.title;
-    removeBtn.setAttribute(
-      'aria-label',
-      row.kind === 'board' ? `Remove board ${name} from this issue` : `Remove chat ${name} from this issue`,
-    );
+    const removeLabel =
+      row.kind === 'board' ? `Remove board ${name} from this issue` : `Remove chat ${name} from this issue`;
+    removeBtn.setAttribute('aria-label', removeLabel);
+    removeBtn.title = removeLabel;
     removeBtn.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -198,55 +181,64 @@ function buildChatRow(issueId: string, row: IssuePeekChatRow): HTMLLIElement {
   return li;
 }
 
-/** Always-on peek section: list, empty copy, New / Existing. */
+/** Menu behind the section's + control: start a chat, or link one that exists. */
+export function issueChatsMenuItems(issue: IssueCard): IssuesContextMenuItem[] {
+  const canRun = canRunIssueWorkflow(issue);
+  const attachable = eligibleIssuePeekChats(issue);
+  return [
+    {
+      id: 'new-issue-chat',
+      label: 'New chat',
+      hint: canRun ? 'Start a General chat from this issue' : 'Closed issues cannot start a chat',
+      disabled: !canRun,
+      iconClass: 'fi-rr-comment',
+      onSelect: () => {
+        void startNewIssueChat(issue.id);
+      },
+    },
+    {
+      id: 'attach-existing-chat',
+      label: 'Link an existing chat',
+      hint:
+        attachable.length === 0
+          ? 'No other chats in this workspace'
+          : `${attachable.length} available`,
+      disabled: attachable.length === 0,
+      submenu: () =>
+        eligibleIssuePeekChats(issue)
+          .slice(0, ATTACH_MENU_CAP)
+          .map((chat) => ({
+            id: `attach-chat-${chat.id}`,
+            label: chat.name.trim() || chat.id,
+            hint: chat.id.slice(0, 8),
+            onSelect: () => attachExistingIssueChat(issue.id, chat.id),
+          })),
+    },
+  ];
+}
+
+/** Row counts for the peek's Chats summary: how many, and how many are live. */
+export function issueChatsSummary(issue: IssueCard): { total: number; running: number } {
+  const rows = listIssuePeekChatRows(issue, issuePeekChatLookup());
+  return {
+    total: rows.length,
+    running: rows.filter((row) => row.running).length,
+  };
+}
+
+/** Peek section body: linked chat and board rows. Empty renders nothing. */
 export function fillIssueChatsSection(issue: IssueCard, body: HTMLElement): void {
   ensurePeekChatStreamBind();
   peekStreamPaintKey = streamingKeyForIssue(issue.id);
   const rows = listIssuePeekChatRows(issue, issuePeekChatLookup());
+  if (rows.length === 0) return;
 
-  if (rows.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'issues-detail__empty';
-    empty.textContent = 'No chats yet.';
-    body.appendChild(empty);
-  } else {
-    const list = document.createElement('ul');
-    list.className = 'issues-detail__chats-list';
-    for (const row of rows) {
-      list.appendChild(buildChatRow(issue.id, row));
-    }
-    body.appendChild(list);
+  const list = document.createElement('ul');
+  list.className = 'issues-detail__chats-list';
+  for (const row of rows) {
+    list.appendChild(buildChatRow(issue.id, row));
   }
-
-  const addRow = document.createElement('div');
-  addRow.className = 'issues-detail__chats-add';
-
-  const newBtn = document.createElement('button');
-  newBtn.type = 'button';
-  newBtn.className = 'issues-btn';
-  newBtn.textContent = 'New';
-  newBtn.disabled = !canRunIssueWorkflow(issue);
-  newBtn.title = canRunIssueWorkflow(issue)
-    ? 'Start a General chat from this issue'
-    : 'Closed issues cannot start a chat';
-  newBtn.addEventListener('click', () => {
-    void startNewIssueChat(issue.id);
-  });
-
-  const existingBtn = document.createElement('button');
-  existingBtn.type = 'button';
-  existingBtn.className = 'issues-btn';
-  existingBtn.textContent = 'Existing';
-  const attachable = eligibleIssuePeekChats(issue);
-  existingBtn.disabled = attachable.length === 0;
-  existingBtn.title =
-    attachable.length === 0 ? 'No other chats to attach' : 'Attach an existing chat';
-  existingBtn.addEventListener('click', () => {
-    openAttachIssueChatMenu(issue.id, existingBtn);
-  });
-
-  addRow.append(newBtn, existingBtn);
-  body.appendChild(addRow);
+  body.appendChild(list);
 }
 
 let peekStreamPaintKey = '';

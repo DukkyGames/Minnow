@@ -68,14 +68,16 @@ import { renderIssueAttachments } from './issues-attachments-section';
 import { bindIssueDropTarget } from './issue-drop-target';
 import {
   canIssueReceiveSubIssues,
-  openAttachSubIssueMenu,
-  promptCreateSubIssue,
+  subIssueAddMenuItems,
   subIssueMenuItems,
   unparentIssueFromParent,
-  workspaceEligibleSubIssues,
 } from './issues-sub-issues';
 import { listChildIssues } from '../issues/hierarchy';
-import { fillIssueChatsSection } from './issues-chats-section';
+import {
+  fillIssueChatsSection,
+  issueChatsMenuItems,
+  issueChatsSummary,
+} from './issues-chats-section';
 import {
   bindGithubSyncButton,
   buildGithubIssueChip,
@@ -84,10 +86,18 @@ import {
   registerGithubConflictHost,
 } from './issues-github-section';
 import { gitLinkDuplicatesGithubIssue } from '../issues/github-sync-plan';
+import { githubSyncCaption } from '../issues/github-sync-status';
 import { createIssuesLabelsField, isIssuesLabelsFieldFocused } from './issues-labels-field';
 import { appConfirm } from './app-dialog';
 import { executeTool } from '../tools/client';
-import { createIssueStatusChip, createIssueTypeChip, resolveIssueStatusIcon } from '../issues/type-icons';
+import {
+  createIssuePriorityChip,
+  createIssueStatusChip,
+  createIssueTypeChip,
+  resolveIssuePriorityIcon,
+  resolveIssueStatusIcon,
+  resolveIssueTypeIcon,
+} from '../issues/type-icons';
 import {
   sortedPriorities,
   sortedStatuses,
@@ -97,13 +107,19 @@ import { getIssuesTaxonomySync } from '../state/issues-taxonomy-store';
 import { isLocalServerAvailable } from '../tools/config';
 import { createIcon } from './icon';
 import {
+  createDetailIconButton,
+  createDetailRow,
+  createDetailTextButton,
+  type DetailRowSummaryPart,
+} from './issues-detail-section';
+import {
   ensureIssuesPeekLayout,
   isIssueDetailSheetExpanded,
   refreshIssuesPeekLayoutChrome,
   resetIssueDetailSheetOnClose,
   setIssueDetailSheetExpanded,
 } from './issues-detail-layout';
-import { openIssuesContextMenu } from './issues-context-menu';
+import { openIssuesContextMenu, type IssuesContextMenuItem } from './issues-context-menu';
 import type {
   IssueCard,
   IssueCodeRef,
@@ -125,6 +141,24 @@ const gitBusyIds = new Set<string>();
 
 /** Last Git error per issue (survives detail re-render). */
 const gitErrorByIssueId = new Map<string, string>();
+
+/**
+ * Cached `gh` probe. The git menu is built synchronously when it opens, so it
+ * reads this instead of awaiting; the first render primes it and repaints.
+ */
+let ghAvailable: boolean | null = null;
+
+function ghAvailableSync(): boolean {
+  return ghAvailable !== false;
+}
+
+function primeGhAvailable(): void {
+  if (ghAvailable !== null || !isLocalServerAvailable()) return;
+  void detectGhAvailable().then((ok) => {
+    if (ghAvailable === ok) return;
+    ghAvailable = ok;
+  });
+}
 
 let selectedIssueId: string | undefined;
 let detailHost: HTMLElement | null = null;
@@ -342,29 +376,14 @@ function formatTs(ts: number): string {
   }
 }
 
-type DetailSectionOptions = {
-  /** No heading — the description is the page, activity is a caption. */
-  untitled?: boolean;
-  /** One-line add row: heading (if any) sits beside the control. */
-  compact?: boolean;
-  variant?: 'document' | 'meta';
-};
-
-function section(
-  title: string | null,
-  options: DetailSectionOptions = {},
-): { section: HTMLElement; body: HTMLElement } {
+/**
+ * Headless section for the two blocks that carry no label: the description
+ * (it is the page) and the meta footer (it is a caption). Everything else
+ * uses the rail vocabulary in `issues-detail-section.ts`.
+ */
+function section(variant: 'document' | 'meta'): { section: HTMLElement; body: HTMLElement } {
   const sectionEl = document.createElement('section');
-  sectionEl.className = 'issues-detail__section';
-  if (options.compact) sectionEl.classList.add('issues-detail__section--compact');
-  if (options.variant) sectionEl.classList.add(`issues-detail__section--${options.variant}`);
-  if (title && !options.untitled) {
-    const h = document.createElement('h3');
-    h.className = 'issues-detail__section-title';
-    if (options.compact) h.classList.add('issues-detail__section-title--inline');
-    h.textContent = title;
-    sectionEl.appendChild(h);
-  }
+  sectionEl.className = `issues-detail__section issues-detail__section--${variant}`;
   const body = document.createElement('div');
   body.className = 'issues-detail__section-body';
   sectionEl.appendChild(body);
@@ -440,12 +459,7 @@ function createDetailStatusChip(status: IssueStatus): HTMLElement {
 function createDetailPriorityChip(priority: IssuePriority): HTMLElement {
   const taxonomy = getIssuesTaxonomySync();
   const item = taxonomy.priorities.find((entry) => entry.id === priority);
-  const chip = document.createElement('span');
-  chip.className = `issues-priority-chip issues-priority-chip--${priority}`;
-  chip.textContent = item?.label ?? (priority === 'none' ? 'None' : priority);
-  if (item?.color) chip.style.setProperty('--issues-chip-color', item.color);
-  chip.classList.toggle('is-unknown', !item);
-  return chip;
+  return createIssuePriorityChip(priority, item);
 }
 
 /** Input + submit used by code links and git paste rows. */
@@ -466,7 +480,7 @@ function buildAddRow(
 
 /** Description: the WYSIWYG editor over canonical markdown. */
 function buildDescriptionSection(issue: IssueCard): HTMLElement {
-  const descSection = section(null, { untitled: true, variant: 'document' });
+  const descSection = section('document');
   const host = document.createElement('div');
   host.className = 'issues-detail__desc-wrap';
 
@@ -520,9 +534,22 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   const header = document.createElement('header');
   header.className = 'issues-detail__header';
 
-  const idEl = document.createElement('span');
+  // The id is the thing people paste into a commit or a chat; make it one click.
+  const idEl = document.createElement('button');
+  idEl.type = 'button';
   idEl.className = 'issues-detail__id';
   idEl.textContent = issue.id;
+  idEl.title = `Copy ${issue.id}`;
+  idEl.setAttribute('aria-label', `Copy issue id ${issue.id}`);
+  idEl.appendChild(createIcon('copy', { size: 11, className: 'issues-detail__id-copy' }));
+  idEl.addEventListener('click', () => {
+    const clipboard = navigator.clipboard;
+    if (!clipboard?.writeText) return;
+    void clipboard.writeText(issue.id).then(
+      () => showIssuesToast(`Copied ${issue.id}`, 'success'),
+      () => showIssuesToast('Could not copy the issue id', 'error'),
+    );
+  });
 
   const headerActions = document.createElement('div');
   headerActions.className = 'issues-detail__header-actions';
@@ -594,7 +621,11 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
     openDetailPropertyMenu(
       anchor,
       'Type',
-      sortedTypes(taxonomy).map((entry) => ({ id: entry.id, label: entry.label })),
+      sortedTypes(taxonomy).map((entry) => ({
+        id: entry.id,
+        label: entry.label,
+        iconClass: resolveIssueTypeIcon(entry.id, entry),
+      })),
       (id) => updateIssue(issue.id, { type: id as IssueType }),
     );
   });
@@ -621,7 +652,11 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
       openDetailPropertyMenu(
         anchor,
         'Priority',
-        sortedPriorities(taxonomy).map((entry) => ({ id: entry.id, label: entry.label })),
+        sortedPriorities(taxonomy).map((entry) => ({
+          id: entry.id,
+          label: entry.label,
+          iconClass: resolveIssuePriorityIcon(entry.id, entry),
+        })),
         (id) => updateIssue(issue.id, { priority: id as IssuePriority }),
       );
     },
@@ -647,44 +682,42 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   const scroll = document.createElement('div');
   scroll.className = 'issues-detail__scroll';
 
-  const parentLine = buildParentLine(issue);
-  if (parentLine) scroll.appendChild(parentLine);
+  // Three zones, in this DOM order so the docked column reads document →
+  // links → conversation. The expanded sheet re-places them with grid areas:
+  // the rail becomes a right sidebar and the document keeps a readable measure.
+  const doc = document.createElement('div');
+  doc.className = 'issues-detail__doc';
 
-  scroll.appendChild(buildDescriptionSection(issue));
+  const parentLine = buildParentLine(issue);
+  if (parentLine) doc.appendChild(parentLine);
+  doc.appendChild(buildDescriptionSection(issue));
+
+  const rail = document.createElement('div');
+  rail.className = 'issues-detail__rail';
 
   const planPath = inferIssuePlanPath(issue);
-  scroll.appendChild(buildCodeLinksSection(issue, planPath));
-
-  const attachmentCount = issue.attachments?.length ?? 0;
-  const attachmentsSection = section(attachmentCount > 0 ? 'Attachments' : null, {
-    untitled: attachmentCount === 0,
-    compact: attachmentCount === 0,
-  });
-  renderIssueAttachments(attachmentsSection.body, issue, () => refreshIssueDetailIfOpen());
-  scroll.appendChild(attachmentsSection.section);
-
-  if (planPath) {
-    scroll.appendChild(buildPlanSection(issue, planPath));
-  }
-
-  scroll.appendChild(buildGitSection(issue));
+  if (planPath) rail.appendChild(buildPlanSection(issue, planPath));
+  rail.appendChild(buildCodeLinksSection(issue, planPath));
+  rail.appendChild(buildAttachmentsSection(issue));
+  rail.appendChild(buildGitSection(issue));
 
   const reviewSection = buildIssueReviewSection(issue);
-  if (reviewSection) scroll.appendChild(reviewSection);
+  if (reviewSection) rail.appendChild(reviewSection);
 
   const subIssues = buildSubIssuesSection(issue);
-  if (subIssues) scroll.appendChild(subIssues);
-
-  const chats = section('Chats');
-  fillIssueChatsSection(issue, chats.body);
-  scroll.appendChild(chats.section);
+  if (subIssues) rail.appendChild(subIssues);
 
   const related = buildRelatedIssuesSection(issue);
-  if (related) scroll.appendChild(related);
+  if (related) rail.appendChild(related);
 
-  scroll.appendChild(buildCommentsSection(issue));
+  rail.appendChild(buildChatsSection(issue));
 
-  scroll.appendChild(buildActivityFooter(issue));
+  const talk = document.createElement('div');
+  talk.className = 'issues-detail__talk';
+  talk.appendChild(buildCommentsSection(issue));
+  talk.appendChild(buildActivityFooter(issue));
+
+  scroll.append(doc, rail, talk);
 
   panel.appendChild(scroll);
   bindIssueDropTarget(panel, issue.id, () => refreshIssueDetailIfOpen());
@@ -696,24 +729,25 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
 
 // ── Links ────────────────────────────────────────────────────────────────────
 
-function buildCodeAddRow(issueId: string): HTMLElement {
+function buildCodeAddRow(issueId: string, onAdded: () => void): HTMLElement {
   const pasteInput = document.createElement('input');
   pasteInput.type = 'text';
   pasteInput.className = 'issues-search';
-  pasteInput.placeholder = 'Add code link…';
+  pasteInput.placeholder = 'path/to/file.ts:12-34';
   pasteInput.setAttribute('aria-label', 'Paste code link');
-  const addBtn = document.createElement('button');
-  addBtn.type = 'button';
-  addBtn.className = 'issues-btn';
-  addBtn.textContent = 'Add';
+  const addBtn = createDetailTextButton({
+    label: 'Add',
+    icon: 'plus',
+    onClick: () => submitPaste(),
+  });
   const submitPaste = (): void => {
     const value = pasteInput.value.trim();
     if (!value) return;
     void addCodeRefFromPaste(issueId, value).then(() => {
       pasteInput.value = '';
+      onAdded();
     });
   };
-  addBtn.addEventListener('click', submitPaste);
   pasteInput.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
@@ -722,15 +756,54 @@ function buildCodeAddRow(issueId: string): HTMLElement {
   return buildAddRow(pasteInput, addBtn);
 }
 
+/** Trailing remove control shared by code, sub-issue, and chat rows. */
+function buildRowRemove(label: string, onRemove: () => void): HTMLButtonElement {
+  return createDetailIconButton({
+    label,
+    icon: 'close',
+    danger: true,
+    onClick: onRemove,
+    className: 'issues-detail__row-remove',
+  });
+}
+
+/** Last path segment — enough to recognise a file without eating the row. */
+function baseName(path: string): string {
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? path;
+}
+
+/** "one thing" reads as the thing; "many things" reads as a count. */
+function countSummary(items: readonly string[], plural: string): DetailRowSummaryPart[] {
+  if (items.length === 0) return [];
+  if (items.length === 1) return [{ text: items[0]!, mono: true }];
+  return [{ text: `${items.length} ${plural}` }];
+}
+
 function buildCodeLinksSection(issue: IssueCard, planPath: string | undefined): HTMLElement {
   const refs = codeRefsExcludingPlan(issue.codeRefs ?? [], planPath);
-  const empty = refs.length === 0;
-  const codeSection = section(empty ? null : 'Code links', {
-    untitled: empty,
-    compact: empty,
+  let addRow: HTMLElement | null = null;
+
+  const sec = createDetailRow({
+    key: 'code',
+    icon: 'appCode',
+    label: 'Code',
+    summary: countSummary(refs.map((ref) => baseName(ref.path)), 'files'),
+    expandable: refs.length > 0,
+    addLabel: 'Add code link',
+    onAdd: () => {
+      sec.expand();
+      if (!addRow) {
+        addRow = buildCodeAddRow(issue.id, () => refreshIssueDetailIfOpen());
+        sec.body.appendChild(addRow);
+      }
+      addRow.hidden = false;
+      sec.body.hidden = false;
+      addRow.querySelector('input')?.focus();
+    },
   });
 
-  if (!empty) {
+  if (refs.length > 0) {
     const list = document.createElement('div');
     list.className = 'issues-detail__code-list';
     for (const ref of refs) {
@@ -739,13 +812,13 @@ function buildCodeLinksSection(issue: IssueCard, planPath: string | undefined): 
 
       const main = document.createElement('div');
       main.className = 'issues-detail__code-row-main';
-
-      const btn = createCodeRefLinkButton({
-        workspacePath: ref.path,
-        startLine: ref.startLine ?? 1,
-        endLine: ref.endLine ?? ref.startLine ?? 1,
-      });
-      main.appendChild(btn);
+      main.appendChild(
+        createCodeRefLinkButton({
+          workspacePath: ref.path,
+          startLine: ref.startLine ?? 1,
+          endLine: ref.endLine ?? ref.startLine ?? 1,
+        }),
+      );
       if (ref.snippet?.trim()) {
         const snip = document.createElement('pre');
         snip.className = 'issues-detail__snippet';
@@ -753,120 +826,164 @@ function buildCodeLinksSection(issue: IssueCard, planPath: string | undefined): 
         main.appendChild(snip);
       }
       row.appendChild(main);
-
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.className = 'issues-detail__code-remove';
-      remove.setAttribute('aria-label', `Remove link to ${ref.path}`);
-      remove.textContent = '×';
-      remove.addEventListener('click', () => {
-        removeCodeRefFromIssue(issue.id, ref);
-      });
-      row.appendChild(remove);
-
+      row.appendChild(
+        buildRowRemove(`Remove link to ${ref.path}`, () => removeCodeRefFromIssue(issue.id, ref)),
+      );
       list.appendChild(row);
     }
-    codeSection.body.appendChild(list);
+    sec.body.insertBefore(list, sec.body.firstChild);
   }
 
-  codeSection.body.appendChild(buildCodeAddRow(issue.id));
-  return codeSection.section;
+  return sec.section;
+}
+
+/** Attachments: the picker lives in the body, its control on the row. */
+function buildAttachmentsSection(issue: IssueCard): HTMLElement {
+  const attachments = issue.attachments ?? [];
+  let openPicker = (): void => {};
+
+  const sec = createDetailRow({
+    key: 'attachments',
+    icon: 'attach',
+    label: 'Attachments',
+    summary: countSummary(attachments.map((file) => file.name), 'files'),
+    expandable: attachments.length > 0,
+    addLabel: 'Attach files',
+    onAdd: () => {
+      sec.expand();
+      openPicker();
+    },
+  });
+
+  openPicker = renderIssueAttachments(sec.body, issue, () => refreshIssueDetailIfOpen()).openPicker;
+  return sec.section;
 }
 
 function buildPlanSection(issue: IssueCard, planPath: string): HTMLElement {
-  const planSection = section('Plan');
-
-  const planRow = document.createElement('div');
-  planRow.className = 'issues-detail__plan-row';
-
-  const planText = document.createElement('p');
-  planText.className = 'issues-detail__plan-path';
-  planText.textContent = planPath;
-  planRow.appendChild(planText);
-
-  const removePlan = document.createElement('button');
-  removePlan.type = 'button';
-  removePlan.className = 'issues-detail__code-remove';
-  removePlan.setAttribute('aria-label', `Remove plan ${planPath}`);
-  removePlan.textContent = '×';
-  removePlan.addEventListener('click', () => {
-    removePlanFromIssue(issue.id, planPath);
-  });
-  planRow.appendChild(removePlan);
-  planSection.body.appendChild(planRow);
-
-  const planActions = document.createElement('div');
-  planActions.className = 'issues-detail__plan-actions';
-
-  const openPlan = document.createElement('button');
-  openPlan.type = 'button';
-  openPlan.className = 'issues-btn';
-  openPlan.textContent = 'Open plan';
-  openPlan.addEventListener('click', () => {
-    void openIssuePlanInEditor(planPath, issue.workspacePath);
-  });
-  planActions.appendChild(openPlan);
-
   const workflowOk = canRunIssueWorkflow(issue);
   const workflowBusy = workflowBusyIds.has(issue.id) || expandingIds.has(issue.id);
-  const boardBtn = document.createElement('button');
-  boardBtn.type = 'button';
-  boardBtn.className = 'issues-btn';
-  boardBtn.disabled = !workflowOk || workflowBusy;
-  boardBtn.textContent = 'Send to board';
-  boardBtn.title = workflowOk
-    ? 'Launch an Orchestrate board from the issue plan'
-    : 'Issue is closed';
-  boardBtn.addEventListener('click', () => {
-    void runWorkflowAction(issue.id, 'board');
+
+  const sec = createDetailRow({
+    key: 'plan',
+    icon: 'modePlan',
+    label: 'Plan',
+    summary: [{ text: baseName(planPath), mono: true }],
+    addLabel: 'Plan actions',
+    addIcon: 'more',
+    onAdd: (anchor) => {
+      openIssuesContextMenu({
+        anchor,
+        restoreFocus: anchor,
+        label: 'Plan actions',
+        items: [
+          {
+            id: 'open-plan',
+            label: 'Open plan',
+            hint: planPath,
+            iconClass: 'fi-rr-arrow-up-right-from-square',
+            onSelect: () => {
+              void openIssuePlanInEditor(planPath, issue.workspacePath);
+            },
+          },
+          {
+            id: 'plan-to-board',
+            label: 'Send to board',
+            hint: workflowOk ? 'Launch an Orchestrate board from this plan' : 'Issue is closed',
+            disabled: !workflowOk || workflowBusy,
+            iconClass: 'fi-rr-layout-fluid',
+            onSelect: () => {
+              void runWorkflowAction(issue.id, 'board');
+            },
+          },
+          {
+            id: 'plan-unlink',
+            label: 'Unlink plan',
+            hint: 'The file stays on disk',
+            danger: true,
+            separatorBefore: true,
+            onSelect: () => removePlanFromIssue(issue.id, planPath),
+          },
+        ],
+      });
+    },
   });
-  planActions.appendChild(boardBtn);
-  planSection.body.appendChild(planActions);
-  return planSection.section;
+
+  // The row itself opens the plan; the menu carries everything else.
+  sec.row.addEventListener('click', () => {
+    void openIssuePlanInEditor(planPath, issue.workspacePath);
+  });
+  sec.row.title = `Open ${planPath}`;
+  return sec.section;
 }
 
 /**
  * Comments + activity: the only place an agent's reply is readable.
  *
- * Follows the peek contract in `issues-detail-display.md` — an issue with no
- * comments and no activity collapses to the composer row alone, no heading and
- * no restated empty copy.
+ * This is a zone, not a property row — it owns a composer, so it keeps a real
+ * heading and stays open.
  */
 function buildCommentsSection(issue: IssueCard): HTMLElement {
   const count = issueCommentCount(issue);
-  const empty = count === 0 && (issue.activity?.length ?? 0) === 0;
-  const title = count > 0 ? `Comments · ${count}` : 'Activity';
-  const commentsSection = section(empty ? null : title, {
-    untitled: empty,
-    compact: empty,
-  });
-  commentsSection.section.classList.add('issues-detail__section--comments');
-  renderIssueComments(commentsSection.body, issue, () => refreshIssueDetailIfOpen());
-  return commentsSection.section;
+  const sectionEl = document.createElement('section');
+  sectionEl.className = 'issues-detail__section issues-detail__section--comments';
+  sectionEl.dataset.section = 'comments';
+
+  const head = document.createElement('div');
+  head.className = 'issues-detail__zone-head';
+  head.appendChild(createIcon('comment', { size: 14, className: 'issues-detail__row-icon' }));
+  const title = document.createElement('h3');
+  title.className = 'issues-detail__section-title';
+  title.textContent = count > 0 ? 'Comments' : 'Activity';
+  head.appendChild(title);
+  if (count > 0) {
+    const countEl = document.createElement('span');
+    countEl.className = 'issues-detail__row-value';
+    const part = document.createElement('span');
+    part.className = 'issues-detail__row-value-part is-mono';
+    part.textContent = String(count);
+    countEl.appendChild(part);
+    head.appendChild(countEl);
+  }
+  sectionEl.appendChild(head);
+
+  const body = document.createElement('div');
+  body.className = 'issues-detail__section-body';
+  renderIssueComments(body, issue, () => refreshIssueDetailIfOpen());
+  sectionEl.appendChild(body);
+  return sectionEl;
 }
 
 function buildActivityFooter(issue: IssueCard): HTMLElement {
-  const activitySection = section(null, { untitled: true, variant: 'meta' });
+  const activitySection = section('meta');
   const ws = issue.workspacePath || getWorkspacePath();
-  const activity = document.createElement('p');
-  activity.className = 'issues-detail__meta-line';
-  activity.textContent = `Created ${formatTs(issue.createdAt)} · Updated ${formatTs(issue.updatedAt)}`;
-  activitySection.body.appendChild(activity);
-  if (ws) {
-    const workspace = document.createElement('p');
-    workspace.className = 'issues-detail__meta-line';
-    workspace.textContent = ws;
-    activitySection.body.appendChild(workspace);
-  }
+
+  const metaLine = (
+    icon: Parameters<typeof createIcon>[0],
+    text: string,
+    title?: string,
+  ): HTMLElement => {
+    const row = document.createElement('p');
+    row.className = 'issues-detail__meta-line';
+    row.appendChild(createIcon(icon, { size: 12 }));
+    const value = document.createElement('span');
+    value.textContent = text;
+    row.appendChild(value);
+    if (title) row.title = title;
+    return row;
+  };
+
+  activitySection.body.appendChild(
+    metaLine('clock', `Created ${formatTs(issue.createdAt)} \u00b7 Updated ${formatTs(issue.updatedAt)}`),
+  );
+  if (ws) activitySection.body.appendChild(metaLine('folder', ws, ws));
+
   const chatBits: string[] = [];
-  if (issue.investigateRunId) chatBits.push(`run ${issue.investigateRunId.slice(0, 8)}…`);
-  if (issue.planRunId) chatBits.push(`plan ${issue.planRunId.slice(0, 8)}…`);
+  if (issue.investigateRunId) chatBits.push(`run ${issue.investigateRunId.slice(0, 8)}\u2026`);
+  if (issue.planRunId) chatBits.push(`plan ${issue.planRunId.slice(0, 8)}\u2026`);
   if (chatBits.length) {
-    const chats = document.createElement('p');
-    chats.className = 'issues-detail__meta-line';
-    chats.textContent = chatBits.join(' · ');
-    activitySection.body.appendChild(chats);
+    activitySection.body.appendChild(metaLine('appAgentActivity', chatBits.join(' \u00b7 ')));
   }
+
   if (issue.notes?.trim()) {
     const notes = document.createElement('div');
     notes.className = 'issues-detail__notes';
@@ -881,7 +998,25 @@ function buildIssueReviewSection(issue: IssueCard): HTMLElement | null {
   const records = listPrReviewsForIssue(issue.id);
   if (!records.length) return null;
   const record = [...records].sort((a, b) => b.startedAt - a.startedAt)[0]!;
-  const reviewSection = section('Review');
+  const reviewSection = createDetailRow({
+    key: 'review',
+    icon: 'pullRequest',
+    label: 'Review',
+    summary: [
+      { text: `#${record.number}`, mono: true },
+      {
+        text:
+          record.status === 'running' ? 'Running' : record.status === 'failed' ? 'Failed' : 'Done',
+        tone:
+          record.status === 'running'
+            ? 'accent'
+            : record.status === 'failed'
+              ? 'danger'
+              : 'success',
+      },
+    ],
+    expandable: true,
+  });
   renderPrReviewPanel(reviewSection.body, record, {
     showUpdateIssue: true,
     onMerge: () => {
@@ -915,108 +1050,90 @@ function buildIssueReviewSection(issue: IssueCard): HTMLElement | null {
 
 // ── Git ──────────────────────────────────────────────────────────────────────
 
-/** Restrained Git menu + linked chips + commit grep list for the detail panel. */
+/**
+ * Git as one row.
+ *
+ * The old block put Create branch / Create PR / Review PR on screen as three
+ * filled buttons, which made the least important actions the heaviest thing
+ * in the panel. They are all "git, for this issue", so they belong in one
+ * menu; the row itself carries the state that actually matters — the linked
+ * GitHub issue and whether it needs pushing.
+ */
 function buildGitSection(issue: IssueCard): HTMLElement {
   const canSync = githubSyncEnabled();
   const github = issue.github;
   // Same-number GH chips are the GitHub row; keep other git links (PRs, other issues).
   const gitLinks = (issue.gitLinks ?? []).filter((link) => !gitLinkDuplicatesGithubIssue(link, issue));
   const showPush = canSync && !github;
-  const empty = gitLinks.length === 0 && !github && !showPush;
-  const gitSection = section(empty ? null : 'Git', {
-    untitled: empty,
-    compact: empty,
-  });
-  const body = gitSection.body;
   const busy = gitBusyIds.has(issue.id);
+  const reviewing = listPrReviewsForIssue(issue.id).some((row) => row.status === 'running');
   const onGithubChanged = (): void => refreshIssueDetailIfOpen();
+  const storedErr = gitErrorByIssueId.get(issue.id);
+
+  const summary: DetailRowSummaryPart[] = [];
+  if (github) {
+    summary.push({ text: `#${github.number}`, mono: true });
+    const caption = githubSyncCaption(issue);
+    if (caption) {
+      summary.push({ text: caption, tone: caption === 'Needs push' ? 'warning' : undefined });
+    }
+  }
+  if (gitLinks.length > 0) {
+    summary.push({ text: gitLinks.length === 1 ? '1 link' : `${gitLinks.length} links` });
+  }
+  if (storedErr) summary.push({ text: 'Failed', tone: 'danger' });
+
+  const sec = createDetailRow({
+    key: 'git',
+    icon: 'gitBranch',
+    label: 'Git',
+    summary,
+    expandable: summary.length > 0,
+    addLabel: 'Git actions',
+    addIcon: 'more',
+    onAdd: (anchor) => {
+      openIssuesContextMenu({
+        anchor,
+        restoreFocus: anchor,
+        label: 'Git actions',
+        items: gitMenuItems(issue, {
+          busy,
+          reviewing,
+          showPush,
+          canSync,
+          conflictHost,
+          onGithubChanged,
+          onLink: () => {
+            sec.expand();
+            linkFields.hidden = false;
+            shaInput.focus();
+          },
+        }),
+      });
+    },
+  });
+  const body = sec.body;
 
   const conflictHost = document.createElement('div');
   conflictHost.className = 'issues-detail__git-conflict';
 
-  const errEl = document.createElement('p');
-  errEl.className = 'issues-detail__git-error';
-  errEl.setAttribute('role', 'alert');
-  const storedErr = gitErrorByIssueId.get(issue.id);
   if (storedErr) {
-    errEl.hidden = false;
-    errEl.textContent = storedErr;
-  } else {
-    errEl.hidden = true;
+    const errEl = document.createElement('p');
+    errEl.className = 'issues-detail__git-error';
+    errEl.setAttribute('role', 'alert');
+    errEl.appendChild(createIcon('statusFail', { size: 13 }));
+    const errText = document.createElement('span');
+    errText.textContent = storedErr;
+    errEl.appendChild(errText);
+    body.appendChild(errEl);
   }
-
-  const menu = document.createElement('div');
-  menu.className = 'issues-detail__git-menu';
-  menu.setAttribute('role', 'toolbar');
-  menu.setAttribute('aria-label', 'Issue git actions');
-
-  const branchBtn = document.createElement('button');
-  branchBtn.type = 'button';
-  branchBtn.className = 'issues-btn';
-  branchBtn.disabled = busy;
-  branchBtn.textContent = busy ? 'Working…' : 'Create branch';
-  branchBtn.title = 'Create and checkout issue/<id>-<slug>';
-  branchBtn.addEventListener('click', () => {
-    void runGitAction(issue.id, 'branch');
-  });
-
-  const prBtn = document.createElement('button');
-  prBtn.type = 'button';
-  prBtn.className = 'issues-btn';
-  prBtn.disabled = busy;
-  prBtn.hidden = true;
-  prBtn.textContent = busy ? 'Working…' : 'Create PR';
-  prBtn.title = 'Open a pull request with gh from the issue branch';
-  prBtn.addEventListener('click', () => {
-    void runGitAction(issue.id, 'pr');
-  });
-
-  const reviewing = listPrReviewsForIssue(issue.id).some((row) => row.status === 'running');
-  const reviewBtn = document.createElement('button');
-  reviewBtn.type = 'button';
-  reviewBtn.className = 'issues-btn';
-  reviewBtn.hidden = true;
-  reviewBtn.disabled = busy || reviewing;
-  reviewBtn.textContent = reviewing ? 'Reviewing…' : busy ? 'Working…' : 'Review PR';
-  reviewBtn.title = 'Review the linked pull request in a dedicated chat';
-  reviewBtn.addEventListener('click', () => {
-    void runGitAction(issue.id, 'review');
-  });
-
-  const linkToggle = document.createElement('button');
-  linkToggle.type = 'button';
-  linkToggle.className = 'issues-btn issues-detail__git-link-toggle';
-  linkToggle.textContent = 'Link…';
-  linkToggle.setAttribute('aria-expanded', 'false');
-  linkToggle.setAttribute('aria-controls', `issues-git-link-fields-${issue.id}`);
-
-  menu.append(branchBtn, prBtn, reviewBtn, linkToggle);
-  if (showPush) {
-    const pushBtn = document.createElement('button');
-    pushBtn.type = 'button';
-    pushBtn.className = 'issues-btn';
-    pushBtn.textContent = 'Push to GitHub';
-    pushBtn.title = 'Create this issue on GitHub';
-    pushBtn.disabled = busy;
-    bindGithubSyncButton(pushBtn, issue, {
-      idleLabel: 'Push to GitHub',
-      conflictHost,
-      onChanged: onGithubChanged,
-    });
-    menu.appendChild(pushBtn);
-  }
-  body.append(menu, errEl);
 
   if (github || gitLinks.length > 0) {
     const chipList = document.createElement('ul');
     chipList.className = 'issues-detail__git-list';
     if (github) {
       chipList.appendChild(
-        buildGithubIssueChip(issue, {
-          canSync,
-          conflictHost,
-          onChanged: onGithubChanged,
-        }),
+        buildGithubIssueChip(issue, { canSync, conflictHost, onChanged: onGithubChanged }),
       );
     }
     for (const link of gitLinks) {
@@ -1027,31 +1144,27 @@ function buildGitSection(issue: IssueCard): HTMLElement {
   body.appendChild(conflictHost);
   registerGithubConflictHost(issue.id, conflictHost, onGithubChanged);
 
-  const commitsHead = document.createElement('h4');
-  commitsHead.className = 'issues-detail__git-subhead';
-  commitsHead.textContent = 'Commits';
-  commitsHead.hidden = true;
   const commitsHost = document.createElement('div');
   commitsHost.className = 'issues-detail__git-commits';
   commitsHost.hidden = true;
-  body.append(commitsHead, commitsHost);
+  body.appendChild(commitsHost);
 
   const shaInput = document.createElement('input');
   shaInput.type = 'text';
   shaInput.className = 'issues-search';
-  shaInput.placeholder = 'Link commit sha…';
+  shaInput.placeholder = 'Commit sha…';
   shaInput.setAttribute('aria-label', 'Commit sha');
-  const shaBtn = document.createElement('button');
-  shaBtn.type = 'button';
-  shaBtn.className = 'issues-btn';
-  shaBtn.textContent = 'Link commit';
-  shaBtn.disabled = busy;
   const submitSha = (): void => {
     const value = shaInput.value;
     shaInput.value = '';
     void runGitAction(issue.id, 'link-commit', value);
   };
-  shaBtn.addEventListener('click', submitSha);
+  const shaBtn = createDetailTextButton({
+    label: 'Link commit',
+    icon: 'gitCommit',
+    disabled: busy,
+    onClick: () => submitSha(),
+  });
   shaInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -1062,19 +1175,19 @@ function buildGitSection(issue: IssueCard): HTMLElement {
   const urlInput = document.createElement('input');
   urlInput.type = 'url';
   urlInput.className = 'issues-search';
-  urlInput.placeholder = 'Paste GitHub issue or PR URL…';
+  urlInput.placeholder = 'GitHub issue or PR URL…';
   urlInput.setAttribute('aria-label', 'GitHub issue or PR URL');
-  const urlBtn = document.createElement('button');
-  urlBtn.type = 'button';
-  urlBtn.className = 'issues-btn';
-  urlBtn.textContent = 'Link URL';
-  urlBtn.disabled = busy;
   const submitUrl = (): void => {
     const value = urlInput.value;
     urlInput.value = '';
     void runGitAction(issue.id, 'link-url', value);
   };
-  urlBtn.addEventListener('click', submitUrl);
+  const urlBtn = createDetailTextButton({
+    label: 'Link URL',
+    icon: 'link',
+    disabled: busy,
+    onClick: () => submitUrl(),
+  });
   urlInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -1089,40 +1202,17 @@ function buildGitSection(issue: IssueCard): HTMLElement {
   linkFields.append(buildAddRow(shaInput, shaBtn), buildAddRow(urlInput, urlBtn));
   body.appendChild(linkFields);
 
-  linkToggle.addEventListener('click', () => {
-    const next = linkFields.hidden;
-    linkFields.hidden = !next;
-    linkToggle.setAttribute('aria-expanded', next ? 'true' : 'false');
-    if (next) shaInput.focus();
-  });
-
-  if (!isLocalServerAvailable()) {
-    return gitSection.section;
-  }
+  if (!isLocalServerAvailable()) return sec.section;
+  primeGhAvailable();
 
   void (async () => {
-    const hasGh = await detectGhAvailable();
-    if (selectedIssueId !== issue.id) return;
-    if (hasGh) {
-      prBtn.hidden = false;
-      const resolved = await resolveIssuePrNumber(issue);
-      if (selectedIssueId !== issue.id) return;
-      if (resolved) reviewBtn.hidden = false;
-    } else {
-      prBtn.hidden = true;
-      reviewBtn.hidden = true;
-      prBtn.title = 'Install and authenticate GitHub CLI (gh) to create PRs';
-    }
-
     const listed = await listIssueCommits(issue);
     if (selectedIssueId !== issue.id) return;
-    commitsHost.innerHTML = '';
+    commitsHost.replaceChildren();
     if (!listed.ok || listed.commits.length === 0) {
-      commitsHead.hidden = true;
       commitsHost.hidden = true;
       return;
     }
-    commitsHead.hidden = false;
     commitsHost.hidden = false;
     const ul = document.createElement('ul');
     ul.className = 'issues-detail__git-list';
@@ -1132,10 +1222,12 @@ function buildGitSection(issue: IssueCard): HTMLElement {
       btn.type = 'button';
       btn.className = 'issues-detail__git-commit-btn';
       btn.title = 'Open in git panel';
+      btn.appendChild(createIcon('gitCommit', { size: 12 }));
       const shaSpan = document.createElement('span');
       shaSpan.className = 'issues-detail__git-sha';
       shaSpan.textContent = c.sha.slice(0, 7);
       const subSpan = document.createElement('span');
+      subSpan.className = 'issues-detail__git-subject';
       subSpan.textContent = c.subject;
       btn.append(shaSpan, subSpan);
       btn.addEventListener('click', () => {
@@ -1147,7 +1239,90 @@ function buildGitSection(issue: IssueCard): HTMLElement {
     commitsHost.appendChild(ul);
   })();
 
-  return gitSection.section;
+  return sec.section;
+}
+
+interface GitMenuContext {
+  busy: boolean;
+  reviewing: boolean;
+  showPush: boolean;
+  canSync: boolean;
+  conflictHost: HTMLElement;
+  onGithubChanged: () => void;
+  onLink: () => void;
+}
+
+/** Everything git can do to this issue, in one menu. */
+function gitMenuItems(issue: IssueCard, ctx: GitMenuContext): IssuesContextMenuItem[] {
+  const items: IssuesContextMenuItem[] = [
+    {
+      id: 'git-branch',
+      label: 'Create branch',
+      hint: 'issue/<id>-<slug>, checked out',
+      disabled: ctx.busy,
+      iconClass: 'fi-sr-code-branch',
+      onSelect: () => {
+        void runGitAction(issue.id, 'branch');
+      },
+    },
+    {
+      id: 'git-pr',
+      label: 'Create pull request',
+      hint: ghAvailableSync() ? 'Opens a PR with gh from the issue branch' : 'Needs the gh CLI',
+      disabled: ctx.busy || !ghAvailableSync(),
+      iconClass: 'fi-rr-code-pull-request',
+      onSelect: () => {
+        void runGitAction(issue.id, 'pr');
+      },
+    },
+    {
+      id: 'git-review',
+      label: ctx.reviewing ? 'Reviewing…' : 'Review pull request',
+      hint: 'Review the linked PR in its own chat',
+      disabled: ctx.busy || ctx.reviewing || !ghAvailableSync(),
+      iconClass: 'fi-rr-search',
+      onSelect: () => {
+        void runGitAction(issue.id, 'review');
+      },
+    },
+    {
+      id: 'git-link',
+      label: 'Link a commit or URL',
+      separatorBefore: true,
+      iconClass: 'fi-rr-link-alt',
+      onSelect: () => ctx.onLink(),
+    },
+  ];
+
+  if (ctx.showPush) {
+    items.push({
+      id: 'git-push',
+      label: 'Push to GitHub',
+      hint: 'Create this issue on GitHub',
+      disabled: ctx.busy,
+      iconClass: 'fi-rr-cloud-upload',
+      onSelect: () => {
+        void pushIssueToGithub(issue, ctx.conflictHost, ctx.onGithubChanged);
+      },
+    });
+  }
+  return items;
+}
+
+/** Push without a live button: the menu item is the trigger. */
+async function pushIssueToGithub(
+  issue: IssueCard,
+  conflictHost: HTMLElement,
+  onChanged: () => void,
+): Promise<void> {
+  const proxy = document.createElement('button');
+  proxy.type = 'button';
+  bindGithubSyncButton(proxy, issue, {
+    idleLabel: 'Push to GitHub',
+    conflictHost,
+    onChanged,
+  });
+  proxy.click();
 }
 
 const ISSUE_RELATION_LABELS: Record<IssueIssueRef['kind'], string> = {
@@ -1182,55 +1357,50 @@ function buildParentLine(issue: IssueCard): HTMLElement | null {
   return wrap;
 }
 
-/** Parent peek: children list plus New / Existing. Hidden on children (one level). */
+/** Parent peek: children rows plus a + menu. Hidden on children (one level). */
 function buildSubIssuesSection(issue: IssueCard): HTMLElement | null {
   const receive = canIssueReceiveSubIssues(issue.id);
   if (!receive.ok) return null;
 
   const children = listChildIssues(issue.id, listIssues());
-  const subSection = section('Sub-issues');
-  const body = subSection.body;
+  const done = children.filter((child) => child.status === 'done' || child.status === 'canceled');
+  const summary: DetailRowSummaryPart[] =
+    children.length === 0
+      ? []
+      : [
+          { text: `${done.length}/${children.length}`, mono: true },
+          ...(done.length === children.length
+            ? [{ text: 'done', tone: 'success' as const }]
+            : []),
+        ];
 
-  if (children.length === 0) {
-    const empty = document.createElement('p');
-    empty.className = 'issues-detail__empty';
-    empty.textContent = 'No sub-issues yet.';
-    body.appendChild(empty);
-  } else {
+  const sec = createDetailRow({
+    key: 'sub-issues',
+    icon: 'subIssues',
+    label: 'Sub-issues',
+    summary,
+    expandable: children.length > 0,
+    addLabel: 'Add a sub-issue',
+    onAdd: (anchor) => {
+      sec.expand();
+      openIssuesContextMenu({
+        anchor,
+        restoreFocus: anchor,
+        label: 'Add a sub-issue',
+        items: subIssueAddMenuItems(issue.id),
+      });
+    },
+  });
+
+  if (children.length > 0) {
     const list = document.createElement('ul');
     list.className = 'issues-detail__sub-issues-list';
     for (const child of children) {
       list.appendChild(buildSubIssueRow(child));
     }
-    body.appendChild(list);
+    sec.body.appendChild(list);
   }
-
-  const addRow = document.createElement('div');
-  addRow.className = 'issues-detail__sub-issues-add';
-
-  const newBtn = document.createElement('button');
-  newBtn.type = 'button';
-  newBtn.className = 'issues-btn';
-  newBtn.textContent = 'New';
-  newBtn.addEventListener('click', () => {
-    void promptCreateSubIssue(issue.id);
-  });
-
-  const existingBtn = document.createElement('button');
-  existingBtn.type = 'button';
-  existingBtn.className = 'issues-btn';
-  existingBtn.textContent = 'Existing';
-  const attachable = workspaceEligibleSubIssues(issue.id);
-  existingBtn.disabled = attachable.length === 0;
-  existingBtn.title =
-    attachable.length === 0 ? 'No other issues to attach' : 'Attach an existing issue';
-  existingBtn.addEventListener('click', () => {
-    openAttachSubIssueMenu(issue.id, existingBtn);
-  });
-
-  addRow.append(newBtn, existingBtn);
-  body.appendChild(addRow);
-  return subSection.section;
+  return sec.section;
 }
 
 /** One child row: open the card, or unparent it. */
@@ -1242,6 +1412,14 @@ function buildSubIssueRow(child: IssueCard): HTMLLIElement {
   openBtn.type = 'button';
   openBtn.className = 'issues-detail__sub-issue-open';
   openBtn.title = `Open ${child.id}`;
+
+  const taxonomy = getIssuesTaxonomySync();
+  openBtn.appendChild(
+    createIssueTypeChip(
+      child.type,
+      taxonomy.types.find((entry) => entry.id === child.type),
+    ),
+  );
 
   const idEl = document.createElement('span');
   idEl.className = 'issues-detail__sub-issue-id';
@@ -1260,19 +1438,45 @@ function buildSubIssueRow(child: IssueCard): HTMLLIElement {
     void import('./issues-page').then((m) => m.setIssuesRouteHash(`#/app/issues/${child.id}`));
   });
 
-  const removeBtn = document.createElement('button');
-  removeBtn.type = 'button';
-  removeBtn.className = 'issues-btn issues-detail__sub-issue-remove';
-  removeBtn.textContent = 'Remove';
-  removeBtn.setAttribute('aria-label', `Remove ${child.id} from parent`);
-  removeBtn.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    unparentIssueFromParent(child.id);
-  });
-
-  li.append(openBtn, removeBtn);
+  li.append(
+    openBtn,
+    buildRowRemove(`Remove ${child.id} from parent`, () => unparentIssueFromParent(child.id)),
+  );
   return li;
+}
+
+/** Linked sessions and boards, with a + menu for new or existing chats. */
+function buildChatsSection(issue: IssueCard): HTMLElement {
+  const stats = issueChatsSummary(issue);
+  const summary: DetailRowSummaryPart[] =
+    stats.total === 0
+      ? []
+      : [
+          { text: String(stats.total), mono: true },
+          ...(stats.running > 0
+            ? [{ text: `${stats.running} running`, tone: 'accent' as const }]
+            : []),
+        ];
+
+  const sec = createDetailRow({
+    key: 'chats',
+    icon: 'appChat',
+    label: 'Chats',
+    summary,
+    expandable: stats.total > 0,
+    addLabel: 'Add a chat',
+    onAdd: (anchor) => {
+      sec.expand();
+      openIssuesContextMenu({
+        anchor,
+        restoreFocus: anchor,
+        label: 'Add a chat',
+        items: issueChatsMenuItems(issue),
+      });
+    },
+  });
+  fillIssueChatsSection(issue, sec.body);
+  return sec.section;
 }
 
 /** Related issue chips with deep links to other cards. */
@@ -1280,14 +1484,20 @@ function buildRelatedIssuesSection(issue: IssueCard): HTMLElement | null {
   const refs = issue.issueRefs ?? [];
   if (refs.length === 0) return null;
 
-  const relatedSection = section('Related issues');
+  const sec = createDetailRow({
+    key: 'related',
+    icon: 'link',
+    label: 'Related',
+    summary: [{ text: String(refs.length), mono: true }],
+    expandable: true,
+  });
   const list = document.createElement('ul');
   list.className = 'issues-detail__related-list';
   for (const ref of refs) {
     list.appendChild(buildRelatedIssueChip(ref));
   }
-  relatedSection.body.appendChild(list);
-  return relatedSection.section;
+  sec.body.appendChild(list);
+  return sec.section;
 }
 
 /** One clickable related-issue chip. */
@@ -1300,8 +1510,23 @@ function buildRelatedIssueChip(ref: IssueIssueRef): HTMLLIElement {
   btn.className = 'issues-detail__related-chip-btn';
   const target = findIssueById(ref.issueId);
   const kindLabel = ISSUE_RELATION_LABELS[ref.kind] ?? ref.kind;
-  const titleBit = target?.title?.trim() ? ` · ${target.title.trim()}` : '';
-  btn.textContent = `${kindLabel} · ${ref.issueId}${titleBit}`;
+
+  const kindEl = document.createElement('span');
+  kindEl.className = 'issues-detail__related-kind';
+  kindEl.textContent = kindLabel;
+
+  const idEl = document.createElement('span');
+  idEl.className = 'issues-detail__related-id';
+  idEl.textContent = ref.issueId;
+
+  btn.append(kindEl, idEl);
+  const title = target?.title?.trim();
+  if (title) {
+    const titleEl = document.createElement('span');
+    titleEl.className = 'issues-detail__related-title';
+    titleEl.textContent = title;
+    btn.appendChild(titleEl);
+  }
   btn.title = `Open ${ref.issueId}`;
   btn.addEventListener('click', () => {
     openIssueDetail(ref.issueId);
@@ -1457,19 +1682,29 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
         });
       }
     }
-    chip.textContent = activity;
+    chip.appendChild(
+      createIcon(activityTarget ? 'statusRunning' : 'statusPending', {
+        size: 11,
+        className: 'issues-detail__activity-chip-icon',
+      }),
+    );
+    const activityText = document.createElement('span');
+    activityText.textContent = activity;
+    chip.appendChild(activityText);
     primary.appendChild(chip);
   }
 
   if (canExpandIssueWithAgent(issue)) {
-    const expandBtn = document.createElement('button');
-    expandBtn.type = 'button';
-    expandBtn.className = 'issues-btn issues-btn--primary';
-    expandBtn.disabled = expandingIds.has(issue.id);
-    expandBtn.textContent = expandingIds.has(issue.id) ? 'Expanding with agent…' : 'Expand with agent';
-    expandBtn.title = 'Research the workspace and fill this triage note with the issue-writer agent';
-    expandBtn.addEventListener('click', () => {
-      void startExpand(issue.id);
+    const busyExpand = expandingIds.has(issue.id);
+    const expandBtn = createDetailTextButton({
+      label: busyExpand ? 'Expanding…' : 'Expand with agent',
+      icon: 'sparkles',
+      primary: true,
+      disabled: busyExpand,
+      title: 'Research the workspace and fill this triage note with the issue-writer agent',
+      onClick: () => {
+        void startExpand(issue.id);
+      },
     });
     primary.appendChild(expandBtn);
   }
@@ -1500,6 +1735,7 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
     createIssuesWorkflowDropdown({
       label: 'Send to chat',
       ariaLabel: 'Send issue to chat — choose mode',
+      icon: 'appChat',
       disabled: !workflowOk || busy,
       primary: true,
       items: foregroundItems,
@@ -1528,6 +1764,7 @@ function buildWorkflowToolbar(issue: IssueCard): HTMLElement {
     createIssuesWorkflowDropdown({
       label: 'Send to background',
       ariaLabel: 'Send issue to background chat — choose mode',
+      icon: 'appAgentActivity',
       disabled: !workflowOk || busy,
       items: backgroundItems,
     }),

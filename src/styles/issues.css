@@ -2024,7 +2024,79 @@
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 8px 14px 20px;
+  padding: 8px 14px 24px;
+}
+
+/*
+ * Three zones. Docked they stack; expanded they become a document column and a
+ * links sidebar, so the description keeps a readable measure at 1100px wide.
+ */
+/*
+ * The description takes the leftover height: a short issue then reads as a
+ * document with room to write in, not as a panel that stops halfway down.
+ */
+.issues-detail__doc {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.issues-detail__doc > .issues-detail__section--document {
+  flex: 1 0 auto;
+}
+
+.issues-detail__doc .issues-detail__section-body,
+.issues-detail__doc .issues-detail__desc-wrap,
+.issues-detail__doc .mn-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
+}
+
+.issues-detail__rail {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0 10px;
+  border-top: 1px solid var(--mn-border);
+}
+
+.issues-detail__talk {
+  min-width: 0;
+}
+
+.issues-shell.is-detail-expanded .issues-detail__scroll {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-rows: auto auto 1fr;
+  column-gap: 40px;
+  align-items: start;
+  padding: 12px 28px 32px;
+}
+
+.issues-shell.is-detail-expanded .issues-detail__doc {
+  grid-area: 1 / 1;
+  max-width: 76ch;
+}
+
+.issues-shell.is-detail-expanded .issues-detail__talk {
+  grid-area: 2 / 1;
+  max-width: 76ch;
+}
+
+/* Grid items no longer stack, so the document keeps its own height here. */
+.issues-shell.is-detail-expanded .issues-detail__doc > .issues-detail__section--document {
+  flex: 0 0 auto;
+}
+
+/* Sidebar rail: its own hairline is the left edge, not a top rule. */
+.issues-shell.is-detail-expanded .issues-detail__rail {
+  grid-area: 1 / 2 / span 3 / 3;
+  position: sticky;
+  top: 0;
+  padding: 2px 0 0 28px;
+  border-top: none;
+  border-left: 1px solid var(--mn-border);
 }
 
 .issues-detail__header {
@@ -2072,10 +2144,44 @@
 }
 
 .issues-detail__id {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: -6px;
+  padding: 3px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
   font-weight: 600;
   color: var(--mn-fg-muted);
+  cursor: pointer;
+}
+
+.issues-detail__id-copy {
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .issues-detail__id:hover {
+    color: var(--mn-fg);
+    background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
+  }
+
+  .issues-detail__id:hover .issues-detail__id-copy {
+    opacity: 0.75;
+  }
+}
+
+.issues-detail__id:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.issues-detail__id:focus-visible .issues-detail__id-copy {
+  opacity: 0.75;
 }
 
 .issues-detail__title {
@@ -2279,6 +2385,16 @@
   opacity: 0.72;
 }
 
+.issues-workflow-menu__icon {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.issues-detail__activity-chip-icon {
+  flex: none;
+  opacity: 0.8;
+}
+
 .issues-workflow-menu {
   position: fixed;
   z-index: 1200;
@@ -2334,6 +2450,9 @@
 }
 
 .issues-detail__activity-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10px;
   font-weight: 600;
@@ -2373,40 +2492,276 @@ button.issues-detail__activity-chip {
   border-top: 1px solid var(--mn-border);
 }
 
+/*
+ * Property list.
+ *
+ * One row per thing the issue can hold: glyph, name, the state it holds, and
+ * a trailing control. Rows sit flush so the block reads as a single object;
+ * the hairline above the rail is the only rule. An empty row still shows an
+ * "Add" hint on the right, so it reads as a field rather than a dead label.
+ */
+.issues-detail__section--rail {
+  gap: 0;
+  padding: 0;
+  border-top: none;
+}
+
+.issues-detail__row {
+  display: grid;
+  grid-template-columns: 16px auto minmax(0, auto) 26px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  width: calc(100% + 16px);
+  min-height: 32px;
+  margin: 0 -8px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  color: var(--mn-fg-muted);
+}
+
+button.issues-detail__row {
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  button.issues-detail__row:hover {
+    background: color-mix(in oklch, var(--mn-fg) 5%, transparent);
+  }
+
+  button.issues-detail__row:hover .issues-detail__section-title,
+  button.issues-detail__row:hover .issues-detail__row-icon {
+    color: var(--mn-fg);
+  }
+}
+
+button.issues-detail__row:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+}
+
+.issues-detail__row-icon {
+  color: var(--mn-fg-muted);
+  opacity: 0.85;
+}
+
+/*
+ * Sentence case, not a micro-caps heading: these are field names in a list,
+ * and uppercase 11px made them read as inert section labels.
+ */
+.issues-detail__row .issues-detail__section-title,
+.issues-detail__zone-head .issues-detail__section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--mn-fg-muted);
+  white-space: nowrap;
+}
+
+.issues-detail__row-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--mn-fg);
+  overflow: hidden;
+}
+
+.issues-detail__row-value-part {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issues-detail__row-value-part.is-mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.issues-detail__row-value-part.is-accent {
+  color: var(--mn-accent);
+}
+
+.issues-detail__row-value-part.is-success {
+  color: var(--mn-success);
+}
+
+.issues-detail__row-value-part.is-warning {
+  color: var(--mn-warning);
+}
+
+.issues-detail__row-value-part.is-danger {
+  color: var(--mn-danger-ink, var(--mn-danger));
+}
+
+.issues-detail__row-trailing {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* No value, so the control takes the value's slot and hugs the name. */
+.issues-detail__row:not(.is-filled) .issues-detail__row-trailing {
+  grid-column: 3;
+}
+
+.issues-detail__sec-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-subtle, var(--mn-fg-muted));
+  cursor: pointer;
+  opacity: 0.6;
+  transition: color 120ms ease-out, background 120ms ease-out, opacity 120ms ease-out;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .issues-detail__row:hover .issues-detail__sec-btn,
+  .issues-detail__sec-btn:hover:not(:disabled) {
+    opacity: 1;
+  }
+
+  .issues-detail__sec-btn:hover:not(:disabled) {
+    color: var(--mn-fg);
+    background: color-mix(in oklch, var(--mn-fg) 10%, transparent);
+  }
+
+  .issues-detail__sec-btn--danger:hover:not(:disabled) {
+    color: var(--mn-danger-ink, var(--mn-danger));
+    background: color-mix(in oklch, var(--mn-danger) 12%, transparent);
+  }
+}
+
+.issues-detail__sec-btn:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
+}
+
+.issues-detail__sec-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+@media (pointer: coarse) {
+  .issues-detail__sec-btn {
+    width: 36px;
+    height: 36px;
+    opacity: 1;
+  }
+
+  .issues-detail__row {
+    grid-template-columns: 16px auto minmax(0, auto) 36px minmax(0, 1fr);
+    min-height: 44px;
+  }
+
+  .issues-detail__icon-btn {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* Detail hangs under the row, aligned with the name. */
+.issues-detail__section--rail > .issues-detail__section-body {
+  padding: 2px 0 10px 25px;
+}
+
+.issues-detail__section--rail > .issues-detail__section-body:empty {
+  display: none;
+}
+
+/* The comments zone keeps a heading because it owns a composer. */
+.issues-detail__zone-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 30px;
+  color: var(--mn-fg-muted);
+}
+
+.issues-detail__zone-head .issues-detail__row-value {
+  justify-self: auto;
+}
+
+/* Labelled action with a leading glyph — inside expanded row detail only. */
+.issues-detail__act {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  padding: 5px 9px;
+  min-height: 30px;
+}
+
+.issues-detail__act-icon {
+  flex: none;
+  opacity: 0.7;
+}
+
+.issues-btn--primary .issues-detail__act-icon {
+  opacity: 0.85;
+}
+
+/* Trailing remove on a code, sub-issue, or chat row. */
+.issues-detail__row-remove {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+  transition: opacity 120ms ease-out, color 120ms ease-out, background 120ms ease-out;
+}
+
+.issues-detail__code-row:hover .issues-detail__row-remove,
+.issues-detail__code-row:focus-within .issues-detail__row-remove,
+.issues-detail__sub-issue:hover .issues-detail__row-remove,
+.issues-detail__sub-issue:focus-within .issues-detail__row-remove,
+.issues-detail__chat:hover .issues-detail__row-remove,
+.issues-detail__chat:focus-within .issues-detail__row-remove,
+.issues-detail__row-remove:focus-visible {
+  opacity: 1;
+}
+
+@media (pointer: coarse) {
+  .issues-detail__row-remove {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .issues-detail__sec-btn,
+  .issues-detail__row-hint,
+  .issues-detail__row-remove {
+    transition: none;
+  }
+}
+
 .issues-detail__section--document {
   border-top: none;
-  padding-top: 4px;
-  padding-bottom: 16px;
+  padding-top: 6px;
+  padding-bottom: 18px;
   gap: 0;
 }
 
-.issues-detail__section--compact {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 8px;
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
-
-.issues-detail__scroll > .issues-detail__section--compact + .issues-detail__section--compact {
-  border-top: none;
-  padding-top: 8px;
-}
-
-.issues-detail__section--compact .issues-detail__section-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.issues-detail__section--compact .issues-detail__add-code,
-.issues-detail__section--compact .issues-detail__git-menu {
-  margin: 0;
-}
-
 .issues-detail__section--meta {
-  margin-top: 8px;
+  margin-top: 4px;
   padding-top: 12px;
+  padding-bottom: 0;
+}
+
+.issues-detail__section--meta .issues-detail__section-body {
+  gap: 4px;
 }
 
 /* ── Comments + activity timeline ──────────────────────────────────────── */
@@ -2667,15 +3022,16 @@ button.issues-detail__activity-chip {
   color: var(--mn-fg-muted);
 }
 
-.issues-detail__section-title--inline {
-  flex-shrink: 0;
-}
-
 .issues-detail__section-body {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* The class rule above outranks the UA [hidden] rule, so restate it. */
+.issues-detail__section-body[hidden] {
+  display: none;
 }
 
 .issues-detail__section-body .issues-btn {
@@ -2708,26 +3064,7 @@ button.issues-detail__activity-chip {
   display: none;
 }
 
-.issues-detail__plan-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.issues-detail__plan-actions .issues-btn {
-  margin-top: 0;
-}
-
-.issues-detail__plan-row {
-  display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 4px;
-}
-
 .issues-detail__plan-path {
-  flex: 1;
   min-width: 0;
   margin: 0;
   font-size: 12px;
@@ -2735,11 +3072,6 @@ button.issues-detail__activity-chip {
   font-family: var(--font-mono, ui-monospace, monospace);
   line-height: 1.45;
   word-break: break-all;
-}
-
-.issues-detail__plan-row:hover .issues-detail__code-remove,
-.issues-detail__plan-row:focus-within .issues-detail__code-remove {
-  opacity: 1;
 }
 
 .issues-detail__desc-wrap {
@@ -2791,19 +3123,28 @@ button.issues-detail__activity-chip {
   color: var(--mn-fg);
 }
 
-.issues-detail__empty {
+.issues-detail__meta-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   margin: 0;
-  font-size: 13px;
-  color: var(--mn-fg-muted);
-  line-height: 1.45;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--mn-fg-subtle, var(--mn-fg-muted));
+  font-family: var(--font-mono, ui-monospace, monospace);
+  line-height: 1.5;
 }
 
-.issues-detail__meta-line {
-  margin: 0;
-  font-size: 12px;
-  color: var(--mn-fg-muted);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  line-height: 1.45;
+.issues-detail__meta-line .icon-svg {
+  flex: none;
+  opacity: 0.7;
+}
+
+.issues-detail__meta-line > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .issues-detail__code-list {
@@ -2817,6 +3158,9 @@ button.issues-detail__activity-chip {
   flex-direction: row;
   align-items: flex-start;
   gap: 4px;
+  margin: 0 -6px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
 }
 
 .issues-detail__code-row-main {
@@ -2826,41 +3170,6 @@ button.issues-detail__activity-chip {
   flex-direction: column;
   gap: 4px;
   align-items: flex-start;
-}
-
-.issues-detail__code-remove {
-  flex: none;
-  width: 22px;
-  height: 22px;
-  margin-top: 2px;
-  padding: 0;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--mn-fg-muted);
-  font-size: 15px;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 120ms ease-out, color 120ms ease-out, background 120ms ease-out;
-}
-
-.issues-detail__code-row:hover .issues-detail__code-remove,
-.issues-detail__code-row:focus-within .issues-detail__code-remove {
-  opacity: 1;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .issues-detail__code-remove:hover {
-    background: color-mix(in oklch, var(--mn-danger) 14%, transparent);
-    color: var(--mn-danger-ink, var(--mn-fg));
-  }
-}
-
-.issues-detail__code-remove:focus-visible {
-  opacity: 1;
-  outline: 2px solid var(--mn-focus-ring, var(--mn-accent));
-  outline-offset: 1px;
 }
 
 .issues-detail__snippet {
@@ -2883,6 +3192,11 @@ button.issues-detail__activity-chip {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+
+/* The class beats the UA [hidden] rule, so restate it for the latent field. */
+.issues-detail__add-code[hidden] {
+  display: none;
 }
 
 .issues-detail__add-code .issues-search {
@@ -2920,10 +3234,30 @@ button.issues-detail__activity-chip {
 }
 
 .issues-detail__git-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
   margin: 0;
   font-size: 12px;
-  color: var(--mn-danger);
+  color: var(--mn-danger-ink, var(--mn-danger));
   white-space: pre-wrap;
+}
+
+.issues-detail__git-error .icon-svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.issues-detail__git-chip-icon {
+  flex: none;
+  color: var(--mn-fg-subtle, var(--mn-fg-muted));
+}
+
+.issues-detail__git-subject {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .issues-detail__git-subhead {
@@ -2944,6 +3278,9 @@ button.issues-detail__activity-chip {
 }
 
 .issues-detail__git-chip-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 12px;
   color: var(--mn-fg);
@@ -3004,22 +3341,57 @@ button.issues-detail__activity-chip {
 
 .issues-detail__related-chip-btn {
   appearance: none;
-  border: 1px solid var(--mn-border);
-  border-radius: 999px;
-  background: var(--mn-bg-subtle);
-  color: var(--mn-accent);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 12px;
-  line-height: 1.3;
-  padding: 4px 10px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 4px 6px;
+  margin-left: -6px;
   cursor: pointer;
   text-align: left;
-  max-width: 100%;
-  word-break: break-word;
 }
 
-.issues-detail__related-chip-btn:hover {
-  background: var(--mn-bg-hover);
+.issues-detail__related-kind {
+  flex: none;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mn-fg-subtle, var(--mn-fg-muted));
+}
+
+.issues-detail__related-id {
+  flex: none;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--mn-accent);
+}
+
+.issues-detail__related-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mn-fg-muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .issues-detail__related-chip-btn:hover {
+    background: color-mix(in oklch, var(--mn-fg) 6%, transparent);
+  }
+}
+
+.issues-detail__related-chip-btn:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: -2px;
 }
 
 .issues-detail__parent-line {
@@ -3063,8 +3435,23 @@ button.issues-detail__activity-chip {
 .issues-detail__sub-issue {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
+  margin: 0 -6px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+}
+
+.issues-detail__sub-issue .issues-type-chip {
+  flex: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .issues-detail__sub-issue:hover,
+  .issues-detail__chat:hover,
+  .issues-detail__code-row:hover {
+    background: color-mix(in oklch, var(--mn-fg) 4%, transparent);
+  }
 }
 
 .issues-detail__sub-issue-open {
@@ -3116,20 +3503,6 @@ button.issues-detail__activity-chip {
   padding: 1px 6px;
 }
 
-.issues-detail__sub-issues-add {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.issues-detail__sub-issues-add .issues-btn {
-  margin-top: 0;
-  font-size: 12px;
-  padding: 6px 10px;
-  min-height: 32px;
-}
-
 .issues-detail__chats-list {
   margin: 0;
   padding: 0;
@@ -3142,8 +3515,11 @@ button.issues-detail__activity-chip {
 .issues-detail__chat {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
+  margin: 0 -6px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
 }
 
 .issues-detail__chat-open {
@@ -3203,20 +3579,6 @@ button.issues-detail__activity-chip {
 .issues-detail__chat-status.is-running {
   color: var(--mn-accent);
   font-weight: 600;
-}
-
-.issues-detail__chats-add {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.issues-detail__chats-add .issues-btn {
-  margin-top: 0;
-  font-size: 12px;
-  padding: 6px 10px;
-  min-height: 32px;
 }
 
 .issues-detail__git-commit-btn {
