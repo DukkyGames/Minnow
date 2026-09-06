@@ -878,6 +878,35 @@
   font-weight: 500;
 }
 
+.issues-row__comments {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
+  vertical-align: 1px;
+  color: var(--mn-fg-muted);
+  background: var(--mn-bg-subtle, var(--mn-bg));
+  border: 1px solid var(--mn-border);
+}
+
+.issues-row__comments::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.issues-row__comments.is-agent {
+  color: var(--mn-accent);
+  border-color: color-mix(in oklch, var(--mn-accent) 40%, var(--mn-border));
+  background: color-mix(in oklch, var(--mn-accent) 10%, transparent);
+}
+
 .issues-row__updated {
   font-size: 12px;
   color: var(--mn-fg-muted);
@@ -1849,6 +1878,255 @@ button.issues-detail__activity-chip {
   padding-top: 12px;
 }
 
+/* ── Comments + activity timeline ──────────────────────────────────────── */
+
+.issues-detail__section--comments {
+  gap: 10px;
+}
+
+.issues-comments__timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.issues-comments__empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.issues-comment {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.issues-comment__avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--mn-fg-muted);
+  background: var(--mn-bg-subtle, var(--mn-bg));
+  border: 1px solid var(--mn-border);
+}
+
+.issues-comment--agent .issues-comment__avatar {
+  color: var(--mn-accent);
+  border-color: color-mix(in oklch, var(--mn-accent) 40%, var(--mn-border));
+  background: color-mix(in oklch, var(--mn-accent) 10%, transparent);
+}
+
+.issues-comment__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg-subtle, var(--mn-bg));
+}
+
+.issues-comment--agent .issues-comment__main {
+  border-color: color-mix(in oklch, var(--mn-accent) 26%, var(--mn-border));
+}
+
+.issues-comment__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.issues-comment__author {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mn-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issues-comment__badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 999px;
+  color: var(--mn-accent);
+  background: color-mix(in oklch, var(--mn-accent) 12%, transparent);
+}
+
+.issues-comment__time {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+}
+
+.issues-comment__delete {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--mn-fg-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.issues-comment:hover .issues-comment__delete,
+.issues-comment__delete:focus-visible {
+  opacity: 1;
+}
+
+.issues-comment__delete:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+.issues-comment__body {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--mn-fg);
+  overflow-wrap: anywhere;
+}
+
+.issues-comment__body > * {
+  margin: 0 0 6px;
+}
+
+.issues-comment__body > :last-child {
+  margin-bottom: 0;
+}
+
+.issues-comment__body h1,
+.issues-comment__body h2,
+.issues-comment__body h3,
+.issues-comment__body h4,
+.issues-comment__body h5,
+.issues-comment__body h6 {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.issues-comment__body ul,
+.issues-comment__body ol {
+  padding-left: 18px;
+}
+
+.issues-comment__body blockquote {
+  padding-left: 8px;
+  border-left: 2px solid var(--mn-border);
+  color: var(--mn-fg-muted);
+}
+
+.issues-comment__code {
+  margin: 0 0 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--mn-code-bg, var(--mn-bg));
+  font-family: var(--mn-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.issues-comment__tasks {
+  list-style: none;
+  padding-left: 0;
+}
+
+.issues-activity-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-left: 8px;
+  font-size: 12px;
+  color: var(--mn-fg-muted);
+}
+
+.issues-activity-row__dot {
+  flex-shrink: 0;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--mn-border-strong, var(--mn-border));
+  transform: translateY(-2px);
+}
+
+.issues-activity-row__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issues-activity-row__time {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.issues-comments__composer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.issues-comments__input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 56px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--mn-fg);
+  background: var(--mn-bg);
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+}
+
+.issues-comments__input:focus-visible {
+  outline: none;
+  border-color: var(--mn-accent);
+  box-shadow: 0 0 0 2px var(--mn-focus-ring, color-mix(in oklch, var(--mn-accent) 30%, transparent));
+}
+
+.issues-comments__composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.issues-comments__hint {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--mn-fg-muted);
+}
+
+.issues-comments__composer .issues-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .issues-detail__section-title {
   margin: 0;
   font-size: 11px;
@@ -2221,6 +2499,12 @@ button.issues-detail__activity-chip {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* `display` on the class outranks the UA `[hidden]` rule, so the Link…
+   disclosure has to opt back out explicitly or it never closes. */
+.issues-detail__git-link-fields[hidden] {
+  display: none;
 }
 
 .issues-detail__git-link-fields .issues-detail__add-code {

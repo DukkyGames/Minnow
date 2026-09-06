@@ -1206,6 +1206,21 @@ function buildIssueRow(
   title.textContent = issue.title;
   title.title = issue.title;
 
+  // Comments are the only way an agent reports back in prose; without a mark on
+  // the row there is nothing to tell the user a reply is waiting inside.
+  const commentCount = issue.comments?.length ?? 0;
+  if (commentCount > 0) {
+    const badge = document.createElement('span');
+    badge.className = 'issues-row__comments';
+    badge.textContent = String(commentCount);
+    badge.title = commentCount === 1 ? '1 comment' : `${commentCount} comments`;
+    if (issue.comments?.some((comment) => comment.authorKind === 'agent')) {
+      badge.classList.add('is-agent');
+    }
+    title.appendChild(document.createTextNode(' '));
+    title.appendChild(badge);
+  }
+
   const status = createStatusChip(issue.status);
   status.className = `${status.className} issues-row__status`;
   bindCellMenu(status, (anchor) => openStatusMenu(anchor, issue));

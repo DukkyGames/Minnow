@@ -56,6 +56,11 @@ import { renderPrReviewPanel } from './pr-review-panel';
 import { switchChat } from './sidebar';
 import { createCodeRefLinkButton } from './code-ref-link';
 import { createIssueEditor, type IssueEditorHandle } from './issue-editor';
+import {
+  isIssueCommentComposerFocused,
+  issueCommentCount,
+  renderIssueComments,
+} from './issues-comments-section';
 import { collectInlineRefs } from '../issues/markdown-inline';
 import { codeRefsExcludingPlan, inferIssuePlanPath } from '../issues/plan-attach';
 import { renderIssueAttachments } from './issues-attachments-section';
@@ -141,6 +146,7 @@ export function isIssuesDetailEditing(): boolean {
     return false;
   }
   if (isIssuesLabelsFieldFocused()) return true;
+  if (isIssueCommentComposerFocused()) return true;
   const el = active as HTMLElement;
   return Boolean(
     el.closest('.issues-detail__title') ||
@@ -625,6 +631,8 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   const related = buildRelatedIssuesSection(issue);
   if (related) scroll.appendChild(related);
 
+  scroll.appendChild(buildCommentsSection(issue));
+
   scroll.appendChild(buildActivityFooter(issue));
 
   panel.appendChild(scroll);
@@ -764,6 +772,26 @@ function buildPlanSection(issue: IssueCard, planPath: string): HTMLElement {
   planActions.appendChild(boardBtn);
   planSection.body.appendChild(planActions);
   return planSection.section;
+}
+
+/**
+ * Comments + activity: the only place an agent's reply is readable.
+ *
+ * Follows the peek contract in `issues-detail-display.md` — an issue with no
+ * comments and no activity collapses to the composer row alone, no heading and
+ * no restated empty copy.
+ */
+function buildCommentsSection(issue: IssueCard): HTMLElement {
+  const count = issueCommentCount(issue);
+  const empty = count === 0 && (issue.activity?.length ?? 0) === 0;
+  const title = count > 0 ? `Comments · ${count}` : 'Activity';
+  const commentsSection = section(empty ? null : title, {
+    untitled: empty,
+    compact: empty,
+  });
+  commentsSection.section.classList.add('issues-detail__section--comments');
+  renderIssueComments(commentsSection.body, issue, () => refreshIssueDetailIfOpen());
+  return commentsSection.section;
 }
 
 function buildActivityFooter(issue: IssueCard): HTMLElement {

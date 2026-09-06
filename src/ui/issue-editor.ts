@@ -49,6 +49,24 @@ interface EditorState {
   options: IssueEditorOptions;
   /** Suppresses the input handler while the editor rewrites its own DOM. */
   rendering: boolean;
+  /**
+   * Bumped whenever `blocks` is replaced. `render` records the value it drew,
+   * so `generation !== renderedGeneration` means the live DOM still carries the
+   * *previous* parse's block ids and must not be read as the document.
+   */
+  generation: number;
+  renderedGeneration: number;
+}
+
+/** Replace the block model. Never assign `state.blocks` directly. */
+function setBlocks(state: EditorState, blocks: MarkdownBlock[]): void {
+  state.blocks = blocks;
+  state.generation += 1;
+}
+
+/** True when the DOM was rendered from the blocks currently in `state`. */
+function domMatchesBlocks(state: EditorState): boolean {
+  return state.renderedGeneration === state.generation;
 }
 
 const HEADING_TAGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'] as const;
@@ -291,6 +309,7 @@ function renderCode(state: EditorState, block: MarkdownBlock): HTMLElement {
 }
 
 function replaceBlock(state: EditorState, id: string, next: MarkdownBlock): void {
+  // Same ids, so the rendered DOM still lines up; only the source changed.
   state.blocks = state.blocks.map((block) => (block.id === id ? next : block));
   state.dirty.delete(id);
 }
@@ -362,80 +381,122 @@ function needsEditableSeed(blocks: MarkdownBlock[]): boolean {
   return blocks.length === 0 || blocks.every((block) => block.kind === 'blank');
 }
 
+/** One serialized run of the document, in DOM order. */
+interface Piece {
+  source: string;
+  /** True when a block in the model owns this node (blanks carry their own spacing). */
+  tracked: boolean;
+}
+
 /**
- * Markdown from DOM nodes the block model does not own.
- *
- * Empty documents seed an editable paragraph that is not in `state.blocks`
- * (so getValue stays `''` until the user types). Browsers also insert extra
- * `<div>`/`<p>` nodes on Enter. Neither is in the parse, so a serialize that
- * only walks `state.blocks` silently drops the description.
+ * Blank blocks already hold the blank lines between tracked runs, so those join
+ * with a single newline. Anything the model does not own — the empty-document
+ * seed, a `<div>` the browser inserted on Enter, a bare text node left after a
+ * select-all delete — needs a real blank line to stay its own paragraph.
  */
-function collectUntrackedMarkdown(state: EditorState, trackedIds: Set<string>): string[] {
-  const extras: string[] = [];
+function joinPieces(pieces: Piece[]): string {
+  let out = '';
+  for (let i = 0; i < pieces.length; i += 1) {
+    if (i > 0) out += pieces[i].tracked && pieces[i - 1].tracked ? '\n' : '\n\n';
+    out += pieces[i].source;
+  }
+  return out;
+}
+
+/** Markdown for a node the block model does not own. */
+function untrackedSource(el: HTMLElement): string {
+  const kind = (el.dataset.kind as MarkdownBlock['kind'] | undefined) ?? 'paragraph';
+  return serializeBlockElement(el, {
+    id: el.dataset.blockId || 'blk-dom',
+    kind: kind === 'blank' || kind === 'raw' ? 'paragraph' : kind,
+    source: '',
+    start: 0,
+    end: 0,
+  }).trim();
+}
+
+/**
+ * Serialize the whole document by walking the live DOM in order.
+ *
+ * The DOM is the document; `state.blocks` only supplies the source of untouched
+ * blocks (so markdown the editor cannot represent round-trips byte-identically)
+ * and of read-only ones. Walking blocks instead and appending whatever the DOM
+ * held on top is what resurrected deleted text: a block whose element the user
+ * removed stayed in the model, and the replacement typed in its place arrived as
+ * an extra node, so `test 1` came back above `test 2`.
+ */
+function currentMarkdown(state: EditorState): string {
+  // The DOM belongs to an older parse (a flush that could not re-render, e.g.
+  // because the body was already detached). Its nodes carry ids no block owns,
+  // so reading them would append the whole document to itself.
+  if (!domMatchesBlocks(state)) return serializeMarkdownBlocks(state.blocks);
+  // A body with no nodes at all is a teardown, not an edit: contenteditable
+  // keeps a placeholder after a real select-all delete, and `render` seeds one.
+  if (state.body.childNodes.length === 0 && state.blocks.length > 0) {
+    return serializeMarkdownBlocks(state.blocks);
+  }
+  markDirtyAtCaret(state);
+
+  const byId = new Map(state.blocks.map((block) => [block.id, block]));
+  const seen = new Set<string>();
+  const pieces: Piece[] = [];
+
   for (const node of Array.from(state.body.childNodes)) {
     if (node.nodeType === 3) {
       const text = (node.nodeValue ?? '').trim();
-      if (text) extras.push(text);
+      if (text) pieces.push({ source: text, tracked: false });
       continue;
     }
     if (node.nodeType !== 1) continue;
     const el = node as HTMLElement;
-    const id = el.dataset.blockId;
-    if (id && trackedIds.has(id)) continue;
-    if (el.classList.contains('mn-editor__blank')) continue;
-    const kind = (el.dataset.kind as MarkdownBlock['kind'] | undefined) ?? 'paragraph';
-    const source = serializeBlockElement(el, {
-      id: id || 'blk-dom',
-      kind: kind === 'blank' || kind === 'raw' ? 'paragraph' : kind,
-      source: '',
-      start: 0,
-      end: 0,
-    }).trim();
-    if (source) extras.push(source);
-  }
-  return extras;
-}
 
-/** Serialize the whole document, re-reading only the blocks marked dirty. */
-function currentMarkdown(state: EditorState): string {
-  markDirtyAtCaret(state);
-  const next = state.blocks.map((block) => {
-    if (!state.dirty.has(block.id)) return block;
-    const el = state.body.querySelector<HTMLElement>(`[data-block-id="${block.id}"]`);
-    if (!el) return block;
-    return { ...block, source: serializeBlockElement(el, block) };
-  });
-  const extras = collectUntrackedMarkdown(
-    state,
-    new Set(state.blocks.map((block) => block.id)),
-  );
-  if (extras.length === 0) return serializeMarkdownBlocks(next);
-  // Placeholder blanks are not content; the seed / orphan nodes are the document.
-  if (needsEditableSeed(next)) return extras.join('\n\n');
-  const base = serializeMarkdownBlocks(next);
-  return base ? `${base}\n\n${extras.join('\n\n')}` : extras.join('\n\n');
+    const id = el.dataset.blockId ?? '';
+    // `seen` matters for Enter: splitting a paragraph clones its attributes, so
+    // the second half arrives carrying the first half's id. Only one node can be
+    // the block; the rest are treated as new content rather than dropped.
+    const block = id && !seen.has(id) ? byId.get(id) : undefined;
+    if (block) {
+      seen.add(id);
+      const source = state.dirty.has(id) ? serializeBlockElement(el, block) : block.source;
+      pieces.push({ source, tracked: true });
+      continue;
+    }
+
+    if (el.classList.contains('mn-editor__blank')) continue;
+    const source = untrackedSource(el);
+    if (source) pieces.push({ source, tracked: false });
+  }
+
+  // A blank-only model is a placeholder, not content: the seed paragraph and
+  // whatever the browser inserted around it *are* the document.
+  if (needsEditableSeed(state.blocks)) {
+    return joinPieces(pieces.filter((piece) => !piece.tracked));
+  }
+  return joinPieces(pieces);
 }
 
 /**
  * Persist the live DOM. Skips `onChange` when markdown is unchanged so a caret
  * sitting in the empty seed does not write a blank description.
  */
-function flush(state: EditorState, renderAfter: boolean): string {
+function flush(state: EditorState): string {
   const markdown = currentMarkdown(state);
   const previous = serializeMarkdownBlocks(state.blocks);
-  if (markdown === previous) {
-    state.dirty.clear();
-    return markdown;
-  }
   state.dirty.clear();
-  state.blocks = parseMarkdownBlocks(markdown);
+  if (markdown === previous) return markdown;
+
+  setBlocks(state, parseMarkdownBlocks(markdown));
+  // Re-render *before* notifying. `onChange` re-enters: it writes the store,
+  // which repaints the detail panel, which destroys this editor — and that
+  // teardown flushes again. A DOM still holding the previous parse's ids would
+  // be read as extra content and doubled onto the description.
+  if (state.body.isConnected) render(state);
   state.options.onChange(markdown);
-  if (renderAfter) render(state);
   return markdown;
 }
 
 function commit(state: EditorState): void {
-  flush(state, true);
+  flush(state);
 }
 
 function render(state: EditorState): void {
@@ -457,6 +518,7 @@ function render(state: EditorState): void {
   }
   syncPlaceholder(state);
   restoreCaret(state, selection);
+  state.renderedGeneration = state.generation;
   state.rendering = false;
 }
 
@@ -822,6 +884,8 @@ export function createIssueEditor(
     dirty: new Set(),
     options,
     rendering: false,
+    generation: 0,
+    renderedGeneration: -1,
   };
 
   root.appendChild(buildToolbar(state));
@@ -858,7 +922,7 @@ export function createIssueEditor(
     }
     const next = event.relatedTarget;
     if (next instanceof Node && root.contains(next)) return;
-    flush(state, true);
+    flush(state);
     options.onBlur?.();
   };
 
@@ -894,16 +958,16 @@ export function createIssueEditor(
   return {
     root,
     getValue: () => currentMarkdown(state),
-    flush: () => (state.body.isConnected ? flush(state, false) : serializeMarkdownBlocks(state.blocks)),
+    flush: () => (state.body.isConnected ? flush(state) : serializeMarkdownBlocks(state.blocks)),
     setValue: (markdown: string) => {
-      state.blocks = parseMarkdownBlocks(markdown);
+      setBlocks(state, parseMarkdownBlocks(markdown));
       state.dirty.clear();
       render(state);
     },
     focus: () => body.focus(),
     destroy: () => {
       // Flush while the nodes still exist so peek remount cannot drop the body.
-      if (state.body.isConnected) flush(state, false);
+      if (state.body.isConnected) flush(state);
       body.removeEventListener('input', onInput);
       body.removeEventListener('keydown', onKeyDown);
       body.removeEventListener('blur', onBlur, true);

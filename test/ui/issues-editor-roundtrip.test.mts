@@ -204,4 +204,74 @@ describe('issue editor round-trip', () => {
     handle.destroy();
     assert.equal(changes.at(-1), 'Kept after remount.');
   });
+
+  test('text deleted with select-all does not come back under the replacement', async () => {
+    const { handle, body } = await mountEditor('test 1');
+    // Select-all + delete removes the block element outright; typing then puts a
+    // bare text node in the body. The deleted block must not survive in the model.
+    body.replaceChildren();
+    body.appendChild(body.ownerDocument.createTextNode('test 2'));
+    body.dispatchEvent(new (windows[0] as unknown as Window).Event('input', { bubbles: true }));
+    assert.equal(handle.getValue(), 'test 2');
+  });
+
+  test('clearing the description leaves it empty, not half-restored', async () => {
+    const { handle, body } = await mountEditor('test 1' + '\n' + '\n' + 'test 2');
+    body.replaceChildren(body.ownerDocument.createElement('br'));
+    body.dispatchEvent(new (windows[0] as unknown as Window).Event('input', { bubbles: true }));
+    assert.equal(handle.getValue(), '');
+  });
+
+  test('an emptied body with no placeholder at all is treated as teardown', async () => {
+    // innerHTML = '' during a remount must never be read as "the user deleted it".
+    const { handle, body } = await mountEditor('Live text.');
+    body.replaceChildren();
+    assert.equal(handle.getValue(), 'Live text.');
+  });
+
+  test('flushing twice does not append the document to itself', async () => {
+    const { handle, body, changes } = await mountEditor('test');
+    const para = body.querySelector('[data-block-id]') as HTMLElement;
+    para.textContent = 'Hello';
+    body.dispatchEvent(new (windows[0] as unknown as Window).Event('input', { bubbles: true }));
+    assert.equal(handle.flush(), 'Hello');
+    assert.equal(handle.flush(), 'Hello');
+    assert.equal(handle.getValue(), 'Hello');
+    assert.deepEqual(changes, ['Hello']);
+  });
+
+  test('a re-entrant onChange that tears the editor down cannot double the body', async () => {
+    // The real panel path: onChange writes the store, the store emit repaints
+    // the detail panel, and the repaint destroys this editor — which flushes
+    // again. Before the fix that second flush read a DOM belonging to the
+    // previous parse and wrote the body twice over.
+    const window = new Window({ url: 'http://localhost/' });
+    windows.push(window);
+    const globalAny = globalThis as Record<string, unknown>;
+    globalAny.window = window;
+    globalAny.document = window.document;
+    globalAny.Node = window.Node;
+    globalAny.NodeFilter = window.NodeFilter;
+    globalAny.HTMLElement = window.HTMLElement;
+    globalAny.Element = window.Element;
+
+    const { createIssueEditor } = await importEditor();
+    const host = window.document.createElement('div') as unknown as HTMLElement;
+    window.document.body.appendChild(host as unknown as never);
+
+    const changes: string[] = [];
+    let handle: ReturnType<typeof createIssueEditor> | undefined;
+    handle = createIssueEditor(host, {
+      value: 'test',
+      onChange: (markdown: string) => {
+        changes.push(markdown);
+        if (changes.length === 1) handle?.destroy();
+      },
+    });
+    const body = host.querySelector('.mn-editor__body') as unknown as HTMLElement;
+    (body.querySelector('[data-block-id]') as HTMLElement).textContent = 'Hello';
+    body.dispatchEvent(new window.Event('blur') as unknown as Event);
+
+    assert.deepEqual(changes, ['Hello']);
+  });
 });
