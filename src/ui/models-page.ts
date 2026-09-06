@@ -1,9 +1,10 @@
 import '../styles/models-page.css';
 import '../styles/settings-sampler.css';
 
+import { getForegroundAppId } from '../os/instances';
 import { isOsAppHash, isOsEmbedded } from '../os/page-bridge';
 import { requestCloseWindowApp, registerWindowTeardown } from '../os/window-mounted-apps';
-import { navigateToDesktop } from '../os/router';
+import { launchApp, navigateToDesktop } from '../os/router';
 import { renderModelsSection } from './models-sections';
 import {
   DEFAULT_MODELS_SECTION,
@@ -180,6 +181,17 @@ function closeOtherFullPages(): void {
 
 /** Open the Models app (optional section deep link). */
 export function openModels(section?: ModelsSectionId): void {
+  // Settings cross-links (Tools → Open Providers, search hits, Voice) call this
+  // while another app is foreground. Toggle `is-open` alone leaves the OS host
+  // on Settings, so Providers never becomes the visible layer.
+  if (isOsEmbedded()) {
+    const foreground = getForegroundAppId();
+    if (foreground !== 'models') {
+      launchApp('models', { modelsSection: section ?? DEFAULT_MODELS_SECTION });
+      return;
+    }
+  }
+
   const root = getModelsRoot();
   const shell = getChatShell();
   if (!root || !shell) return;
