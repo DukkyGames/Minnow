@@ -18,6 +18,15 @@ export const DEFAULT_ISSUE_TYPE_ICONS = {
   note: 'fi-sr-edit',
 } as const satisfies Record<string, IssueTypeIconClass>;
 
+/** Built-in priority ids mapped to signal glyphs for menus and form pickers. */
+export const DEFAULT_ISSUE_PRIORITY_ICONS = {
+  urgent: 'fi-sr-bolt',
+  high: 'fi-sr-flag',
+  medium: 'fi-sr-minus',
+  low: 'fi-sr-arrow-down',
+  none: 'fi-rr-minus',
+} as const satisfies Record<string, IssueTypeIconClass>;
+
 /** Built-in status ids mapped to their default workflow glyphs. */
 export const DEFAULT_ISSUE_STATUS_ICONS = {
   triage: 'fi-rr-inbox',
@@ -99,6 +108,11 @@ export function resolveIssueStatusIcon(statusId: string, item?: TaxonomyItem): I
   return resolveCatalogIcon(statusId, item, DEFAULT_ISSUE_STATUS_ICONS);
 }
 
+/** Resolve the glyph for a taxonomy priority (built-in default or fallback). */
+export function resolveIssuePriorityIcon(priorityId: string, item?: TaxonomyItem): IssueTypeIconClass {
+  return resolveCatalogIcon(priorityId, item, DEFAULT_ISSUE_PRIORITY_ICONS);
+}
+
 /** Create a Uicons `<i>` element for an issue type or status glyph. */
 export function createIssueTypeIconElement(
   iconClass: IssueTypeIconClass,
@@ -138,6 +152,34 @@ export function createIssueTypeChip(
     text.textContent = label;
     chip.appendChild(text);
   }
+  return chip;
+}
+
+/** Build a priority pill (glyph beside the label). */
+export function createIssuePriorityChip(
+  priorityId: string,
+  item?: TaxonomyItem,
+  options: { className?: string; withIcon?: boolean } = {},
+): HTMLElement {
+  const chip = document.createElement('span');
+  const extra = options.className ? ` ${options.className}` : '';
+  chip.className = `issues-priority-chip issues-priority-chip--${priorityId}${extra}`;
+  const label = item?.label ?? (priorityId === 'none' ? 'None' : priorityId);
+  chip.title = label;
+  if (item?.color) chip.style.setProperty('--issues-chip-color', item.color);
+  chip.classList.toggle('is-unknown', !item);
+  if (options.withIcon !== false) {
+    chip.appendChild(
+      createIssueTypeIconElement(resolveIssuePriorityIcon(priorityId, item), {
+        className: 'issues-priority-chip__icon',
+        size: 12,
+      }),
+    );
+  }
+  const text = document.createElement('span');
+  text.className = 'issues-priority-chip__label';
+  text.textContent = label;
+  chip.appendChild(text);
   return chip;
 }
 

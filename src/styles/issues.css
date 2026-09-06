@@ -466,9 +466,9 @@
 
 .issues-new-form__grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(8rem, 1fr));
-  gap: 10px 12px;
-  align-items: end;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 10px;
+  align-items: start;
 }
 
 .issues-new-form__title {
@@ -483,15 +483,179 @@
   display: none;
 }
 
+.issues-new-form__labels {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.issues-new-form__labels-host {
+  min-width: 0;
+}
+
+.issues-new-form__prop-host {
+  min-width: 0;
+}
+
+.issues-new-form__prop-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.issues-new-form__prop-chevron {
+  flex-shrink: 0;
+  margin-left: auto;
+  --mn-icon-size: 10px;
+  opacity: 0.52;
+  color: var(--mn-fg-muted);
+}
+
+.issues-new-form__prop-btn.issues-type-chip {
+  width: 100%;
+  height: auto;
+  justify-content: flex-start;
+}
+
+.issues-new-form__prop-btn.issues-type-chip .issues-type-chip__icon {
+  width: auto;
+  height: auto;
+  border: none;
+  background: transparent;
+  padding: 0;
+  --mn-icon-size: 14px;
+}
+
+.issues-new-form__prop-btn.issues-type-chip .issues-type-chip__label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.issues-new-form__prop-btn.issues-type-chip--bug .issues-type-chip__icon {
+  color: var(--mn-danger);
+}
+
+.issues-new-form__prop-btn.issues-type-chip--task .issues-type-chip__icon {
+  color: var(--mn-accent);
+}
+
+.issues-new-form__prop-btn.issues-type-chip--idea .issues-type-chip__icon {
+  color: var(--mn-warning);
+}
+
+.issues-new-form__prop-btn.issues-type-chip--note .issues-type-chip__icon {
+  color: var(--mn-fg-muted);
+}
+
+.issues-new-form__prop-btn.issues-priority-chip {
+  width: 100%;
+  font-size: 13px;
+  color: var(--mn-fg-muted);
+}
+
+.issues-new-form__prop-btn.issues-priority-chip .issues-priority-chip__label {
+  font-size: 13px;
+  font-weight: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  color: inherit;
+}
+
+.issues-new-form__prop-btn.issues-priority-chip--urgent {
+  color: var(--mn-danger);
+}
+
+.issues-new-form__prop-btn.issues-priority-chip--high {
+  color: var(--mn-warning);
+}
+
+.issues-new-form__prop-btn.issues-priority-chip--medium {
+  color: var(--mn-fg);
+}
+
+.issues-new-form__prop-btn.issues-priority-chip--none {
+  font-weight: 500;
+}
+
+.issues-new-form__prop-btn.issues-priority-chip[style*='--issues-chip-color'] {
+  color: var(--issues-chip-color);
+}
+
+.issues-new-form__prop-btn.issues-priority-chip .issues-new-form__prop-chevron {
+  color: var(--mn-fg-muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .issues-new-form__prop-btn:hover {
+    border-color: color-mix(in oklch, var(--mn-fg) 22%, var(--mn-border));
+    background: color-mix(in oklch, var(--mn-fg) 6%, var(--mn-bg));
+  }
+
+  .issues-new-form__prop-btn:hover .issues-new-form__prop-chevron {
+    opacity: 0.88;
+  }
+}
+
+.issues-new-form__prop-btn:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 1px;
+}
+
+.issues-new-form .issues-labels-field--form {
+  min-height: 32px;
+  padding: 4px 6px;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-sm);
+  background: var(--mn-bg);
+  gap: 6px;
+}
+
+.issues-new-form .issues-labels-field--form .issues-labels-field__add--text {
+  width: auto;
+  min-width: unset;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--mn-fg-muted);
+}
+
+.issues-new-form .issues-labels-field--form:not(:has(.issues-label-chip)) .issues-labels-field__add--text {
+  margin-left: 0;
+}
+
 .issues-new-form__desc {
   grid-column: 1 / -1;
 }
 
 .issues-new-form label,
-.issues-new-form__desc {
+.issues-new-form__desc,
+.issues-new-form__labels {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
 }
 
@@ -504,16 +668,18 @@
   color: var(--mn-fg-muted);
 }
 
-.issues-new-form input,
+.issues-new-form input[type='text'],
 .issues-new-form select {
   font-family: var(--font-ui);
   font-size: 13px;
+  min-height: 32px;
   padding: 6px 8px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--mn-border);
   background: var(--mn-bg);
   color: var(--mn-fg);
   width: 100%;
+  box-sizing: border-box;
 }
 
 .issues-new-form .issues-detail__desc-wrap {
@@ -671,9 +837,10 @@
   /*
    * Identity (id, priority, type) stays tight on the left. Labels shrink-wrap
    * to their chips (max three, then a caret) so the + sits next to the last chip.
-   * id priority type title labels assignee project agent rollup counts status updated
+   * id priority type title labels project agent rollup counts status updated
+   * (assignee column hidden for now — see .issues-list-head__assignee below)
    */
-  --issues-list-cols: 4.25rem minmax(4.5rem, max-content) 1.75rem minmax(0, 1fr) max-content 4rem 4rem 3.5rem 2.5rem 2.5rem minmax(5rem, max-content) 4rem;
+  --issues-list-cols: 4.25rem minmax(4.5rem, max-content) 1.75rem minmax(0, 1fr) max-content 4rem 3.5rem 2.5rem 2.5rem minmax(5rem, max-content) 4rem;
   display: grid;
   grid-template-columns: var(--issues-list-cols);
   gap: 8px 10px;
@@ -731,6 +898,12 @@
 }
 
 .issues-list-head[hidden] {
+  display: none;
+}
+
+/* Assignee column hidden until multiplayer assignee UX ships. */
+.issues-list-head__assignee,
+.issues-row__assignee {
   display: none;
 }
 
@@ -1524,9 +1697,25 @@
 }
 
 .issues-priority-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 11px;
   font-weight: 600;
   color: var(--mn-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issues-priority-chip__icon {
+  --mn-icon-size: 12px;
+  flex-shrink: 0;
+  color: currentColor;
+}
+
+.issues-priority-chip__label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1536,7 +1725,15 @@
   color: var(--mn-danger);
 }
 
+.issues-priority-chip--urgent .issues-priority-chip__icon {
+  color: var(--mn-danger);
+}
+
 .issues-priority-chip--high {
+  color: var(--mn-warning);
+}
+
+.issues-priority-chip--high .issues-priority-chip__icon {
   color: var(--mn-warning);
 }
 
@@ -1544,9 +1741,21 @@
   color: var(--mn-fg);
 }
 
+.issues-priority-chip--medium .issues-priority-chip__icon {
+  color: var(--mn-fg);
+}
+
+.issues-priority-chip--low .issues-priority-chip__icon {
+  color: var(--mn-fg-muted);
+}
+
 .issues-priority-chip--none {
   color: var(--mn-fg-muted);
   font-weight: 500;
+}
+
+.issues-priority-chip--none .issues-priority-chip__icon {
+  color: var(--mn-fg-muted);
 }
 
 /* ---------- board / kanban ---------- */
@@ -1982,6 +2191,10 @@
   padding: 0 7px 0 8px;
   text-transform: none;
   letter-spacing: -0.01em;
+}
+
+.issues-detail__prop.issues-priority-chip .issues-priority-chip__icon {
+  --mn-icon-size: 12px;
 }
 
 .issues-detail__prop.issues-status-chip {

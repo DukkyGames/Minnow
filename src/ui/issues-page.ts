@@ -119,8 +119,15 @@ import {
   isIssueExpandOverlayOpen,
   startIssueExpandFromUi,
 } from './issues-expand-controls';
-import { createIssuesLabelsField } from './issues-labels-field';
-import { createIssueLabelsDisplay } from './issues-label-chip';
+import {
+  closeIssuesLabelsSuggestionsMenu,
+  createIssuesLabelsField,
+  isIssuesLabelsFieldFocused,
+} from './issues-labels-field';
+import {
+  createIssueLabelsDisplay,
+  isIssuesLabelPopoverFocused,
+} from './issues-label-chip';
 import {
   ariaSortValue,
   cycleIssuesListSort,
@@ -146,6 +153,10 @@ import {
   getNewIssueWorkspacePath,
   refreshNewIssueWorkspaceField,
 } from './issues-new-workspace-field';
+import {
+  ensureNewIssuePropertyFields,
+  syncNewIssuePropertyFields,
+} from './issues-new-property-field';
 
 const CHAT_AREA_ISSUES_CLASS = 'chat-area--issues';
 const MAIN_COLUMN_ISSUES_CLASS = 'main-column--issues';
@@ -203,25 +214,7 @@ function getAllStatusOptions(): Array<{ id: IssueStatus; label: string; iconClas
 
 /** Sync new-issue form options from taxonomy (preserves current value when possible). */
 function syncIssuesFilterSelects(): void {
-  const taxonomy = getIssuesTaxonomySync();
-  const refillRequired = (id: string, items: Array<{ id: string; label: string }>, current: string): void => {
-    const select = document.getElementById(id);
-    if (!select || !('options' in select)) return;
-    const sel = select as unknown as { value: string; innerHTML: string; options: ArrayLike<{ value: string }>; appendChild: (n: Node) => void };
-    const prev = sel.value;
-    sel.innerHTML = '';
-    for (const item of items) {
-      const opt = document.createElement('option');
-      opt.value = item.id;
-      opt.textContent = item.label;
-      sel.appendChild(opt);
-    }
-    const values = [...Array.from(sel.options)].map((o) => o.value);
-    if (prev && values.includes(prev)) sel.value = prev;
-    else if (current && values.includes(current)) sel.value = current;
-  };
-  refillRequired('issuesNewType', sortedTypes(taxonomy), 'task');
-  refillRequired('issuesNewPriority', sortedPriorities(taxonomy), 'none');
+  syncNewIssuePropertyFields();
 }
 
 const DEFAULT_FILTERS: IssuesUiFilters = {
@@ -1143,7 +1136,7 @@ function openProjectMenu(anchor: Element, issue: IssueCard): void {
 
 function openLabelsMenu(anchor: Element, issue: IssueCard): void {
   const suggestions = collectIssueLabelSuggestions(issue.id);
-  const items: IssuesContextMenuItem[] = suggestions.slice(0, 20).map((label) => ({
+  const items: IssuesContextMenuItem[] = suggestions.map((label) => ({
     id: `label-${label}`,
     label,
     onSelect: () => {
@@ -1986,16 +1979,72 @@ function isNewFormOpen(): boolean {
 
 let newFormOutsideHandler: ((e: PointerEvent) => void) | null = null;
 let newFormEscapeHandler: ((e: KeyboardEvent) => void) | null = null;
+let newFormSessionAbort: AbortController | null = null;
 
 function detachNewFormListeners(): void {
-  if (newFormOutsideHandler) {
-    document.removeEventListener('pointerdown', newFormOutsideHandler, true);
-    newFormOutsideHandler = null;
-  }
-  if (newFormEscapeHandler) {
-    document.removeEventListener('keydown', newFormEscapeHandler, true);
-    newFormEscapeHandler = null;
-  }
+  newFormSessionAbort?.abort();
+  newFormSessionAbort = null;
+  newFormOutsideHandler = null;
+  newFormEscapeHandler = null;
+}
+
+function attachNewFormSessionListeners(form: HTMLElement, backdrop: HTMLElement | null): void {
+  detachNewFormListeners();
+  const abort = new AbortController();
+  newFormSessionAbort = abort;
+  const { signal } = abort;
+  const anchor = document.getElementById('btnIssuesNew');
+
+  form.addEventListener(
+    'click',
+    (event) => {
+      const target = event.target as Element | null;
+      if (!target?.closest('#btnIssuesNewCancel')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setNewFormOpen(false);
+    },
+    { signal },
+  );
+
+  backdrop?.addEventListener(
+    'click',
+    () => {
+      setNewFormOpen(false);
+    },
+    { signal },
+  );
+
+  newFormOutsideHandler = (event) => {
+    const liveForm = document.getElementById('issuesNewForm');
+    if (!liveForm?.classList.contains('is-open')) return;
+    const target = event.target as Node | null;
+    if (liveForm.contains(target) || anchor?.contains(target ?? null)) return;
+    if (isIssuesLabelsFieldFocused()) return;
+    if (isContextMenuOpen()) return;
+    setNewFormOpen(false);
+  };
+  document.addEventListener('pointerdown', newFormOutsideHandler, { capture: true, signal });
+
+  newFormEscapeHandler = (event) => {
+    if (event.key !== 'Escape') return;
+    if (isIssuesLabelPopoverFocused()) {
+      closeIssuesLabelsSuggestionsMenu();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (isContextMenuOpen()) {
+      closeIssuesContextMenu();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setNewFormOpen(false);
+  };
+  document.addEventListener('keydown', newFormEscapeHandler, { capture: true, signal });
 }
 
 function setNewIssuePanelOpen(open: boolean, form: HTMLElement, backdrop: HTMLElement | null): void {
@@ -2007,6 +2056,62 @@ function setNewIssuePanelOpen(open: boolean, form: HTMLElement, backdrop: HTMLEl
 }
 
 let newIssueDescriptionEditor: IssueEditorHandle | null = null;
+
+const NEW_ISSUE_LABELS_ID = '__new__';
+let newIssueLabels: string[] = [];
+let newIssueLabelsField: HTMLElement | null = null;
+
+/** Insert the labels host when an older new-issue form predates the field. */
+function ensureNewIssueLabelsHost(form: HTMLElement): void {
+  if (document.getElementById('issuesNewLabelsHost')) return;
+
+  const grid = form.querySelector('.issues-new-form__grid');
+  const desc = form.querySelector('.issues-new-form__desc');
+  if (!grid || !desc) return;
+
+  const labels = document.createElement('div');
+  labels.className = 'issues-new-form__labels';
+
+  const fieldLabel = document.createElement('span');
+  fieldLabel.className = 'issues-new-form__field-label';
+  fieldLabel.textContent = 'Labels';
+
+  const host = document.createElement('div');
+  host.id = 'issuesNewLabelsHost';
+  host.className = 'issues-new-form__labels-host';
+
+  labels.append(fieldLabel, host);
+  grid.insertBefore(labels, desc);
+}
+
+function ensureNewIssueLabelsField(): void {
+  const form = document.getElementById('issuesNewForm');
+  if (!form) return;
+  ensureNewIssueLabelsHost(form);
+
+  const host = document.getElementById('issuesNewLabelsHost');
+  if (!host) return;
+  if (newIssueLabelsField && host.contains(newIssueLabelsField)) return;
+
+  newIssueLabelsField?.remove();
+  newIssueLabels = [];
+  newIssueLabelsField = createIssuesLabelsField({
+    issueId: NEW_ISSUE_LABELS_ID,
+    labels: [],
+    variant: 'form',
+    onChange: (labels) => {
+      newIssueLabels = labels;
+    },
+  });
+  host.replaceChildren(newIssueLabelsField);
+}
+
+function resetNewIssueLabels(): void {
+  newIssueLabels = [];
+  newIssueLabelsField?.remove();
+  newIssueLabelsField = null;
+  document.getElementById('issuesNewLabelsHost')?.replaceChildren();
+}
 
 function getNewIssueDescriptionHost(): HTMLElement | null {
   let host = document.getElementById('issuesNewDescriptionHost');
@@ -2083,18 +2188,15 @@ function bindNewIssueFormControls(): void {
   if (newIssueFormBindingsDone) return;
   const form = document.getElementById('issuesNewForm');
   if (!form) return;
-  newIssueFormBindingsDone = true;
 
   ensureNewIssueWorkspaceField(form);
+  ensureNewIssuePropertyFields(form);
   ensureNewIssueDescriptionEditor();
+  ensureNewIssueLabelsField();
+  syncNewIssuePropertyFields();
 
   form.addEventListener('submit', submitNewIssue);
-  document.getElementById('btnIssuesNewCancel')?.addEventListener('click', () => {
-    setNewFormOpen(false);
-  });
-  document.getElementById('issuesNewFormBackdrop')?.addEventListener('click', () => {
-    setNewFormOpen(false);
-  });
+  newIssueFormBindingsDone = true;
 }
 
 function setNewFormOpen(open: boolean): void {
@@ -2109,30 +2211,19 @@ function setNewFormOpen(open: boolean): void {
     setNewIssuePanelOpen(false, form, backdrop);
     anchor?.setAttribute('aria-expanded', 'false');
     resetNewIssueDescription();
+    resetNewIssueLabels();
     detachNewFormListeners();
     return;
   }
 
   ensureNewIssueDescriptionEditor();
+  ensureNewIssueLabelsField();
+  syncNewIssuePropertyFields();
   void refreshNewIssueWorkspaceField(filters.scope);
   setNewIssuePanelOpen(true, form, backdrop);
   anchor?.setAttribute('aria-expanded', 'true');
 
-  detachNewFormListeners();
-  newFormOutsideHandler = (event) => {
-    const target = event.target as Node | null;
-    if (form.contains(target) || anchor?.contains(target ?? null)) return;
-    setNewFormOpen(false);
-  };
-  document.addEventListener('pointerdown', newFormOutsideHandler, true);
-
-  newFormEscapeHandler = (event) => {
-    if (event.key !== 'Escape') return;
-    event.preventDefault();
-    event.stopPropagation();
-    setNewFormOpen(false);
-  };
-  document.addEventListener('keydown', newFormEscapeHandler, true);
+  attachNewFormSessionListeners(form, backdrop);
 
   const title = document.getElementById('issuesNewTitle');
   if (title && 'focus' in title && typeof (title as { focus?: unknown }).focus === 'function') {
@@ -2150,11 +2241,13 @@ function submitNewIssue(event: Event): void {
     description,
     type: (controlValue('issuesNewType') as IssueType) || 'task',
     priority: (controlValue('issuesNewPriority') as IssuePriority) || 'none',
+    labels: newIssueLabels,
     workspacePath: getNewIssueWorkspacePath(filters.scope),
   });
   syncNewIssueDescriptionRefs(issue.id, description);
   setControlValue('issuesNewTitle', '');
   resetNewIssueDescription();
+  resetNewIssueLabels();
   setNewFormOpen(false);
   renderIssuesPanel();
 }

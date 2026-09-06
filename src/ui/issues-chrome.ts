@@ -1,3 +1,4 @@
+import { ensureNewIssuePropertyFields } from './issues-new-property-field';
 import { ensureNewIssueWorkspaceField } from './issues-new-workspace-field';
 
 const CHROME_MARK = 'data-issues-chrome';
@@ -159,6 +160,7 @@ function buildNewForm(): HTMLElement {
   const existing = document.getElementById('issuesNewForm');
   if (existing) {
     ensureNewIssueWorkspaceField(existing);
+    ensureNewIssuePropertyFields(existing);
     if (!document.getElementById('issuesNewFormBackdrop')) {
       const backdrop = el('button', {
         type: 'button',
@@ -172,7 +174,7 @@ function buildNewForm(): HTMLElement {
   }
 
   const title = el('label', { class: 'issues-new-form__title' }, [
-    document.createTextNode('Title'),
+    el('span', { class: 'issues-new-form__field-label', text: 'Title' }),
     el('input', {
       type: 'text',
       id: 'issuesNewTitle',
@@ -189,13 +191,19 @@ function buildNewForm(): HTMLElement {
     document.createTextNode('Workspace'),
     el('select', { id: 'issuesNewWorkspace', 'aria-label': 'Workspace' }),
   ]);
-  const type = el('label', {}, [
-    document.createTextNode('Type'),
-    el('select', { id: 'issuesNewType' }),
+  const type = el('label', { class: 'issues-new-form__prop' }, [
+    el('span', { class: 'issues-new-form__field-label', text: 'Type' }),
+    el('input', { type: 'hidden', id: 'issuesNewType', value: 'task' }),
+    el('div', { id: 'issuesNewTypeHost', class: 'issues-new-form__prop-host' }),
   ]);
-  const priority = el('label', {}, [
-    document.createTextNode('Priority'),
-    el('select', { id: 'issuesNewPriority' }),
+  const priority = el('label', { class: 'issues-new-form__prop' }, [
+    el('span', { class: 'issues-new-form__field-label', text: 'Priority' }),
+    el('input', { type: 'hidden', id: 'issuesNewPriority', value: 'none' }),
+    el('div', { id: 'issuesNewPriorityHost', class: 'issues-new-form__prop-host' }),
+  ]);
+  const labels = el('div', { class: 'issues-new-form__labels' }, [
+    el('span', { class: 'issues-new-form__field-label', text: 'Labels' }),
+    el('div', { id: 'issuesNewLabelsHost', class: 'issues-new-form__labels-host' }),
   ]);
   const desc = el('div', { class: 'issues-new-form__desc' }, [
     el('span', { class: 'issues-new-form__field-label', text: 'Description' }),
@@ -204,7 +212,7 @@ function buildNewForm(): HTMLElement {
       class: 'issues-detail__desc-wrap is-editing',
     }),
   ]);
-  const grid = el('div', { class: 'issues-new-form__grid' }, [title, workspace, type, priority, desc]);
+  const grid = el('div', { class: 'issues-new-form__grid' }, [title, workspace, type, priority, labels, desc]);
   const actions = el('div', { class: 'issues-new-form__actions' }, [
     el('button', { type: 'submit', class: 'issues-btn issues-btn--primary', text: 'Create issue' }),
     el('button', { type: 'button', class: 'issues-btn', id: 'btnIssuesNewCancel', text: 'Cancel' }),
