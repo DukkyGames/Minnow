@@ -488,6 +488,9 @@ export async function runCapabilityProbe(
     modelIds?: string[];
     selectedModelId?: string;
     signal?: AbortSignal;
+    /** First-load background probe — server skips vision on loopback openai-v1. */
+    auto?: boolean;
+    skipVision?: boolean;
   } = {},
 ): Promise<ProviderCapabilitiesFile> {
   const encoded = encodeURIComponent(providerId);
@@ -497,6 +500,8 @@ export async function runCapabilityProbe(
     body: JSON.stringify({
       modelIds: options.modelIds,
       selectedModelId: options.selectedModelId,
+      ...(options.auto === true ? { auto: true } : {}),
+      ...(options.skipVision === true ? { skipVision: true } : {}),
     }),
     signal: options.signal,
     cache: 'no-store',
@@ -626,6 +631,9 @@ export async function runCapabilityProbeForProvider(
     apiKind?: ApiKind;
     /** Settings button — may abort an in-flight first-load probe. */
     manual?: boolean;
+    /** First-load background probe — skip vision on loopback openai-v1 (MIN-839). */
+    auto?: boolean;
+    skipVision?: boolean;
   } = {},
 ): Promise<boolean> {
   if (!isServerStorageMode()) return false;
@@ -661,6 +669,8 @@ export async function runCapabilityProbeForProvider(
       modelIds: prioritized,
       selectedModelId: options.selectedModelId,
       signal: controller.signal,
+      auto: options.auto === true,
+      skipVision: options.skipVision === true,
     });
     if (probeAbort === controller) {
       mergeCapabilitiesIntoModelCache(file);
