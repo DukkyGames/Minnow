@@ -11,6 +11,9 @@ import { Window } from 'happy-dom';
 
 import type { IssueCard } from '../../src/types.ts';
 import { ISSUES_COMPAT_VERSION, ISSUES_SCHEMA_VERSION } from '../../src/types.ts';
+import type { Chat, SessionState } from '../../src/types.ts';
+import { defaultSessionState } from '../../src/config/defaults.ts';
+import { setSessionStateForTests } from '../../src/state/sessions.ts';
 
 const { findIssueById, setIssuesStateForTests } = await import('../../src/state/issues-store.ts');
 const { closeIssueDetail, openIssueDetail } = await import('../../src/ui/issues-detail.ts');
@@ -75,6 +78,7 @@ afterEach(() => {
   resetGhAvailableCache();
   resetIssuesGithubForTests();
   setIssuesStateForTests(null);
+  setSessionStateForTests(null);
   domWindow?.close();
   domWindow = null;
 });
@@ -392,5 +396,90 @@ describe('issues detail display', () => {
     const titles = headingTexts(document.body);
     assert.equal(titles.includes('Activity'), false);
     assert.equal(titles.some((t) => t.startsWith('Comments')), false);
+  });
+
+  test('Chats section lists linked sessions and unlinks without deleting the chat', () => {
+    setupDom();
+    const chat: Chat = {
+      id: 'chat-issue-1',
+      name: 'Fix header',
+      workspacePath: '/repo',
+      modelId: '',
+      modeId: 'debug',
+      history: [],
+      historyLoaded: true,
+      lastStats: null,
+      modelInfo: {},
+      updatedAt: FIXED_NOW,
+      lastMessageAt: FIXED_NOW,
+    };
+    const sessions: SessionState = { ...defaultSessionState(), version: 6, activeId: chat.id, chats: [chat] };
+    setSessionStateForTests(sessions);
+    seedIssues([
+      {
+        id: 'GET-9',
+        type: 'task',
+        title: 'Header',
+        description: '',
+        status: 'todo',
+        priority: 'none',
+        labels: [],
+        workspacePath: '/repo',
+        createdAt: FIXED_NOW,
+        updatedAt: FIXED_NOW,
+        source: 'user',
+        chatIds: ['chat-issue-1', 'gone-chat'],
+      },
+    ]);
+
+    openIssueDetail('GET-9');
+
+    const scroll = document.querySelector('.issues-detail__scroll');
+    assert.ok(scroll);
+    assert.ok(headingTexts(scroll).includes('Chats'));
+    const copy = scroll.textContent ?? '';
+    assert.match(copy, /Fix header/);
+    assert.match(copy, /Debug/);
+    assert.match(copy, /Done/);
+    assert.match(copy, /Chat unavailable/);
+    assert.match(copy, /No chats yet\.|New/);
+    assert.ok([...scroll.querySelectorAll('button')].some((btn) => btn.textContent === 'New'));
+    assert.ok([...scroll.querySelectorAll('button')].some((btn) => btn.textContent === 'Existing'));
+
+    const removeLive = [...scroll.querySelectorAll('.issues-detail__chat-remove')].find(
+      (btn) => btn.getAttribute('aria-label') === 'Remove chat Fix header from this issue',
+    );
+    assert.ok(removeLive);
+    removeLive.click();
+
+    assert.deepEqual(findIssueById('GET-9')?.chatIds, ['gone-chat']);
+    assert.equal(sessions.chats.some((row) => row.id === 'chat-issue-1'), true);
+  });
+
+  test('empty Chats section still shows New and Existing', () => {
+    setupDom();
+    seedIssues([
+      {
+        id: 'GET-10',
+        type: 'task',
+        title: 'Fresh',
+        description: '',
+        status: 'todo',
+        priority: 'none',
+        labels: [],
+        workspacePath: '/repo',
+        createdAt: FIXED_NOW,
+        updatedAt: FIXED_NOW,
+        source: 'user',
+      },
+    ]);
+
+    openIssueDetail('GET-10');
+    const scroll = document.querySelector('.issues-detail__scroll');
+    assert.ok(scroll);
+    assert.ok(headingTexts(scroll).includes('Chats'));
+    assert.match(scroll.textContent ?? '', /No chats yet\./);
+    assert.ok([...scroll.querySelectorAll('button')].some((btn) => btn.textContent === 'New'));
+    assert.ok([...scroll.querySelectorAll('button')].some((btn) => btn.textContent === 'Existing'));
   });
 });

@@ -1558,7 +1558,8 @@ export function updateIssue(
   if (patch.boardChatId !== undefined) issue.boardChatId = patch.boardChatId;
   if (patch.investigateRunId !== undefined) issue.investigateRunId = patch.investigateRunId;
   if (patch.planRunId !== undefined) issue.planRunId = patch.planRunId;
-  if (patch.chatIds) issue.chatIds = [...patch.chatIds];
+  // Empty array is a real unlink (last chat removed), not "leave chatIds alone".
+  if (patch.chatIds !== undefined) issue.chatIds = [...patch.chatIds];
   if (patch.codeRefs) {
     issue.codeRefs = patch.codeRefs
       .map((r) => normalizeIssueCodeRef(r))

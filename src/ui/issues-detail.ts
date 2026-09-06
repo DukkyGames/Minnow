@@ -75,6 +75,7 @@ import {
   workspaceEligibleSubIssues,
 } from './issues-sub-issues';
 import { listChildIssues } from '../issues/hierarchy';
+import { fillIssueChatsSection } from './issues-chats-section';
 import {
   bindGithubSyncButton,
   buildGithubIssueChip,
@@ -674,6 +675,10 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   const subIssues = buildSubIssuesSection(issue);
   if (subIssues) scroll.appendChild(subIssues);
 
+  const chats = section('Chats');
+  fillIssueChatsSection(issue, chats.body);
+  scroll.appendChild(chats.section);
+
   const related = buildRelatedIssuesSection(issue);
   if (related) scroll.appendChild(related);
 
@@ -854,8 +859,6 @@ function buildActivityFooter(issue: IssueCard): HTMLElement {
     activitySection.body.appendChild(workspace);
   }
   const chatBits: string[] = [];
-  if (issue.chatIds?.length) chatBits.push(`${issue.chatIds.length} chat(s)`);
-  if (issue.boardChatId) chatBits.push(`board ${issue.boardChatId.slice(0, 8)}…`);
   if (issue.investigateRunId) chatBits.push(`run ${issue.investigateRunId.slice(0, 8)}…`);
   if (issue.planRunId) chatBits.push(`plan ${issue.planRunId.slice(0, 8)}…`);
   if (chatBits.length) {

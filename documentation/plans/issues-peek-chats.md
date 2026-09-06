@@ -1,20 +1,20 @@
 # Shape: issue chats in peek
 
-Discovery (2026-09-06). **Not confirmed yet.** Do not implement until this brief is approved.
+Discovery (2026-09-06). Brief confirmed via `/impeccable craft`.
 
 **Register:** product. **Color:** Restrained (Issues tokens, no per-surface override). **Fidelity:** production-ready. **Breadth:** Issues peek (detail scroll). **Time intent:** ship.
 
 ## Todos
 
-- [ ] Confirm this brief (gate for `/impeccable craft`)
-- [ ] Peek **Chats** section: linked `chatIds` as rows (title, running/done, mode)
-- [ ] Same list: board row when the issue or a linked chat has a board
-- [ ] Click/Open: Code chat (`switchChat`); board row opens the orchestrate board
-- [ ] Empty: section always visible; **New** / **Existing**; workflow toolbar unchanged
-- [ ] Unlink removes the id from `chatIds` (does not delete the chat)
-- [ ] Footer meta no longer the only chat affordance (drop the dead `N chat(s)` count or keep a quiet duplicate only if tests require it)
-- [ ] Tests for list membership, streaming/mode display, unlink, attach, missing chats
-- [ ] Update `documentation/context.md` and `documentation/manual/apps/issues.md`
+- [x] Confirm this brief (gate for `/impeccable craft`)
+- [x] Peek **Chats** section: linked `chatIds` as rows (title, running/done, mode)
+- [x] Same list: board row when the issue or a linked chat has a board
+- [x] Click/Open: Code chat (`switchChat`); board row opens the orchestrate board
+- [x] Empty: section always visible; **New** / **Existing**; workflow toolbar unchanged
+- [x] Unlink removes the id from `chatIds` (does not delete the chat)
+- [x] Footer meta no longer the only chat affordance (drop the dead `N chat(s)` count or keep a quiet duplicate only if tests require it)
+- [x] Tests for list membership, streaming/mode display, unlink, attach, missing chats
+- [x] Update `documentation/context.md` and `documentation/manual/apps/issues.md`
 
 ## 1. Feature summary
 
