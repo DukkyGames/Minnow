@@ -1313,18 +1313,19 @@ function buildIssueRow(
   updated.className = 'issues-row__updated';
   updated.textContent = formatUpdated(issue.updatedAt);
 
+  // Match the list grid: labels sit after title; status sits with the trailing metadata.
   row.append(
     id,
+    priority,
     type,
     title,
-    status,
-    priority,
+    labels,
     assignee,
     project,
     agent,
     rollup,
     counts,
-    labels,
+    status,
     updated,
   );
   row.addEventListener('click', (event) => {

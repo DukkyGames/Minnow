@@ -38,7 +38,7 @@ Scan the list and know, without opening a peek, what kind of work a row is.
 
 ## 5. Layout strategy
 
-**List:** one nowrap line, up to 3 chips, **+N**, then **+**. Long names ellipsize. Row height matches empty-label rows.
+**List:** one nowrap line, up to 3 chips, **+N**, then **+**. Chips hug label text (centered); ellipsize only in peek/detail and board when a name exceeds ~9rem.
 
 **Peek:** full set, wrapping allowed. Same chips and **+**.
 
@@ -60,4 +60,4 @@ Scan the list and know, without opening a peek, what kind of work a row is.
 - New labels get the next unused swatch (least-used, palette order, when all 10 are taken).
 - Existing names migrate once, sorted by name, first-unused assignment.
 - Removing the last use of a label keeps its catalog color.
-- GitHub sync stays names only.
+- GitHub sync stays names only. Missing GitHub repo labels are created on push so the name actually lands.

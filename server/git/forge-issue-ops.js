@@ -121,6 +121,101 @@ export async function issueView({ cwd, number } = {}) {
   return { ok: true, issue };
 }
 
+/**
+ * Deduplicate label names case-insensitively while keeping first-seen casing.
+ * @param {unknown} labels
+ * @returns {string[]}
+ */
+export function cleanLabelNames(labels) {
+  if (!Array.isArray(labels)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const raw of labels) {
+    const name = String(raw ?? '').trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
+}
+
+/**
+ * Parse `gh label list --json name` stdout into unique names.
+ * @param {string} stdout
+ * @returns {string[]}
+ */
+export function parseLabelListJson(stdout) {
+  const raw = parseJson(stdout, []);
+  if (!Array.isArray(raw)) return [];
+  return cleanLabelNames(raw.map((row) => (row && typeof row === 'object' ? row.name : row)));
+}
+
+/**
+ * Names in `wanted` that are not already in the repo catalog.
+ * @param {unknown} wanted
+ * @param {unknown} existing
+ * @returns {string[]}
+ */
+export function labelsMissingFromRepo(wanted, existing) {
+  const have = new Set(cleanLabelNames(existing).map((name) => name.toLowerCase()));
+  return cleanLabelNames(wanted).filter((name) => !have.has(name.toLowerCase()));
+}
+
+/**
+ * True when `gh label create` failed because the name is already in the repo.
+ * @param {string} [stderr]
+ * @param {string} [stdout]
+ */
+export function labelAlreadyExists(stderr, stdout) {
+  return /already exists|already_exists/i.test(`${stderr ?? ''}\n${stdout ?? ''}`);
+}
+
+/** GitHub's default gray — names sync; Minnow swatches stay local. */
+const DEFAULT_LABEL_COLOR = 'ededed';
+
+/**
+ * Create repo labels that `gh issue create/edit --label` would otherwise reject.
+ * @param {string} cwd
+ * @param {string[]} names
+ */
+async function ensureRepoLabels(cwd, names) {
+  const wanted = cleanLabelNames(names);
+  if (!wanted.length) return;
+
+  const listed = await gh(['label', 'list', '--limit', '1000', '--json', 'name'], cwd);
+  const existing = listed.code === 0 ? parseLabelListJson(listed.stdout) : [];
+
+  // Failures are fine here: create/edit still retry without new names.
+  for (const name of labelsMissingFromRepo(wanted, existing)) {
+    await gh(['label', 'create', name, '--color', DEFAULT_LABEL_COLOR], cwd);
+  }
+}
+
+function looksLikeLabelError(stderr) {
+  return /label/i.test(String(stderr ?? ''));
+}
+
+/**
+ * @param {{ number: number, title?: unknown, body?: unknown, addLabels?: unknown, removeLabels?: unknown }} input
+ * @returns {string[]}
+ */
+export function buildIssueEditArgs(input) {
+  const args = ['issue', 'edit', String(input.number)];
+  if (typeof input.title === 'string' && input.title.trim()) {
+    args.push('--title', input.title.trim());
+  }
+  if (typeof input.body === 'string') args.push('--body', input.body);
+  for (const name of cleanLabelNames(input.addLabels)) {
+    args.push('--add-label', name);
+  }
+  for (const name of cleanLabelNames(input.removeLabels)) {
+    args.push('--remove-label', name);
+  }
+  return args;
+}
+
 export async function issueCreate({ cwd, title, body, labels } = {}) {
   const gate = await requireForge(cwd);
   if (!gate.ok) return gate;
@@ -128,11 +223,13 @@ export async function issueCreate({ cwd, title, body, labels } = {}) {
   const cleanTitle = String(title ?? '').trim();
   if (!cleanTitle) return { ok: false, error: 'A title is required' };
 
+  const labelNames = cleanLabelNames(labels);
+  await ensureRepoLabels(gate.cwd, labelNames);
+
   const base = ['issue', 'create', '--title', cleanTitle, '--body', String(body ?? '')];
   const args = [...base];
-  for (const label of Array.isArray(labels) ? labels : []) {
-    const name = String(label ?? '').trim();
-    if (name) args.push('--label', name);
+  for (const name of labelNames) {
+    args.push('--label', name);
   }
 
   const result = await gh(args, gate.cwd);
@@ -140,8 +237,8 @@ export async function issueCreate({ cwd, title, body, labels } = {}) {
     return { ok: true, ...parseIssueCreateOutput(result.stdout) };
   }
 
-  const usedLabels = args.length > base.length;
-  if (usedLabels && /label/i.test(String(result.stderr ?? ''))) {
+  // Permission or remaining unknown names must not lose the issue itself.
+  if (labelNames.length && looksLikeLabelError(result.stderr)) {
     const retry = await gh(base, gate.cwd);
     if (retry.code === 0) {
       return { ok: true, ...parseIssueCreateOutput(retry.stdout), droppedLabels: true };
@@ -159,24 +256,41 @@ export async function issueEdit({ cwd, number, title, body, addLabels, removeLab
     return { ok: false, error: 'An issue number is required' };
   }
 
-  const args = ['issue', 'edit', String(num)];
-  if (typeof title === 'string' && title.trim()) args.push('--title', title.trim());
-  if (typeof body === 'string') args.push('--body', body);
-  for (const label of Array.isArray(addLabels) ? addLabels : []) {
-    const name = String(label ?? '').trim();
-    if (name) args.push('--add-label', name);
-  }
-  for (const label of Array.isArray(removeLabels) ? removeLabels : []) {
-    const name = String(label ?? '').trim();
-    if (name) args.push('--remove-label', name);
-  }
+  const toAdd = cleanLabelNames(addLabels);
+  const toRemove = cleanLabelNames(removeLabels);
+  await ensureRepoLabels(gate.cwd, toAdd);
+
+  const args = buildIssueEditArgs({
+    number: num,
+    title,
+    body,
+    addLabels: toAdd,
+    removeLabels: toRemove,
+  });
   if (args.length === 3) return { ok: false, error: 'Nothing to update' };
 
   const result = await gh(args, gate.cwd);
-  if (result.code !== 0) {
-    return { ok: false, error: processError(result, `Could not update issue #${num}`) };
+  if (result.code === 0) {
+    return { ok: true, number: num };
   }
-  return { ok: true, number: num };
+
+  // A missing add must not roll back title/body/removes already in this command.
+  if (toAdd.length && looksLikeLabelError(result.stderr)) {
+    const retryArgs = buildIssueEditArgs({
+      number: num,
+      title,
+      body,
+      addLabels: [],
+      removeLabels: toRemove,
+    });
+    if (retryArgs.length > 3) {
+      const retry = await gh(retryArgs, gate.cwd);
+      if (retry.code === 0) {
+        return { ok: true, number: num, droppedLabels: true };
+      }
+    }
+  }
+  return { ok: false, error: processError(result, `Could not update issue #${num}`) };
 }
 
 export async function issueState({ cwd, number, state = 'closed', reason } = {}) {

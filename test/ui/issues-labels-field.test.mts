@@ -1,5 +1,5 @@
 /**
- * List labels field: one row, max three chips, +N overflow, + add (no dashed placeholder).
+ * List labels field: one row, max three chips, caret overflow, + add (no dashed placeholder).
  */
 
 import assert from 'node:assert/strict';
@@ -67,7 +67,7 @@ describe('issues labels field', () => {
     domWindow = null;
   });
 
-  test('row variant shows three chips, +N, and + with no inline input', () => {
+  test('row variant shows three chips, a caret for overflow, and + with no inline input', () => {
     const issue = seedIssue(['AUTH', 'CLERK', 'ONBOARDING', 'SETUP', 'API']);
     const field = createIssuesLabelsField({
       issueId: issue.id,
@@ -83,13 +83,14 @@ describe('issues labels field', () => {
       chips.map((chip) => chip.querySelector('.issues-label-chip__text')?.textContent),
       ['AUTH', 'CLERK', 'ONBOARDING'],
     );
-    assert.equal(field.querySelector('.issues-labels-field__more')?.textContent, '+2');
+    assert.equal(field.querySelector('.issues-labels-field__more')?.getAttribute('aria-label'), '2 more labels');
+    assert.ok(field.querySelector('.issues-labels-field__more .issues-labels-field__more-icon'));
     assert.ok(field.querySelector('.issues-labels-field__add'));
     assert.equal(field.querySelector(':scope > .issues-labels-field__input'), null);
     assert.ok(chips[0]?.getAttribute('data-swatch'));
   });
 
-  test('+N opens a popover with the remaining labels', () => {
+  test('caret opens a popover with the remaining labels', () => {
     const issue = seedIssue(['AUTH', 'CLERK', 'ONBOARDING', 'SETUP', 'API']);
     const field = createIssuesLabelsField({
       issueId: issue.id,

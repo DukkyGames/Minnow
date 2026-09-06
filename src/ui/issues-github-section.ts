@@ -194,7 +194,8 @@ export function bindGithubSyncButton(
           return;
         }
         if (outcome.droppedLabels) {
-          showToast('Created on GitHub. Some labels do not exist there and were dropped.', 'success');
+          const verb = outcome.action === 'create' ? 'Created on GitHub' : 'Pushed to GitHub';
+          showToast(`${verb}. Some labels could not be applied there.`, 'success');
         } else if (outcome.action === 'noop') {
           showToast(outcome.error ?? 'Already in sync', 'success');
         } else {

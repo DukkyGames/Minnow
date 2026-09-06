@@ -12,6 +12,7 @@ import { describe, test } from 'node:test';
 import {
   gitLinkDuplicatesGithubIssue,
   githubIssueNumberFromRef,
+  githubLabelDiff,
   githubSyncedFieldsChanged,
   githubSyncedSnapshot,
   issueNeedsGithubPush,
@@ -218,6 +219,44 @@ describe('syncFieldsEqual', () => {
     assert.equal(syncFieldsEqual(base, { ...base, closed: true }), false);
     assert.equal(syncFieldsEqual(base, { ...base, labels: ['y'] }), false);
     assert.equal(syncFieldsEqual(base, { ...base, labels: ['x', 'y'] }), false);
+  });
+
+  test('label casing is not a change (GitHub names are case-insensitive)', () => {
+    assert.equal(
+      syncFieldsEqual(base, { ...base, labels: ['X'] }),
+      true,
+    );
+  });
+});
+
+describe('githubLabelDiff', () => {
+  test('adds local-only names and removes remote-only names', () => {
+    assert.deepEqual(githubLabelDiff(['bug', 'ui'], ['bug']), {
+      add: ['ui'],
+      remove: [],
+    });
+    assert.deepEqual(githubLabelDiff(['bug'], ['bug', 'docs']), {
+      add: [],
+      remove: ['docs'],
+    });
+    assert.deepEqual(githubLabelDiff(['ux'], ['bug']), {
+      add: ['ux'],
+      remove: ['bug'],
+    });
+  });
+
+  test('keeps remote casing on remove so gh hits the real name', () => {
+    assert.deepEqual(githubLabelDiff(['Bug'], ['bug', 'Docs']), {
+      add: [],
+      remove: ['Docs'],
+    });
+  });
+
+  test('empty local set removes every remote label', () => {
+    assert.deepEqual(githubLabelDiff([], ['bug', 'docs']), {
+      add: [],
+      remove: ['bug', 'docs'],
+    });
   });
 });
 

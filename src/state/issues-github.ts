@@ -11,6 +11,7 @@
 
 import {
   ISSUES_GITHUB_MODES,
+  githubLabelDiff,
   nextGithubLink,
   normalizeGithubMode,
   planIssueSync,
@@ -277,19 +278,11 @@ async function runIssueSync(issueId: string): Promise<SyncOutcome> {
     case 'push': {
       const number = issue.github?.number;
       if (!number) return { ok: false, action: 'push', error: 'Not linked to a GitHub issue' };
-      const res = await forge('issueEdit', {
-        number,
-        title: action.fields.title,
-        body: action.fields.body,
-      });
-      if (!res.ok) return { ok: false, action: 'push', error: userFacingGithubError(res.error) };
-
-      if (remote && action.fields.closed !== (remote.state === 'closed')) {
-        await forge('issueState', { number, state: action.fields.closed ? 'closed' : 'open' });
-      }
+      const res = await pushSyncedFieldsToGithub(number, action.fields, remote);
+      if (!res.ok) return { ok: false, action: 'push', error: res.error };
       const after = await readRemote(issueId);
       writeLink(issueId, number, issue.github?.url ?? '', after?.updatedAt);
-      return { ok: true, action: 'push' };
+      return { ok: true, action: 'push', droppedLabels: res.droppedLabels };
     }
 
     case 'pull': {
@@ -335,21 +328,41 @@ export async function resolveSyncConflict(
     return { ok: true, action: 'pull' };
   }
 
-  const res = await forge('issueEdit', {
-    number: conflict.number,
-    title: conflict.local.title,
-    body: conflict.local.body,
+  const res = await pushSyncedFieldsToGithub(conflict.number, conflict.local, {
+    labels: conflict.remote.labels,
+    state: conflict.remote.closed ? 'closed' : 'open',
   });
-  if (!res.ok) return { ok: false, action: 'push', error: userFacingGithubError(res.error) };
-  if (conflict.local.closed !== conflict.remote.closed) {
-    await forge('issueState', {
-      number: conflict.number,
-      state: conflict.local.closed ? 'closed' : 'open',
-    });
-  }
+  if (!res.ok) return { ok: false, action: 'push', error: res.error };
   const after = await readRemote(conflict.issueId);
   writeLink(conflict.issueId, conflict.number, conflict.url, after?.updatedAt);
-  return { ok: true, action: 'push' };
+  return { ok: true, action: 'push', droppedLabels: res.droppedLabels };
+}
+
+/**
+ * Write synced fields to an existing GitHub issue.
+ *
+ * `gh issue edit` has no replace-all for labels, so this sends the add/remove
+ * diff. Missing repo labels are created server-side before attach.
+ */
+async function pushSyncedFieldsToGithub(
+  number: number,
+  fields: SyncFields,
+  remote: Pick<RemoteIssueSnapshot, 'labels' | 'state'> | null,
+): Promise<{ ok: boolean; error?: string; droppedLabels?: boolean }> {
+  const { add, remove } = githubLabelDiff(fields.labels, remote?.labels ?? []);
+  const res = await forge('issueEdit', {
+    number,
+    title: fields.title,
+    body: fields.body,
+    addLabels: add,
+    removeLabels: remove,
+  });
+  if (!res.ok) return { ok: false, error: userFacingGithubError(res.error) };
+
+  if (remote && fields.closed !== (remote.state === 'closed')) {
+    await forge('issueState', { number, state: fields.closed ? 'closed' : 'open' });
+  }
+  return { ok: true, droppedLabels: res.droppedLabels };
 }
 
 function applyRemoteToIssue(issueId: string, fields: SyncFields): void {

@@ -19,7 +19,7 @@ Open it from the app rail for the fullscreen app, or from the Issues button in t
 
 **j** / **k** (or the arrows) move the focused row. **Enter** opens the peek panel for the description and history — you do not need peek to change a field.
 
-**Edit** labels inline on the row: up to three chips stay visible, **+N** opens the rest, and **+** adds a name. The chip **×** removes it from that issue. Right-click a chip to pick a color; that color applies to every issue with the same name.
+**Edit** labels inline on the row: up to three chips stay visible, a caret opens the rest, and **+** adds a name. The chip **×** removes it from that issue. Right-click a chip to pick a color; that color applies to every issue with the same name.
 
 The peek keeps identity, type/status/priority chips, labels, and Send to chat pinned. The description is the page. Empty code links, attachments, and git collapse to one add row each; Plan and Related appear only when they have something to show. Delete lives under the more menu next to Close.
 
@@ -55,7 +55,7 @@ Issues have workspace-specific ids like `MIN-12` (configure the prefix under **S
 - Plans live at `documentation/plans/issues/<id>.md`
 - Pull requests go through the `gh` CLI when it is installed, with GitHub links appearing on the issue
 - **Review PR** (when `gh` is available and a PR can be resolved) runs an in-app reviewer and shows the verdict on the issue. Reviews are not posted to GitHub.
-- **GitHub sync** (Settings → Apps → Issues → GitHub) is **Off** or **Two-way mirror**. When it is on, the peek Git section can push a new issue, sync a linked one, and import open GitHub issues into Triage. **Sync automatically** (under Two-way mirror) pushes title, description, labels, and closed-state as they change, creates a GitHub issue the first time those fields change on an unlinked card, and checks GitHub every 5 minutes while Minnow is running — including in the background. It does not backfill every unlinked card when you turn it on. **Open** uses your system browser, not the in-app browser. If both sides changed since the last sync, you pick which to keep (or get a toast if that issue is not open).
+- **GitHub sync** (Settings → Apps → Issues → GitHub) is **Off** or **Two-way mirror**. When it is on, the peek Git section can push a new issue, sync a linked one, and import open GitHub issues into Triage. **Sync automatically** (under Two-way mirror) pushes title, description, labels, and closed-state as they change, creates a GitHub issue the first time those fields change on an unlinked card, and checks GitHub every 5 minutes while Minnow is running — including in the background. It does not backfill every unlinked card when you turn it on. Labels sync **by name**; if a name is not in the GitHub repo yet, Minnow creates it. Chip colors stay in Minnow. **Open** uses your system browser, not the in-app browser. If both sides changed since the last sync, you pick which to keep (or get a toast if that issue is not open).
 
 When a board finishes work on an issue, the issue moves to **review** rather than closing itself.
 

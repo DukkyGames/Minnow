@@ -10,9 +10,14 @@ import { describe, test } from 'node:test';
 
 import { gh } from '../../server/git/forge-ops.js';
 import {
+  buildIssueEditArgs,
+  cleanLabelNames,
   issueList,
+  labelAlreadyExists,
+  labelsMissingFromRepo,
   normalizeForgeIssue,
   parseIssueCreateOutput,
+  parseLabelListJson,
 } from '../../server/git/forge-issue-ops.js';
 
 describe('normalizeForgeIssue', () => {
@@ -61,6 +66,66 @@ describe('parseIssueCreateOutput', () => {
     );
     assert.equal(parsed.number, 88);
     assert.equal(parsed.url, 'https://github.com/acme/app/issues/88');
+  });
+});
+
+describe('repo label helpers', () => {
+  test('cleanLabelNames trims, drops empties, and de-dupes case-insensitively', () => {
+    assert.deepEqual(cleanLabelNames([' Bug ', '', 'bug', 'ui', null]), ['Bug', 'ui']);
+    assert.deepEqual(cleanLabelNames(undefined), []);
+  });
+
+  test('parseLabelListJson reads gh JSON objects or strings', () => {
+    assert.deepEqual(
+      parseLabelListJson('[{"name":"bug"},{"name":"docs"}]'),
+      ['bug', 'docs'],
+    );
+    assert.deepEqual(parseLabelListJson('not json'), []);
+  });
+
+  test('labelsMissingFromRepo is case-insensitive', () => {
+    assert.deepEqual(labelsMissingFromRepo(['Bug', 'ui'], ['bug']), ['ui']);
+    assert.deepEqual(labelsMissingFromRepo(['bug'], ['bug', 'docs']), []);
+  });
+
+  test('labelAlreadyExists matches GitHub and gh wording', () => {
+    assert.equal(labelAlreadyExists('HTTP 422: already_exists'), true);
+    assert.equal(labelAlreadyExists('', 'label "bug" already exists'), true);
+    assert.equal(labelAlreadyExists('permission denied'), false);
+  });
+
+  test('buildIssueEditArgs sends add and remove flags', () => {
+    assert.deepEqual(
+      buildIssueEditArgs({
+        number: 12,
+        title: 'Title',
+        body: 'Body',
+        addLabels: ['ui'],
+        removeLabels: ['docs'],
+      }),
+      [
+        'issue',
+        'edit',
+        '12',
+        '--title',
+        'Title',
+        '--body',
+        'Body',
+        '--add-label',
+        'ui',
+        '--remove-label',
+        'docs',
+      ],
+    );
+  });
+
+  test('buildIssueEditArgs with only labels is still a valid edit', () => {
+    const args = buildIssueEditArgs({
+      number: 3,
+      addLabels: ['ux'],
+      removeLabels: [],
+    });
+    assert.deepEqual(args, ['issue', 'edit', '3', '--add-label', 'ux']);
   });
 });
 

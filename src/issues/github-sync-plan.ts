@@ -18,6 +18,7 @@
  * Phase 5 of `documentation/plans/issues-app-v2.md`.
  */
 
+import { normalizeIssueLabelsList } from './label-catalog';
 import type { IssueCard, IssueGitLink, IssueGithubLink } from '../types';
 
 /** Settings-gated sync mode. */
@@ -90,13 +91,36 @@ function remoteFields(remote: RemoteIssueSnapshot): SyncFields {
 
 /** True when the two sides carry the same synced content. */
 export function syncFieldsEqual(a: SyncFields, b: SyncFields): boolean {
+  const localLabels = normalizeIssueLabelsList(a.labels);
+  const remoteLabels = normalizeIssueLabelsList(b.labels);
+  const remoteKeys = new Set(remoteLabels.map((label) => label.toLowerCase()));
   return (
     a.title.trim() === b.title.trim() &&
     a.body.trim() === b.body.trim() &&
     a.closed === b.closed &&
-    a.labels.length === b.labels.length &&
-    a.labels.every((label) => b.labels.includes(label))
+    localLabels.length === remoteLabels.length &&
+    localLabels.every((label) => remoteKeys.has(label.toLowerCase()))
   );
+}
+
+/**
+ * Names to add and remove so GitHub's issue matches the local set.
+ *
+ * `gh issue edit` has no replace-all. Compare case-insensitively (GitHub does)
+ * but remove with the remote's casing so `--remove-label` hits the real name.
+ */
+export function githubLabelDiff(
+  local: readonly string[],
+  remote: readonly string[],
+): { add: string[]; remove: string[] } {
+  const localNames = normalizeIssueLabelsList(local);
+  const remoteNames = normalizeIssueLabelsList(remote);
+  const remoteKeys = new Set(remoteNames.map((name) => name.toLowerCase()));
+  const localKeys = new Set(localNames.map((name) => name.toLowerCase()));
+  return {
+    add: localNames.filter((name) => !remoteKeys.has(name.toLowerCase())),
+    remove: remoteNames.filter((name) => !localKeys.has(name.toLowerCase())),
+  };
 }
 
 /** True when a local write actually changed GitHub-shaped fields (not rank, assignee, …). */

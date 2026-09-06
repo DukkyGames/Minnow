@@ -1,7 +1,7 @@
 /**
  * Inline labels editor for list rows and the issue peek.
  *
- * List rows stay one line: three chips, a +N overflow popover, and a + add
+ * List rows stay one line: three chips, a caret overflow popover, and a + add
  * control. The dashed placeholder no longer lives in the row. Peek wraps.
  */
 

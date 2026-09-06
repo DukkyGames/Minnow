@@ -67,4 +67,24 @@ describe('issues list CSS contract', () => {
     assert.doesNotMatch(css, /^\s*max-width:\s*65ch/m);
     assert.match(css, /\.issues-empty--triage/);
   });
+
+  test('list columns put labels after title and status before updated', () => {
+    const css = fs.readFileSync(new URL('../../src/styles/issues.css', import.meta.url), 'utf8');
+    const chrome = fs.readFileSync(new URL('../../src/ui/issues-chrome.ts', import.meta.url), 'utf8');
+    const page = fs.readFileSync(new URL('../../src/ui/issues-page.ts', import.meta.url), 'utf8');
+    assert.match(css, /--issues-row-h:\s*36px/);
+    assert.match(css, /id priority type title labels/);
+    assert.match(css, /minmax\(0, 1fr\).*max-content.*minmax\(5rem, max-content\)/);
+    assert.match(css, /Compact identity: id, priority, title, status/);
+    assert.match(
+      chrome,
+      /sortHead\('title'[\s\S]*?sortHead\('labels'[\s\S]*?sortHead\('status'[\s\S]*?sortHead\('updated'/,
+    );
+    assert.match(page, /row\.append\(\s*id,\s*priority,\s*type,\s*title,\s*labels/);
+    assert.match(page, /counts,\s*status,\s*updated/);
+    const compact = css.split('@container issues (max-width: 900px)')[1]?.split('@container')[0] ?? '';
+    assert.match(compact, /issues-list-head__type/);
+    assert.doesNotMatch(compact, /issues-row__priority/);
+    assert.doesNotMatch(compact, /issues-list-head__priority/);
+  });
 });

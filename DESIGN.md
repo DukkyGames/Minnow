@@ -174,6 +174,12 @@ Flat-by-default. Surfaces share `--surface` / `--bg`; separation is borders, not
 - **Semantic variants:** `.c` accent, `.g` success, `.y` warning, `.r` danger with matching border alpha tints.
 - **Issue labels:** ten catalog swatches (`--mn-label-*` in [`tokens.css`](src/styles/tokens.css)), tinted into `--mn-bg` / `--mn-fg` on `.issues-label[data-swatch]`. Not metric success/warning/danger.
 
+### Issues list
+
+- **Columns:** ID, priority, type, title, labels, then metadata and status. Priority is an identity field, not a trailing chip.
+- **Width:** title takes leftover space (`1fr`). Labels are `max-content`: up to three chips, then a caret for the rest, with **+** hugging the last chip.
+- **Density:** `--issues-row-h: 36px` with 8px vertical padding; `--issues-list-head-h: 32px`. Compact (≤900px container) keeps ID, priority, title, status.
+
 ### Cards / Containers
 
 - **Message bubbles:** `--radius-lg` (14px); user = green wash, no border; assistant = `--bg` + 1px `--border`, one corner squared toward the speaker.

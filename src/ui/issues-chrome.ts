@@ -239,18 +239,19 @@ function buildBody(): HTMLElement {
     selectionActions,
   ]);
 
+  // Identity cluster first so priority sits next to the id while scanning.
   const head = el('div', { id: 'issuesListHead', class: 'issues-list-head', hidden: '', role: 'row' }, [
     sortHead('id', 'ID', 'issues-list-head__id'),
+    sortHead('priority', 'Priority', 'issues-list-head__priority'),
     sortHead('type', 'Type', 'issues-list-head__type'),
     sortHead('title', 'Title', 'issues-list-head__title'),
-    sortHead('status', 'Status', 'issues-list-head__status'),
-    sortHead('priority', 'Priority', 'issues-list-head__priority'),
+    sortHead('labels', 'Labels', 'issues-list-head__labels'),
     el('span', { class: 'issues-list-head__assignee', text: 'Assignee' }),
     el('span', { class: 'issues-list-head__project', text: 'Project' }),
     el('span', { class: 'issues-list-head__agent', text: 'Agent' }),
     el('span', { class: 'issues-list-head__rollup', text: 'Sub' }),
     el('span', { class: 'issues-list-head__counts', text: 'Links' }),
-    sortHead('labels', 'Labels', 'issues-list-head__labels'),
+    sortHead('status', 'Status', 'issues-list-head__status'),
     sortHead('updated', 'Updated', 'issues-list-head__updated', 'descending'),
   ]);
 

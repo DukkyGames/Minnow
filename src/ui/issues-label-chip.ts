@@ -9,6 +9,7 @@ import {
 } from '../issues/label-catalog';
 import type { IssueLabelSwatchId } from '../types';
 import { getIssueLabelSwatch, setIssueLabelColor } from '../state/issues-store';
+import { createIcon } from './icon';
 
 export type IssueLabelChipOptions = {
   name: string;
@@ -148,7 +149,7 @@ export function createIssueLabelChip(options: IssueLabelChipOptions): HTMLElemen
   return chip;
 }
 
-/** Compact +N control. */
+/** Caret that opens labels beyond the row cap of three. */
 export function createIssueLabelMoreButton(
   hiddenCount: number,
   hiddenNames: readonly string[],
@@ -157,9 +158,9 @@ export function createIssueLabelMoreButton(
   const more = document.createElement('button');
   more.type = 'button';
   more.className = 'issues-label issues-labels-field__more';
-  more.textContent = `+${hiddenCount}`;
   more.title = hiddenNames.join(', ');
   more.setAttribute('aria-label', `${hiddenCount} more labels`);
+  more.appendChild(createIcon('chevronDown', { size: 12, className: 'issues-labels-field__more-icon' }));
   more.addEventListener('click', (event) => {
     event.stopPropagation();
     onOpen(more);
@@ -218,7 +219,7 @@ export function openIssueLabelColorPicker(anchor: HTMLElement, name: string): vo
 }
 
 /**
- * Read-only chip cluster for board cards: up to three chips and a +N popover.
+ * Read-only chip cluster for board cards: up to three chips and a caret popover.
  */
 export function createIssueLabelsDisplay(labels: readonly string[]): HTMLElement | null {
   if (labels.length === 0) return null;

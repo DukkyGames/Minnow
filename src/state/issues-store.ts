@@ -1545,7 +1545,8 @@ export function updateIssue(
   if (patch.type) issue.type = patch.type;
   if (patch.status) issue.status = patch.status;
   if (patch.priority) issue.priority = patch.priority;
-  if (patch.labels) {
+  // Empty array is a real clear (last chip removed), not "leave labels alone".
+  if (patch.labels !== undefined) {
     issue.labels = commitIssueLabels(patch.labels, { persist: false });
   }
   if (patch.notes !== undefined) issue.notes = patch.notes;

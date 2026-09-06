@@ -215,6 +215,12 @@ describe('issues-store', () => {
     assert.deepEqual(updated?.labels, ['Bug', 'Feature']);
   });
 
+  test('updateIssue with an empty labels array clears every chip', () => {
+    addIssue({ title: 'x', workspacePath: '/w', labels: ['bug'] }, 'ISS-1');
+    const updated = updateIssue('ISS-1', { labels: [] });
+    assert.deepEqual(updated?.labels, []);
+  });
+
   test('collectIssueLabelSuggestions returns unique sorted labels', () => {
     addIssue({ title: 'a', workspacePath: '/w', labels: ['Beta', 'alpha'] }, 'ISS-1');
     addIssue({ title: 'b', workspacePath: '/w', labels: ['ALPHA', 'gamma'] }, 'ISS-2');
