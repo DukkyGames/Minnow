@@ -225,4 +225,74 @@ describe('issues detail display', () => {
 
     assert.equal(findIssueById('GET-4')?.description, 'Updated description.');
   });
+
+  test('agent comments and activity are rendered, not silently stored', () => {
+    setupDom();
+    seedIssues([
+      {
+        id: 'GET-5',
+        type: 'task',
+        title: 'agent reported back',
+        description: '',
+        status: 'backlog',
+        priority: 'none',
+        labels: [],
+        workspacePath: '/repo',
+        createdAt: FIXED_NOW,
+        updatedAt: FIXED_NOW,
+        source: 'user',
+        comments: [
+          {
+            id: 'cmt-1',
+            authorKind: 'agent',
+            author: 'builder',
+            body: 'Found it: **two** parses.',
+            createdAt: FIXED_NOW,
+          },
+        ],
+        activity: [
+          { id: 'act-1', kind: 'moved', at: FIXED_NOW + 1000, actorKind: 'agent' },
+        ],
+      },
+    ]);
+
+    openIssueDetail('GET-5');
+
+    const comment = document.querySelector('.issues-comment');
+    assert.ok(comment, 'an agent comment must be visible in the panel');
+    assert.ok(comment.classList.contains('issues-comment--agent'));
+    assert.match(comment.textContent ?? '', /builder/);
+    assert.match(comment.textContent ?? '', /two/);
+    assert.ok(comment.querySelector('strong'), 'comment markdown is rendered');
+    assert.ok(document.querySelector('.issues-activity-row'), 'activity is shown too');
+    assert.ok(document.querySelector('.issues-comments__input'), 'a composer is offered');
+    assert.ok(headingTexts(document.body).includes('Comments · 1'));
+  });
+
+  test('an issue with no comments collapses to the composer, no heading', () => {
+    setupDom();
+    seedIssues([
+      {
+        id: 'GET-6',
+        type: 'task',
+        title: 'quiet',
+        description: '',
+        status: 'backlog',
+        priority: 'none',
+        labels: [],
+        workspacePath: '/repo',
+        createdAt: FIXED_NOW,
+        updatedAt: FIXED_NOW,
+        source: 'user',
+      },
+    ]);
+
+    openIssueDetail('GET-6');
+
+    assert.equal(document.querySelector('.issues-comment'), null);
+    assert.ok(document.querySelector('.issues-comments__input'));
+    const titles = headingTexts(document.body);
+    assert.equal(titles.includes('Activity'), false);
+    assert.equal(titles.some((t) => t.startsWith('Comments')), false);
+  });
 });
