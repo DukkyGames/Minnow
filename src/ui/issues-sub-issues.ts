@@ -114,6 +114,42 @@ export function openAttachSubIssueMenu(parentId: string, anchor: HTMLElement): v
   });
 }
 
+/** Menu behind the Sub-issues + control: create a child, or nest one that exists. */
+export function subIssueAddMenuItems(parentId: string): IssuesContextMenuItem[] {
+  const receive = canIssueReceiveSubIssues(parentId);
+  const attachable = workspaceEligibleSubIssues(parentId);
+  return [
+    {
+      id: 'new-sub-issue',
+      label: 'New sub-issue',
+      hint: receive.ok ? 'Create a child issue' : receive.error,
+      disabled: !receive.ok,
+      iconClass: 'fi-rr-plus-small',
+      onSelect: () => {
+        void promptCreateSubIssue(parentId);
+      },
+    },
+    {
+      id: 'attach-sub-issue',
+      label: 'Nest an existing issue',
+      hint:
+        attachable.length === 0
+          ? 'No other issues in this workspace'
+          : `${attachable.length} available`,
+      disabled: !receive.ok || attachable.length === 0,
+      submenu: () =>
+        workspaceEligibleSubIssues(parentId)
+          .slice(0, ATTACH_MENU_CAP)
+          .map((issue) => ({
+            id: `attach-${issue.id}`,
+            label: issue.title.trim() || issue.id,
+            hint: issue.id,
+            onSelect: () => applyIssueParentDrop(parentId, [issue.id]),
+          })),
+    },
+  ];
+}
+
 /** Row / peek-more items for create and unparent. */
 export function subIssueMenuItems(issue: IssueCard): IssuesContextMenuItem[] {
   const receive = canIssueReceiveSubIssues(issue.id);

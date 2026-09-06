@@ -39,6 +39,7 @@
 }
 
 .mn-os-app-rail__btn {
+  position: relative;
   width: 32px;
   height: 32px;
   padding: 0;

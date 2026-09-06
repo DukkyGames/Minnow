@@ -3,7 +3,11 @@
  * User-editable catalog for issue types, statuses, and priorities.
  */
 
-import { DEFAULT_ISSUE_TYPE_ICONS, isIssueTypeIconClass } from './type-icons';
+import {
+  DEFAULT_ISSUE_STATUS_ICONS,
+  DEFAULT_ISSUE_TYPE_ICONS,
+  isIssueTypeIconClass,
+} from './type-icons';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -25,7 +29,7 @@ export type TaxonomyItem = {
   order: number;
   /** Optional chip color (CSS token name or hex from the fixed palette). */
   color?: string;
-  /** Optional Uicons class for list chips (e.g. fi-sr-bug). Settings → Issues picker only. */
+  /** Optional Uicons class for type/status chips (e.g. fi-sr-bug). Settings → Issues picker only. */
   icon?: string;
 };
 
@@ -85,19 +89,63 @@ export function createDefaultIssuesTaxonomy(): IssuesTaxonomy {
       { id: 'note', label: 'Note', order: 3, icon: DEFAULT_ISSUE_TYPE_ICONS.note },
     ],
     statuses: [
-      { id: 'triage', label: 'Triage', order: 0, role: 'triage', boardVisible: true },
-      { id: 'backlog', label: 'Backlog', order: 1, role: 'backlog', boardVisible: false },
-      { id: 'todo', label: 'Todo', order: 2, role: 'todo', boardVisible: true },
-      { id: 'planned', label: 'Planned', order: 3, role: 'planned', boardVisible: true },
+      {
+        id: 'triage',
+        label: 'Triage',
+        order: 0,
+        role: 'triage',
+        boardVisible: true,
+        icon: DEFAULT_ISSUE_STATUS_ICONS.triage,
+      },
+      {
+        id: 'backlog',
+        label: 'Backlog',
+        order: 1,
+        role: 'backlog',
+        boardVisible: false,
+        icon: DEFAULT_ISSUE_STATUS_ICONS.backlog,
+      },
+      {
+        id: 'todo',
+        label: 'Todo',
+        order: 2,
+        role: 'todo',
+        boardVisible: true,
+        icon: DEFAULT_ISSUE_STATUS_ICONS.todo,
+      },
+      {
+        id: 'planned',
+        label: 'Planned',
+        order: 3,
+        role: 'planned',
+        boardVisible: true,
+        icon: DEFAULT_ISSUE_STATUS_ICONS.planned,
+      },
       {
         id: 'in_progress',
         label: 'In progress',
         order: 4,
         role: 'in_progress',
         boardVisible: true,
+        icon: DEFAULT_ISSUE_STATUS_ICONS.in_progress,
       },
-      { id: 'review', label: 'Review', order: 5, role: 'review', boardVisible: true },
-      { id: 'done', label: 'Done', order: 6, role: 'done', isClosed: true, boardVisible: true },
+      {
+        id: 'review',
+        label: 'Review',
+        order: 5,
+        role: 'review',
+        boardVisible: true,
+        icon: DEFAULT_ISSUE_STATUS_ICONS.review,
+      },
+      {
+        id: 'done',
+        label: 'Done',
+        order: 6,
+        role: 'done',
+        isClosed: true,
+        boardVisible: true,
+        icon: DEFAULT_ISSUE_STATUS_ICONS.done,
+      },
       {
         id: 'canceled',
         label: 'Canceled',
@@ -105,6 +153,7 @@ export function createDefaultIssuesTaxonomy(): IssuesTaxonomy {
         role: 'canceled',
         isClosed: true,
         boardVisible: false,
+        icon: DEFAULT_ISSUE_STATUS_ICONS.canceled,
       },
     ],
     priorities: [
@@ -133,6 +182,25 @@ export function isTaxonomySlug(id: string): boolean {
 
 function sortByOrder<T extends TaxonomyItem>(items: T[]): T[] {
   return [...items].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+}
+
+/** Parse a picker icon from a taxonomy row; unknown classes become validation errors. */
+function readCatalogIcon(
+  kind: 'types' | 'statuses',
+  id: string,
+  row: Record<string, unknown>,
+  errors: TaxonomyValidationError[],
+): string | undefined {
+  if (typeof row.icon !== 'string' || !row.icon.trim()) return undefined;
+  const icon = row.icon.trim();
+  if (!isIssueTypeIconClass(icon)) {
+    errors.push({
+      field: `${kind}.${id}.icon`,
+      message: `Unknown ${kind === 'types' ? 'type' : 'status'} icon "${icon}"`,
+    });
+    return undefined;
+  }
+  return icon;
 }
 
 function validateItemList(
@@ -179,6 +247,8 @@ function validateItemList(
     if (kind === 'statuses') {
       const status: StatusItem = { id, label, order };
       if (typeof row.color === 'string' && row.color.trim()) status.color = row.color.trim();
+      const icon = readCatalogIcon('statuses', id, row, errors);
+      if (icon) status.icon = icon;
       if (typeof row.role === 'string' && row.role.trim()) {
         const role = row.role.trim() as IssueStatusRole;
         if (!(ISSUE_STATUS_ROLES as readonly string[]).includes(role)) {
@@ -197,17 +267,8 @@ function validateItemList(
     const item: TaxonomyItem = { id, label, order };
     if (typeof row.color === 'string' && row.color.trim()) item.color = row.color.trim();
     if (kind === 'types') {
-      if (typeof row.icon === 'string' && row.icon.trim()) {
-        const icon = row.icon.trim();
-        if (!isIssueTypeIconClass(icon)) {
-          errors.push({
-            field: `${kind}.${id}.icon`,
-            message: `Unknown type icon "${icon}"`,
-          });
-        } else {
-          item.icon = icon;
-        }
-      }
+      const icon = readCatalogIcon('types', id, row, errors);
+      if (icon) item.icon = icon;
     }
     out.push(item);
   }

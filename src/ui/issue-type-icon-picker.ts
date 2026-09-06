@@ -84,7 +84,7 @@ export function openIssueTypeIconPicker(options: IssueTypeIconPickerOptions): vo
   popoverEl = document.createElement('div');
   popoverEl.className = 'settings-issues-icon-picker';
   popoverEl.setAttribute('role', 'dialog');
-  popoverEl.setAttribute('aria-label', 'Choose type icon');
+  popoverEl.setAttribute('aria-label', 'Choose icon');
 
   const grid = document.createElement('div');
   grid.className = 'settings-issues-icon-picker__grid';
@@ -139,12 +139,14 @@ export function createIssueTypeIconPickerButton(
     );
   };
 
-  renderIcon(value);
+  let current = value;
+  renderIcon(current);
   btn.addEventListener('click', () => {
     openIssueTypeIconPicker({
       anchor: btn,
-      value,
+      value: current,
       onSelect: (icon) => {
+        current = icon;
         renderIcon(icon);
         onSelect(icon);
       },

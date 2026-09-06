@@ -111,7 +111,7 @@ A bare request without the header returns `401 Unauthorized` — that is the gat
 
 ## 6. Optional contributor setup
 
-- **WSL terminal (Windows)** — Settings → App → General → **Default shell** (e.g. `WSL Ubuntu`). Requires `npm start`.
+- **WSL / Git Bash (Windows)** — Settings → General → Chat & terminal → **Default shell**. Git Bash appears when Git for Windows is installed; WSL distros appear when WSL is installed. Requires `npm start`.
 - **Voice** — Models → Voice: local Whisper / Qwen3-TTS or provider APIs.
 - **Memory & Brain** — the **Brain** app owns memory settings and embeddings.
 - **MCP** — Settings → Tools & integrations → **MCP servers**: Context7 built in; add custom servers.

@@ -228,6 +228,7 @@ export function wrapSandbox(spawnTarget, policy, { platform = process.platform, 
  * @param {string} [params.worktreeRoot]
  * @param {NodeJS.ProcessEnv} [params.env]
  * @param {string} [params.platform]
+ * @param {'native'|'wsl'|'git-bash'} [params.runtime]
  * @returns {ReturnType<typeof wrapSandbox> | (typeof spawnTarget & { sandbox?: SandboxMeta })}
  */
 export function applyAgentShellSandbox(spawnTarget, params) {
@@ -244,6 +245,19 @@ export function applyAgentShellSandbox(spawnTarget, params) {
           params.source !== 'agent'
             ? describeSandboxUnavailable(SANDBOX_UNAVAILABLE_REASON.USER_PTY)
             : describeSandboxUnavailable(SANDBOX_UNAVAILABLE_REASON.DISABLED),
+        mode,
+      },
+    };
+  }
+
+  // Git Bash is native Windows; rewriting into WSL+Landlock would discard the profile.
+  if (params.runtime === 'git-bash') {
+    return {
+      ...spawnTarget,
+      sandbox: {
+        applied: false,
+        reason: SANDBOX_UNAVAILABLE_REASON.NATIVE_WIN_SHELL,
+        detail: describeSandboxUnavailable(SANDBOX_UNAVAILABLE_REASON.NATIVE_WIN_SHELL),
         mode,
       },
     };

@@ -946,16 +946,17 @@ async function toolExecuteCommand(args) {
   }
 
   const shellProfile = await resolveExecuteShellProfile(getEffectiveWorkspaceRoot());
-  const usesWsl =
+  const runtime = describeShellProfileRuntime(shellProfile).runtime;
+  const skipUnixPipeGuard =
     process.platform === 'win32' &&
-    describeShellProfileRuntime(shellProfile).runtime === 'wsl';
+    (runtime === 'wsl' || runtime === 'git-bash');
 
   if (typeof args?.command === 'string') {
     const hostKill = assessHostKillCommand(args.command);
     if (hostKill) return hostKill;
     const portBind = assessHostPortBindCommand(args.command);
     if (portBind) return portBind;
-    if (!usesWsl) {
+    if (!skipUnixPipeGuard) {
       const unixPipe = assessUnixPipeOnWindows(args.command);
       if (unixPipe) return unixPipe;
     }

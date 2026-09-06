@@ -136,7 +136,14 @@ export type ChromeIconName =
   | 'codeMapInjection'
   | 'contextDocuments'
   | 'inbox'
-  | 'moon';
+  | 'moon'
+  | 'link'
+  | 'externalLink'
+  | 'pullRequest'
+  | 'subIssues'
+  | 'comment'
+  | 'copy'
+  | 'clock';
 
 export type BoardIconName =
   | 'boardBuild'
@@ -167,7 +174,7 @@ export type MetricIconName =
   | 'metricTotal'
   | 'metricCtx';
 
-/** All 134 semantic icon names. */
+/** All 149 semantic icon names. */
 export type IconName =
   | ShellIconName
   | AppIconName
@@ -308,6 +315,13 @@ export const ICON_CLASS: Record<IconName, string> = {
   contextDocuments: 'fi-rr-document-signed',
   inbox: 'fi-rr-inbox',
   moon: 'fi-rr-moon',
+  link: 'fi-rr-link-alt',
+  externalLink: 'fi-rr-arrow-up-right-from-square',
+  pullRequest: 'fi-rr-code-pull-request',
+  subIssues: 'fi-rr-sitemap',
+  comment: 'fi-rr-comment-alt',
+  copy: 'fi-rr-copy-alt',
+  clock: 'fi-rr-clock',
 
   boardBuild: 'fi-sr-hammer',
   boardFix: 'fi-sr-band-aid',

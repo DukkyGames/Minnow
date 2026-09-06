@@ -13,15 +13,15 @@ Open it from the app rail for the fullscreen app, or from the Issues button in t
 
 ## Working with issues
 
-**Capture** with the quick-capture field in the header, or **New issue** (**C**) for the full form. When **Workspace scope** is **All workspaces**, the new-issue form includes a **Workspace** picker (Scratch plus recent folders). New issues start in **Backlog**.
+**Capture** with the quick-capture field in the header, or **New issue** (**C**) for the full form (title, type, priority, labels, description). When **Workspace scope** is **All workspaces**, the new-issue form includes a **Workspace** picker (Scratch plus recent folders). New issues start in **Backlog**.
 
 **Select** several rows with **Ctrl/Cmd+click**, or a range with **Shift+click**. The selection bar can change status, priority, assignee, labels, and project, or delete. **Shift+F10** or right-click opens the row menu: open, copy ID, expand, add a sub-issue, remove from parent, send to chat or a background agent, change status, delete.
 
-**j** / **k** (or the arrows) move the focused row. **Enter** opens the peek panel for the description and history — you do not need peek to change a field. Drag the peek's left edge to widen it (remembered per workspace). The header control next to Close opens a larger centered sheet over the list; click the dim area, Restore, or Escape to return to the docked peek. The peek **Sub-issues** section lists children: **New** creates one from a title, **Existing** attaches another issue, and **Remove** unparents without deleting. A child peek shows a Parent chip that opens the parent.
+**j** / **k** (or the arrows) move the focused row. **Enter** opens the peek panel for the description and history — you do not need peek to change a field. Drag the peek's left edge to widen it (remembered per workspace). The header control next to Close opens a larger centered sheet over the list; click the dim area, Restore, or Escape to return to the docked peek. The peek **Sub-issues** section lists children: **New** creates one from a title, **Existing** attaches another issue, and **Remove** unparents without deleting. A child peek shows a Parent chip that opens the parent. **Chats** lists sessions started or attached from the issue (title, Running or Done, mode). Open jumps to that chat in Code. A board tied to the issue or to one of those chats is a sibling row. **New** starts a General chat the same way Send to chat does; **Existing** attaches a session you already have. **Remove** unlinks only.
 
 **Edit** labels inline on the row: up to three chips stay visible, a caret opens the rest, and **+** adds a name. The chip **×** removes it from that issue. Right-click a chip to pick a color; that color applies to every issue with the same name.
 
-The peek keeps identity, type/status/priority chips, labels, and Send to chat pinned. The description is the page. Empty code links, attachments, and git collapse to one add row each; Plan and Related appear only when they have something to show. Sub-issues stay visible so you can add a child on an empty parent. Delete lives under the more menu next to Close.
+The peek keeps identity, type/status/priority chips, labels, and Send to chat pinned. The description is the page. Empty code links, attachments, and git collapse to one add row each; Plan and Related appear only when they have something to show. Sub-issues and Chats stay visible so you can add a child or attach a session on an empty card. Delete lives under the more menu next to Close.
 
 Type in the description to edit it. The formatting toolbar appears while the description is focused. **Ctrl/Cmd+Enter** commits; **Escape** commits and lets the panel close.
 
@@ -63,7 +63,7 @@ When a board finishes work on an issue, the issue moves to **review** rather tha
 
 **Settings → Apps → Issues** defines your **project key** (new auto-ids) and your types, statuses and priorities.
 
-Statuses carry semantic roles and flags — which lanes appear on the board, which count as closed — so workflows can resolve "the triage status" without hard-coding your names. You can delete an entry only when nothing references it.
+Statuses carry semantic roles and flags: which lanes appear on the board, and which count as closed, so workflows can resolve "the triage status" without hard-coding your names. Types and statuses each have an icon you pick in that table (same Flaticon set). Status chips show the icon next to the name. You can delete an entry only when nothing references it.
 
 Keep the taxonomy small. Humans and agents share this vocabulary, and every extra status is another thing for both to get wrong.
 

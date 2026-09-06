@@ -58,10 +58,16 @@ import { createSettingsToggleRow } from './settings-switch';
 import { createIcon } from './icon';
 import { createIssueTypeIconPickerButton } from './issue-type-icon-picker';
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
-import { resolveIssueTypeIcon } from '../issues/type-icons';
+import { resolveIssueStatusIcon, resolveIssueTypeIcon } from '../issues/type-icons';
 import { setStatus } from './status';
 
 type TaxonomyKind = 'types' | 'statuses' | 'priorities';
+
+const TAXONOMY_ADD_LABEL: Record<TaxonomyKind, string> = {
+  types: 'Add type',
+  statuses: 'Add status',
+  priorities: 'Add priority',
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -149,7 +155,7 @@ function renderTaxonomyTable(
   onChange: () => void,
 ): void {
   const withStatusColumns = kind === 'statuses';
-  const withIconColumn = kind === 'types';
+  const withIconColumn = kind === 'types' || kind === 'statuses';
   const body = appendSettingsGroup(mount, title, hint, searchKey, { emphasis: true });
   const taxonomy = getIssuesTaxonomySync();
   const items =
@@ -203,7 +209,7 @@ function renderTaxonomyTable(
   body.appendChild(wrap);
 
   const toolbar = el('div', 'settings-issues-toolbar');
-  const addBtn = el('button', 'settings-inline-btn', `Add ${kind.slice(0, -1)}`);
+  const addBtn = el('button', 'settings-inline-btn', TAXONOMY_ADD_LABEL[kind]);
   addBtn.type = 'button';
   addBtn.addEventListener('click', () => {
     void promptAndAddItem(kind, onChange);
@@ -231,11 +237,15 @@ function renderTaxonomyRow(
   row.dataset.taxonomyId = item.id;
 
   if (withIconColumn) {
+    const resolved =
+      kind === 'statuses'
+        ? resolveIssueStatusIcon(item.id, item)
+        : resolveIssueTypeIcon(item.id, item);
     const iconBtn = createIssueTypeIconPickerButton(
-      resolveIssueTypeIcon(item.id, item),
+      resolved,
       item.label,
       (icon) => {
-        void updateItemIcon(item.id, icon, onChange);
+        void updateItemIcon(kind, item.id, icon, onChange);
       },
     );
     row.appendChild(labeledCell('Icon', iconBtn));
@@ -353,12 +363,15 @@ function renderTaxonomyRow(
 // ── Mutations ────────────────────────────────────────────────────────────────
 
 async function updateItemIcon(
+  kind: TaxonomyKind,
   id: string,
   icon: string,
   onChange: () => void,
 ): Promise<void> {
+  if (kind !== 'types' && kind !== 'statuses') return;
   const next = cloneTaxonomy();
-  const item = next.types.find((row) => row.id === id);
+  const list = kind === 'types' ? next.types : next.statuses;
+  const item = list.find((row) => row.id === id);
   if (!item) return;
   item.icon = icon;
   if (await persistTaxonomy(next)) onChange();
@@ -473,7 +486,13 @@ async function promptAndAddItem(kind: TaxonomyKind, onChange: () => void): Promi
 
   const order = list.length;
   if (kind === 'statuses') {
-    next.statuses.push({ id, label: label.trim(), order, boardVisible: true });
+    next.statuses.push({
+      id,
+      label: label.trim(),
+      order,
+      boardVisible: true,
+      icon: resolveIssueStatusIcon(id),
+    });
   } else if (kind === 'types') {
     next.types.push({
       id,

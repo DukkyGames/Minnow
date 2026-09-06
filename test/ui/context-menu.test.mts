@@ -80,6 +80,27 @@ describe('shared context menu', () => {
     assert.equal(doc.activeElement?.textContent?.trim(), 'Open');
   });
 
+  test('renders a leading Uicons glyph when iconClass is set', () => {
+    const doc = installDom();
+    openContextMenu({
+      items: [
+        {
+          id: 'todo',
+          label: 'Todo',
+          iconClass: 'fi-sr-clipboard-list',
+          onSelect: () => {},
+        },
+      ],
+      clientX: 10,
+      clientY: 10,
+    });
+
+    const glyph = rows(doc)[0]?.querySelector('.mn-menu__icon');
+    assert.ok(glyph);
+    assert.equal(glyph?.classList.contains('fi-sr-clipboard-list'), true);
+    assert.equal(glyph?.getAttribute('aria-hidden'), 'true');
+  });
+
   test('a submenu row is marked as such and opens a real nested menu', () => {
     const doc = installDom();
     openContextMenu({ items: sample, clientX: 40, clientY: 40 });

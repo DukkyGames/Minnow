@@ -156,6 +156,7 @@ export async function createPtySession(options) {
   const env = buildPtySpawnEnv(process.env, {
     term: 'xterm-256color',
     workspaceRoot: cwd,
+    gitBash: profile.runtime === 'git-bash',
   });
 
   const ptyProcess = pty.spawn(spawnTarget.shell, spawnTarget.args, {

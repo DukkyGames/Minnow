@@ -25,7 +25,7 @@ export type IssuesLabelsFieldOptions = {
   labels: string[];
   /** Legacy severity chip shown read-only beside labels. */
   severity?: string;
-  variant: 'detail' | 'row';
+  variant: 'detail' | 'row' | 'form';
   onChange: (labels: string[]) => void;
 };
 
@@ -44,7 +44,6 @@ export function filterIssueLabelSuggestions(
   allSuggestions: readonly string[],
   currentLabels: readonly string[],
   query: string,
-  limit = 10,
 ): string[] {
   const applied = new Set(currentLabels.map((label) => label.toLowerCase()));
   const needle = query.trim().toLowerCase();
@@ -53,7 +52,6 @@ export function filterIssueLabelSuggestions(
     if (applied.has(suggestion.toLowerCase())) continue;
     if (needle && !suggestion.toLowerCase().includes(needle)) continue;
     out.push(suggestion);
-    if (out.length >= limit) break;
   }
   return out;
 }
@@ -69,7 +67,7 @@ export function createIssuesLabelsField(options: IssuesLabelsFieldOptions): HTML
   root.className = `issues-labels-field issues-labels-field--${options.variant}`;
   if (options.variant === 'detail') {
     root.classList.add('issues-detail__labels');
-  } else {
+  } else if (options.variant === 'row') {
     root.classList.add('issues-row__labels');
   }
   root.setAttribute('role', 'group');
@@ -84,7 +82,12 @@ export function createIssuesLabelsField(options: IssuesLabelsFieldOptions): HTML
   const addButton = document.createElement('button');
   addButton.type = 'button';
   addButton.className = 'issues-label issues-labels-field__add';
-  addButton.textContent = '+';
+  if (options.variant === 'form') {
+    addButton.textContent = 'Add label';
+    addButton.classList.add('issues-labels-field__add--text');
+  } else {
+    addButton.textContent = '+';
+  }
   addButton.setAttribute('aria-label', 'Add label');
   addButton.setAttribute('aria-haspopup', 'listbox');
   addButton.setAttribute('aria-expanded', 'false');

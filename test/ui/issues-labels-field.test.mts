@@ -10,7 +10,7 @@ import { ISSUES_COMPAT_VERSION, ISSUES_SCHEMA_VERSION } from '../../src/types.ts
 import type { IssueCard } from '../../src/types.ts';
 
 const { setIssuesStateForTests } = await import('../../src/state/issues-store.ts');
-const { createIssuesLabelsField, closeIssuesLabelsSuggestionsMenu } = await import(
+const { createIssuesLabelsField, closeIssuesLabelsSuggestionsMenu, filterIssueLabelSuggestions } = await import(
   '../../src/ui/issues-labels-field.ts'
 );
 
@@ -120,5 +120,52 @@ describe('issues labels field', () => {
     });
     assert.equal(field.querySelectorAll('.issues-label-chip').length, 4);
     assert.equal(field.querySelector('.issues-labels-field__more'), null);
+  });
+
+  test('add popover lists every workspace suggestion, not a capped subset', () => {
+    const labels = Array.from({ length: 15 }, (_, index) => `LABEL-${index + 1}`);
+    const issue = seedIssue(['FEATURE']);
+    setIssuesStateForTests({
+      version: ISSUES_COMPAT_VERSION,
+      schemaRevision: ISSUES_SCHEMA_VERSION,
+      nextId: 10,
+      issues: [
+        {
+          ...issue,
+          labels: ['FEATURE'],
+        },
+        {
+          id: 'MIN-10',
+          type: 'task',
+          title: 'Other',
+          description: '',
+          status: 'todo',
+          priority: 'none',
+          labels,
+          workspacePath: '/workspace',
+          createdAt: FIXED_NOW,
+          updatedAt: FIXED_NOW,
+          source: 'user',
+        },
+      ],
+    });
+
+    const field = createIssuesLabelsField({
+      issueId: issue.id,
+      labels: ['FEATURE'],
+      variant: 'row',
+      onChange: () => {},
+    });
+    document.body.appendChild(field);
+    field.querySelector('.issues-labels-field__add')?.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+
+    const options = document.querySelectorAll('.issues-labels-suggestions__item');
+    assert.equal(options.length, 15);
+  });
+
+  test('filterIssueLabelSuggestions returns every match', () => {
+    const suggestions = Array.from({ length: 25 }, (_, index) => `TAG-${index + 1}`);
+    const filtered = filterIssueLabelSuggestions(suggestions, ['TAG-1'], '');
+    assert.equal(filtered.length, 24);
   });
 });

@@ -13,6 +13,7 @@ import {
 import { hasExternalFileDrag } from '../attachments/external-file-drop';
 import type { IssueAttachment, IssueCard } from '../types';
 import { appConfirm } from './app-dialog';
+import { createIcon } from './icon';
 import { showToast } from './toast';
 
 /** Called after any change so the panel re-renders from store state. */
@@ -111,7 +112,10 @@ function buildAttachmentRow(
   const pathEl = document.createElement('button');
   pathEl.type = 'button';
   pathEl.className = 'issues-attachment__path';
-  pathEl.textContent = 'Copy path';
+  pathEl.appendChild(createIcon('copy', { size: 12 }));
+  const pathLabel = document.createElement('span');
+  pathLabel.textContent = 'Copy path';
+  pathEl.appendChild(pathLabel);
   pathEl.title = attachment.path;
   pathEl.addEventListener('click', () => {
     void navigator.clipboard.writeText(attachment.path).then(
@@ -126,7 +130,8 @@ function buildAttachmentRow(
   remove.type = 'button';
   remove.className = 'issues-attachment__remove';
   remove.setAttribute('aria-label', `Remove ${attachment.name}`);
-  remove.textContent = '×';
+  remove.title = `Remove ${attachment.name}`;
+  remove.appendChild(createIcon('trash', { size: 13 }));
   remove.addEventListener('click', () => {
     void (async () => {
       const ok = await appConfirm(`Remove ${attachment.name}? The file is deleted.`, {
@@ -148,12 +153,22 @@ function buildAttachmentRow(
 
 // ── Render ───────────────────────────────────────────────────────────────────
 
-/** Build the section. */
+/** Handle so the section header's control can open the native picker. */
+export interface IssueAttachmentsHandle {
+  openPicker: () => void;
+}
+
+/**
+ * Build the section.
+ *
+ * The picker lives here but the control that opens it sits in the section
+ * header, so an issue with no attachments costs one row instead of a button.
+ */
 export function renderIssueAttachments(
   body: HTMLElement,
   issue: IssueCard,
   onChanged: AttachmentsChanged,
-): void {
+): IssueAttachmentsHandle {
   const attachments = issue.attachments ?? [];
 
   if (attachments.length > 0) {
@@ -165,27 +180,17 @@ export function renderIssueAttachments(
     body.appendChild(list);
   }
 
-  const controls = document.createElement('div');
-  controls.className = 'issues-detail__add-code';
-
   const picker = document.createElement('input');
   picker.type = 'file';
   picker.multiple = true;
   picker.hidden = true;
+  picker.setAttribute('aria-hidden', 'true');
   picker.addEventListener('change', () => {
     const files = picker.files ? Array.from(picker.files) : [];
     picker.value = '';
     void ingestIssueFiles(issue.id, files, onChanged);
   });
-
-  const attachBtn = document.createElement('button');
-  attachBtn.type = 'button';
-  attachBtn.className = 'issues-btn';
-  attachBtn.textContent = 'Attach…';
-  attachBtn.addEventListener('click', () => picker.click());
-
-  controls.append(attachBtn, picker);
-  body.appendChild(controls);
+  body.appendChild(picker);
 
   body.addEventListener('paste', (event) => {
     const files = filesFromClipboard(event as ClipboardEvent);
@@ -210,4 +215,6 @@ export function renderIssueAttachments(
     if (files.length === 0) return;
     void ingestIssueFiles(issue.id, files, onChanged);
   });
+
+  return { openPicker: () => picker.click() };
 }

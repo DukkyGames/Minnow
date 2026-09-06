@@ -13,6 +13,7 @@ export const SANDBOX_UNAVAILABLE_REASON = Object.freeze({
   WSL_UNAVAILABLE: 'wsl_unavailable',
   DISABLED: 'disabled',
   USER_PTY: 'user_pty',
+  NATIVE_WIN_SHELL: 'native_win_shell',
 });
 
 /**
@@ -39,6 +40,8 @@ export function describeSandboxUnavailable(reason) {
       return 'Agent shell sandbox is disabled';
     case SANDBOX_UNAVAILABLE_REASON.USER_PTY:
       return 'Interactive user PTY sessions are never sandboxed';
+    case SANDBOX_UNAVAILABLE_REASON.NATIVE_WIN_SHELL:
+      return 'Git Bash is a native Windows shell; WSL Landlock does not wrap it. Interactive PTYs are also unsandboxed';
     default:
       return `Agent shell sandbox unavailable (${reason})`;
   }

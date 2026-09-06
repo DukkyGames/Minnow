@@ -198,5 +198,14 @@ describe('Phase 3: trailers', () => {
       }),
       '',
     );
+    assert.equal(
+      formatSandboxTrailer({
+        applied: false,
+        mode: 'prefer',
+        reason: 'native_win_shell',
+        detail: 'Git Bash is a native Windows shell',
+      }),
+      '',
+    );
   });
 });

@@ -6,7 +6,7 @@ export interface ShellProfile {
   shell: string;
   args: string[];
   platform: string;
-  runtime?: 'native' | 'wsl';
+  runtime?: 'native' | 'wsl' | 'git-bash';
   distro?: string;
 }
 

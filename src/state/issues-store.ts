@@ -1558,7 +1558,8 @@ export function updateIssue(
   if (patch.boardChatId !== undefined) issue.boardChatId = patch.boardChatId;
   if (patch.investigateRunId !== undefined) issue.investigateRunId = patch.investigateRunId;
   if (patch.planRunId !== undefined) issue.planRunId = patch.planRunId;
-  if (patch.chatIds) issue.chatIds = [...patch.chatIds];
+  // Empty array is a real unlink (last chat removed), not "leave chatIds alone".
+  if (patch.chatIds !== undefined) issue.chatIds = [...patch.chatIds];
   if (patch.codeRefs) {
     issue.codeRefs = patch.codeRefs
       .map((r) => normalizeIssueCodeRef(r))
@@ -2170,17 +2171,24 @@ export function setIssueLabelColor(name: string, color: IssueLabelSwatchId): voi
 }
 
 export function collectIssueLabelSuggestions(excludeIssueId?: string): string[] {
+  const state = requireIssuesState();
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const issue of requireIssuesState().issues) {
+  const push = (raw: string): void => {
+    const normalized = normalizeIssueLabel(raw);
+    if (!normalized) return;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(normalized);
+  };
+  for (const entry of state.labelCatalog ?? []) {
+    push(entry.name);
+  }
+  for (const issue of state.issues) {
     if (excludeIssueId && issue.id === excludeIssueId) continue;
     for (const label of issue.labels) {
-      const normalized = normalizeIssueLabel(label);
-      if (!normalized) continue;
-      const key = normalized.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(normalized);
+      push(label);
     }
   }
   out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));

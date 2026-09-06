@@ -17,6 +17,8 @@ export interface IssuesContextMenuItem {
   submenu?: IssuesContextMenuItem[] | (() => IssuesContextMenuItem[]);
   /** Draws a divider above this row. */
   separatorBefore?: boolean;
+  /** Leading Uicons class for status (and similar) rows. */
+  iconClass?: string;
   onSelect?: () => void | Promise<void>;
 }
 
@@ -59,6 +61,7 @@ function toMenuItems(items: IssuesContextMenuItem[]): MenuItem[] {
       hint: item.hint,
       danger: item.danger,
       disabled: item.disabled,
+      iconClass: item.iconClass,
       onSelect: item.onSelect ?? (() => {}),
     });
   }

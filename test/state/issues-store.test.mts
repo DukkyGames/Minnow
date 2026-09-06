@@ -225,7 +225,13 @@ describe('issues-store', () => {
     addIssue({ title: 'a', workspacePath: '/w', labels: ['Beta', 'alpha'] }, 'ISS-1');
     addIssue({ title: 'b', workspacePath: '/w', labels: ['ALPHA', 'gamma'] }, 'ISS-2');
     assert.deepEqual(collectIssueLabelSuggestions(), ['alpha', 'Beta', 'gamma']);
-    assert.deepEqual(collectIssueLabelSuggestions('ISS-1'), ['ALPHA', 'gamma']);
+    assert.deepEqual(collectIssueLabelSuggestions('ISS-1'), ['alpha', 'Beta', 'gamma']);
+  });
+
+  test('collectIssueLabelSuggestions includes catalog names not on any issue', () => {
+    addIssue({ title: 'a', workspacePath: '/w', labels: ['bug'] }, 'ISS-1');
+    setIssueLabelColor('legacy', 'clay');
+    assert.deepEqual(collectIssueLabelSuggestions(), ['bug', 'legacy']);
   });
 
   test('new labels get the next unused catalog swatch', () => {

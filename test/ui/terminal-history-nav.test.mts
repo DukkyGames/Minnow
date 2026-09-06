@@ -42,6 +42,7 @@ describe('terminal-history-nav', () => {
     assert.equal(usesShellNativeHistory('zsh'), true);
     assert.equal(usesShellNativeHistory('bash'), true);
     assert.equal(usesShellNativeHistory('fish'), true);
+    assert.equal(usesShellNativeHistory('git-bash'), true);
     assert.equal(usesShellNativeHistory('wsl:Ubuntu'), true);
     assert.equal(usesShellNativeHistory(null), false);
   });
@@ -63,6 +64,10 @@ describe('terminal-history-nav', () => {
     );
     assert.equal(
       shouldInterceptPtyHistoryArrow({ ...usedZsh, shellProfileId: 'powershell' }),
+      false,
+    );
+    assert.equal(
+      shouldInterceptPtyHistoryArrow({ ...usedZsh, shellProfileId: 'git-bash' }),
       false,
     );
   });

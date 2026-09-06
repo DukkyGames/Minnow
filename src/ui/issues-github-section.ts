@@ -20,6 +20,7 @@ import { userFacingGithubError } from '../issues/github-error';
 import { githubSyncCaption } from '../issues/github-sync-status';
 import type { IssueCard } from '../types';
 import { openExternalGitUrl } from '../chat/issues/git-actions';
+import { createIcon } from './icon';
 import { showToast } from './toast';
 
 /** Called after any change so the panel re-renders from store state. */
@@ -154,11 +155,11 @@ export async function runIssuesGithubSyncAll(
   }
   if (syncAllInFlight) return;
 
-  const btn = document.getElementById('btnIssuesSyncAll');
+  const btn = document.getElementById('btnIssuesSyncAll') as HTMLButtonElement | null;
   syncAllInFlight = true;
   if (btn) {
     btn.disabled = true;
-    btn.textContent = 'Syncing…';
+    setButtonLabel(btn, 'Syncing…');
   }
 
   try {
@@ -329,6 +330,13 @@ function buildConflictPane(
 // ── Sync action ──────────────────────────────────────────────────────────────
 
 /** Wire Push / Sync to the same forge path. Idle label is restored on failure. */
+/** Rewrite a button's words without dropping its leading glyph. */
+function setButtonLabel(btn: HTMLButtonElement, text: string): void {
+  const label = btn.querySelector('span');
+  if (label) label.textContent = text;
+  else btn.textContent = text;
+}
+
 export function bindGithubSyncButton(
   btn: HTMLButtonElement,
   issue: IssueCard,
@@ -337,12 +345,12 @@ export function bindGithubSyncButton(
   btn.addEventListener('click', () => {
     const idle = options.idleLabel;
     btn.disabled = true;
-    btn.textContent = 'Syncing…';
+    setButtonLabel(btn, 'Syncing…');
     void syncIssueWithGithub(issue.id)
       .then((outcome) => {
         if (outcome.conflict) {
           btn.disabled = false;
-          btn.textContent = idle;
+          setButtonLabel(btn, idle);
           const shown = presentGithubSyncConflict(outcome.conflict);
           if (!shown && options.conflictHost.isConnected) {
             showConflict(options.conflictHost, outcome.conflict, options.onChanged);
@@ -351,7 +359,7 @@ export function bindGithubSyncButton(
         }
         if (!outcome.ok) {
           btn.disabled = false;
-          btn.textContent = idle;
+          setButtonLabel(btn, idle);
           showToast(outcome.error ?? 'Sync failed', 'error');
           return;
         }
@@ -367,7 +375,7 @@ export function bindGithubSyncButton(
       })
       .catch(() => {
         btn.disabled = false;
-        btn.textContent = idle;
+        setButtonLabel(btn, idle);
         showToast('Sync failed', 'error');
       });
   });
@@ -395,6 +403,8 @@ export function buildGithubIssueChip(
   const identity = document.createElement('span');
   identity.className = 'issues-detail__git-chip-label';
 
+  identity.appendChild(createIcon('globe', { size: 12, className: 'issues-detail__git-chip-icon' }));
+
   const ref = document.createElement('span');
   ref.className = 'issues-detail__git-chip-ref';
   ref.textContent = `#${number}`;
@@ -414,8 +424,11 @@ export function buildGithubIssueChip(
 
   const openBtn = document.createElement('button');
   openBtn.type = 'button';
-  openBtn.className = 'issues-btn issues-detail__git-open';
-  openBtn.textContent = 'Open';
+  openBtn.className = 'issues-btn issues-detail__act issues-detail__git-open';
+  openBtn.appendChild(createIcon('externalLink', { size: 12, className: 'issues-detail__act-icon' }));
+  const openLabel = document.createElement('span');
+  openLabel.textContent = 'Open';
+  openBtn.appendChild(openLabel);
   openBtn.title = 'Open on GitHub in your browser';
   openBtn.setAttribute('aria-label', `Open GitHub issue #${number} in your browser`);
   openBtn.disabled = !url;
@@ -431,8 +444,11 @@ export function buildGithubIssueChip(
   if (options.canSync) {
     const syncBtn = document.createElement('button');
     syncBtn.type = 'button';
-    syncBtn.className = 'issues-btn issues-detail__git-open';
-    syncBtn.textContent = 'Sync';
+    syncBtn.className = 'issues-btn issues-detail__act issues-detail__git-open';
+    syncBtn.appendChild(createIcon('sync', { size: 12, className: 'issues-detail__act-icon' }));
+    const syncLabel = document.createElement('span');
+    syncLabel.textContent = 'Sync';
+    syncBtn.appendChild(syncLabel);
     syncBtn.title = 'Sync this issue with GitHub';
     bindGithubSyncButton(syncBtn, issue, {
       idleLabel: 'Sync',
