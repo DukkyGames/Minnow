@@ -2,8 +2,8 @@
  * Lexicographic fractional ranks for {@link IssueCard.rank}.
  *
  * Why strings, not numbers: inserting between two rows must not rewrite the
- * whole group. A key that sorts between its neighbours is enough; drag and
- * Alt+↑/↓ persist it via `updateIssue`. Header sort is a session fallback used
+ * whole group. A key that sorts between its neighbours is enough; Alt+↑/↓
+ * persist it via `updateIssue`. Header sort is a session fallback used
  * only when ranks are equal or missing — see `sortIssuesInGroup`.
  */
 
@@ -60,7 +60,7 @@ export function rankInitial(): string {
  * Compare two optional ranks. Ranked rows sort before unranked ones so a
  * manual order the user started is not shuffled behind unsorted leftovers.
  *
- * That ranked-before-unranked rule is why the first Alt+↑/↓ or drag in a
+ * That ranked-before-unranked rule is why the first Alt+↑/↓ in a
  * group must {@link materializePeerRanks}: `rankBetween(null, null)` is `"h"`,
  * which still sorts *before* an unranked neighbour, so the DOM never swaps.
  */

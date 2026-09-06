@@ -4,6 +4,7 @@ import {
   deleteIssue,
   findIssueById,
   issueCodeRefsEqual,
+  listIssues,
   scheduleSaveIssues,
   updateIssue,
 } from '../state/issues-store';
@@ -66,6 +67,15 @@ import { codeRefsExcludingPlan, inferIssuePlanPath } from '../issues/plan-attach
 import { renderIssueAttachments } from './issues-attachments-section';
 import { bindIssueDropTarget } from './issue-drop-target';
 import {
+  canIssueReceiveSubIssues,
+  openAttachSubIssueMenu,
+  promptCreateSubIssue,
+  subIssueMenuItems,
+  unparentIssueFromParent,
+  workspaceEligibleSubIssues,
+} from './issues-sub-issues';
+import { listChildIssues } from '../issues/hierarchy';
+import {
   bindGithubSyncButton,
   buildGithubIssueChip,
   clearGithubConflictHost,
@@ -85,6 +95,13 @@ import {
 import { getIssuesTaxonomySync } from '../state/issues-taxonomy-store';
 import { isLocalServerAvailable } from '../tools/config';
 import { createIcon } from './icon';
+import {
+  ensureIssuesPeekLayout,
+  isIssueDetailSheetExpanded,
+  refreshIssuesPeekLayoutChrome,
+  resetIssueDetailSheetOnClose,
+  setIssueDetailSheetExpanded,
+} from './issues-detail-layout';
 import { openIssuesContextMenu } from './issues-context-menu';
 import type {
   IssueCard,
@@ -137,6 +154,7 @@ function ensureDetailHost(): HTMLElement | null {
     body.appendChild(host);
   }
   detailHost = host;
+  ensureIssuesPeekLayout(host);
   return host;
 }
 
@@ -196,8 +214,10 @@ export function closeIssueDetail(): void {
   const host = detailHost ?? document.getElementById('issuesDetailHost');
   if (host) {
     host.classList.remove('is-open');
-    host.innerHTML = '';
+    host.querySelector('.issues-detail')?.remove();
   }
+  resetIssueDetailSheetOnClose();
+  refreshIssuesPeekLayoutChrome();
   syncDetailLayoutClass(false);
 }
 
@@ -229,6 +249,7 @@ export function openIssueDetail(issueId: string): void {
   syncDetailLayoutClass(true);
   host.classList.add('is-open');
   renderIssueDetail(host, issue);
+  refreshIssuesPeekLayoutChrome();
 }
 
 /** Re-render detail if the selected issue is still open. */
@@ -350,7 +371,10 @@ function section(
 }
 
 /** Icon button used for Close and the more menu — 28px visual, 44px on coarse pointers. */
-function detailIconButton(label: string, iconName: 'close' | 'more'): HTMLButtonElement {
+function detailIconButton(
+  label: string,
+  iconName: 'close' | 'more' | 'expand',
+): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'issues-detail__icon-btn';
@@ -487,7 +511,7 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   paintingDetail = true;
   try {
     teardownDetailEditor();
-    host.innerHTML = '';
+    host.querySelector('.issues-detail')?.remove();
 
   const panel = document.createElement('div');
   panel.className = 'issues-detail';
@@ -515,16 +539,27 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
       restoreFocus: moreBtn,
       label: 'Issue actions',
       items: [
+        ...subIssueMenuItems(issue),
         {
           id: 'delete',
           label: 'Delete issue',
           danger: true,
+          separatorBefore: true,
           onSelect: () => {
             void deleteIssueFromDetail(issue.id);
           },
         },
       ],
     });
+  });
+
+  // Docked vs overlay: this control grows the same peek, it does not close it.
+  const layoutBtn = detailIconButton('Open issue in a larger sheet', 'expand');
+  layoutBtn.classList.add('issues-detail__layout-expand');
+  layoutBtn.setAttribute('aria-pressed', isIssueDetailSheetExpanded() ? 'true' : 'false');
+  layoutBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setIssueDetailSheetExpanded(!isIssueDetailSheetExpanded());
   });
 
   const closeBtn = detailIconButton('Close issue detail', 'close');
@@ -534,7 +569,7 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
     void import('./issues-page').then((m) => m.setIssuesRouteHash('#/app/issues'));
   });
 
-  headerActions.append(createIssueExpandButton(issue, 'peek'), moreBtn, closeBtn);
+  headerActions.append(createIssueExpandButton(issue, 'peek'), moreBtn, layoutBtn, closeBtn);
   header.append(idEl, headerActions);
   sticky.appendChild(header);
 
@@ -611,6 +646,9 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   const scroll = document.createElement('div');
   scroll.className = 'issues-detail__scroll';
 
+  const parentLine = buildParentLine(issue);
+  if (parentLine) scroll.appendChild(parentLine);
+
   scroll.appendChild(buildDescriptionSection(issue));
 
   const planPath = inferIssuePlanPath(issue);
@@ -632,6 +670,9 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
 
   const reviewSection = buildIssueReviewSection(issue);
   if (reviewSection) scroll.appendChild(reviewSection);
+
+  const subIssues = buildSubIssuesSection(issue);
+  if (subIssues) scroll.appendChild(subIssues);
 
   const related = buildRelatedIssuesSection(issue);
   if (related) scroll.appendChild(related);
@@ -1114,6 +1155,122 @@ const ISSUE_RELATION_LABELS: Record<IssueIssueRef['kind'], string> = {
   parent: 'Parent',
   'sub-issue': 'Sub-issue',
 };
+
+/** Parent chip at the top of a child peek. */
+function buildParentLine(issue: IssueCard): HTMLElement | null {
+  const parentId = issue.parentId?.trim();
+  if (!parentId) return null;
+  const parent = findIssueById(parentId);
+  const titleBit = parent?.title?.trim() ? ` · ${parent.title.trim()}` : '';
+
+  const wrap = document.createElement('div');
+  wrap.className = 'issues-detail__parent-line';
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'issues-detail__parent-line-btn';
+  btn.textContent = `Parent · ${parentId}${titleBit}`;
+  btn.title = `Open ${parentId}`;
+  btn.addEventListener('click', () => {
+    openIssueDetail(parentId);
+    void import('./issues-page').then((m) => m.setIssuesRouteHash(`#/app/issues/${parentId}`));
+  });
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+/** Parent peek: children list plus New / Existing. Hidden on children (one level). */
+function buildSubIssuesSection(issue: IssueCard): HTMLElement | null {
+  const receive = canIssueReceiveSubIssues(issue.id);
+  if (!receive.ok) return null;
+
+  const children = listChildIssues(issue.id, listIssues());
+  const subSection = section('Sub-issues');
+  const body = subSection.body;
+
+  if (children.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'issues-detail__empty';
+    empty.textContent = 'No sub-issues yet.';
+    body.appendChild(empty);
+  } else {
+    const list = document.createElement('ul');
+    list.className = 'issues-detail__sub-issues-list';
+    for (const child of children) {
+      list.appendChild(buildSubIssueRow(child));
+    }
+    body.appendChild(list);
+  }
+
+  const addRow = document.createElement('div');
+  addRow.className = 'issues-detail__sub-issues-add';
+
+  const newBtn = document.createElement('button');
+  newBtn.type = 'button';
+  newBtn.className = 'issues-btn';
+  newBtn.textContent = 'New';
+  newBtn.addEventListener('click', () => {
+    void promptCreateSubIssue(issue.id);
+  });
+
+  const existingBtn = document.createElement('button');
+  existingBtn.type = 'button';
+  existingBtn.className = 'issues-btn';
+  existingBtn.textContent = 'Existing';
+  const attachable = workspaceEligibleSubIssues(issue.id);
+  existingBtn.disabled = attachable.length === 0;
+  existingBtn.title =
+    attachable.length === 0 ? 'No other issues to attach' : 'Attach an existing issue';
+  existingBtn.addEventListener('click', () => {
+    openAttachSubIssueMenu(issue.id, existingBtn);
+  });
+
+  addRow.append(newBtn, existingBtn);
+  body.appendChild(addRow);
+  return subSection.section;
+}
+
+/** One child row: open the card, or unparent it. */
+function buildSubIssueRow(child: IssueCard): HTMLLIElement {
+  const li = document.createElement('li');
+  li.className = 'issues-detail__sub-issue';
+
+  const openBtn = document.createElement('button');
+  openBtn.type = 'button';
+  openBtn.className = 'issues-detail__sub-issue-open';
+  openBtn.title = `Open ${child.id}`;
+
+  const idEl = document.createElement('span');
+  idEl.className = 'issues-detail__sub-issue-id';
+  idEl.textContent = child.id;
+
+  const titleEl = document.createElement('span');
+  titleEl.className = 'issues-detail__sub-issue-title';
+  titleEl.textContent = child.title.trim() || 'Untitled';
+
+  const statusChip = createDetailStatusChip(child.status);
+  statusChip.classList.add('issues-detail__sub-issue-status');
+
+  openBtn.append(idEl, titleEl, statusChip);
+  openBtn.addEventListener('click', () => {
+    openIssueDetail(child.id);
+    void import('./issues-page').then((m) => m.setIssuesRouteHash(`#/app/issues/${child.id}`));
+  });
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'issues-btn issues-detail__sub-issue-remove';
+  removeBtn.textContent = 'Remove';
+  removeBtn.setAttribute('aria-label', `Remove ${child.id} from parent`);
+  removeBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    unparentIssueFromParent(child.id);
+  });
+
+  li.append(openBtn, removeBtn);
+  return li;
+}
 
 /** Related issue chips with deep links to other cards. */
 function buildRelatedIssuesSection(issue: IssueCard): HTMLElement | null {

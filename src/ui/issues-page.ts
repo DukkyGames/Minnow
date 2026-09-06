@@ -19,6 +19,8 @@ import { getMode } from '../chat/modes/registry';
 import { createAppIcon } from '../os/icons';
 import { iconHtml } from './icon';
 import { bindIssueDropTarget } from './issue-drop-target';
+import { setIssueDragData, endIssueDrag, getActiveIssueDragIds } from '../issues/issue-drag';
+import { subIssueMenuItems } from './issues-sub-issues';
 import { createIssueEditor, type IssueEditorHandle } from './issue-editor';
 import { collectInlineRefs } from '../issues/markdown-inline';
 import { taskProgress } from '../issues/markdown-blocks';
@@ -105,6 +107,7 @@ import {
   openIssueDetail,
   refreshIssueDetailIfOpen,
 } from './issues-detail';
+import { collapseIssueDetailSheet } from './issues-detail-layout';
 import {
   closeIssueExpandOverlay,
   createIssueExpandButton,
@@ -243,11 +246,6 @@ let focusedIssueId: string | undefined;
 const collapsedGroups = new Set<string>();
 let unregisterIssuesCommands: (() => void) | null = null;
 let issuesKeyHandler: ((event: KeyboardEvent) => void) | null = null;
-/** dragover cannot read getData; highlight from this descriptor instead. */
-let activeIssueDrag: { ids: string[] } | null = null;
-
-const ISSUE_DRAG_MIME = 'application/x-minnow-issue-id';
-
 /** Where #issuesView lived before it was moved into the Code #chatArea embed. */
 let issuesViewHome: { parent: HTMLElement; nextSibling: ChildNode | null } | null = null;
 /** Chat to restore when closing the Code embed. */
@@ -920,6 +918,14 @@ function buildIssueRowMenuItems(
   }
 
   if (singleTarget) {
+    const subItems = subIssueMenuItems(issue);
+    if (subItems.length > 0) {
+      subItems[0] = { ...subItems[0], separatorBefore: true };
+      items.push(...subItems);
+    }
+  }
+
+  if (singleTarget) {
     items.push({
       id: 'send-to-chat',
       label: 'Send to chat',
@@ -1371,15 +1377,11 @@ function buildIssueRow(
       selectedIssueIds.has(issue.id) && selectedIssueIds.size > 1
         ? [...selectedIssueIds]
         : [issue.id];
-    activeIssueDrag = { ids };
-    const transfer = event.dataTransfer;
-    if (!transfer) return;
-    transfer.setData(ISSUE_DRAG_MIME, ids.join(','));
-    transfer.setData('text/plain', ids.join(','));
-    transfer.effectAllowed = 'move';
+    setIssueDragData(event.dataTransfer, ids);
+    event.stopPropagation();
   });
   row.addEventListener('dragend', () => {
-    activeIssueDrag = null;
+    endIssueDrag();
   });
   bindIssueDropTarget(row, issue.id, () => {
     renderIssuesPanel();
@@ -1435,7 +1437,6 @@ function renderList(mount: HTMLElement, _issues: IssueCard[]): void {
           body.appendChild(buildIssueRow(child, ordered, childIndex, { depth: 1 }));
         }
       }
-      bindGroupDrop(body, group.issues);
       section.appendChild(body);
     }
 
@@ -1445,60 +1446,11 @@ function renderList(mount: HTMLElement, _issues: IssueCard[]): void {
   mount.appendChild(list);
 }
 
-function bindGroupDrop(body: HTMLElement, groupIssues: IssueCard[]): void {
-  body.addEventListener('dragover', (event) => {
-    const ids = activeIssueDrag?.ids ?? [];
-    if (ids.length === 0) return;
-    event.preventDefault();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-    placeDropIndicator(body, event.clientY);
-  });
-  body.addEventListener('dragleave', (event) => {
-    const related = asElement(event.relatedTarget as EventTarget | null);
-    if (related && body.contains(related)) return;
-    body.querySelector('.issues-drop-indicator')?.remove();
-  });
-  body.addEventListener('drop', (event) => {
-    const ids = activeIssueDrag?.ids ?? [];
-    if (ids.length === 0) return;
-    event.preventDefault();
-    body.querySelector('.issues-drop-indicator')?.remove();
-    const rows = [...body.querySelectorAll('.issues-row')];
-    const insertAt = dropIndexFromY(rows, event.clientY);
-    persistRanksAfterReorder(
-      groupIssues.map((issue) => issue.id),
-      ids,
-      insertAt,
-    );
-    renderIssuesPanel();
-  });
-}
-
-function placeDropIndicator(host: HTMLElement, clientY: number): void {
-  host.querySelector('.issues-drop-indicator')?.remove();
-  const rows = [...host.querySelectorAll('.issues-row')];
-  const indicator = document.createElement('div');
-  indicator.className = 'issues-drop-indicator';
-  indicator.setAttribute('aria-hidden', 'true');
-  const index = dropIndexFromY(rows, clientY);
-  if (index >= rows.length) host.appendChild(indicator);
-  else host.insertBefore(indicator, rows[index]);
-}
-
-function dropIndexFromY(rows: Element[], clientY: number): number {
-  for (let i = 0; i < rows.length; i += 1) {
-    const rect = rows[i].getBoundingClientRect();
-    if (clientY < rect.top + rect.height / 2) return i;
-  }
-  return rows.length;
-}
-
-/** Write ranks for a list/board reorder. */
+/** Write ranks for a keyboard reorder (Alt+↑/↓). Pointer drag no longer ranks. */
 function persistRanksAfterReorder(
   orderedIds: string[],
   movingIds: string[],
   insertIndex: number,
-  status?: IssueStatus,
 ): void {
   const existing = new Map(
     [...orderedIds, ...movingIds].map((id) => [id, findIssueById(id)?.rank]),
@@ -1512,7 +1464,7 @@ function persistRanksAfterReorder(
     if (!rank) continue;
     const isMover = movingIds.includes(id);
     if (isMover) {
-      updateIssue(id, status ? { status, rank } : { rank });
+      updateIssue(id, { rank });
       continue;
     }
     if (rank !== findIssueById(id)?.rank) updateIssue(id, { rank });
@@ -1521,7 +1473,7 @@ function persistRanksAfterReorder(
 
 // ── Board ────────────────────────────────────────────────────────────────────
 
-/** Rows, cards and the peek panel accept a dropped capture or OS files directly. */
+/** Rows, cards and peek accept capture, files, and issue-on-issue parent drops. */
 function bindIssueCaptureDrop(el: HTMLElement, issueId: string): void {
   bindIssueDropTarget(el, issueId, () => {
     renderIssuesPanel();
@@ -1536,47 +1488,40 @@ function bindCardDrag(card: HTMLElement, issueId: string): void {
       selectedIssueIds.has(issueId) && selectedIssueIds.size > 1
         ? [...selectedIssueIds]
         : [issueId];
-    activeIssueDrag = { ids };
-    const transfer = event.dataTransfer;
-    if (!transfer) return;
-    transfer.setData(ISSUE_DRAG_MIME, ids.join(','));
-    transfer.setData('text/plain', ids.join(','));
-    transfer.effectAllowed = 'move';
+    setIssueDragData(event.dataTransfer, ids);
+    event.stopPropagation();
   });
   card.addEventListener('dragend', () => {
-    activeIssueDrag = null;
+    endIssueDrag();
   });
   bindIssueCaptureDrop(card, issueId);
 }
 
 function bindColumnDrop(columnEl: HTMLElement, status: IssueStatus): void {
-  const list = columnEl.querySelector('.issues-column__list') ?? columnEl;
   columnEl.addEventListener('dragover', (event) => {
-    const ids = activeIssueDrag?.ids ?? [];
+    const ids = getActiveIssueDragIds();
     if (ids.length === 0) return;
+    const overCard = asElement(event.target)?.closest('.issues-card');
+    if (overCard) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
     columnEl.classList.add('is-drag-over');
-    placeDropIndicator(list as HTMLElement, event.clientY);
   });
   columnEl.addEventListener('dragleave', (event) => {
     const related = asElement(event.relatedTarget as EventTarget | null);
     if (related && columnEl.contains(related)) return;
     columnEl.classList.remove('is-drag-over');
-    list.querySelector('.issues-drop-indicator')?.remove();
   });
   columnEl.addEventListener('drop', (event) => {
-    const ids = activeIssueDrag?.ids ?? [];
+    const ids = getActiveIssueDragIds();
     if (ids.length === 0) return;
+    const overCard = asElement(event.target)?.closest('.issues-card');
+    if (overCard) return;
     event.preventDefault();
     columnEl.classList.remove('is-drag-over');
-    list.querySelector('.issues-drop-indicator')?.remove();
-    const cards = [...list.querySelectorAll('.issues-card')];
-    const insertAt = dropIndexFromY(cards, event.clientY);
-    const columnIds = cards
-      .map((card) => card.getAttribute('data-issue-id'))
-      .filter((id): id is string => Boolean(id));
-    persistRanksAfterReorder(columnIds, ids, insertAt, status);
+    for (const id of ids) {
+      updateIssue(id, { status });
+    }
     renderIssuesPanel();
   });
 }
@@ -2342,7 +2287,7 @@ async function openIssueAgentChat(issueId: string): Promise<void> {
   switchChat(chatId);
 }
 
-/** Issues keyboard map (suppressed by isTypingTarget): j/k or arrows — move selection Enter — peek; Escape — close peek / clear multi-select s status, p priority, u assignee, l labels, g project A — assign an agent (plan, board, worktree, PR); answer it when it is waiting Y — accept triage (backlog + triagedAt) N or Backspace — decline triage when the focused card is unreviewed C — new issue E — expand focused issue (sparkles rewrite) Alt+↑/↓ — rank within the group/column Shift+←/→ — move board column (status) / */
+/** Issues keyboard map (suppressed by isTypingTarget): j/k or arrows — move selection Enter — peek; Escape — restore expanded peek, then close peek / clear multi-select s status, p priority, u assignee, l labels, g project A — assign an agent (plan, board, worktree, PR); answer it when it is waiting Y — accept triage (backlog + triagedAt) N or Backspace — decline triage when the focused card is unreviewed C — new issue E — expand focused issue (sparkles rewrite) Alt+↑/↓ — rank within the group/column Shift+←/→ — move board column (status) / */
 function onIssuesKeydown(event: KeyboardEvent): void {
   if (!isIssuesPageOpen()) return;
   if (isTypingTarget(event.target)) return;
@@ -2384,6 +2329,10 @@ function onIssuesKeydown(event: KeyboardEvent): void {
     if (isNewFormOpen()) {
       event.preventDefault();
       setNewFormOpen(false);
+      return;
+    }
+    if (collapseIssueDetailSheet()) {
+      event.preventDefault();
       return;
     }
     if (getSelectedIssueId()) {

@@ -2,8 +2,8 @@
  * Group the Issues list by status, priority, assignee, label, or project.
  *
  * Manual `rank` wins inside a group. Column-header sort is a session fallback
- * applied only when ranks are equal or missing — drag and Alt+↑/↓ write ranks
- * and then that order sticks until the user ranks again.
+ * applied only when ranks are equal or missing. Alt+↑/↓ writes ranks; dropping
+ * an issue onto another issue sets `parentId` instead of rank.
  */
 
 import type { IssueCard, IssueProject } from '../types';
@@ -60,7 +60,7 @@ function assigneeGroupLabel(issue: IssueCard): string {
  * Sort inside a group: rank first, then the session column sort.
  *
  * Ranked rows stay ahead of unranked ones so a partial reorder does not dump
- * the moved row behind everything the user has not touched. The first drag or
+ * the moved row behind everything the user has not touched. The first
  * Alt+↑/↓ therefore materializes ranks for the whole peer set (see `rank.ts`)
  * before inserting — otherwise `"h"` on one row still sorts above leftovers.
  */

@@ -62,6 +62,87 @@ export function listChildIssues(parentId: string, issues: readonly IssueCard[]):
   return issues.filter((issue) => issue.parentId === parentId);
 }
 
+/**
+ * Whether `parentId` may gain children at all.
+ *
+ * A child cannot receive children (one level). Unknown ids fail closed.
+ */
+export function canReceiveSubIssues(
+  parentId: string,
+  issues: readonly IssueCard[],
+): ParentLinkResult {
+  const parent = findById(issues, parentId);
+  if (!parent) {
+    return { ok: false, error: `Unknown parent issue "${parentId}".` };
+  }
+  if (parent.parentId) {
+    return { ok: false, error: 'Sub-issues nest one level only.' };
+  }
+  return { ok: true };
+}
+
+export type ParentDropRejected = {
+  id: string;
+  error: string;
+};
+
+export type ParentDropPartition = {
+  /** Ids that should write `parentId`. */
+  accepted: string[];
+  /** Ids that failed `validateParentLink` (not self / already-child skips). */
+  rejected: ParentDropRejected[];
+};
+
+/**
+ * Split a multi-drag into nestable ids vs errors.
+ *
+ * Self and cards already under this parent are skipped with no error so a
+ * drop onto the current parent is a quiet no-op.
+ */
+export function partitionParentDrop(
+  parentId: string,
+  childIds: readonly string[],
+  issues: readonly IssueCard[],
+): ParentDropPartition {
+  const accepted: string[] = [];
+  const rejected: ParentDropRejected[] = [];
+  const seen = new Set<string>();
+  for (const raw of childIds) {
+    const id = raw.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    if (id === parentId) continue;
+    const existing = findById(issues, id);
+    if (existing?.parentId === parentId) continue;
+    const check = validateParentLink(id, parentId, issues);
+    if (check.ok) accepted.push(id);
+    else rejected.push({ id, error: check.error });
+  }
+  return { accepted, rejected };
+}
+
+/**
+ * Issues that may become children of `parentId` (reparent allowed).
+ *
+ * Omits the parent itself and cards already nested under it. Callers may
+ * further filter by workspace.
+ */
+export function eligibleSubIssueCandidates(
+  parentId: string,
+  issues: readonly IssueCard[],
+): IssueCard[] {
+  const gate = canReceiveSubIssues(parentId, issues);
+  if (!gate.ok) return [];
+  return issues
+    .filter((issue) => {
+      if (issue.id === parentId) return false;
+      if (issue.parentId === parentId) return false;
+      return validateParentLink(issue.id, parentId, issues).ok;
+    })
+    .slice()
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
 /** Closed/total for one parent's direct children. Zero total when it has none. */
 export function subIssueRollup(
   parentId: string,

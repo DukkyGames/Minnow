@@ -14,6 +14,7 @@ import { ISSUES_COMPAT_VERSION, ISSUES_SCHEMA_VERSION } from '../../src/types.ts
 
 const { findIssueById, setIssuesStateForTests } = await import('../../src/state/issues-store.ts');
 const { closeIssueDetail, openIssueDetail } = await import('../../src/ui/issues-detail.ts');
+const { resetIssuesDetailLayoutForTests } = await import('../../src/ui/issues-detail-layout.ts');
 const { resetGhAvailableCache } = await import('../../src/chat/issues/git-actions.ts');
 const { resetIssuesGithubForTests, setIssuesGithubMode } = await import(
   '../../src/state/issues-github.ts'
@@ -70,6 +71,7 @@ function headingTexts(root: Element): string[] {
 
 afterEach(() => {
   closeIssueDetail();
+  resetIssuesDetailLayoutForTests();
   resetGhAvailableCache();
   resetIssuesGithubForTests();
   setIssuesStateForTests(null);
@@ -108,6 +110,7 @@ describe('issues detail display', () => {
       sticky.querySelector('.issues-detail__close')?.getAttribute('aria-label'),
       'Close issue detail',
     );
+    assert.ok(sticky.querySelector('.issues-detail__layout-expand'));
     assert.equal(
       sticky.querySelector('.issues-detail__more')?.getAttribute('aria-label'),
       'Issue actions',

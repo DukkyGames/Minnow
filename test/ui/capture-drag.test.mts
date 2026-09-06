@@ -7,6 +7,7 @@ import { describe, test, afterEach } from 'node:test';
 
 import { WORKSPACE_FILE_MIME } from '../../src/attachments/workspace-ref';
 import { CHAT_DRAG_MIME } from '../../src/attachments/chat-drag';
+import { ISSUE_DRAG_MIME, beginIssueDrag, resetIssueDragForTests } from '../../src/issues/issue-drag';
 import {
   beginCaptureDrag,
   capturePayloadFromDataTransfer,
@@ -29,6 +30,7 @@ function fakeTransfer(types: string[] = []): DataTransfer {
 describe('dataTransferLooksCapturable', () => {
   afterEach(() => {
     resetCaptureDragForTests();
+    resetIssueDragForTests();
   });
 
   test('returns true while a capture drag is active even without MIME types', () => {
@@ -59,11 +61,24 @@ describe('dataTransferLooksCapturable', () => {
     const transfer = fakeTransfer(['Files', 'text/plain']);
     assert.equal(dataTransferLooksCapturable(transfer), false);
   });
+
+  test('returns false for issue-row drags even when they also set text/plain', () => {
+    const transfer = fakeTransfer([ISSUE_DRAG_MIME, 'text/plain']);
+    transfer.setData(ISSUE_DRAG_MIME, 'MIN-1');
+    transfer.setData('text/plain', 'MIN-1');
+    assert.equal(dataTransferLooksCapturable(transfer), false);
+  });
+
+  test('returns false while an issue-row drag is in flight', () => {
+    beginIssueDrag(['MIN-1']);
+    assert.equal(dataTransferLooksCapturable(null), false);
+  });
 });
 
 describe('capturePayloadFromDataTransfer', () => {
   afterEach(() => {
     resetCaptureDragForTests();
+    resetIssueDragForTests();
   });
 
   test('builds a chat item from sidebar chat drags', () => {
@@ -90,6 +105,13 @@ describe('capturePayloadFromDataTransfer', () => {
   test('ignores internal plain-text tab payloads', () => {
     const transfer = fakeTransfer(['text/plain']);
     transfer.setData('text/plain', 'file:src/foo.ts');
+    assert.equal(capturePayloadFromDataTransfer(transfer), null);
+  });
+
+  test('ignores issue-row drags that also carry text/plain ids', () => {
+    const transfer = fakeTransfer([ISSUE_DRAG_MIME, 'text/plain']);
+    transfer.setData(ISSUE_DRAG_MIME, 'MIN-1,MIN-2');
+    transfer.setData('text/plain', 'MIN-1,MIN-2');
     assert.equal(capturePayloadFromDataTransfer(transfer), null);
   });
 });

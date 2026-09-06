@@ -6,8 +6,8 @@ Open it from the app rail for the fullscreen app, or from the Issues button in t
 
 ## Views
 
-- **List** — one dense row per issue, grouped (status by default). Click a column header to sort inside a group when ranks are equal or missing; drag or **Alt+↑/↓** writes a manual rank that then sticks. Click a status, priority, assignee, or project cell to edit it in place.
-- **Board** — kanban lanes by status. Drop a card to change status and rank; a line shows the insert point. **Shift+←/→** moves the focused card across columns.
+- **List** — one dense row per issue, grouped (status by default). Click a column header to sort inside a group when ranks are equal or missing. **Alt+↑/↓** still writes a manual rank. Drag an issue onto another issue to make it a sub-issue. Click a status, priority, assignee, or project cell to edit it in place.
+- **Board** — kanban lanes by status. Drop a card onto another card to nest it. Drop onto empty column space to change status. **Shift+←/→** moves the focused card across columns.
 - **Triage** — a saved view of issues that arrived from an agent, a crash, or GitHub and have not been reviewed yet. **Y** accepts (backlog), **N** or **Backspace** declines (canceled).
 - **Assigned to agents** / **My open** — the other built-in tabs. Hide-done is a chip under the tabs.
 
@@ -15,19 +15,19 @@ Open it from the app rail for the fullscreen app, or from the Issues button in t
 
 **Capture** with the quick-capture field in the header, or **New issue** (**C**) for the full form. When **Workspace scope** is **All workspaces**, the new-issue form includes a **Workspace** picker (Scratch plus recent folders). New issues start in **Backlog**.
 
-**Select** several rows with **Ctrl/Cmd+click**, or a range with **Shift+click**. The selection bar can change status, priority, assignee, labels, and project, or delete. **Shift+F10** or right-click opens the row menu: open, copy ID, expand (fill title and description from this card), expand with an agent (triage), send to chat or to a background agent, change status, delete.
+**Select** several rows with **Ctrl/Cmd+click**, or a range with **Shift+click**. The selection bar can change status, priority, assignee, labels, and project, or delete. **Shift+F10** or right-click opens the row menu: open, copy ID, expand, add a sub-issue, remove from parent, send to chat or a background agent, change status, delete.
 
-**j** / **k** (or the arrows) move the focused row. **Enter** opens the peek panel for the description and history — you do not need peek to change a field.
+**j** / **k** (or the arrows) move the focused row. **Enter** opens the peek panel for the description and history — you do not need peek to change a field. Drag the peek's left edge to widen it (remembered per workspace). The header control next to Close opens a larger centered sheet over the list; click the dim area, Restore, or Escape to return to the docked peek. The peek **Sub-issues** section lists children: **New** creates one from a title, **Existing** attaches another issue, and **Remove** unparents without deleting. A child peek shows a Parent chip that opens the parent.
 
 **Edit** labels inline on the row: up to three chips stay visible, a caret opens the rest, and **+** adds a name. The chip **×** removes it from that issue. Right-click a chip to pick a color; that color applies to every issue with the same name.
 
-The peek keeps identity, type/status/priority chips, labels, and Send to chat pinned. The description is the page. Empty code links, attachments, and git collapse to one add row each; Plan and Related appear only when they have something to show. Delete lives under the more menu next to Close.
+The peek keeps identity, type/status/priority chips, labels, and Send to chat pinned. The description is the page. Empty code links, attachments, and git collapse to one add row each; Plan and Related appear only when they have something to show. Sub-issues stay visible so you can add a child on an empty parent. Delete lives under the more menu next to Close.
 
 Type in the description to edit it. The formatting toolbar appears while the description is focused. **Ctrl/Cmd+Enter** commits; **Escape** commits and lets the panel close.
 
 **Projects** group and filter issues inside this app. They are not Orchestrator boards. The Group control can bucket the list by project, and each project shows a closed/open count.
 
-Agents can link related, blocking, duplicate, or parent/sub issues with `issue_link`; those links appear under **Related issues** in the detail panel.
+Agents can link related, blocking, or duplicate issues with `issue_link`; those links appear under **Related issues** in the detail panel. Parent and child cards use `parentId` (peek Sub-issues, list nesting, and the Sub column), not Related.
 
 ## Handing an issue to an agent
 

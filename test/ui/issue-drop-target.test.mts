@@ -53,4 +53,11 @@ describe('dataTransferAcceptsIssueDrop', () => {
     transfer.setData('text/plain', 'hello');
     assert.equal(dataTransferAcceptsIssueDrop(transfer), true);
   });
+
+  test('does not treat issue-row MIME as a capture drop', () => {
+    const transfer = fakeTransfer(['application/x-minnow-issue-id', 'text/plain']);
+    transfer.setData('application/x-minnow-issue-id', 'MIN-1');
+    transfer.setData('text/plain', 'MIN-1');
+    assert.equal(dataTransferAcceptsIssueDrop(transfer), false);
+  });
 });

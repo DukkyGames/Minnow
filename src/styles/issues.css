@@ -38,7 +38,8 @@
   min-width: 0;
   min-height: 0;
   /* Wide peek; @container below narrows this because the page itself cannot match. */
-  --issues-peek-cols: minmax(0, 1fr) minmax(380px, 520px);
+  --issues-peek-w: 520px;
+  --issues-peek-cols: minmax(0, 1fr) minmax(380px, var(--issues-peek-w));
   /* Row and sticky group offset; 4pt scale, a step above the old 28px density. */
   --issues-row-h: 36px;
   --issues-list-head-h: 32px;
@@ -622,6 +623,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 
 /* Shared scrollport — header and rows share one width; gutter only when scrolling. */
@@ -831,6 +833,11 @@
   border-bottom: 1px solid var(--mn-border);
   cursor: pointer;
   min-height: var(--issues-row-h);
+}
+
+/* Row is the drag source; inner chips must not start an image/text drag. */
+.issues-row > * {
+  -webkit-user-drag: none;
 }
 
 .issues-row.is-child {
@@ -1075,14 +1082,6 @@
   font-weight: 500;
   color: var(--mn-fg-muted);
   font-variant-numeric: tabular-nums;
-}
-
-.issues-drop-indicator {
-  height: 2px;
-  margin: 0 16px;
-  background: var(--mn-accent);
-  border-radius: 1px;
-  pointer-events: none;
 }
 
 /* ---------- chips & badges ---------- */
@@ -1672,6 +1671,7 @@
   display: none;
   flex-direction: column;
   min-height: 0;
+  position: relative;
   border-left: 1px solid var(--mn-border);
   background: var(--mn-surface-1, var(--mn-bg));
   overflow: hidden;
@@ -1686,9 +1686,99 @@
   grid-row: 1 / span 2;
 }
 
+/* Overlay sheet: list goes full width; peek sits on a dim scrim. */
+.issues-shell.is-detail.is-detail-expanded {
+  --issues-peek-cols: minmax(0, 1fr);
+}
+
+.issues-shell.is-detail-expanded .issues-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.issues-shell.is-detail-expanded .issues-selection-bar,
+.issues-shell.is-detail-expanded .issues-list-pane {
+  grid-column: auto;
+  grid-row: auto;
+}
+
+.issues-shell.is-detail-expanded .issues-list-pane {
+  flex: 1;
+  min-height: 0;
+}
+
+.issues-detail-scrim {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--mn-overlay);
+  cursor: pointer;
+}
+
+.issues-shell.is-detail-expanded .issues-detail-scrim:not([hidden]) {
+  display: block;
+}
+
+/* Centered popover: inset + auto margins, not a second docked column. */
+.issues-shell.is-detail-expanded .issues-detail-host {
+  position: absolute;
+  top: 24px;
+  bottom: 24px;
+  left: 0;
+  right: 0;
+  width: min(1100px, calc(100% - 48px));
+  max-width: none;
+  height: auto;
+  margin-inline: auto;
+  z-index: 9;
+  grid-column: auto;
+  grid-row: auto;
+  border: 1px solid var(--mn-border);
+  border-radius: var(--radius-md, 10px);
+}
+
+.issues-detail-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  z-index: 2;
+  cursor: col-resize;
+  background: transparent;
+  touch-action: none;
+  flex: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .issues-detail-resizer:hover {
+    background: var(--mn-accent-soft);
+  }
+}
+
+.issues-detail-resizer.dragging {
+  background: var(--mn-accent-soft);
+}
+
+.issues-detail-resizer[hidden] {
+  display: none;
+}
+
+.issues-shell.is-peek-compact .issues-detail-resizer,
+.issues-shell.is-peek-compact .issues-detail__layout-expand,
+.issues-shell.is-detail-expanded .issues-detail-resizer {
+  display: none;
+}
+
 .issues-detail {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-width: 0;
   gap: 0;
   min-height: 0;
   height: 100%;
@@ -2699,6 +2789,107 @@ button.issues-detail__activity-chip {
   background: var(--mn-bg-hover);
 }
 
+.issues-detail__parent-line {
+  margin: 0 0 12px;
+}
+
+.issues-detail__parent-line-btn {
+  appearance: none;
+  border: 1px solid var(--mn-border);
+  border-radius: 999px;
+  background: var(--mn-bg-subtle);
+  color: var(--mn-accent);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.3;
+  padding: 4px 10px;
+  cursor: pointer;
+  text-align: left;
+  max-width: 100%;
+  word-break: break-word;
+}
+
+.issues-detail__parent-line-btn:hover {
+  background: var(--mn-bg-hover);
+}
+
+.issues-detail__parent-line-btn:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.issues-detail__sub-issues-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.issues-detail__sub-issue {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.issues-detail__sub-issue-open {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--mn-fg);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  padding: 4px 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.issues-detail__sub-issue-open:hover {
+  color: var(--mn-accent);
+}
+
+.issues-detail__sub-issue-open:focus-visible {
+  outline: 2px solid var(--mn-accent);
+  outline-offset: 2px;
+}
+
+.issues-detail__sub-issue-id {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mn-fg-muted);
+  flex-shrink: 0;
+}
+
+.issues-detail__sub-issue-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.issues-detail__sub-issue-status {
+  pointer-events: none;
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 1px 6px;
+}
+
+.issues-detail__sub-issues-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .issues-detail__git-commit-btn {
   display: flex;
   gap: 8px;
@@ -2775,6 +2966,11 @@ button.issues-detail__activity-chip {
     grid-column: 1;
     grid-row: 1 / span 2;
     border-left: none;
+  }
+
+  .issues-detail-resizer,
+  .issues-detail__layout-expand {
+    display: none;
   }
 
   .issues-list-head,
@@ -2887,6 +3083,7 @@ button.issues-detail__activity-chip {
   .issues-btn,
   .issues-card,
   .issues-detail-host,
+  .issues-detail-scrim,
   .issues-label-chip__remove,
   .issues-detail__icon-btn {
     transition: none;
@@ -3009,6 +3206,13 @@ button.issues-detail__activity-chip {
 .issues-card.is-capture-target {
   outline: 2px solid var(--mn-accent);
   outline-offset: -2px;
+}
+
+.issues-row.is-parent-target,
+.issues-card.is-parent-target,
+.issues-detail.is-parent-target {
+  background: color-mix(in oklch, var(--mn-accent) 10%, var(--mn-bg));
+  outline: 1px solid color-mix(in oklch, var(--mn-accent) 45%, var(--mn-border));
 }
 
 /* ── GitHub sync

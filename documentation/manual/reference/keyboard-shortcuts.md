@@ -94,7 +94,7 @@ Shortcuts apply when Issues is open and you are not typing in a field.
 |------|--------|
 | **j** / **k** / **Arrow keys** | Move the focused issue |
 | **Enter** | Open peek |
-| **Escape** | Close peek, or clear the multi-select |
+| **Escape** | Restore the expanded peek, then close peek, or clear the multi-select |
 | **s** | Change status |
 | **p** | Change priority |
 | **u** | Change assignee |

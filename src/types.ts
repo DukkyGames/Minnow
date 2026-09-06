@@ -841,7 +841,7 @@ export interface IssueCard {
   agent?: IssueAgentRun;
   /** Parent issue id; hierarchy is one level deep by design. */
   parentId?: string;
-  /** Lexicographic manual order key within a group (drag or Alt+↑/↓). */
+  /** Lexicographic manual order key within a group (Alt+↑/↓). */
   rank?: string;
   projectId?: string;
   comments?: IssueComment[];

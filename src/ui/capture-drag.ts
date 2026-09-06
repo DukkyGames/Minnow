@@ -11,6 +11,7 @@ import {
 } from '../issues/capture-payload';
 import { formatCodeRefLabel } from '../attachments/code-ref-format';
 import { CHAT_DRAG_MIME } from '../attachments/chat-drag';
+import { ISSUE_DRAG_MIME, dataTransferHasIssueDrag } from '../issues/issue-drag';
 
 /** Active drag, or null. Read by drop targets during `dragover`. */
 let activeDrag: CapturePayload | null = null;
@@ -98,6 +99,7 @@ function hasCapturablePlainText(types: readonly string[]): boolean {
   if (types.includes(CODE_SELECTION_MIME)) return false;
   if (types.includes(WORKSPACE_FILE_MIME)) return false;
   if (types.includes(CHAT_DRAG_MIME)) return false;
+  if (types.includes(ISSUE_DRAG_MIME)) return false;
   return true;
 }
 
@@ -106,6 +108,8 @@ export function capturePayloadFromDataTransfer(
   dataTransfer: DataTransfer | null,
 ): CapturePayload | null {
   if (!dataTransfer) return null;
+  // Issue-row drags also set text/plain (the ids). Do not capture them.
+  if (dataTransferHasIssueDrag(dataTransfer)) return null;
 
   const own = parseCaptureDragData(dataTransfer);
   if (own) return own;
@@ -189,6 +193,7 @@ export function capturePayloadFromDataTransfer(
 
 /** True when a drag *might* be capturable, judged from types alone (dragover-safe). */
 export function dataTransferLooksCapturable(dataTransfer: DataTransfer | null): boolean {
+  if (dataTransferHasIssueDrag(dataTransfer)) return false;
   if (isCaptureDragActive()) return true;
   if (!dataTransfer) return false;
   const types = Array.from(dataTransfer.types);
