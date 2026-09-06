@@ -35,6 +35,14 @@ import { getIssuesTaxonomySync } from './issues-taxonomy-store.ts';
 import { normalizeIssuePlanPath } from '../issues/plan-attach.ts';
 import { getWorkspaceLabel, getWorkspacePath } from './workspace.ts';
 import { validateParentLink } from '../issues/hierarchy.ts';
+import {
+  ISSUE_LABEL_SWATCH_IDS,
+  mergeIssueLabelCatalog,
+  normalizeIssueLabel,
+  normalizeIssueLabelsList,
+  parseIssueLabelCatalog,
+  uniqueIssueLabelNames,
+} from '../issues/label-catalog.ts';
 import { builtInIssueViews, LOCAL_ASSIGNEE_ID } from '../issues/saved-views.ts';
 import { isUnreviewedTriageIssue } from '../issues/triage.ts';
 import {
@@ -59,6 +67,8 @@ import type {
   IssueGitLink,
   IssueGithubLink,
   IssueIssueRef,
+  IssueLabelCatalogEntry,
+  IssueLabelSwatchId,
   IssuePriority,
   IssueProject,
   IssueRelationKind,
@@ -158,6 +168,7 @@ function defaultIssuesState(): IssuesState {
     nextId: 1,
     issues: [],
     workspaces: {},
+    labelCatalog: [],
   };
 }
 
@@ -397,6 +408,7 @@ const NORMALIZED_ISSUES_STATE_KEYS: ReadonlySet<string> = new Set([
   'workspaces',
   'projects',
   'views',
+  'labelCatalog',
 ]);
 
 /**
@@ -860,6 +872,7 @@ export function parseIssuesState(raw: unknown): IssuesState {
     workspaces?: unknown;
     projects?: unknown;
     views?: unknown;
+    labelCatalog?: unknown;
   };
   if (!Array.isArray(row.issues)) {
     return defaultIssuesState();
@@ -892,6 +905,10 @@ export function parseIssuesState(raw: unknown): IssuesState {
 
   const projects = parseIssueProjects(row.projects);
   const views = parseIssueViews(row.views);
+  const mergedCatalog = mergeIssueLabelCatalog(
+    parseIssueLabelCatalog(row.labelCatalog),
+    uniqueIssueLabelNames(issues.map((issue) => issue.labels)),
+  );
 
   const state: IssuesState = {
     version: ISSUES_COMPAT_VERSION,
@@ -899,6 +916,7 @@ export function parseIssuesState(raw: unknown): IssuesState {
     nextId,
     issues,
     workspaces,
+    labelCatalog: mergedCatalog.catalog,
   };
   if (projects) state.projects = projects;
   if (views) state.views = views;
@@ -1010,6 +1028,7 @@ export function migrateBugsToIssuesState(bugs: BugCard[]): IssuesState {
     nextId,
     issues,
     workspaces: {},
+    labelCatalog: [],
   };
 }
 
@@ -1214,7 +1233,7 @@ export function addIssue(input: AddIssueInput, issueId?: string): IssueCard {
     description: (input.description ?? '').trim(),
     status: input.status ?? requireIssueStatusForRole('backlog'),
     priority: input.priority ?? defaultIssuePriorityId(taxonomy),
-    labels: input.labels ? [...input.labels] : [],
+    labels: commitIssueLabels(input.labels ?? [], { persist: false }),
     workspacePath,
     createdAt: nowMs,
     updatedAt: nowMs,
@@ -1527,16 +1546,7 @@ export function updateIssue(
   if (patch.status) issue.status = patch.status;
   if (patch.priority) issue.priority = patch.priority;
   if (patch.labels) {
-    const seen = new Set<string>();
-    issue.labels = [];
-    for (const raw of patch.labels) {
-      const label = normalizeIssueLabel(raw);
-      if (!label) continue;
-      const key = label.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      issue.labels.push(label);
-    }
+    issue.labels = commitIssueLabels(patch.labels, { persist: false });
   }
   if (patch.notes !== undefined) issue.notes = patch.notes;
   if (patch.planPath !== undefined) {
@@ -1660,6 +1670,7 @@ export function getIssuesSnapshot(): IssuesState {
     nextId: state.nextId,
     issues: state.issues.map((i) => ({ ...i, labels: [...i.labels] })),
     workspaces,
+    labelCatalog: (state.labelCatalog ?? []).map((entry) => ({ ...entry })),
   };
 }
 
@@ -2109,13 +2120,54 @@ export type CollectIssuesOptions = {
   assigneeId?: string | null;
 };
 
-/** Trim and collapse whitespace for a single issue label. */
-export function normalizeIssueLabel(raw: string): string | null {
-  const trimmed = raw.trim().replace(/\s+/g, ' ');
-  return trimmed.length > 0 ? trimmed : null;
+/** Unique label strings used across issues (for autocomplete), case-insensitive dedupe. */
+export { normalizeIssueLabel };
+
+function ensureLabelCatalog(names: readonly string[], persistQuiet: boolean): IssueLabelCatalogEntry[] {
+  const state = requireIssuesState();
+  const merged = mergeIssueLabelCatalog(state.labelCatalog ?? [], names);
+  state.labelCatalog = merged.catalog;
+  if (merged.changed && persistQuiet) scheduleSaveIssues();
+  return merged.catalog;
 }
 
-/** Unique label strings used across issues (for autocomplete), case-insensitive dedupe. */
+/** Normalize names, register them in the catalog, and return the committed list. */
+function commitIssueLabels(
+  raw: readonly string[],
+  options: { persist: boolean },
+): string[] {
+  const labels = normalizeIssueLabelsList(raw);
+  ensureLabelCatalog(labels, options.persist);
+  return labels;
+}
+
+/** Color for a label name, assigning a swatch if the catalog has not seen it yet. */
+export function getIssueLabelSwatch(name: string): IssueLabelSwatchId {
+  const normalized = normalizeIssueLabel(name);
+  if (!normalized) return ISSUE_LABEL_SWATCH_IDS[0];
+  const catalog = ensureLabelCatalog([normalized], true);
+  const key = normalized.toLowerCase();
+  return catalog.find((entry) => entry.name.toLowerCase() === key)?.color ?? ISSUE_LABEL_SWATCH_IDS[0];
+}
+
+/** Recolor a catalog name on every issue. Does not bump issue.updatedAt. */
+export function setIssueLabelColor(name: string, color: IssueLabelSwatchId): void {
+  const normalized = normalizeIssueLabel(name);
+  if (!normalized) return;
+  const state = requireIssuesState();
+  const catalog = [...(state.labelCatalog ?? [])];
+  const key = normalized.toLowerCase();
+  const index = catalog.findIndex((entry) => entry.name.toLowerCase() === key);
+  if (index >= 0) {
+    if (catalog[index].color === color) return;
+    catalog[index] = { name: catalog[index].name, color };
+  } else {
+    catalog.push({ name: normalized, color });
+  }
+  state.labelCatalog = catalog;
+  touchIssuesStore();
+}
+
 export function collectIssueLabelSuggestions(excludeIssueId?: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];

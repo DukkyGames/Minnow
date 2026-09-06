@@ -1,7 +1,24 @@
+/**
+ * Inline labels editor for list rows and the issue peek.
+ *
+ * List rows stay one line: three chips, a +N overflow popover, and a + add
+ * control. The dashed placeholder no longer lives in the row. Peek wraps.
+ */
+
 import {
-  collectIssueLabelSuggestions,
-  normalizeIssueLabel,
-} from '../state/issues-store';
+  normalizeIssueLabelsList,
+  splitIssueLabelsForList,
+} from '../issues/label-catalog';
+import { collectIssueLabelSuggestions, normalizeIssueLabel } from '../state/issues-store';
+import {
+  applyIssueLabelSwatch,
+  closeIssueLabelPopovers,
+  createIssueLabelChip,
+  createIssueLabelMoreButton,
+  isIssuesLabelPopoverFocused,
+  mountIssueLabelFlyout,
+  openIssueLabelOverflow,
+} from './issues-label-chip';
 
 export type IssuesLabelsFieldOptions = {
   issueId: string;
@@ -14,10 +31,11 @@ export type IssuesLabelsFieldOptions = {
 
 // ── Focus ────────────────────────────────────────────────────────────────────
 
-/** True when focus is inside a labels field (skip detail re-render while editing). */
+/** True when focus is inside a labels field or its flyouts. */
 export function isIssuesLabelsFieldFocused(): boolean {
   const active = document.activeElement;
   if (!active || typeof (active as { closest?: unknown }).closest !== 'function') return false;
+  if (isIssuesLabelPopoverFocused()) return true;
   return Boolean((active as { closest: (s: string) => Element | null }).closest('.issues-labels-field'));
 }
 
@@ -40,82 +58,8 @@ export function filterIssueLabelSuggestions(
   return out;
 }
 
-let openSuggestionsMenu: HTMLUListElement | null = null;
-let openSuggestionsInput: HTMLInputElement | null = null;
-let suggestionsRepositionHandler: (() => void) | null = null;
-
-// ── Menu ─────────────────────────────────────────────────────────────────────
-
-/** Close any open labels suggestion menu (body-mounted). */
-export function closeIssuesLabelsSuggestionsMenu(): void {
-  if (suggestionsRepositionHandler) {
-    window.removeEventListener('resize', suggestionsRepositionHandler);
-    window.removeEventListener('scroll', suggestionsRepositionHandler, true);
-    suggestionsRepositionHandler = null;
-  }
-  openSuggestionsMenu?.remove();
-  openSuggestionsMenu = null;
-  openSuggestionsInput?.setAttribute('aria-expanded', 'false');
-  openSuggestionsInput = null;
-}
-
-function positionSuggestionsMenu(anchor: HTMLElement, menu: HTMLElement): void {
-  const rect = anchor.getBoundingClientRect();
-  const margin = 8;
-  const gap = 4;
-  const menuHeight = menu.offsetHeight || menu.getBoundingClientRect().height;
-  const menuWidth = menu.offsetWidth || menu.getBoundingClientRect().width;
-
-  let top = rect.bottom + gap;
-  if (top + menuHeight > window.innerHeight - margin) {
-    top = Math.max(margin, rect.top - menuHeight - gap);
-  }
-
-  let left = rect.left;
-  if (left + menuWidth > window.innerWidth - margin) {
-    left = Math.max(margin, window.innerWidth - menuWidth - margin);
-  }
-
-  menu.style.top = `${top}px`;
-  menu.style.left = `${left}px`;
-}
-
-/** Deduplicate labels case-insensitively while preserving first-seen casing. */
-export function normalizeIssueLabelsList(labels: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of labels) {
-    const label = normalizeIssueLabel(raw);
-    if (!label) continue;
-    const key = label.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(label);
-  }
-  return out;
-}
-
-function buildLabelChip(label: string, onRemove: () => void): HTMLElement {
-  const chip = document.createElement('span');
-  chip.className = 'issues-label issues-label-chip';
-
-  const text = document.createElement('span');
-  text.className = 'issues-label-chip__text';
-  text.textContent = label;
-
-  const remove = document.createElement('button');
-  remove.type = 'button';
-  remove.className = 'issues-label-chip__remove';
-  remove.setAttribute('aria-label', `Remove label ${label}`);
-  remove.textContent = '×';
-  remove.addEventListener('click', (event) => {
-    event.stopPropagation();
-    onRemove();
-  });
-
-  chip.append(text, remove);
-  return chip;
-}
+export { closeIssueLabelPopovers as closeIssuesLabelsSuggestionsMenu };
+export { normalizeIssueLabelsList };
 
 // ── Field ────────────────────────────────────────────────────────────────────
 
@@ -132,16 +76,30 @@ export function createIssuesLabelsField(options: IssuesLabelsFieldOptions): HTML
   root.setAttribute('aria-label', 'Labels');
 
   let currentLabels = normalizeIssueLabelsList(options.labels);
-  let expanded = options.variant === 'detail';
   const suggestions = collectIssueLabelSuggestions(options.issueId);
 
   const chipsHost = document.createElement('div');
   chipsHost.className = 'issues-labels-field__chips';
 
+  const addButton = document.createElement('button');
+  addButton.type = 'button';
+  addButton.className = 'issues-label issues-labels-field__add';
+  addButton.textContent = '+';
+  addButton.setAttribute('aria-label', 'Add label');
+  addButton.setAttribute('aria-haspopup', 'listbox');
+  addButton.setAttribute('aria-expanded', 'false');
+
+  let moreButton: HTMLButtonElement | null = null;
+  let severityChip: HTMLElement | null = null;
+
+  const popover = document.createElement('div');
+  popover.className = 'issues-labels-popover issues-labels-add-popover';
+  popover.hidden = true;
+
   const input = document.createElement('input');
   input.type = 'text';
   input.className = 'issues-labels-field__input';
-  input.placeholder = options.variant === 'detail' ? 'Add label…' : 'Label…';
+  input.placeholder = 'Add label';
   input.setAttribute('aria-label', 'Add label');
   input.setAttribute('autocomplete', 'off');
   input.setAttribute('role', 'combobox');
@@ -154,10 +112,13 @@ export function createIssuesLabelsField(options: IssuesLabelsFieldOptions): HTML
   suggestionsMenu.className = 'issues-labels-suggestions';
   suggestionsMenu.id = suggestionsListId;
   suggestionsMenu.setAttribute('role', 'listbox');
-  suggestionsMenu.hidden = true;
+
+  popover.append(input, suggestionsMenu);
 
   let visibleSuggestions: string[] = [];
   let activeSuggestionIndex = -1;
+  let createName: string | null = null;
+  let addOpen = false;
 
   const commit = (labels: string[]): void => {
     currentLabels = normalizeIssueLabelsList(labels);
@@ -170,6 +131,18 @@ export function createIssuesLabelsField(options: IssuesLabelsFieldOptions): HTML
     commit(currentLabels.filter((entry) => entry.toLowerCase() !== key));
   };
 
+  const closeAddPopover = (): void => {
+    if (!addOpen) return;
+    addOpen = false;
+    input.value = '';
+    visibleSuggestions = [];
+    activeSuggestionIndex = -1;
+    createName = null;
+    addButton.setAttribute('aria-expanded', 'false');
+    input.setAttribute('aria-expanded', 'false');
+    closeIssueLabelPopovers();
+  };
+
   const addLabel = (raw: string): void => {
     const label = normalizeIssueLabel(raw);
     if (!label) return;
@@ -178,26 +151,12 @@ export function createIssuesLabelsField(options: IssuesLabelsFieldOptions): HTML
       input.value = '';
       return;
     }
+    closeAddPopover();
     commit([...currentLabels, label]);
-    input.value = '';
-    closeSuggestionsMenu();
-    if (document.activeElement === input) refreshSuggestions();
-  };
-
-  const closeSuggestionsMenu = (): void => {
-    if (openSuggestionsInput === input) {
-      closeIssuesLabelsSuggestionsMenu();
-    }
-    suggestionsMenu.hidden = true;
-    suggestionsMenu.replaceChildren();
-    visibleSuggestions = [];
-    activeSuggestionIndex = -1;
-    input.setAttribute('aria-expanded', 'false');
   };
 
   const chooseSuggestion = (label: string): void => {
     addLabel(label);
-    input.focus();
   };
 
   const paintSuggestionsMenu = (): void => {
@@ -208,7 +167,12 @@ export function createIssuesLabelsField(options: IssuesLabelsFieldOptions): HTML
       item.setAttribute('role', 'option');
       item.setAttribute('aria-selected', String(index === activeSuggestionIndex));
       item.classList.toggle('is-active', index === activeSuggestionIndex);
-      item.textContent = label;
+      const swatch = document.createElement('span');
+      swatch.className = 'issues-labels-suggestions__swatch';
+      applyIssueLabelSwatch(swatch, label);
+      const text = document.createElement('span');
+      text.textContent = label;
+      item.append(swatch, text);
       item.addEventListener('mousedown', (event) => {
         event.preventDefault();
         chooseSuggestion(label);
@@ -216,110 +180,135 @@ export function createIssuesLabelsField(options: IssuesLabelsFieldOptions): HTML
       suggestionsMenu.appendChild(item);
     });
 
-    const hasSuggestions = visibleSuggestions.length > 0;
-    suggestionsMenu.hidden = !hasSuggestions;
-    input.setAttribute('aria-expanded', String(hasSuggestions));
-
-    if (!hasSuggestions) {
-      if (openSuggestionsInput === input) closeIssuesLabelsSuggestionsMenu();
-      return;
+    if (createName) {
+      const createIndex = visibleSuggestions.length;
+      const item = document.createElement('li');
+      item.className = 'issues-labels-suggestions__item';
+      item.setAttribute('role', 'option');
+      item.setAttribute('aria-selected', String(createIndex === activeSuggestionIndex));
+      item.classList.toggle('is-active', createIndex === activeSuggestionIndex);
+      item.textContent = `Create "${createName}"`;
+      item.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        chooseSuggestion(createName as string);
+      });
+      suggestionsMenu.appendChild(item);
     }
 
-    if (!suggestionsMenu.isConnected) {
-      document.body.appendChild(suggestionsMenu);
-    }
-    if (openSuggestionsInput && openSuggestionsInput !== input) {
-      closeIssuesLabelsSuggestionsMenu();
-    }
-    openSuggestionsMenu = suggestionsMenu;
-    openSuggestionsInput = input;
-    positionSuggestionsMenu(input, suggestionsMenu);
-
-    if (!suggestionsRepositionHandler) {
-      suggestionsRepositionHandler = () => {
-        if (!openSuggestionsMenu || !openSuggestionsInput) return;
-        positionSuggestionsMenu(openSuggestionsInput, openSuggestionsMenu);
-      };
-      window.addEventListener('resize', suggestionsRepositionHandler);
-      window.addEventListener('scroll', suggestionsRepositionHandler, true);
-    }
+    const optionCount = visibleSuggestions.length + (createName ? 1 : 0);
+    input.setAttribute('aria-expanded', String(optionCount > 0));
   };
 
   const refreshSuggestions = (): void => {
     visibleSuggestions = filterIssueLabelSuggestions(suggestions, currentLabels, input.value);
-    activeSuggestionIndex = visibleSuggestions.length > 0 ? 0 : -1;
+    const typed = normalizeIssueLabel(input.value);
+    const typedKey = typed?.toLowerCase() ?? '';
+    const alreadyOnIssue = typedKey
+      ? currentLabels.some((entry) => entry.toLowerCase() === typedKey)
+      : false;
+    const alreadySuggested = typedKey
+      ? visibleSuggestions.some((entry) => entry.toLowerCase() === typedKey)
+      : false;
+    createName = typed && !alreadyOnIssue && !alreadySuggested ? typed : null;
+    const optionCount = visibleSuggestions.length + (createName ? 1 : 0);
+    activeSuggestionIndex = optionCount > 0 ? 0 : -1;
     paintSuggestionsMenu();
+  };
+
+  const optionAt = (index: number): string | null => {
+    if (index < 0) return null;
+    if (index < visibleSuggestions.length) return visibleSuggestions[index];
+    if (createName && index === visibleSuggestions.length) return createName;
+    return null;
+  };
+
+  const optionCount = (): number => visibleSuggestions.length + (createName ? 1 : 0);
+
+  const openAddPopover = (): void => {
+    if (addOpen) {
+      input.focus();
+      return;
+    }
+    addOpen = true;
+    addButton.setAttribute('aria-expanded', 'true');
+    popover.hidden = false;
+    mountIssueLabelFlyout(addButton, popover, () => {
+      addOpen = false;
+      addButton.setAttribute('aria-expanded', 'false');
+      input.value = '';
+    });
+    refreshSuggestions();
+    input.focus();
   };
 
   const paint = (): void => {
     chipsHost.replaceChildren();
-    const collapsedLimit = 3;
-    const visible =
-      options.variant === 'row' && !expanded
-        ? currentLabels.slice(0, collapsedLimit)
-        : currentLabels;
-    const hiddenCount =
-      options.variant === 'row' && !expanded
-        ? Math.max(0, currentLabels.length - collapsedLimit)
-        : 0;
+    const collapsed = options.variant === 'row';
+    const { visible, hidden, hiddenCount } = collapsed
+      ? splitIssueLabelsForList(currentLabels)
+      : { visible: currentLabels, hidden: [], hiddenCount: 0 };
 
     for (const label of visible) {
-      chipsHost.appendChild(buildLabelChip(label, () => removeLabel(label)));
+      chipsHost.appendChild(
+        createIssueLabelChip({
+          name: label,
+          removable: true,
+          onRemove: () => removeLabel(label),
+        }),
+      );
     }
 
+    moreButton?.remove();
+    moreButton = null;
     if (hiddenCount > 0) {
-      const more = document.createElement('button');
-      more.type = 'button';
-      more.className = 'issues-label issues-labels-field__more';
-      more.textContent = `+${hiddenCount}`;
-      more.title = currentLabels.slice(collapsedLimit).join(', ');
-      more.setAttribute('aria-label', `${hiddenCount} more labels`);
-      more.addEventListener('click', (event) => {
-        event.stopPropagation();
-        expanded = true;
-        paint();
-        input.focus();
+      moreButton = createIssueLabelMoreButton(hiddenCount, hidden, (button) => {
+        openIssueLabelOverflow(button, hidden, {
+          removable: true,
+          onRemove: removeLabel,
+        });
       });
-      chipsHost.appendChild(more);
+      root.insertBefore(moreButton, addButton);
     }
 
+    severityChip?.remove();
+    severityChip = null;
     if (options.severity) {
-      const severityChip = document.createElement('span');
+      severityChip = document.createElement('span');
       severityChip.className = 'issues-label issues-label--readonly';
       severityChip.textContent = options.severity;
-      chipsHost.appendChild(severityChip);
+      root.insertBefore(severityChip, addButton);
     }
-
-    root.classList.toggle('is-expanded', expanded);
   };
 
   input.addEventListener('keydown', (event) => {
     event.stopPropagation();
-    if (!suggestionsMenu.hidden && visibleSuggestions.length > 0) {
+    const count = optionCount();
+    if (count > 0) {
       if (event.key === 'ArrowDown') {
         event.preventDefault();
-        activeSuggestionIndex = (activeSuggestionIndex + 1) % visibleSuggestions.length;
+        activeSuggestionIndex = (activeSuggestionIndex + 1) % count;
         paintSuggestionsMenu();
         return;
       }
       if (event.key === 'ArrowUp') {
         event.preventDefault();
-        activeSuggestionIndex =
-          activeSuggestionIndex <= 0
-            ? visibleSuggestions.length - 1
-            : activeSuggestionIndex - 1;
+        activeSuggestionIndex = activeSuggestionIndex <= 0 ? count - 1 : activeSuggestionIndex - 1;
         paintSuggestionsMenu();
         return;
       }
       if (event.key === 'Escape') {
         event.preventDefault();
-        closeSuggestionsMenu();
+        closeAddPopover();
+        addButton.focus();
         return;
       }
       if (event.key === 'Enter' && activeSuggestionIndex >= 0) {
-        event.preventDefault();
-        chooseSuggestion(visibleSuggestions[activeSuggestionIndex]);
-        return;
+        const chosen = optionAt(activeSuggestionIndex);
+        if (chosen) {
+          event.preventDefault();
+          chooseSuggestion(chosen);
+          return;
+        }
       }
     }
     if (event.key === 'Enter' || event.key === ',') {
@@ -336,40 +325,25 @@ export function createIssuesLabelsField(options: IssuesLabelsFieldOptions): HTML
     refreshSuggestions();
   });
 
-  input.addEventListener('focus', () => {
-    if (options.variant === 'row') {
-      expanded = true;
-      paint();
-    }
-    refreshSuggestions();
-  });
-
-  input.addEventListener('blur', () => {
-    window.setTimeout(() => {
-      if (root.contains(document.activeElement) || suggestionsMenu.contains(document.activeElement)) {
-        return;
-      }
-      closeSuggestionsMenu();
-      if (options.variant !== 'row') return;
-      expanded = false;
-      paint();
-    }, 0);
+  addButton.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (addOpen) closeAddPopover();
+    else openAddPopover();
   });
 
   for (const eventName of ['click', 'mousedown'] as const) {
     root.addEventListener(eventName, (event) => event.stopPropagation());
-    input.addEventListener(eventName, (event) => event.stopPropagation());
   }
 
-  root.addEventListener('click', () => {
-    if (options.variant === 'row') {
-      expanded = true;
-      paint();
+  root.addEventListener('click', (event) => {
+    const target = event.target as Element | null;
+    if (target?.closest('.issues-label-chip, .issues-labels-field__more, .issues-labels-field__add')) {
+      return;
     }
-    input.focus();
+    openAddPopover();
   });
 
+  root.append(chipsHost, addButton);
   paint();
-  root.append(chipsHost, input);
   return root;
 }

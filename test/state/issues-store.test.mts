@@ -12,6 +12,7 @@ import {
   deleteIssue,
   deleteIssues,
   findIssueById,
+  getIssueLabelSwatch,
   isBugColumn,
   isBugSeverity,
   migrateBugCardToIssue,
@@ -22,6 +23,7 @@ import {
   setWorkspaceProjectKey,
   setIssuesNowForTests,
   setIssuesStateForTests,
+  setIssueLabelColor,
   updateIssue,
 } from '../../src/state/issues-store.ts';
 import type { BugCard, Chat } from '../../src/types.ts';
@@ -218,5 +220,21 @@ describe('issues-store', () => {
     addIssue({ title: 'b', workspacePath: '/w', labels: ['ALPHA', 'gamma'] }, 'ISS-2');
     assert.deepEqual(collectIssueLabelSuggestions(), ['alpha', 'Beta', 'gamma']);
     assert.deepEqual(collectIssueLabelSuggestions('ISS-1'), ['ALPHA', 'gamma']);
+  });
+
+  test('new labels get the next unused catalog swatch', () => {
+    addIssue({ title: 'a', workspacePath: '/w', labels: ['UX'] }, 'ISS-1');
+    addIssue({ title: 'b', workspacePath: '/w', labels: ['API'] }, 'ISS-2');
+    assert.equal(getIssueLabelSwatch('UX'), 'clay');
+    assert.equal(getIssueLabelSwatch('API'), 'apricot');
+  });
+
+  test('setIssueLabelColor does not bump issue.updatedAt', () => {
+    const issue = addIssue({ title: 'a', workspacePath: '/w', labels: ['UX'] }, 'ISS-1');
+    const before = issue.updatedAt;
+    setIssuesNowForTests(() => FIXED_NOW + 50_000);
+    setIssueLabelColor('UX', 'dusk');
+    assert.equal(findIssueById('ISS-1')?.updatedAt, before);
+    assert.equal(getIssueLabelSwatch('UX'), 'dusk');
   });
 });

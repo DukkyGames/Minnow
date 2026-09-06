@@ -786,6 +786,29 @@ export interface IssueSavedView {
  */
 export const ISSUE_ACTIVITY_CAP = 50;
 
+/**
+ * Fixed issue-label swatches. Catalog colors, not metric success/warning/danger.
+ * Keep in sync with `ISSUE_LABEL_SWATCH_IDS` in `src/issues/label-catalog.ts`.
+ */
+export type IssueLabelSwatchId =
+  | 'clay'
+  | 'apricot'
+  | 'pollen'
+  | 'moss'
+  | 'kelp'
+  | 'tide'
+  | 'dusk'
+  | 'fig'
+  | 'blush'
+  | 'pebble';
+
+/** One named label and its workspace color. */
+export interface IssueLabelCatalogEntry {
+  /** Canonical name (first-seen casing). */
+  name: string;
+  color: IssueLabelSwatchId;
+}
+
 /** One issue card in the Issues app (Linear-style tracker). */
 export interface IssueCard {
   id: string;
@@ -895,6 +918,8 @@ export interface IssuesState {
   workspaces?: Record<string, IssuesWorkspaceIdConfig>;
   projects?: IssueProject[];
   views?: IssueSavedView[];
+  /** Workspace-wide name → color map. Same name is the same color on every issue. */
+  labelCatalog?: IssueLabelCatalogEntry[];
 }
 
 /** Effective schema revision of a stored blob (`schemaRevision`, else `version`). */

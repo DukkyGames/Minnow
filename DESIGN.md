@@ -172,6 +172,7 @@ Flat-by-default. Surfaces share `--surface` / `--bg`; separation is borders, not
 
 - **Style:** 9px uppercase, 1px border `--border-strong`, text `--text-dim`.
 - **Semantic variants:** `.c` accent, `.g` success, `.y` warning, `.r` danger with matching border alpha tints.
+- **Issue labels:** ten catalog swatches (`--mn-label-*` in [`tokens.css`](src/styles/tokens.css)), tinted into `--mn-bg` / `--mn-fg` on `.issues-label[data-swatch]`. Not metric success/warning/danger.
 
 ### Cards / Containers
 

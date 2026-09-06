@@ -51,6 +51,22 @@ body {
   --chat-msg-max: 900px;
   --chat-msg-md-ch: 88ch;
   --chat-tool-call-max: 520px;
+
+  /*
+   * Issue label catalog swatches. Dedicated hues so labels stay parsable
+   * without borrowing metric success/warning/danger. Application CSS tints
+   * these into --mn-bg / --mn-fg. Light themes override lightness below.
+   */
+  --mn-label-clay: oklch(0.74 0.12 28);
+  --mn-label-apricot: oklch(0.76 0.12 55);
+  --mn-label-pollen: oklch(0.78 0.11 92);
+  --mn-label-moss: oklch(0.74 0.11 148);
+  --mn-label-kelp: oklch(0.74 0.10 175);
+  --mn-label-tide: oklch(0.74 0.10 215);
+  --mn-label-dusk: oklch(0.72 0.11 268);
+  --mn-label-fig: oklch(0.72 0.12 312);
+  --mn-label-blush: oklch(0.74 0.12 12);
+  --mn-label-pebble: oklch(0.72 0.04 80);
 }
 
 :root[data-theme="swamp-dark"],
@@ -1308,6 +1324,20 @@ body {
   --mn-syntax-inline: var(--mn-fg);
   --mn-syntax-link: var(--mn-accent-ink);
   --mn-selection-bg: color-mix(in srgb, var(--mn-accent) 32%, var(--mn-surface-0));
+}
+
+html[data-theme$="-light"],
+.settings-theme-preview[data-theme$="-light"] {
+  --mn-label-clay: oklch(0.50 0.14 28);
+  --mn-label-apricot: oklch(0.50 0.14 55);
+  --mn-label-pollen: oklch(0.48 0.13 92);
+  --mn-label-moss: oklch(0.46 0.12 148);
+  --mn-label-kelp: oklch(0.46 0.12 175);
+  --mn-label-tide: oklch(0.46 0.12 215);
+  --mn-label-dusk: oklch(0.46 0.13 268);
+  --mn-label-fig: oklch(0.48 0.14 312);
+  --mn-label-blush: oklch(0.50 0.14 12);
+  --mn-label-pebble: oklch(0.48 0.05 80);
 }
 
 /* Native selection — chat code fences, inputs, and prose */

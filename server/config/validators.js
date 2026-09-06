@@ -352,6 +352,7 @@ const NORMALIZED_ISSUES_STATE_KEYS = new Set([
   'workspaces',
   'projects',
   'views',
+  'labelCatalog',
 ]);
 
 /**
@@ -529,6 +530,94 @@ function parseIssueViews(raw) {
   return out;
 }
 
+const ISSUE_LABEL_SWATCH_IDS = [
+  'clay',
+  'apricot',
+  'pollen',
+  'moss',
+  'kelp',
+  'tide',
+  'dusk',
+  'fig',
+  'blush',
+  'pebble',
+];
+
+function normalizeIssueLabelName(raw) {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim().replace(/\s+/g, ' ');
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function parseIssueLabelCatalog(raw) {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const row = /** @type {Record<string, unknown>} */ (item);
+    const name = normalizeIssueLabelName(row.name);
+    const color = typeof row.color === 'string' ? row.color.trim() : '';
+    if (!name || !ISSUE_LABEL_SWATCH_IDS.includes(color)) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name, color });
+  }
+  return out;
+}
+
+function pickNextLabelSwatch(used) {
+  const counts = new Map(ISSUE_LABEL_SWATCH_IDS.map((id) => [id, 0]));
+  for (const id of used) counts.set(id, (counts.get(id) ?? 0) + 1);
+  let best = ISSUE_LABEL_SWATCH_IDS[0];
+  let bestCount = Number.POSITIVE_INFINITY;
+  for (const id of ISSUE_LABEL_SWATCH_IDS) {
+    const count = counts.get(id) ?? 0;
+    if (count < bestCount) {
+      best = id;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+function mergeIssueLabelCatalog(catalog, names) {
+  const byKey = new Map();
+  for (const entry of catalog) {
+    const key = entry.name.toLowerCase();
+    if (byKey.has(key)) continue;
+    byKey.set(key, entry);
+  }
+  const used = [...byKey.values()].map((entry) => entry.color);
+  const missing = [];
+  const seenMissing = new Set();
+  for (const raw of names) {
+    const name = normalizeIssueLabelName(raw);
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (byKey.has(key) || seenMissing.has(key)) continue;
+    seenMissing.add(key);
+    missing.push(name);
+  }
+  missing.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  for (const name of missing) {
+    const color = pickNextLabelSwatch(used);
+    used.push(color);
+    byKey.set(name.toLowerCase(), { name, color });
+  }
+  return [...byKey.values()];
+}
+
+function collectIssueLabelNames(issues) {
+  const names = [];
+  for (const issue of issues) {
+    if (!Array.isArray(issue.labels)) continue;
+    for (const label of issue.labels) names.push(label);
+  }
+  return names;
+}
+
 function ensureIssueCard(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const r = /** @type {Record<string, unknown>} */ (raw);
@@ -645,12 +734,17 @@ export function validateIssuesState(raw) {
 
   const projects = parseIssueProjects(row.projects);
   const views = parseIssueViews(row.views);
+  const labelCatalog = mergeIssueLabelCatalog(
+    parseIssueLabelCatalog(row.labelCatalog),
+    collectIssueLabelNames(issues),
+  );
   const state = {
     version: ISSUES_COMPAT_VERSION,
     schemaRevision: Math.max(readRevision, ISSUES_SCHEMA_VERSION),
     nextId,
     issues,
     workspaces,
+    labelCatalog,
   };
   if (projects) state.projects = projects;
   if (views) state.views = views;

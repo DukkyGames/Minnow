@@ -112,6 +112,7 @@ import {
   startIssueExpandFromUi,
 } from './issues-expand-controls';
 import { createIssuesLabelsField } from './issues-labels-field';
+import { createIssueLabelsDisplay } from './issues-label-chip';
 import {
   ariaSortValue,
   cycleIssuesListSort,
@@ -969,6 +970,14 @@ function bindIssueRowContextMenu(
   issue: IssueCard,
 ): void {
   row.addEventListener('contextmenu', (event) => {
+    const target = event.target as Element | null;
+    if (
+      target?.closest(
+        '.issues-label-chip, .issues-labels-field__more, .issues-labels-field__add, .issues-labels-popover',
+      )
+    ) {
+      return;
+    }
     event.preventDefault();
     openIssueRowMenu(issue, event.clientX, event.clientY, row);
   });
@@ -1614,11 +1623,8 @@ function renderBoard(mount: HTMLElement, issues: IssueCard[]): void {
         chip.textContent = agentText;
         meta.appendChild(chip);
       }
-      if (issue.labels.length) {
-        const labelBit = document.createElement('span');
-        labelBit.textContent = issue.labels.slice(0, 3).join(', ');
-        meta.appendChild(labelBit);
-      }
+      const labelsDisplay = createIssueLabelsDisplay(issue.labels);
+      if (labelsDisplay) meta.appendChild(labelsDisplay);
       const rollup = subIssueRollup(issue.id, collectIssues({ hideDone: false, scope: 'all' }), taxonomy);
       if (rollup.total > 0) {
         const rollupBit = document.createElement('span');
