@@ -12,6 +12,8 @@ import { describe, test } from 'node:test';
 import {
   gitLinkDuplicatesGithubIssue,
   githubIssueNumberFromRef,
+  githubSyncedFieldsChanged,
+  githubSyncedSnapshot,
   issueNeedsGithubPush,
   nextGithubLink,
   normalizeGithubMode,
@@ -267,6 +269,21 @@ describe('issueNeedsGithubPush', () => {
       issueNeedsGithubPush(issue({ github: link(), updatedAt: SYNCED_AT + 10 })),
       true,
     );
+  });
+});
+
+describe('githubSyncedFieldsChanged', () => {
+  test('title, body, labels, and closed count; rank-like extras are not in the snapshot', () => {
+    const open = githubSyncedSnapshot(issue({ title: 'A', description: 'B', labels: ['x'] }), false);
+    assert.equal(githubSyncedFieldsChanged(open, githubSyncedSnapshot(issue({ title: 'A2', description: 'B', labels: ['x'] }), false)), true);
+    assert.equal(githubSyncedFieldsChanged(open, githubSyncedSnapshot(issue({ title: 'A', description: 'B2', labels: ['x'] }), false)), true);
+    assert.equal(githubSyncedFieldsChanged(open, githubSyncedSnapshot(issue({ title: 'A', description: 'B', labels: ['y'] }), false)), true);
+    assert.equal(githubSyncedFieldsChanged(open, githubSyncedSnapshot(issue({ title: 'A', description: 'B', labels: ['x'] }), true)), true);
+    assert.equal(
+      githubSyncedFieldsChanged(open, githubSyncedSnapshot(issue({ title: 'A', description: 'B', labels: ['x'] }), false)),
+      false,
+    );
+    assert.equal(syncFieldsEqual(open, githubSyncedSnapshot(issue({ title: ' A ', description: 'B', labels: ['x'] }), false)), true);
   });
 });
 

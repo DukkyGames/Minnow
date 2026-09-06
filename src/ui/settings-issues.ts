@@ -41,8 +41,10 @@ import {
   normalizeGithubMode,
 } from '../issues/github-sync-plan';
 import {
+  getIssuesGithubAuto,
   getIssuesGithubMode,
   importGithubIssues,
+  setIssuesGithubAuto,
   setIssuesGithubMode,
 } from '../state/issues-github';
 import { userFacingGithubError } from '../issues/github-error';
@@ -52,6 +54,7 @@ import {
   createSettingsKvList,
   createSettingsSelectRow,
 } from './settings-controls';
+import { createSettingsToggleRow } from './settings-switch';
 import { createIcon } from './icon';
 import { createIssueTypeIconPickerButton } from './issue-type-icon-picker';
 import { getWorkspaceLabel, getWorkspacePath } from '../state/workspace';
@@ -752,6 +755,20 @@ function renderIssuesGithubPanel(mount: HTMLElement, onChange: () => void): void
 
   body.appendChild(row);
   body.appendChild(hint);
+
+  const modeIsOff = getIssuesGithubMode() === 'off';
+  const { row: autoRow } = createSettingsToggleRow('Sync automatically', {
+    searchKey: 'apps.issues.github.auto',
+    id: 'settingsIssuesGithubAuto',
+    checked: getIssuesGithubAuto(),
+    disabled: modeIsOff,
+    description:
+      'Pushes title, description, labels, and closed-state as they change, creates a GitHub issue on the first of those edits to an unlinked card, and checks GitHub every 5 minutes (including in the background). Conflicts still wait for you.',
+    onChange: (checked) => {
+      setIssuesGithubAuto(checked);
+    },
+  });
+  body.appendChild(autoRow);
 
   const importRow = el('div', 'settings-row settings-issues-github-import');
   importRow.dataset.settingsSearchKey = 'apps.issues.github.import';

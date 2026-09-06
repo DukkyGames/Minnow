@@ -213,6 +213,10 @@
   margin-top: 0;
 }
 
+.settings-issues .settings-toggle-row__desc {
+  max-width: 38rem;
+}
+
 .settings-issues-table col.settings-issues-col-icon {
   width: 3.25rem;
 }

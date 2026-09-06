@@ -62,13 +62,21 @@ export interface SyncFields {
   labels: string[];
 }
 
-function localFields(issue: IssueCard, isClosed: boolean): SyncFields {
+/** Snapshot of the GitHub-mirrored fields. Rank, assignee, and type are not included. */
+export function githubSyncedSnapshot(
+  issue: Pick<IssueCard, 'title' | 'description' | 'labels'>,
+  isClosed: boolean,
+): SyncFields {
   return {
     title: issue.title,
     body: issue.description,
     closed: isClosed,
     labels: [...issue.labels],
   };
+}
+
+function localFields(issue: IssueCard, isClosed: boolean): SyncFields {
+  return githubSyncedSnapshot(issue, isClosed);
 }
 
 function remoteFields(remote: RemoteIssueSnapshot): SyncFields {
@@ -89,6 +97,11 @@ export function syncFieldsEqual(a: SyncFields, b: SyncFields): boolean {
     a.labels.length === b.labels.length &&
     a.labels.every((label) => b.labels.includes(label))
   );
+}
+
+/** True when a local write actually changed GitHub-shaped fields (not rank, assignee, …). */
+export function githubSyncedFieldsChanged(before: SyncFields, after: SyncFields): boolean {
+  return !syncFieldsEqual(before, after);
 }
 
 export interface PlanSyncInput {

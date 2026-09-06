@@ -32,6 +32,13 @@ function truncate(text: string, max = 400): string {
   return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean;
 }
 
+let liveConflictTarget: {
+  issueId: string;
+  host: HTMLElement;
+  onChanged: GithubSectionChanged;
+} | null = null;
+const pendingConflicts = new Map<string, SyncConflict>();
+
 /** Two-way mirror is the only mode that may contact GitHub. */
 export function githubSyncEnabled(): boolean {
   return getIssuesGithubMode() === 'mirror';
@@ -43,6 +50,40 @@ function showConflict(
   onChanged: GithubSectionChanged,
 ): void {
   host.replaceChildren(buildConflictPane(conflict, onChanged));
+}
+
+/** Peek Git section registers where Keep mine / Keep GitHub should mount. */
+export function registerGithubConflictHost(
+  issueId: string,
+  host: HTMLElement,
+  onChanged: GithubSectionChanged,
+): void {
+  liveConflictTarget = { issueId, host, onChanged };
+  const pending = pendingConflicts.get(issueId);
+  if (pending) showConflict(host, pending, onChanged);
+}
+
+/** Drop the live host when peek closes. Pending conflicts stay until resolved. */
+export function clearGithubConflictHost(issueId?: string): void {
+  if (!issueId || liveConflictTarget?.issueId === issueId) {
+    liveConflictTarget = null;
+  }
+}
+
+/**
+ * Show the conflict pane when this issue's peek is open.
+ * Returns false when the caller should toast instead.
+ */
+export function presentGithubSyncConflict(conflict: SyncConflict): boolean {
+  pendingConflicts.set(conflict.issueId, conflict);
+  if (liveConflictTarget?.issueId !== conflict.issueId) return false;
+  if (!liveConflictTarget.host.isConnected) return false;
+  showConflict(liveConflictTarget.host, conflict, liveConflictTarget.onChanged);
+  return true;
+}
+
+function clearPendingConflict(issueId: string): void {
+  pendingConflicts.delete(issueId);
 }
 
 // ── Conflict ─────────────────────────────────────────────────────────────────
@@ -108,6 +149,7 @@ function buildConflictPane(
             keepBtn.disabled = false;
             return;
           }
+          clearPendingConflict(conflict.issueId);
           showToast(keep === 'local' ? 'Pushed your version' : 'Took the GitHub version', 'success');
           onChanged();
         })

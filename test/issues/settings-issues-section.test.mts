@@ -9,7 +9,9 @@ import { Window } from 'happy-dom';
 
 import { setStorageModeForTests } from '../../src/config/storage-mode.ts';
 import {
+  getIssuesGithubAuto,
   resetIssuesGithubForTests,
+  setIssuesGithubAuto,
   setIssuesGithubMode,
 } from '../../src/state/issues-github.ts';
 import { setIssuesStateForTests } from '../../src/state/issues-store.ts';
@@ -119,7 +121,26 @@ describe('Settings → Issues GitHub import', () => {
     assert.deepEqual(labels, ['Off', 'Two-way mirror']);
     assert.doesNotMatch(mount.textContent ?? '', /Link \+ push/);
     assert.match(mount.textContent ?? '', /land in Triage/);
+    assert.match(mount.textContent ?? '', /Sync automatically/);
     assert.equal(importButton(mount).className, 'settings-action-btn');
+    const auto = mount.querySelector('#settingsIssuesGithubAuto') as HTMLInputElement | null;
+    assert.ok(auto);
+    assert.equal(auto.disabled, false);
+  });
+
+  test('Sync automatically stays checked but disabled when mode is Off', async () => {
+    const mount = setupDom();
+    setIssuesStateForTests({ version: 2, nextId: 1, issues: [], workspaces: {} });
+    setIssuesGithubAuto(true);
+    setIssuesGithubMode('off');
+    const { renderIssuesSettingsSection } = await import('../../src/ui/settings-issues.ts');
+    renderIssuesSettingsSection(mount);
+
+    const auto = mount.querySelector('#settingsIssuesGithubAuto') as HTMLInputElement | null;
+    assert.ok(auto);
+    assert.equal(auto.checked, true);
+    assert.equal(auto.disabled, true);
+    assert.equal(getIssuesGithubAuto(), true);
   });
 
   test('failed fetch shows Open or restart Minnow and re-enables Import', async () => {

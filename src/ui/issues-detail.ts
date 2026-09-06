@@ -68,7 +68,9 @@ import { bindIssueDropTarget } from './issue-drop-target';
 import {
   bindGithubSyncButton,
   buildGithubIssueChip,
+  clearGithubConflictHost,
   githubSyncEnabled,
+  registerGithubConflictHost,
 } from './issues-github-section';
 import { gitLinkDuplicatesGithubIssue } from '../issues/github-sync-plan';
 import { createIssuesLabelsField, isIssuesLabelsFieldFocused } from './issues-labels-field';
@@ -182,8 +184,15 @@ function teardownDetailEditor(): void {
 
 /** Close the detail panel and clear selection. */
 export function closeIssueDetail(): void {
-  selectedIssueId = undefined;
+  const id = selectedIssueId;
   teardownDetailEditor();
+  if (id) {
+    void import('../state/issues-github-auto').then((mod) => {
+      mod.flushIssueGithubAutoSync(id);
+    });
+    clearGithubConflictHost(id);
+  }
+  selectedIssueId = undefined;
   const host = detailHost ?? document.getElementById('issuesDetailHost');
   if (host) {
     host.classList.remove('is-open');
@@ -972,6 +981,7 @@ function buildGitSection(issue: IssueCard): HTMLElement {
     body.appendChild(chipList);
   }
   body.appendChild(conflictHost);
+  registerGithubConflictHost(issue.id, conflictHost, onGithubChanged);
 
   const commitsHead = document.createElement('h4');
   commitsHead.className = 'issues-detail__git-subhead';

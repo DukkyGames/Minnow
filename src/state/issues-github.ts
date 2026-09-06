@@ -38,9 +38,12 @@ import { getWorkspacePath } from './workspace';
 // ── Mode ─────────────────────────────────────────────────────────────────────
 
 const MODE_STORAGE_KEY = 'minnow.issues.github.mode';
+const AUTO_STORAGE_KEY = 'minnow.issues.github.auto';
 
 let cachedMode: IssuesGithubMode | null = null;
+let cachedAuto: boolean | null = null;
 const modeListeners = new Set<(mode: IssuesGithubMode) => void>();
+const autoListeners = new Set<(enabled: boolean) => void>();
 
 /** The settings-gated sync mode. Retired Link + push (`link`) becomes Off. */
 export function getIssuesGithubMode(): IssuesGithubMode {
@@ -84,6 +87,46 @@ export function subscribeIssuesGithubMode(
   return () => {
     modeListeners.delete(listener);
   };
+}
+
+/** Read the stored Auto checkbox. Ignored unless mode is Two-way mirror. */
+export function getIssuesGithubAuto(): boolean {
+  if (cachedAuto !== null) return cachedAuto;
+  let stored: string | null = null;
+  try {
+    stored = localStorage.getItem(AUTO_STORAGE_KEY);
+  } catch {
+    cachedAuto = false;
+    return cachedAuto;
+  }
+  cachedAuto = stored === 'true' || stored === '1';
+  return cachedAuto;
+}
+
+/** Persist the Auto checkbox. Mode Off leaves this flag alone so it can come back. */
+export function setIssuesGithubAuto(enabled: boolean): void {
+  cachedAuto = Boolean(enabled);
+  try {
+    localStorage.setItem(AUTO_STORAGE_KEY, cachedAuto ? 'true' : 'false');
+  } catch {}
+  for (const listener of [...autoListeners]) {
+    try {
+      listener(cachedAuto);
+    } catch {}
+  }
+}
+
+/** Subscribe to Auto checkbox changes (settings ↔ background loop). */
+export function subscribeIssuesGithubAuto(listener: (enabled: boolean) => void): () => void {
+  autoListeners.add(listener);
+  return () => {
+    autoListeners.delete(listener);
+  };
+}
+
+/** True when Two-way mirror and Auto are both on. The only gate that may contact GitHub unattended. */
+export function githubAutoSyncActive(): boolean {
+  return getIssuesGithubMode() === 'mirror' && getIssuesGithubAuto();
 }
 
 /** Every valid mode, for the settings control. */
@@ -311,12 +354,17 @@ export async function resolveSyncConflict(
 
 function applyRemoteToIssue(issueId: string, fields: SyncFields): void {
   const status = fields.closed ? statusForClosedRemote() : findIssueById(issueId)?.status;
-  updateIssue(issueId, {
-    title: fields.title,
-    description: fields.body,
-    labels: fields.labels,
-    ...(status ? { status } : {}),
-  });
+  // Pulls must not look like local edits or Auto would push the same fields back.
+  updateIssue(
+    issueId,
+    {
+      title: fields.title,
+      description: fields.body,
+      labels: fields.labels,
+      ...(status ? { status } : {}),
+    },
+    { skipGithubAutoSync: true },
+  );
 }
 
 function writeLink(
@@ -435,7 +483,10 @@ export async function importGithubIssues(options?: {
 }
 
 /** Sync every eligible issue; returns the conflicts for the user to resolve. */
-export async function syncAllIssuesWithGithub(): Promise<{
+export async function syncAllIssuesWithGithub(options?: {
+  /** Skip unlinked cards so a poller cannot backfill creates. */
+  linkedOnly?: boolean;
+}): Promise<{
   synced: number;
   conflicts: SyncConflict[];
   errors: string[];
@@ -448,6 +499,7 @@ export async function syncAllIssuesWithGithub(): Promise<{
   if (mode === 'off') return { synced, conflicts, errors };
 
   for (const issue of listIssues()) {
+    if (options?.linkedOnly && !issue.github) continue;
     const outcome = await syncIssueWithGithub(issue.id);
     if (outcome.conflict) conflicts.push(outcome.conflict);
     else if (outcome.ok && outcome.action !== 'noop') synced += 1;
@@ -461,5 +513,7 @@ export async function syncAllIssuesWithGithub(): Promise<{
 /** Reset cached settings (tests). */
 export function resetIssuesGithubForTests(): void {
   cachedMode = null;
+  cachedAuto = null;
   modeListeners.clear();
+  autoListeners.clear();
 }

@@ -269,6 +269,8 @@ export async function initApp(): Promise<void> {
     './state/issues-store.ts'
   );
   await loadIssuesFromStorage();
+  const { startGithubAutoSyncLoop } = await import('./state/issues-github-auto.ts');
+  startGithubAutoSyncLoop();
   const { loadPrReviewsFromStorage } = await import('./state/pr-review-store.ts');
   await loadPrReviewsFromStorage();
   if (sessionState) {

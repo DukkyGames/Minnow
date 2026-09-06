@@ -25,7 +25,12 @@ import {
   statusIdForRole,
   type IssueStatusRole,
 } from '../issues/taxonomy.ts';
+import {
+  githubSyncedFieldsChanged,
+  githubSyncedSnapshot,
+} from '../issues/github-sync-plan.ts';
 import { emitIssuesChange } from './issues-events.ts';
+import { notifyGithubSyncedFieldWrite } from './issues-github-notify.ts';
 import { getIssuesTaxonomySync } from './issues-taxonomy-store.ts';
 import { normalizeIssuePlanPath } from '../issues/plan-attach.ts';
 import { getWorkspaceLabel, getWorkspacePath } from './workspace.ts';
@@ -1276,6 +1281,12 @@ export type UpdateIssuePatch = {
   githubSync?: boolean;
 };
 
+/** Options for a store write that is not a user/agent edit. */
+export type UpdateIssueOptions = {
+  /** GitHub pull/conflict apply: do not treat this write as a local auto-sync trigger. */
+  skipGithubAutoSync?: boolean;
+};
+
 // ── Links ────────────────────────────────────────────────────────────────────
 
 const ISSUE_RELATION_KINDS: readonly IssueRelationKind[] = [
@@ -1500,9 +1511,15 @@ export function appendIssueLinks(
 }
 
 /** Patch one issue; returns updated card or null if missing. */
-export function updateIssue(issueId: string, patch: UpdateIssuePatch): IssueCard | null {
+export function updateIssue(
+  issueId: string,
+  patch: UpdateIssuePatch,
+  options?: UpdateIssueOptions,
+): IssueCard | null {
   const issue = findIssueById(issueId);
   if (!issue) return null;
+  const taxonomy = getIssuesTaxonomySync();
+  const beforeSynced = githubSyncedSnapshot(issue, isClosedStatus(taxonomy, issue.status));
   const nowMs = issuesNowMs();
   if (patch.title !== undefined) issue.title = patch.title.trim();
   if (patch.description !== undefined) issue.description = patch.description;
@@ -1581,8 +1598,13 @@ export function updateIssue(issueId: string, patch: UpdateIssuePatch): IssueCard
     else issue.triagedAt = patch.triagedAt;
   }
   if (patch.githubSync !== undefined) issue.githubSync = patch.githubSync;
+  const afterSynced = githubSyncedSnapshot(issue, isClosedStatus(taxonomy, issue.status));
   issue.updatedAt = nowMs;
   touchIssuesStore();
+  // Auto-sync keys off GitHub-shaped fields, not every updatedAt bump (rank, assignee, …).
+  if (!options?.skipGithubAutoSync && githubSyncedFieldsChanged(beforeSynced, afterSynced)) {
+    notifyGithubSyncedFieldWrite(issueId);
+  }
   return issue;
 }
 
