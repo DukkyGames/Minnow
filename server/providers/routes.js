@@ -295,10 +295,14 @@ export async function handleProviderRequest(req, res, pathname) {
         : undefined;
       const selectedModelId =
         typeof body.selectedModelId === 'string' ? body.selectedModelId : undefined;
+      const auto = body.auto === true;
+      const skipVision = body.skipVision === true;
       try {
         const result = await runCapabilityProbe(id, {
           modelIds,
           selectedModelId,
+          auto,
+          skipVision,
         });
         sendJson(res, 200, result);
       } catch (err) {

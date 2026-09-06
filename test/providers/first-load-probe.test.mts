@@ -185,7 +185,7 @@ describe('scheduleFirstLoadCapabilityProbes', () => {
     setStorageModeForTests('server');
     const calls: Array<{ providerId: string; modelIds?: string[] }> = [];
     setFirstLoadCapabilityProbeRunnerForTests(async (providerId, options) => {
-      calls.push({ providerId, modelIds: options.modelIds });
+      calls.push({ providerId, modelIds: options.modelIds, auto: options.auto });
       return true;
     });
     cacheRow('lm-studio-local', 'gemma-3-12b-it', {
@@ -198,6 +198,7 @@ describe('scheduleFirstLoadCapabilityProbes', () => {
     assert.equal(calls.length, 1);
     assert.equal(calls[0]?.providerId, 'lm-studio-local');
     assert.deepEqual(calls[0]?.modelIds, ['gemma-3-12b-it']);
+    assert.equal(calls[0]?.auto, true);
   });
 
   test('does not queue a catalog VLM or an unused cloud openai-v1 row', async () => {
@@ -221,7 +222,7 @@ describe('scheduleFirstLoadCapabilityProbes', () => {
     setStorageModeForTests('server');
     const calls: Array<{ providerId: string; modelIds?: string[] }> = [];
     setFirstLoadCapabilityProbeRunnerForTests(async (providerId, options) => {
-      calls.push({ providerId, modelIds: options.modelIds });
+      calls.push({ providerId, modelIds: options.modelIds, auto: options.auto });
       return true;
     });
     const libraryId = 'gguf:org/gemma-3:gemma-3-12b-it.gguf';
@@ -242,6 +243,7 @@ describe('scheduleFirstLoadCapabilityProbes', () => {
     assert.equal(calls.length, 1);
     assert.equal(calls[0]?.providerId, 'llama-cpp-local');
     assert.deepEqual(calls[0]?.modelIds, [libraryId]);
+    assert.equal(calls[0]?.auto, true);
     assert.equal(getFirstLoadProbeSeenKeysForTests().length, 1);
   });
 
@@ -249,7 +251,7 @@ describe('scheduleFirstLoadCapabilityProbes', () => {
     setStorageModeForTests('server');
     const calls: Array<{ providerId: string; modelIds?: string[] }> = [];
     setFirstLoadCapabilityProbeRunnerForTests(async (providerId, options) => {
-      calls.push({ providerId, modelIds: options.modelIds });
+      calls.push({ providerId, modelIds: options.modelIds, auto: options.auto });
       return true;
     });
     cacheRow('openai', 'gpt-4o', { id: 'gpt-4o', type: 'llm', state: 'loaded' });
@@ -261,13 +263,14 @@ describe('scheduleFirstLoadCapabilityProbes', () => {
     assert.equal(calls.length, 1);
     assert.equal(calls[0]?.providerId, 'openai');
     assert.deepEqual(calls[0]?.modelIds, ['gpt-4o']);
+    assert.equal(calls[0]?.auto, true);
   });
 
   test('scheduleCapabilityProbeForSelectValue probes a picked cloud model once', async () => {
     setStorageModeForTests('server');
     const calls: Array<{ providerId: string; modelIds?: string[] }> = [];
     setFirstLoadCapabilityProbeRunnerForTests(async (providerId, options) => {
-      calls.push({ providerId, modelIds: options.modelIds });
+      calls.push({ providerId, modelIds: options.modelIds, auto: options.auto });
       return true;
     });
     cacheRow('openai', 'gpt-4o', { id: 'gpt-4o', type: 'llm', state: 'loaded' });
@@ -279,5 +282,6 @@ describe('scheduleFirstLoadCapabilityProbes', () => {
     assert.equal(calls.length, 1);
     assert.equal(calls[0]?.providerId, 'openai');
     assert.deepEqual(calls[0]?.modelIds, ['gpt-4o']);
+    assert.equal(calls[0]?.auto, true);
   });
 });

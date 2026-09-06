@@ -550,14 +550,15 @@ describe('openai-v1 capabilities/probe route', () => {
       res.statusCode = 404;
       res.end('not found');
     });
-    await new Promise((resolve) => visionMock.listen(0, '127.0.0.1', resolve));
+    await new Promise((resolve) => visionMock.listen(0, '127.0.0.2', resolve));
     const port = /** @type {import('net').AddressInfo} */ (visionMock.address()).port;
 
     try {
       await httpRequest(baseUrl, 'POST', '/api/providers', {
         id: 'probe-vision',
         label: 'Probe vision',
-        baseUrl: `http://127.0.0.1:${port}`,
+        // 127.0.0.2 is not classified as loopback, so the corrupt-image control runs.
+        baseUrl: `http://127.0.0.2:${port}`,
         apiKind: 'openai-v1',
       });
 
@@ -632,6 +633,191 @@ describe('openai-v1 capabilities/probe route', () => {
       assert.equal(res.json.models['unreachable'].sources.vision, 'catalog');
     } finally {
       await new Promise((resolve) => downMock.close(resolve));
+    }
+  });
+
+  it('skips the corrupt-image control on loopback openai-v1 (MIN-839)', async () => {
+    /** @type {Array<{ model: string, hasImage: boolean, decodesImage: boolean }>} */
+    const seen = [];
+    const visionMock = http.createServer((req, res) => {
+      if (req.method === 'GET' && req.url === '/v1/models') {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ data: [{ id: 'sees-images' }] }));
+        return;
+      }
+      if (req.method === 'POST' && req.url === '/v1/chat/completions') {
+        let body = '';
+        req.on('data', (c) => {
+          body += c;
+        });
+        req.on('end', () => {
+          const parsed = JSON.parse(body);
+          const serialized = JSON.stringify(parsed.messages);
+          const hasImage = serialized.includes('image_url');
+          const decodesImage = serialized.includes('base64,iVBOR');
+          seen.push({ model: parsed.model, hasImage, decodesImage });
+          res.setHeader('Content-Type', 'application/json');
+          if (hasImage && !decodesImage) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: 'invalid image data' }));
+            return;
+          }
+          res.end(
+            JSON.stringify({
+              choices: [{ message: { content: 'pong' }, finish_reason: 'stop' }],
+            }),
+          );
+        });
+        return;
+      }
+      res.statusCode = 404;
+      res.end('not found');
+    });
+    await new Promise((resolve) => visionMock.listen(0, '127.0.0.1', resolve));
+    const port = /** @type {import('net').AddressInfo} */ (visionMock.address()).port;
+
+    try {
+      await httpRequest(baseUrl, 'POST', '/api/providers', {
+        id: 'probe-vision-loopback',
+        label: 'Loopback llama.cpp',
+        baseUrl: `http://127.0.0.1:${port}`,
+        apiKind: 'openai-v1',
+      });
+
+      const res = await httpRequest(
+        baseUrl,
+        'POST',
+        '/api/providers/probe-vision-loopback/capabilities/probe',
+        { modelIds: ['sees-images'] },
+      );
+      assert.equal(res.status, 200);
+      assert.equal(res.json.models['sees-images'].vision, true);
+      assert.equal(res.json.models['sees-images'].sources.vision, 'probe');
+      const imagePosts = seen.filter((r) => r.hasImage);
+      assert.equal(imagePosts.length, 1);
+      assert.equal(imagePosts[0]?.decodesImage, true);
+    } finally {
+      await new Promise((resolve) => visionMock.close(resolve));
+    }
+  });
+
+  it('skips all image_url posts on first-load auto probe for loopback openai-v1', async () => {
+    let imageRequests = 0;
+    const visionMock = http.createServer((req, res) => {
+      if (req.method === 'GET' && req.url === '/v1/models') {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ data: [{ id: 'qwen3.8-27b-q6' }] }));
+        return;
+      }
+      if (req.method === 'POST' && req.url === '/v1/chat/completions') {
+        let body = '';
+        req.on('data', (c) => {
+          body += c;
+        });
+        req.on('end', () => {
+          const parsed = JSON.parse(body);
+          if (JSON.stringify(parsed.messages).includes('image_url')) {
+            imageRequests += 1;
+          }
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({
+              choices: [{ message: { content: 'pong' }, finish_reason: 'stop' }],
+            }),
+          );
+        });
+        return;
+      }
+      res.statusCode = 404;
+      res.end('not found');
+    });
+    await new Promise((resolve) => visionMock.listen(0, '127.0.0.1', resolve));
+    const port = /** @type {import('net').AddressInfo} */ (visionMock.address()).port;
+
+    try {
+      await httpRequest(baseUrl, 'POST', '/api/providers', {
+        id: 'probe-vision-auto',
+        label: 'Loopback auto',
+        baseUrl: `http://127.0.0.1:${port}`,
+        apiKind: 'openai-v1',
+      });
+
+      const res = await httpRequest(
+        baseUrl,
+        'POST',
+        '/api/providers/probe-vision-auto/capabilities/probe',
+        { modelIds: ['qwen3.8-27b-q6'], auto: true },
+      );
+      assert.equal(res.status, 200);
+      assert.equal(imageRequests, 0);
+      assert.equal(res.json.models['qwen3.8-27b-q6'].sources.vision, 'catalog');
+      assert.equal(res.json.models['qwen3.8-27b-q6'].sources.streaming, 'probe');
+    } finally {
+      await new Promise((resolve) => visionMock.close(resolve));
+    }
+  });
+
+  it('does not stamp probe vision when the valid PNG returns mtmd/ffprobe', async () => {
+    /** @type {string[]} */
+    const imagePayloads = [];
+    const visionMock = http.createServer((req, res) => {
+      if (req.method === 'GET' && req.url === '/v1/models') {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ data: [{ id: 'qwen-vl' }] }));
+        return;
+      }
+      if (req.method === 'POST' && req.url === '/v1/chat/completions') {
+        let body = '';
+        req.on('data', (c) => {
+          body += c;
+        });
+        req.on('end', () => {
+          const parsed = JSON.parse(body);
+          const serialized = JSON.stringify(parsed.messages);
+          res.setHeader('Content-Type', 'application/json');
+          if (serialized.includes('image_url')) {
+            imagePayloads.push(serialized);
+            res.statusCode = 500;
+            res.end(
+              'E mtmd_helper_video_init_from_buf: ffprobe failed on buffer (is ffprobe in PATH?)\n' +
+                'E mtmd_helper_bitmap_init_from_buf: failed to decode buffer as either image/audio/video',
+            );
+            return;
+          }
+          res.end(
+            JSON.stringify({
+              choices: [{ message: { content: 'pong' }, finish_reason: 'stop' }],
+            }),
+          );
+        });
+        return;
+      }
+      res.statusCode = 404;
+      res.end('not found');
+    });
+    await new Promise((resolve) => visionMock.listen(0, '127.0.0.1', resolve));
+    const port = /** @type {import('net').AddressInfo} */ (visionMock.address()).port;
+
+    try {
+      await httpRequest(baseUrl, 'POST', '/api/providers', {
+        id: 'probe-vision-mtmd',
+        label: 'mtmd crash',
+        baseUrl: `http://127.0.0.1:${port}`,
+        apiKind: 'openai-v1',
+      });
+
+      const res = await httpRequest(
+        baseUrl,
+        'POST',
+        '/api/providers/probe-vision-mtmd/capabilities/probe',
+        { modelIds: ['qwen-vl'] },
+      );
+      assert.equal(res.status, 200);
+      assert.equal(imagePayloads.length, 1);
+      assert.equal(res.json.models['qwen-vl'].sources.vision, 'catalog');
+      assert.match(res.json.models['qwen-vl'].probeErrors.vision, /mtmd|ffprobe/i);
+    } finally {
+      await new Promise((resolve) => visionMock.close(resolve));
     }
   });
 });
