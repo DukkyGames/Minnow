@@ -1459,6 +1459,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 5px;
   width: fit-content;
   max-width: 100%;
   font-size: 10px;
@@ -1466,13 +1467,19 @@
   line-height: 1.2;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  padding: 3px 8px;
+  padding: 3px 8px 3px 6px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--mn-border);
   color: var(--mn-fg-muted);
   background: color-mix(in srgb, var(--mn-fg) 3%, var(--mn-bg));
   white-space: nowrap;
   box-sizing: border-box;
+}
+
+.issues-status-chip__icon {
+  --mn-icon-size: 12px;
+  flex-shrink: 0;
+  color: currentColor;
 }
 
 .issues-status-chip--backlog {
@@ -1979,6 +1986,12 @@
 
 .issues-detail__prop.issues-status-chip {
   font-size: 11px;
+  padding: 0 7px 0 6px;
+  gap: 5px;
+}
+
+.issues-detail__prop.issues-status-chip .issues-status-chip__icon {
+  --mn-icon-size: 12px;
 }
 
 .issues-detail__prop.issues-priority-chip--none {

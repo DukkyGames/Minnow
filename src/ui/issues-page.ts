@@ -24,7 +24,11 @@ import { subIssueMenuItems } from './issues-sub-issues';
 import { createIssueEditor, type IssueEditorHandle } from './issue-editor';
 import { collectInlineRefs } from '../issues/markdown-inline';
 import { taskProgress } from '../issues/markdown-blocks';
-import { createIssueTypeChip } from '../issues/type-icons';
+import {
+  createIssueStatusChip,
+  createIssueTypeChip,
+  resolveIssueStatusIcon,
+} from '../issues/type-icons';
 import { getForegroundAppId, getOsView } from '../os/instances';
 import { isOsAppHash, isOsShellEnabled } from '../os/page-bridge';
 import { navigateToDesktop } from '../os/router';
@@ -189,8 +193,12 @@ function getBoardStatusOptions(): Array<{ id: IssueStatus; label: string }> {
 }
 
 /** All statuses for bulk status change menus. */
-function getAllStatusOptions(): Array<{ id: IssueStatus; label: string }> {
-  return sortedStatuses(getIssuesTaxonomySync()).map((s) => ({ id: s.id, label: s.label }));
+function getAllStatusOptions(): Array<{ id: IssueStatus; label: string; iconClass: string }> {
+  return sortedStatuses(getIssuesTaxonomySync()).map((s) => ({
+    id: s.id,
+    label: s.label,
+    iconClass: resolveIssueStatusIcon(s.id, s),
+  }));
 }
 
 /** Sync new-issue form options from taxonomy (preserves current value when possible). */
@@ -591,12 +599,7 @@ function createTypeChip(type: IssueType): HTMLElement {
 function createStatusChip(status: IssueStatus): HTMLElement {
   const taxonomy = getIssuesTaxonomySync();
   const item = taxonomy.statuses.find((s) => s.id === status);
-  const chip = document.createElement('span');
-  chip.className = `issues-status-chip issues-status-chip--${status}`;
-  chip.textContent = item?.label ?? `${status.replace(/_/g, ' ')} (unknown)`;
-  if (item?.color) chip.style.setProperty('--issues-chip-color', item.color);
-  chip.classList.toggle('is-unknown', !item);
-  return chip;
+  return createIssueStatusChip(status, item);
 }
 
 /** Build a priority label for list rows. */
@@ -949,6 +952,7 @@ function buildIssueRowMenuItems(
       getAllStatusOptions().map((status) => ({
         id: status.id,
         label: status.label,
+        iconClass: status.iconClass,
         onSelect: () => {
           for (const id of targetIds) {
             updateIssue(id, { status: status.id });
@@ -1035,12 +1039,13 @@ export async function deleteIssueFromUi(issueId: string): Promise<void> {
 }
 
 function menuItemsFromPairs(
-  pairs: Array<{ id: string; label: string; swatch?: string }>,
+  pairs: Array<{ id: string; label: string; swatch?: string; iconClass?: string }>,
   onPick: (id: string) => void,
 ): IssuesContextMenuItem[] {
   return pairs.map((pair) => ({
     id: pair.id,
     label: pair.label,
+    iconClass: pair.iconClass,
     onSelect: () => onPick(pair.id),
   }));
 }

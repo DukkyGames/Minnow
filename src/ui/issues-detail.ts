@@ -86,7 +86,7 @@ import { gitLinkDuplicatesGithubIssue } from '../issues/github-sync-plan';
 import { createIssuesLabelsField, isIssuesLabelsFieldFocused } from './issues-labels-field';
 import { appConfirm } from './app-dialog';
 import { executeTool } from '../tools/client';
-import { createIssueTypeChip } from '../issues/type-icons';
+import { createIssueStatusChip, createIssueTypeChip, resolveIssueStatusIcon } from '../issues/type-icons';
 import {
   sortedPriorities,
   sortedStatuses,
@@ -414,7 +414,7 @@ function bindPropertyChip(
 function openDetailPropertyMenu(
   anchor: HTMLElement,
   label: string,
-  items: Array<{ id: string; label: string }>,
+  items: Array<{ id: string; label: string; iconClass?: string }>,
   onPick: (id: string) => void,
 ): void {
   openIssuesContextMenu({
@@ -424,6 +424,7 @@ function openDetailPropertyMenu(
     items: items.map((item) => ({
       id: item.id,
       label: item.label,
+      iconClass: item.iconClass,
       onSelect: () => onPick(item.id),
     })),
   });
@@ -432,12 +433,7 @@ function openDetailPropertyMenu(
 function createDetailStatusChip(status: IssueStatus): HTMLElement {
   const taxonomy = getIssuesTaxonomySync();
   const item = taxonomy.statuses.find((entry) => entry.id === status);
-  const chip = document.createElement('span');
-  chip.className = `issues-status-chip issues-status-chip--${status}`;
-  chip.textContent = item?.label ?? `${status.replace(/_/g, ' ')} (unknown)`;
-  if (item?.color) chip.style.setProperty('--issues-chip-color', item.color);
-  chip.classList.toggle('is-unknown', !item);
-  return chip;
+  return createIssueStatusChip(status, item);
 }
 
 function createDetailPriorityChip(priority: IssuePriority): HTMLElement {
@@ -603,11 +599,15 @@ function renderIssueDetail(host: HTMLElement, issue: IssueCard): void {
   });
 
   const statusChip = createDetailStatusChip(issue.status);
-  bindPropertyChip(statusChip, `Status: ${statusChip.textContent || issue.status}`, (anchor) => {
+  bindPropertyChip(statusChip, `Status: ${statusChip.title || issue.status}`, (anchor) => {
     openDetailPropertyMenu(
       anchor,
       'Status',
-      sortedStatuses(taxonomy).map((entry) => ({ id: entry.id, label: entry.label })),
+      sortedStatuses(taxonomy).map((entry) => ({
+        id: entry.id,
+        label: entry.label,
+        iconClass: resolveIssueStatusIcon(entry.id, entry),
+      })),
       (id) => updateIssue(issue.id, { status: id as IssueStatus }),
     );
   });

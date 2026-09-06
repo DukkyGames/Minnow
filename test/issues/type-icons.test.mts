@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { Window } from 'happy-dom';
 
 import {
   createDefaultIssuesTaxonomy,
   validateIssuesTaxonomy,
 } from '../../src/issues/taxonomy.ts';
 import {
+  DEFAULT_ISSUE_STATUS_ICONS,
   DEFAULT_ISSUE_TYPE_ICONS,
+  createIssueStatusChip,
   isIssueTypeIconClass,
+  resolveIssueStatusIcon,
   resolveIssueTypeIcon,
 } from '../../src/issues/type-icons.ts';
 
@@ -60,7 +64,86 @@ describe('issue type icons', () => {
     });
     const validated = validateIssuesTaxonomy(next);
     assert.equal(validated.types.find((t) => t.id === 'spike')?.icon, 'fi-sr-rocket');
-    assert.equal(isIssueTypeIconClass('fi-sr-rocket'), true);
+    assert.equal(isIssueTypeIconClass('fi-rr-inbox'), true);
     assert.equal(isIssueTypeIconClass('fi-sr-not-a-real-icon'), false);
+  });
+});
+
+describe('issue status icons', () => {
+  it('seeds built-in statuses with default icons', () => {
+    const taxonomy = createDefaultIssuesTaxonomy();
+    assert.equal(
+      taxonomy.statuses.find((s) => s.id === 'triage')?.icon,
+      DEFAULT_ISSUE_STATUS_ICONS.triage,
+    );
+    assert.equal(
+      taxonomy.statuses.find((s) => s.id === 'in_progress')?.icon,
+      DEFAULT_ISSUE_STATUS_ICONS.in_progress,
+    );
+    assert.equal(
+      taxonomy.statuses.find((s) => s.id === 'done')?.icon,
+      DEFAULT_ISSUE_STATUS_ICONS.done,
+    );
+    assert.equal(
+      taxonomy.statuses.find((s) => s.id === 'canceled')?.icon,
+      DEFAULT_ISSUE_STATUS_ICONS.canceled,
+    );
+  });
+
+  it('resolves stored icons and falls back for custom statuses without an icon', () => {
+    assert.equal(
+      resolveIssueStatusIcon('todo', { id: 'todo', label: 'Todo', order: 0 }),
+      'fi-sr-clipboard-list',
+    );
+    assert.equal(
+      resolveIssueStatusIcon('blocked', {
+        id: 'blocked',
+        label: 'Blocked',
+        order: 0,
+        icon: 'fi-rr-clock',
+      }),
+      'fi-rr-clock',
+    );
+    assert.equal(
+      resolveIssueStatusIcon('blocked', { id: 'blocked', label: 'Blocked', order: 0 }),
+      'fi-sr-box',
+    );
+  });
+
+  it('keeps statuses that omit icon (existing taxonomies)', () => {
+    const base = createDefaultIssuesTaxonomy();
+    const next = structuredClone(base);
+    for (const status of next.statuses) delete status.icon;
+    const validated = validateIssuesTaxonomy(next);
+    const triage = validated.statuses.find((s) => s.id === 'triage');
+    assert.equal(triage?.icon, undefined);
+    assert.equal(resolveIssueStatusIcon('triage', triage), 'fi-rr-inbox');
+  });
+
+  it('rejects status icons outside the picker catalog', () => {
+    const base = createDefaultIssuesTaxonomy();
+    const next = structuredClone(base);
+    next.statuses.push({
+      id: 'blocked',
+      label: 'Blocked',
+      order: 99,
+      boardVisible: true,
+      icon: 'fi-sr-not-a-real-icon',
+    });
+    assert.throws(() => validateIssuesTaxonomy(next), /Unknown status icon/);
+  });
+
+  it('renders the glyph beside the status label', () => {
+    const win = new Window({ url: 'http://localhost/' });
+    globalThis.document = win.document as unknown as Document;
+    try {
+      const chip = createIssueStatusChip('done', { id: 'done', label: 'Done', order: 0 });
+      assert.equal(chip.className.includes('issues-status-chip--done'), true);
+      assert.ok(chip.querySelector('.issues-status-chip__icon'));
+      assert.equal(chip.querySelector('.issues-status-chip__label')?.textContent, 'Done');
+      assert.equal(chip.textContent?.includes('Done'), true);
+    } finally {
+      win.close();
+    }
   });
 });

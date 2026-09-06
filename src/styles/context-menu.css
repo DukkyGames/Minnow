@@ -92,6 +92,13 @@
 }
 
 /* Colour dot for taxonomy rows; sized to the cap height of the label. */
+.mn-menu__icon {
+  flex-shrink: 0;
+  --mn-icon-size: 14px;
+  color: currentColor;
+  opacity: 0.88;
+}
+
 .mn-menu__swatch {
   flex-shrink: 0;
   width: 8px;

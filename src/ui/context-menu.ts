@@ -16,6 +16,8 @@ export interface MenuActionItem {
   checked?: boolean;
   /** Leading colour dot — taxonomy chips, branch colours. */
   swatch?: string;
+  /** Leading Uicons class (fi-rr-* / fi-sr-*), e.g. status glyphs. */
+  iconClass?: string;
   onSelect: () => void | Promise<void>;
 }
 
@@ -176,7 +178,15 @@ function buildRow(item: MenuActionItem | MenuSubmenuItem): HTMLButtonElement {
   }
   if (!submenu && (item as MenuActionItem).danger) btn.classList.add('is-danger');
 
-  const swatchColor = !submenu ? (item as MenuActionItem).swatch : undefined;
+  const action = !submenu ? (item as MenuActionItem) : null;
+  const iconClass = action?.iconClass?.trim();
+  if (iconClass && /^fi-(?:rr|sr)-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(iconClass)) {
+    const glyph = document.createElement('i');
+    glyph.className = `fi ${iconClass} icon-svg mn-menu__icon`;
+    glyph.setAttribute('aria-hidden', 'true');
+    btn.appendChild(glyph);
+  }
+  const swatchColor = action?.swatch;
   if (swatchColor) {
     const swatch = document.createElement('span');
     swatch.className = 'mn-menu__swatch';
