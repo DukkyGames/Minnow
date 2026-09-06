@@ -149,10 +149,13 @@ export function resolveOneShotSpawn({
   }
 
   if (winOneShot) {
+    // Let Node build the cmd.exe /d /s /c line (shell:true). Passing the raw
+    // string as an argv element with shell:false lets libuv escape inner quotes
+    // as \" — which cmd.exe does not understand (MIN-269).
     return {
-      command: 'cmd.exe',
-      args: ['/d', '/s', '/c', command],
-      shell: false,
+      command,
+      args: [],
+      shell: true,
     };
   }
 
