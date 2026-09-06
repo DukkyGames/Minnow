@@ -13,7 +13,7 @@ Open it from the app rail for the fullscreen app, or from the Issues button in t
 
 ## Working with issues
 
-**Capture** with the quick-capture field in the header, or **New issue** (**C**) for the full form. New issues start in **Backlog**.
+**Capture** with the quick-capture field in the header, or **New issue** (**C**) for the full form. When **Workspace scope** is **All workspaces**, the new-issue form includes a **Workspace** picker (Scratch plus recent folders). New issues start in **Backlog**.
 
 **Select** several rows with **Ctrl/Cmd+click**, or a range with **Shift+click**. The selection bar can change status, priority, assignee, labels, and project, or delete. **Shift+F10** or right-click opens the row menu: open, copy ID, expand (fill title and description from this card), expand with an agent (triage), send to chat or to a background agent, change status, delete.
 

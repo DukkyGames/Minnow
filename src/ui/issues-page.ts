@@ -132,6 +132,11 @@ import {
   runIssuesGithubSyncAll,
   syncIssuesGithubSyncAllButton,
 } from './issues-github-section';
+import {
+  ensureNewIssueWorkspaceField,
+  getNewIssueWorkspacePath,
+  refreshNewIssueWorkspaceField,
+} from './issues-new-workspace-field';
 
 const CHAT_AREA_ISSUES_CLASS = 'chat-area--issues';
 const MAIN_COLUMN_ISSUES_CLASS = 'main-column--issues';
@@ -1980,6 +1985,9 @@ function issuesGithubSyncScope(): { scope: 'all' | 'current_workspace'; workspac
 
 function onFiltersChanged(): void {
   readFiltersFromControls();
+  if (isNewFormOpen()) {
+    void refreshNewIssueWorkspaceField(filters.scope);
+  }
   renderIssuesPanel();
 }
 
@@ -2109,6 +2117,7 @@ function bindNewIssueFormControls(): void {
   if (!form) return;
   newIssueFormBindingsDone = true;
 
+  ensureNewIssueWorkspaceField(form);
   ensureNewIssueDescriptionEditor();
 
   form.addEventListener('submit', submitNewIssue);
@@ -2137,6 +2146,7 @@ function setNewFormOpen(open: boolean): void {
   }
 
   ensureNewIssueDescriptionEditor();
+  void refreshNewIssueWorkspaceField(filters.scope);
   setNewIssuePanelOpen(true, form, backdrop);
   anchor?.setAttribute('aria-expanded', 'true');
 
@@ -2172,7 +2182,7 @@ function submitNewIssue(event: Event): void {
     description,
     type: (controlValue('issuesNewType') as IssueType) || 'task',
     priority: (controlValue('issuesNewPriority') as IssuePriority) || 'none',
-    workspacePath: getWorkspacePath(),
+    workspacePath: getNewIssueWorkspacePath(filters.scope),
   });
   syncNewIssueDescriptionRefs(issue.id, description);
   setControlValue('issuesNewTitle', '');

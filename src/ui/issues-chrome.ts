@@ -1,3 +1,5 @@
+import { ensureNewIssueWorkspaceField } from './issues-new-workspace-field';
+
 const CHROME_MARK = 'data-issues-chrome';
 
 // ── Ensure ───────────────────────────────────────────────────────────────────
@@ -156,6 +158,7 @@ function buildChipBar(): HTMLElement {
 function buildNewForm(): HTMLElement {
   const existing = document.getElementById('issuesNewForm');
   if (existing) {
+    ensureNewIssueWorkspaceField(existing);
     if (!document.getElementById('issuesNewFormBackdrop')) {
       const backdrop = el('button', {
         type: 'button',
@@ -178,6 +181,14 @@ function buildNewForm(): HTMLElement {
       placeholder: 'What needs doing?',
     }),
   ]);
+  const workspace = el('label', {
+    id: 'issuesNewWorkspaceWrap',
+    class: 'issues-new-form__workspace',
+    hidden: '',
+  }, [
+    document.createTextNode('Workspace'),
+    el('select', { id: 'issuesNewWorkspace', 'aria-label': 'Workspace' }),
+  ]);
   const type = el('label', {}, [
     document.createTextNode('Type'),
     el('select', { id: 'issuesNewType' }),
@@ -193,7 +204,7 @@ function buildNewForm(): HTMLElement {
       class: 'issues-detail__desc-wrap is-editing',
     }),
   ]);
-  const grid = el('div', { class: 'issues-new-form__grid' }, [title, type, priority, desc]);
+  const grid = el('div', { class: 'issues-new-form__grid' }, [title, workspace, type, priority, desc]);
   const actions = el('div', { class: 'issues-new-form__actions' }, [
     el('button', { type: 'submit', class: 'issues-btn issues-btn--primary', text: 'Create issue' }),
     el('button', { type: 'button', class: 'issues-btn', id: 'btnIssuesNewCancel', text: 'Cancel' }),

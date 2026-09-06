@@ -474,6 +474,14 @@
   grid-column: 1 / -1;
 }
 
+.issues-new-form__workspace {
+  grid-column: 1 / -1;
+}
+
+.issues-new-form__workspace[hidden] {
+  display: none;
+}
+
 .issues-new-form__desc {
   grid-column: 1 / -1;
 }
