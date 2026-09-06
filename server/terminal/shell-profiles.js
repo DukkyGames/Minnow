@@ -6,6 +6,12 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import {
+  buildGitBashInteractiveArgs,
+  detectGitBashPath,
+  GIT_BASH_PROFILE_ID,
+  resetGitBashCacheForTests,
+} from './git-bash.js';
+import {
   buildWslInteractiveArgs,
   listWslDistros,
   resetWslDistroCacheForTests,
@@ -23,7 +29,7 @@ const execFileAsync = promisify(execFile);
  * @property {string} shell
  * @property {string[]} args
  * @property {string} platform
- * @property {'native' | 'wsl'} [runtime]
+ * @property {'native' | 'wsl' | 'git-bash'} [runtime]
  * @property {string} [distro] WSL distribution name when runtime is wsl
  */
 
@@ -91,11 +97,12 @@ function getWslCatalog(options = {}) {
   return { distros: [], defaultDistro: null };
 }
 
-/** Reset cached WSL detection (tests). */
+/** Reset cached WSL and Git Bash detection (tests). */
 export function resetWslShellProfileCache() {
   wslDetected = null;
   wslCatalog = null;
   resetWslDistroCacheForTests();
+  resetGitBashCacheForTests();
 }
 
 /**
@@ -139,7 +146,7 @@ function wslDistroProfile(distro, isDefault) {
 /**
  * Build profiles for a platform (pure, testable).
  * @param {string} platform - Node `process.platform`
- * @param {{ wsl?: boolean; wslDistros?: string[]; wslDefaultDistro?: string | null }} [options]
+ * @param {{ wsl?: boolean; wslDistros?: string[]; wslDefaultDistro?: string | null; gitBashPath?: string | null }} [options]
  * @returns {ShellProfile[]}
  */
 export function resolveProfiles(platform, options = {}) {
@@ -163,6 +170,18 @@ export function resolveProfiles(platform, options = {}) {
       platform: 'win32',
       runtime: 'native',
     });
+
+    const gitBashPath = detectGitBashPath(options);
+    if (gitBashPath) {
+      profiles.push({
+        id: GIT_BASH_PROFILE_ID,
+        label: 'Git Bash',
+        shell: gitBashPath,
+        args: buildGitBashInteractiveArgs(),
+        platform: 'win32',
+        runtime: 'git-bash',
+      });
+    }
 
     const catalog =
       options.wslDistros != null
@@ -250,8 +269,10 @@ export function getShellProfileById(id) {
 
 /**
  * Resolve distro + runtime flags for a profile record.
+ * Git Bash must pass through as `git-bash` (not collapse to native), or
+ * one-shots still run through cmd.exe.
  * @param {ShellProfile | null | undefined} profile
- * @returns {{ runtime: 'native' | 'wsl'; distro: string | null }}
+ * @returns {{ runtime: 'native' | 'wsl' | 'git-bash'; distro: string | null }}
  */
 export function describeShellProfileRuntime(profile) {
   if (!profile) return { runtime: 'native', distro: null };
@@ -263,6 +284,9 @@ export function describeShellProfileRuntime(profile) {
         profile.distro ??
         resolveWslDistroFromProfileId(profile.id, catalog.defaultDistro),
     };
+  }
+  if (profile.runtime === 'git-bash') {
+    return { runtime: 'git-bash', distro: null };
   }
   return { runtime: 'native', distro: null };
 }

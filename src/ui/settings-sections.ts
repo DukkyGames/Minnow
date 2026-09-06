@@ -238,7 +238,8 @@ async function appendTerminalControls(mount: HTMLElement): Promise<void> {
   }
 
   const wslProfiles = shellProfiles.filter((p) => p.runtime === 'wsl');
-  if (wslProfiles.length > 0) {
+  // Always on Windows (PowerShell + cmd); also ungates macOS zsh vs bash.
+  if (shellProfiles.length > 1) {
     const { row: shellRow, select: shellSelect } = createSettingsSelectRow(
       'Default shell',
       {
@@ -246,7 +247,9 @@ async function appendTerminalControls(mount: HTMLElement): Promise<void> {
         value: configuredDefault ?? shellProfiles[0]?.id ?? 'powershell',
         searchKey: 'general.chat.terminal.defaultShell',
         description:
-          'Used for new terminal tabs and agent execute_command. Pick a WSL distro to run Linux tooling from Windows.',
+          wslProfiles.length > 0
+            ? 'Used for new terminal tabs and agent execute_command. Pick Git Bash or a WSL distro for Unix tooling, or PowerShell / Command Prompt for native Windows.'
+            : 'Used for new terminal tabs and agent execute_command. On Windows, Git Bash appears when Git for Windows is installed.',
       },
     );
     mount.appendChild(shellRow);
@@ -283,7 +286,7 @@ async function appendTerminalControls(mount: HTMLElement): Promise<void> {
               value: workspaceOverride ?? '',
               searchKey: 'general.chat.terminal.workspaceShell',
               description:
-                'Override the default shell for the open Code workspace only. Handy when one repo expects WSL and another uses PowerShell.',
+                'Override the default shell for the open Code workspace only. Handy when one repo expects Git Bash or WSL and another uses PowerShell.',
             });
           mount.appendChild(workspaceShellRow);
 

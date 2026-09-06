@@ -29,7 +29,7 @@ export function formatSandboxTrailer(meta) {
   if (mode !== 'prefer' && mode !== 'require' && meta.fallbackUnsandboxed !== true) {
     return '';
   }
-  if (meta.reason === 'disabled' || meta.reason === 'user_pty') return '';
+  if (meta.reason === 'disabled' || meta.reason === 'user_pty' || meta.reason === 'native_win_shell') return '';
 
   const detail =
     (typeof meta.detail === 'string' && meta.detail.trim()) ||

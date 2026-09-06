@@ -2,13 +2,13 @@
 name: Git Bash terminal
 overview: Add Git Bash as a Windows-only shell profile (interactive PTY tabs and agent `execute_command`) when Git for Windows is installed, without colliding with the existing WSL `bash` profile.
 todos:
-  - [ ] `server/terminal/git-bash.js`: detect well-known Git for Windows `bash.exe` (never PATH `bash.exe`), MSYS path helper, PTY/one-shot argv, env patch, test reset
-  - [ ] Register `git-bash` in `resolveProfiles` (after cmd, only when found). `describeShellProfileRuntime` MUST return runtime `'git-bash'` (do not collapse to native)
-  - [ ] Merge Git Bash env in PTY spawn; add `git-bash` to `NATIVE_HISTORY_SHELL_IDS`; widen client `ShellProfile.runtime`
-  - [ ] Route Windows one-shot strings through `bash.exe --login -c`; merge spawn env in `createRun` / `createBackgroundRun`; skip unix-pipe guard; do not dollar-escape
-  - [ ] Skip WSL-Landlock rewrite for git-bash one-shots (`applied: false`, no Ask)
-  - [ ] Ungate Default shell Settings when `profiles.length > 1`; update copy, agent Windows-shell prompts, `context.md`, manual, setup-from-source, privacy sandbox note
-  - [ ] Tests + typecheck; verify picker + a Git Bash tab + agent command on Windows
+  - [x] `server/terminal/git-bash.js`: detect well-known Git for Windows `bash.exe` (never PATH `bash.exe`), MSYS path helper, PTY/one-shot argv, env patch, test reset
+  - [x] Register `git-bash` in `resolveProfiles` (after cmd, only when found). `describeShellProfileRuntime` MUST return runtime `'git-bash'` (do not collapse to native)
+  - [x] Merge Git Bash env in PTY spawn; add `git-bash` to `NATIVE_HISTORY_SHELL_IDS`; widen client `ShellProfile.runtime`
+  - [x] Route Windows one-shot strings through `bash.exe --login -c`; merge spawn env in `createRun` / `createBackgroundRun`; skip unix-pipe guard; do not dollar-escape
+  - [x] Skip WSL-Landlock rewrite for git-bash one-shots (`applied: false`, no Ask)
+  - [x] Ungate Default shell Settings when `profiles.length > 1`; update copy, agent Windows-shell prompts, `context.md`, manual, setup-from-source, privacy sandbox note
+  - [x] Tests + typecheck; verify picker + a Git Bash tab + agent command on Windows
 isProject: true
 ---
 

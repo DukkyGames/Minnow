@@ -316,4 +316,27 @@ describe('shouldApplyShellSandbox / applyAgentShellSandbox', () => {
     assert.equal(out.command, '/bin/zsh');
     assert.equal(out.sandbox.applied, false);
   });
+
+  it('skips WSL Landlock wrap for git-bash without Ask', () => {
+    const spawn = {
+      command: 'C:\\Git\\bin\\bash.exe',
+      args: ['--login', '-c', 'ls'],
+      shell: false,
+      env: { CHERE_INVOKING: '1' },
+    };
+    const out = applyAgentShellSandbox(spawn, {
+      source: 'agent',
+      mode: 'prefer',
+      cwd: FAKE_WORKSPACE,
+      workspaceRoot: FAKE_WORKSPACE,
+      platform: 'win32',
+      runtime: 'git-bash',
+    });
+    assert.equal(out.command, spawn.command);
+    assert.deepEqual(out.args, spawn.args);
+    assert.equal(out.sandbox.applied, false);
+    assert.equal(out.sandbox.needsEscalation, undefined);
+    assert.equal(out.sandbox.blocked, undefined);
+    assert.equal(out.sandbox.reason, SANDBOX_UNAVAILABLE_REASON.NATIVE_WIN_SHELL);
+  });
 });

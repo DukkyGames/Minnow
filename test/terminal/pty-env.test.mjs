@@ -40,4 +40,13 @@ describe('buildPtySpawnEnv', () => {
     assert.equal(env.EMPTY, undefined);
     assert.equal(env.PATH, '/bin');
   });
+
+  it('merges MSYS keys when gitBash is set', () => {
+    const env = buildPtySpawnEnv({ PATH: '/bin' }, { gitBash: true });
+    assert.equal(env.CHERE_INVOKING, '1');
+    assert.equal(env.MSYSTEM, 'MINGW64');
+    assert.equal(env.MSYS, 'enable_pcon');
+    assert.equal(env.MSYS2_PATH_TYPE, 'inherit');
+    assert.equal(env.TERM, 'xterm-256color');
+  });
 });

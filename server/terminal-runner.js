@@ -17,6 +17,7 @@ import {
   runProcess,
 } from './process-runner.js';
 import { resolveOneShotSpawn } from './terminal/one-shot-spawn.js';
+import { describeShellProfileRuntime } from './terminal/shell-profiles.js';
 import {
   applyAgentShellSandbox,
   formatPreferEscalationError,
@@ -120,6 +121,22 @@ function emit(state, event) {
     } catch {
     }
   }
+}
+
+/**
+ * Merge Git Bash MSYS keys (and any other one-shot env) with caller overrides.
+ * Undefined means inherit process.env unchanged.
+ * @param {NodeJS.ProcessEnv | Record<string, string> | undefined} spawnEnv
+ * @param {Record<string, string> | undefined} envOverrides
+ * @returns {NodeJS.ProcessEnv | undefined}
+ */
+function mergeRunSpawnEnv(spawnEnv, envOverrides) {
+  const fromSpawn =
+    spawnEnv && typeof spawnEnv === 'object' ? spawnEnv : null;
+  const fromCaller =
+    envOverrides && typeof envOverrides === 'object' ? envOverrides : null;
+  if (!fromSpawn && !fromCaller) return undefined;
+  return { ...process.env, ...fromSpawn, ...fromCaller };
 }
 
 /** @type {Map<string, Promise<void>>} */
@@ -312,6 +329,7 @@ export async function createRun({
         cwd,
         workspaceRoot: getEffectiveWorkspaceRoot(),
         worktreeRoot,
+        runtime: describeShellProfileRuntime(shellProfile).runtime,
       });
       state.sandbox = spawnTarget.sandbox ?? null;
       emit(state, {
@@ -345,10 +363,7 @@ export async function createRun({
         timeout: clampedTimeout,
         shell: spawnTarget.shell,
         killTree: killProcessTree,
-        env:
-          envOverrides && typeof envOverrides === 'object'
-            ? { ...process.env, ...envOverrides }
-            : undefined,
+        env: mergeRunSpawnEnv(spawnTarget.env, envOverrides),
         onSpawn: (child) => {
           state.child = child;
           if (child.pid) void updateRunIndexEntry(runId, { pid: child.pid });
@@ -486,6 +501,7 @@ export async function createBackgroundRun({
     cwd,
     workspaceRoot: getEffectiveWorkspaceRoot(),
     worktreeRoot,
+    runtime: describeShellProfileRuntime(shellProfile).runtime,
   });
   state.sandbox = spawnTarget.sandbox ?? null;
   emit(state, { type: 'meta', runId, command, cwd, sandbox: state.sandbox });
@@ -507,10 +523,8 @@ export async function createBackgroundRun({
   const useShell = spawnTarget.shell;
   const spawnCwd = spawnTarget.cwd ?? cwd;
 
-  const childEnv =
-    envOverrides && typeof envOverrides === 'object'
-      ? { ...process.env, ...envOverrides }
-      : process.env;
+  const mergedEnv = mergeRunSpawnEnv(spawnTarget.env, envOverrides);
+  const childEnv = mergedEnv ?? process.env;
 
   const child = spawn(execCommand, execArgs, {
     cwd: spawnCwd,

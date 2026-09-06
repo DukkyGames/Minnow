@@ -1,10 +1,12 @@
 /**
  * Resolve spawn targets for one-shot shell command strings (agent execute_command).
- * Windows uses cmd.exe by default; WSL profiles route through wsl.exe + bash -l.
+ * Windows uses cmd.exe by default; WSL profiles route through wsl.exe + bash -l;
+ * Git Bash profiles route through Git\bin\bash.exe --login -c.
  */
 
-import { buildWslOneShotSpawn } from './wsl.js';
+import { buildGitBashOneShotSpawn } from './git-bash.js';
 import { describeShellProfileRuntime } from './shell-profiles.js';
+import { buildWslOneShotSpawn } from './wsl.js';
 
 /**
  * Pick a login shell for Unix one-shot invocations (macOS zsh, Linux bash).
@@ -100,7 +102,7 @@ export function tryRewriteInlineInterpreterCommand(command) {
  * @param {string} [params.platform]
  * @param {import('./shell-profiles.js').ShellProfile | null} [params.shellProfile]
  * @param {string} [params.cwd]
- * @returns {{ command: string, args: string[], shell: boolean, cwd?: string }}
+ * @returns {{ command: string, args: string[], shell: boolean, cwd?: string, env?: NodeJS.ProcessEnv }}
  */
 export function resolveOneShotSpawn({
   command,
@@ -133,6 +135,17 @@ export function resolveOneShotSpawn({
       distro,
       cwd: cwd ?? undefined,
     });
+  }
+
+  if (runtime === 'git-bash' && platform === 'win32' && oneShot) {
+    const bashPath = shellProfile?.shell;
+    if (typeof bashPath === 'string' && bashPath) {
+      return buildGitBashOneShotSpawn({
+        command,
+        cwd: cwd ?? undefined,
+        bashPath,
+      });
+    }
   }
 
   if (winOneShot) {

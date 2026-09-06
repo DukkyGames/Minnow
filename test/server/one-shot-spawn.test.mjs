@@ -88,6 +88,29 @@ describe('resolveOneShotSpawn', () => {
     assert.equal(wsl.shell, false);
   });
 
+  it('routes Windows one-shot strings through Git Bash when runtime is git-bash', () => {
+    const gitBash = resolveOneShotSpawn({
+      command: 'echo $HOME',
+      args: [],
+      platform: 'win32',
+      shellProfile: {
+        id: 'git-bash',
+        label: 'Git Bash',
+        shell: 'C:\\Git\\bin\\bash.exe',
+        args: ['--login', '-i'],
+        platform: 'win32',
+        runtime: 'git-bash',
+      },
+      cwd: 'C:\\repo',
+    });
+    assert.equal(gitBash.command, 'C:\\Git\\bin\\bash.exe');
+    assert.deepEqual(gitBash.args, ['--login', '-c', 'echo $HOME']);
+    assert.equal(gitBash.shell, false);
+    assert.equal(gitBash.cwd, 'C:\\repo');
+    assert.equal(gitBash.env?.CHERE_INVOKING, '1');
+    assert.equal(gitBash.args[2].includes('\\$'), false);
+  });
+
   it('rewrites node -e one-shot strings to argv spawn', () => {
     const resolved = resolveOneShotSpawn({
       command: 'node -e "console.log(1)"',
@@ -98,6 +121,24 @@ describe('resolveOneShotSpawn', () => {
     assert.equal(resolved.command, 'node');
     assert.deepEqual(resolved.args, ['-e', 'console.log(1)']);
     assert.equal(resolved.shell, false);
+  });
+
+  it('keeps PowerShell profile one-shots on cmd.exe', () => {
+    const win = resolveOneShotSpawn({
+      command: 'echo MINNOW_WIN',
+      args: [],
+      platform: 'win32',
+      shellProfile: {
+        id: 'powershell',
+        label: 'PowerShell',
+        shell: 'powershell.exe',
+        args: ['-NoLogo'],
+        platform: 'win32',
+        runtime: 'native',
+      },
+    });
+    assert.equal(win.command, 'cmd.exe');
+    assert.deepEqual(win.args, ['/d', '/s', '/c', 'echo MINNOW_WIN']);
   });
 
   it('passes argv invocations through unchanged', () => {

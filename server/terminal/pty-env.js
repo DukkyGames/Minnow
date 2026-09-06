@@ -6,6 +6,8 @@
  * caret notation (^[[A) instead of recalling history.
  */
 
+import { gitBashSpawnEnvPatch } from './git-bash.js';
+
 /** Keys that confuse an interactive line editor when inherited from the host. */
 const DROP_ENV_KEYS = [
   'TMUX',
@@ -21,7 +23,7 @@ const DROP_ENV_KEYS = [
 
 /**
  * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [baseEnv]
- * @param {{ term?: string; workspaceRoot?: string; termProgram?: string }} [options]
+ * @param {{ term?: string; workspaceRoot?: string; termProgram?: string; gitBash?: boolean }} [options]
  * @returns {Record<string, string>}
  */
 export function buildPtySpawnEnv(baseEnv = process.env, options = {}) {
@@ -45,6 +47,9 @@ export function buildPtySpawnEnv(baseEnv = process.env, options = {}) {
   env.TERM_PROGRAM = options.termProgram ?? 'Minnow';
   if (options.workspaceRoot) {
     env.MINNOW_WORKSPACE_ROOT = options.workspaceRoot;
+  }
+  if (options.gitBash) {
+    Object.assign(env, gitBashSpawnEnvPatch());
   }
   return env;
 }

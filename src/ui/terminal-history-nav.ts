@@ -9,6 +9,7 @@ const NATIVE_HISTORY_SHELL_IDS = new Set([
   'cmd',
   'zsh',
   'bash',
+  'git-bash',
   'fish',
 ]);
 
