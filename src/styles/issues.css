@@ -833,10 +833,12 @@
   border-bottom: 1px solid var(--mn-border);
   cursor: pointer;
   min-height: var(--issues-row-h);
+  /* Title text must not become a selection drag (that drop is capture, not parent). */
+  user-select: none;
 }
 
-/* Row is the drag source; inner chips must not start an image/text drag. */
-.issues-row > * {
+/* The row is the drag source; chips, buttons, and nested labels are not. */
+.issues-row * {
   -webkit-user-drag: none;
 }
 
@@ -1594,6 +1596,11 @@
   border-radius: var(--radius-sm);
   background: var(--mn-bg);
   cursor: grab;
+  user-select: none;
+}
+
+.issues-card * {
+  -webkit-user-drag: none;
 }
 
 .issues-card__head {
@@ -2136,6 +2143,7 @@ button.issues-detail__activity-chip {
   flex-direction: column;
   gap: 6px;
   padding-top: 12px;
+  padding-bottom: 12px;
   border-top: 1px solid var(--mn-border);
 }
 
@@ -2152,7 +2160,7 @@ button.issues-detail__activity-chip {
   align-items: flex-start;
   gap: 8px;
   padding-top: 8px;
-  padding-bottom: 0;
+  padding-bottom: 8px;
 }
 
 .issues-detail__scroll > .issues-detail__section--compact + .issues-detail__section--compact {
@@ -2648,8 +2656,7 @@ button.issues-detail__activity-chip {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
-  margin-bottom: 0;
+  align-items: center;
 }
 
 .issues-detail__add-code .issues-search {
@@ -2887,7 +2894,14 @@ button.issues-detail__activity-chip {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
+  align-items: center;
+}
+
+.issues-detail__sub-issues-add .issues-btn {
+  margin-top: 0;
+  font-size: 12px;
+  padding: 6px 10px;
+  min-height: 32px;
 }
 
 .issues-detail__git-commit-btn {

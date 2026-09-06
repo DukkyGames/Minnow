@@ -32,12 +32,12 @@ describe('issue drag ids', () => {
     resetIssueDragForTests();
   });
 
-  test('setIssueDragData records ids and uses copyMove so row dropEffect move is legal', () => {
+  test('setIssueDragData records ids and uses all so link and move dropEffects stay legal', () => {
     const transfer = fakeTransfer();
     setIssueDragData(transfer, ['MIN-1', 'MIN-2']);
     assert.deepEqual(getActiveIssueDragIds(), ['MIN-1', 'MIN-2']);
     assert.equal(transfer.getData(ISSUE_DRAG_MIME), 'MIN-1,MIN-2');
-    assert.equal(transfer.effectAllowed, 'copyMove');
+    assert.equal(transfer.effectAllowed, 'all');
   });
 
   test('readIssueDragIds falls back to MIME when the in-flight list is empty', () => {

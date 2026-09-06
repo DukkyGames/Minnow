@@ -73,8 +73,9 @@ export function readIssueDragIds(dataTransfer: DataTransfer | null): string[] {
 /**
  * Write MIME + plain text and record the in-flight ids.
  *
- * `copyMove` (not `move`) so row `dropEffect` cannot cancel the drop.
- * Chromium rejects a drop when dropEffect is not in effectAllowed.
+ * `all` (not `move`) so list `dropEffect: link` and board-column
+ * `dropEffect: move` are both legal. Chromium cancels the drop when
+ * dropEffect is not in effectAllowed — that was why list nesting failed.
  */
 export function setIssueDragData(transfer: DataTransfer | null, ids: readonly string[]): void {
   beginIssueDrag(ids);
@@ -86,7 +87,7 @@ export function setIssueDragData(transfer: DataTransfer | null, ids: readonly st
     // Some embeds reject custom MIME; text/plain plus the descriptor still work.
   }
   transfer.setData('text/plain', packed);
-  transfer.effectAllowed = 'copyMove';
+  transfer.effectAllowed = 'all';
 }
 
 /** Reset module state (tests). */

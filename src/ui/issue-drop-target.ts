@@ -33,7 +33,7 @@ export function acceptedParentDropIds(
 function markParentDropAllowed(event: DragEvent): void {
   event.preventDefault();
   event.stopPropagation();
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'link';
 }
 
 /** Wire dragover/drop on a list row, board card, or detail panel. */
@@ -81,38 +81,38 @@ export function bindIssueDropTarget(
   el.addEventListener(
     'drop',
     (event) => {
-    el.classList.remove('is-capture-target');
-    el.classList.remove('is-parent-target');
+      el.classList.remove('is-capture-target');
+      el.classList.remove('is-parent-target');
 
-    const dragIds = readIssueDragIds(event.dataTransfer);
-    if (dragIds.length > 0) {
+      const dragIds = readIssueDragIds(event.dataTransfer);
+      if (dragIds.length > 0) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (acceptedParentDropIds(issueId, event.dataTransfer).length === 0) return;
+        void import('./issues-sub-issues').then((m) => {
+          m.applyIssueParentDrop(issueId, dragIds);
+          notify();
+        });
+        return;
+      }
+
+      if (!dataTransferAcceptsIssueDrop(event.dataTransfer)) return;
       event.preventDefault();
       event.stopPropagation();
-      if (acceptedParentDropIds(issueId, event.dataTransfer).length === 0) return;
-      void import('./issues-sub-issues').then((m) => {
-        m.applyIssueParentDrop(issueId, dragIds);
-        notify();
+
+      if (hasExternalFileDrag(event.dataTransfer)) {
+        const files = filesFromDataTransfer(event.dataTransfer!).filter(
+          (file) => !isLikelyDirectoryDrop(file),
+        );
+        void ingestIssueFiles(issueId, files, notify);
+        return;
+      }
+
+      const payload = capturePayloadFromDataTransfer(event.dataTransfer);
+      if (!payload) return;
+      void attachCaptureToIssue(issueId, payload).then((ok) => {
+        if (ok) notify();
       });
-      return;
-    }
-
-    if (!dataTransferAcceptsIssueDrop(event.dataTransfer)) return;
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (hasExternalFileDrag(event.dataTransfer)) {
-      const files = filesFromDataTransfer(event.dataTransfer!).filter(
-        (file) => !isLikelyDirectoryDrop(file),
-      );
-      void ingestIssueFiles(issueId, files, notify);
-      return;
-    }
-
-    const payload = capturePayloadFromDataTransfer(event.dataTransfer);
-    if (!payload) return;
-    void attachCaptureToIssue(issueId, payload).then((ok) => {
-      if (ok) notify();
-    });
     },
     true,
   );
