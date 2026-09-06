@@ -10,6 +10,11 @@
  * Hosted openai-v1 / anthropic-v1 catalogs stamp every row `state: 'loaded'`.
  * Auto-probe those only when the model is in use (picker, default, a chat
  * binding) — never the entire OpenRouter-sized catalog.
+ *
+ * Loopback openai-v1 (custom llama.cpp on 127.0.0.1, llama-cpp-local) skips
+ * the image_url half of the auto-probe so --mmproj is not hit with a test PNG
+ * or the corrupt-image control (MIN-839). Settings → Probe models still runs
+ * a valid PNG without that control.
  */
 
 import { isModelLoaded } from '../api/model-loaded-state';
@@ -196,6 +201,9 @@ async function drainFirstLoadProbeQueue(): Promise<void> {
           const ran = await probeRunner(job.providerId, {
             modelIds: [job.modelId],
             selectedModelId: job.modelId,
+            // Loopback openai-v1 skips image_url on auto so llama.cpp --mmproj
+            // is not hit with a test PNG (or the corrupt control) on first select.
+            auto: true,
           });
           if (!ran) {
             seenKeys.delete(job.key);

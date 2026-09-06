@@ -14,6 +14,11 @@ import { openAiMessagesToCoreMessages } from '../generations/anthropic/openai-to
 import { mapOpenAiToolChoice, mapOpenAiTools } from '../generations/anthropic/openai-tools.js';
 import { resolveOpenCodeZenUpstreamUrl } from './opencode-zen.js';
 import { sanitizeCompletionBodyForProvider } from './sanitize-completion-body.js';
+import { isLocalProviderBaseUrl } from './provider-host.js';
+import {
+  LLAMA_CPP_LOCAL_PROVIDER_ID,
+  MLX_LM_LOCAL_PROVIDER_ID,
+} from '../runner/provider-ids.js';
 
 const MAX_MODELS_PER_PROBE = 8;
 const MODEL_PROBE_TIMEOUT_MS = 25_000;
@@ -39,6 +44,13 @@ const PROBE_IMAGE_DATA_URL =
 
 const PROBE_INVALID_IMAGE_DATA_URL =
   'data:image/png;base64,bm90LWFuLWltYWdlLW1pbm5vdy1jYXBhYmlsaXR5LXByb2Jl';
+
+/**
+ * llama.cpp mtmd / CUDA signatures from a vision probe. A probed `vision: false`
+ * would beat the id heuristic, so these must not stamp sources.vision = 'probe'.
+ */
+const VISION_PROBE_CRASH_RE =
+  /\bmtmd\b|ffprobe|cuda error|cuda_error|ggml-cuda|failed to decode buffer as either image/i;
 
 const DUMMY_TOOL = {
   type: 'function',
@@ -284,6 +296,34 @@ async function postChatCompletion(url, headers, body, timeoutMs, signal) {
 }
 
 /**
+ * Vision POST that treats a dropped connection as a runtime crash, not a throw
+ * that would wipe tools/streaming results already recorded on this model.
+ *
+ * @param {string} url
+ * @param {Record<string, string>} headers
+ * @param {object} body
+ * @param {number} timeoutMs
+ * @param {AbortSignal | undefined} signal
+ */
+async function postVisionProbeCompletion(url, headers, body, timeoutMs, signal) {
+  try {
+    return await postChatCompletion(url, headers, body, timeoutMs, signal);
+  } catch (err) {
+    // Parent abort (user cancelled / drain aborted) must still unwind the probe.
+    if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) {
+      throw err;
+    }
+    return {
+      ok: false,
+      status: 0,
+      json: null,
+      text: err instanceof Error ? err.message : String(err),
+      networkError: true,
+    };
+  }
+}
+
+/**
  * @param {{ url: string, headers: Record<string, string>, body: object }} params
  */
 async function postStructuredProbeCompletion({ url, headers, body }) {
@@ -348,12 +388,69 @@ function applyToolsProbe(cap, result) {
 }
 
 /**
+ * True when this provider decodes image_url locally (llama.cpp mtmd, mlx-lm).
+ * Cloud passthrough gateways are the opposite: they 200 any content part.
+ *
+ * @param {{ id?: string, baseUrl?: string }} [profile]
+ */
+export function providerDecodesVisionLocally(profile) {
+  const id = typeof profile?.id === 'string' ? profile.id.trim() : '';
+  if (id === LLAMA_CPP_LOCAL_PROVIDER_ID || id === MLX_LM_LOCAL_PROVIDER_ID) {
+    return true;
+  }
+  return isLocalProviderBaseUrl(profile?.baseUrl);
+}
+
+/**
+ * Corrupt-image control is for remote openai-v1 gateways. Loopback llama.cpp
+ * decodes the buffer, so the garbage PNG logs ffprobe and can CUDA-fault --mmproj.
+ *
+ * @param {{ id?: string, baseUrl?: string }} [profile]
+ */
+export function shouldSendCorruptImageVisionControl(profile) {
+  return !providerDecodesVisionLocally(profile);
+}
+
+/**
+ * First-load auto-probe skips image_url on loopback openai-v1 (MIN-839).
+ * LM Studio keeps auto vision: its catalog names VLMs and a rejected PNG is a clean 4xx.
+ *
+ * @param {{ id?: string, baseUrl?: string, apiKind?: string }} [profile]
+ */
+export function shouldSkipAutoVisionCapabilityProbe(profile) {
+  if (profile?.apiKind === 'lm-studio-v0') return false;
+  return providerDecodesVisionLocally(profile);
+}
+
+/**
+ * @param {{ ok?: boolean, status?: number, text?: string, networkError?: boolean }} [result]
+ */
+export function isVisionProbeRuntimeCrash(result) {
+  if (!result) return false;
+  const text = typeof result.text === 'string' ? result.text : '';
+  if (VISION_PROBE_CRASH_RE.test(text)) return true;
+  // Text ping already succeeded; a dropped connection on image_url is a runtime
+  // crash (projector / CUDA), not a clean "this model has no vision" 4xx.
+  return result.networkError === true;
+}
+
+/**
  * @param {object} cap
- * @param {{ ok: boolean, status: number, text?: string }} result
+ * @param {{ ok: boolean, status: number, text?: string, networkError?: boolean }} result
  * @param {{ ok: boolean, status: number, text?: string }} [control]
  */
-function applyVisionProbe(cap, result, control) {
+export function applyVisionProbe(cap, result, control) {
   if (cap.vision === true) return;
+
+  if (isVisionProbeRuntimeCrash(result)) {
+    cap.probeErrors = {
+      ...cap.probeErrors,
+      vision:
+        result.text?.trim().slice(0, 200) ||
+        'image probe crashed the local runtime — vision left unset',
+    };
+    return;
+  }
 
   if (!result.ok) {
     cap.vision = false;
@@ -403,8 +500,9 @@ function createProbeAbortSignal(timeoutMs, signal) {
  * @param {object} modelRow
  * @param {{ profile: object, headers: Record<string, string>, paths: object, secrets: object }} runtime
  * @param {AbortSignal | undefined} signal
+ * @param {{ skipVision?: boolean }} [probeOptions]
  */
-async function probeAnthropicModelCapabilities(modelRow, runtime, signal) {
+async function probeAnthropicModelCapabilities(modelRow, runtime, signal, probeOptions = {}) {
   const cap = ingestFromCatalog(modelRow);
   const modelId = modelRow.id;
   const anthropic = buildAnthropicProvider(runtime);
@@ -465,7 +563,7 @@ async function probeAnthropicModelCapabilities(modelRow, runtime, signal) {
     toolProbe.dispose();
   }
 
-  if (cap.streaming === true && cap.vision !== true) {
+  if (!probeOptions.skipVision && cap.streaming === true && cap.vision !== true) {
     /** @param {string} dataUrl */
     const runImageProbe = async (dataUrl) => {
       const probe = createProbeAbortSignal(MODEL_PROBE_TIMEOUT_MS, signal);
@@ -486,10 +584,17 @@ async function probeAnthropicModelCapabilities(modelRow, runtime, signal) {
         });
         return { ok: true, status: 200 };
       } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) {
+          throw err;
+        }
+        const text = err instanceof Error ? err.message : String(err);
         return {
           ok: false,
           status: 0,
-          text: err instanceof Error ? err.message : String(err),
+          text,
+          // SDK throws on 4xx as well as transport failure; only mark a crash
+          // when the message looks like mtmd/CUDA or a dropped connection.
+          networkError: /fetch failed|econnreset|socket hang up|network/i.test(text),
         };
       } finally {
         probe.dispose();
@@ -497,7 +602,11 @@ async function probeAnthropicModelCapabilities(modelRow, runtime, signal) {
     };
 
     const visionResult = await runImageProbe(PROBE_IMAGE_DATA_URL);
-    const controlResult = visionResult.ok
+    const sendControl =
+      visionResult.ok &&
+      !isVisionProbeRuntimeCrash(visionResult) &&
+      shouldSendCorruptImageVisionControl(runtime.profile);
+    const controlResult = sendControl
       ? await runImageProbe(PROBE_INVALID_IMAGE_DATA_URL)
       : undefined;
     applyVisionProbe(cap, visionResult, controlResult);
@@ -510,8 +619,9 @@ async function probeAnthropicModelCapabilities(modelRow, runtime, signal) {
  * @param {object} modelRow
  * @param {{ profile: object, headers: Record<string, string>, paths: object }} runtime
  * @param {AbortSignal | undefined} signal
+ * @param {{ skipVision?: boolean }} [probeOptions]
  */
-async function probeModelCapabilities(modelRow, runtime, signal) {
+async function probeModelCapabilities(modelRow, runtime, signal, probeOptions = {}) {
   const cap = ingestFromCatalog(modelRow);
   const resolvedApi = resolveModelApi(runtime, modelRow.id, modelRow);
   cap.api = resolvedApi;
@@ -521,7 +631,7 @@ async function probeModelCapabilities(modelRow, runtime, signal) {
   }
 
   if (resolvedApi === 'anthropic-v1') {
-    return probeAnthropicModelCapabilities(modelRow, runtime, signal);
+    return probeAnthropicModelCapabilities(modelRow, runtime, signal, probeOptions);
   }
 
   const modelId = modelRow.id;
@@ -567,7 +677,7 @@ async function probeModelCapabilities(modelRow, runtime, signal) {
   );
   applyToolsProbe(cap, toolResult);
 
-  if (chatResult.ok && cap.vision !== true) {
+  if (!probeOptions.skipVision && chatResult.ok && cap.vision !== true) {
     const imageProbeBody = (dataUrl) => ({
       model: modelId,
       messages: [
@@ -583,15 +693,19 @@ async function probeModelCapabilities(modelRow, runtime, signal) {
       stream: false,
     });
 
-    const visionResult = await postChatCompletion(
+    const visionResult = await postVisionProbeCompletion(
       url,
       runtime.headers,
       imageProbeBody(PROBE_IMAGE_DATA_URL),
       MODEL_PROBE_TIMEOUT_MS,
       signal,
     );
-    const controlResult = visionResult.ok
-      ? await postChatCompletion(
+    const sendControl =
+      visionResult.ok &&
+      !isVisionProbeRuntimeCrash(visionResult) &&
+      shouldSendCorruptImageVisionControl(runtime.profile);
+    const controlResult = sendControl
+      ? await postVisionProbeCompletion(
           url,
           runtime.headers,
           imageProbeBody(PROBE_INVALID_IMAGE_DATA_URL),
@@ -607,7 +721,7 @@ async function probeModelCapabilities(modelRow, runtime, signal) {
 
 /**
  * @param {string} providerId
- * @param {{ modelIds?: string[], selectedModelId?: string, signal?: AbortSignal }} [options]
+ * @param {{ modelIds?: string[], selectedModelId?: string, signal?: AbortSignal, auto?: boolean, skipVision?: boolean }} [options]
  */
 export async function runCapabilityProbe(providerId, options = {}) {
   validateProviderId(providerId);
@@ -642,6 +756,11 @@ export async function runCapabilityProbe(providerId, options = {}) {
   const patches = {};
   const probedAt = new Date().toISOString();
   const targeted = Boolean(options.modelIds?.length);
+  // First-load (auto) skips image_url on loopback openai-v1 so --mmproj is not
+  // hit until the user clicks Probe models. Manual probes still send a valid PNG.
+  const skipVision =
+    options.skipVision === true ||
+    (options.auto === true && shouldSkipAutoVisionCapabilityProbe(runtime.profile));
 
   for (const modelId of prioritized) {
     if (options.signal?.aborted) {
@@ -649,7 +768,9 @@ export async function runCapabilityProbe(providerId, options = {}) {
     }
     const row = catalogById.get(modelId) || { id: modelId, type: 'llm' };
     try {
-      patches[modelId] = await probeModelCapabilities(row, runtime, options.signal);
+      patches[modelId] = await probeModelCapabilities(row, runtime, options.signal, {
+        skipVision,
+      });
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         throw err;
